@@ -1,0 +1,24 @@
+---
+description: Reuse KlassenPilot UI primitives and tokens; avoid one-off styling per screen
+alwaysApply: true
+---
+
+# Design system reuse
+
+Before adding or changing UI, read [frontend/DESIGN.md](frontend/DESIGN.md) and [frontend/src/app/globals.css](frontend/src/app/globals.css).
+
+## Rules
+
+1. **Prefer shared components** — `src/components/ui/`, `src/components/klassenpilot/`, `src/components/assistant-ui/` (registry). Import and compose; do not reinvent controls inline on pages.
+2. **No one-off styling** — Do not duplicate Tailwind class strings for the same control across files. If a pattern may appear twice or is domain-wide (segmented toggles, toolbars, cards), add or extend a component in `ui/` first, then consume it.
+3. **Semantic tokens only** — Use `bg-accent`, `bg-muted`, `text-primary`, `border-border`, etc. No ad-hoc hex in feature code.
+4. **Green is scarce** — `Button variant="default"` (solid primary) only for the main CTA per action group (e.g. save, chat send). Secondary controls use `outline`, `ghost`, or `SegmentedToggle`.
+5. **Exception** — Customize styling in a single place only when the user explicitly asks for a one-off or page-specific exception.
+
+## Examples
+
+| Need | Use |
+|------|-----|
+| Edit / Preview (or similar modes) | `SegmentedToggle` from `@/components/ui/segmented-toggle` |
+| Highlight panel / callout | `Card variant="highlight"` |
+| Primary action | `Button variant="default"` once per row |

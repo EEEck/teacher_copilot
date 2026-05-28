@@ -1,0 +1,32 @@
+openapi: 3.1.0
+info:
+  title: KlassenPilot API
+  version: 0.1.0
+paths:
+  /api/health:
+    get:
+      summary: Health check
+  /api/classes:
+    get:
+      summary: List classes
+  /api/classes/{classId}/timeline:
+    get:
+      summary: Lesson timeline
+  /api/classes/{classId}/snapshot:
+    get:
+      summary: Class memory snapshot
+  /api/classes/{classId}/ingest/sessions:
+    post:
+      summary: Start ingest chat session
+  /api/classes/{classId}/ingest/sessions/{sessionId}/chat:
+    post:
+      summary: Chat turn
+  /api/classes/{classId}/ingest/sessions/{sessionId}/propose:
+    post:
+      summary: Generate diary MD and wiki proposals
+  /api/classes/{classId}/ingest/commit:
+    post:
+      summary: Commit approved diary and wiki updates
+  /api/classes/{classId}/plan-lesson:
+    post:
+      summary: Generate lesson plan

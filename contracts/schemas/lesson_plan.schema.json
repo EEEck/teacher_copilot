@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lesson_plan.schema.json",
+  "title": "LessonPlan",
+  "type": "object",
+  "required": ["title", "learningGoals", "lessonFlow", "warmup", "practiceTasks", "homework", "teacherNotes"],
+  "properties": {
+    "title": { "type": "string" },
+    "lessonDate": { "type": "string", "format": "date" },
+    "durationMinutes": { "type": "integer", "default": 45 },
+    "learningGoals": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "lessonFlow": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["phase", "minutes", "description"],
+        "properties": {
+          "phase": { "type": "string" },
+          "minutes": { "type": "integer" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "warmup": { "type": "string" },
+    "practiceTasks": { "type": "array", "items": { "type": "string" } },
+    "homework": { "type": "string" },
+    "teacherNotes": { "type": "string" },
+    "addressesOpenLoops": { "type": "array", "items": { "type": "string" } },
+    "addressesMisconceptions": { "type": "array", "items": { "type": "string" } }
+  }
+}

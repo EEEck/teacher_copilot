@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lesson_diary.schema.json",
+  "title": "LessonDiary",
+  "type": "object",
+  "required": ["meta", "coverage", "observations", "followUps"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["lessonDate", "title", "classId"],
+      "properties": {
+        "lessonDate": { "type": "string", "format": "date" },
+        "title": { "type": "string" },
+        "classId": { "type": "string" }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": ["topics"],
+      "properties": {
+        "topics": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "activities": { "type": "array", "items": { "type": "string" } },
+        "materials": { "type": "array", "items": { "type": "string" } },
+        "durationMinutes": { "type": "integer" }
+      }
+    },
+    "observations": {
+      "type": "object",
+      "properties": {
+        "classWideNotes": { "type": "string" },
+        "misconceptions": { "type": "array", "items": { "type": "string" } },
+        "whatWorked": { "type": "array", "items": { "type": "string" } },
+        "whatStruggled": { "type": "array", "items": { "type": "string" } },
+        "studentsDidWell": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["studentId", "note"],
+            "properties": {
+              "studentId": { "type": "string", "pattern": "^S-\\d{3}$" },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "studentsStruggled": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["studentId", "note"],
+            "properties": {
+              "studentId": { "type": "string", "pattern": "^S-\\d{3}$" },
+              "note": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "followUps": {
+      "type": "object",
+      "properties": {
+        "homework": { "type": "string" },
+        "openLoops": { "type": "array", "items": { "type": "string" } },
+        "nextLessonFocus": { "type": "string" }
+      }
+    },
+    "cleanSummary": { "type": "string" }
+  }
+}

@@ -1,0 +1,75 @@
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "tw-shimmer";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* KlassenPilot palette (hex reference) */
+    --bg: #ffffff;
+    --text: #0a0d0a;
+    --brand: #014421;
+    --muted-text: #526359;
+    --border-color: #dde5de;
+    --panel-bg: #f7f9f7;
+    --error: #b42318;
+    --error-bg: #fdecea;
+
+    /* HSL channels for Tailwind opacity modifiers (no blue ring fallback) */
+    --background: 0 0% 100%;
+    --foreground: 120 20% 3%;
+    --card: 0 0% 100%;
+    --card-foreground: 120 20% 3%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 120 20% 3%;
+    --primary: 149 96% 13%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 100%;
+    --secondary-foreground: 120 20% 3%;
+    --muted: 120 14% 97%;
+    --muted-foreground: 140 8% 42%;
+    --accent: 125 20% 92%;
+    --accent-foreground: 149 96% 13%;
+    --destructive: 4 76% 40%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 125 16% 88%;
+    --input: 125 16% 88%;
+    --ring: 149 96% 13%;
+    --radius: 0.625rem;
+    --chart-1: 125 16% 88%;
+    --chart-2: 140 8% 42%;
+    --chart-3: 149 50% 25%;
+    --chart-4: 149 70% 18%;
+    --chart-5: 149 96% 13%;
+    --sidebar: 0 0% 100%;
+    --sidebar-foreground: 120 20% 3%;
+    --sidebar-primary: 149 96% 13%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 125 20% 92%;
+    --sidebar-accent-foreground: 149 96% 13%;
+    --sidebar-border: 125 16% 88%;
+    --sidebar-ring: 149 96% 13%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring) / 0.5);
+    outline-offset: 2px;
+  }
+
+  body {
+    @apply antialiased bg-background text-foreground;
+  }
+  .theme {
+    --font-heading: var(--font-sans);
+    --font-sans: var(--font-sans);
+  }
+  html {
+    @apply font-sans;
+  }
+}
