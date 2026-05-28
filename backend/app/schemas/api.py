@@ -22,6 +22,11 @@ class ClassesResponse(BaseModel):
     classes: list[ClassSummary]
 
 
+class WikiLintResponse(BaseModel):
+    class_id: str
+    report_markdown: str
+
+
 class TimelineEntry(BaseModel):
     date: str
     title: str
@@ -146,9 +151,15 @@ class CommitIngestResponse(BaseModel):
     title: str = ""
 
 
+class ChatAttachment(BaseModel):
+    filename: str
+    content: str
+
+
 class ChatRequest(BaseModel):
     message: str
     diary_markdown: Optional[str] = None
+    attachments: list[ChatAttachment] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):
@@ -160,6 +171,52 @@ class ChatResponse(BaseModel):
 
 class UpdateDraftRequest(BaseModel):
     diary_markdown: str
+
+
+class PlanSessionStatus(str, Enum):
+    chatting = "chatting"
+    ready_to_save = "ready_to_save"
+    saved = "saved"
+
+
+class PlanSession(BaseModel):
+    session_id: str
+    class_id: str
+    status: PlanSessionStatus
+    messages: list[ChatMessage] = Field(default_factory=list)
+    opening_message: str = ""
+
+
+class PlanDraft(BaseModel):
+    plan_markdown: str
+
+
+class PlanChatRequest(BaseModel):
+    message: str
+    plan_markdown: Optional[str] = None
+    attachments: list[ChatAttachment] = Field(default_factory=list)
+
+
+class PlanChatResponse(BaseModel):
+    reply: str
+    plan_markdown: str
+    ready_to_save: bool = False
+
+
+class UpdatePlanDraftRequest(BaseModel):
+    plan_markdown: str
+
+
+class SavePlanRequest(BaseModel):
+    session_id: str
+    lesson_date: str
+    plan_markdown: str
+
+
+class SavePlanResponse(BaseModel):
+    lesson_date: str
+    title: str
+    plan_path: str
 
 
 class PlanLessonRequest(BaseModel):

@@ -44,6 +44,14 @@ LESSON_RESULTS_SECTIONS: list[tuple[str, str, bool]] = [
 
 DIARY_SECTION_HEADINGS = [label for _, label, _ in LESSON_RESULTS_SECTIONS]
 
+STUDENT_ID_RE = re.compile(r"\b(S-\d{3})\b", re.I)
+LOG_HEADER_RE = re.compile(
+    r"##\s*\[([^\]]+)\]\s+(\w+)\s*\|\s*(?:([\d-]+)\s*—\s*)?(.+?)\s*\(id:([a-f0-9]+)\)"
+)
+LOG_HEADER_LEGACY_RE = re.compile(
+    r"##\s*\[(\d{4}-\d{2}-\d{2})\]\s+(\w+)\s*\|\s*(.+?)\s*\(id:([a-f0-9]+)\)"
+)
+
 
 @dataclass
 class WikiStore:
@@ -59,6 +67,27 @@ class WikiStore:
 
     def lesson_dir(self, class_id: str, lesson_date: str) -> Path:
         return self.class_dir(class_id) / "lessons" / lesson_date
+
+    def students_dir(self, class_id: str) -> Path:
+        return self.class_dir(class_id) / "students"
+
+    def student_path(self, class_id: str, student_id: str) -> Path:
+        sid = student_id.upper()
+        return self.students_dir(class_id) / f"{sid}.md"
+
+    def timeline_path(self, class_id: str) -> Path:
+        return self.class_dir(class_id) / "timeline.md"
+
+    def class_config_path(self, class_id: str) -> Path:
+        return self.class_dir(class_id) / "class_config.md"
+
+    @property
+    def index_path(self) -> Path:
+        return self.root / "index.md"
+
+    @property
+    def log_path(self) -> Path:
+        return self.root / "log.md"
 
     def roll_up_paths(self, class_id: str) -> dict[str, Path]:
         base = self.class_dir(class_id)
@@ -84,13 +113,166 @@ class WikiStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
 
+    def resolve_path(self, relative_path: str) -> Path:
+        """Resolve a wiki-relative path; reject escapes outside root."""
+        rel = relative_path.strip().lstrip("/").replace("\\", "/")
+        if ".." in rel.split("/"):
+            raise ValueError(f"Invalid path: {relative_path}")
+        full = (self.root / rel).resolve()
+        root_resolved = self.root.resolve()
+        if not str(full).startswith(str(root_resolved)):
+            raise ValueError(f"Path outside wiki root: {relative_path}")
+        return full
+
+    def read_wiki_page(self, relative_path: str, max_chars: int = 12000) -> str:
+        path = self.resolve_path(relative_path)
+        text = self.read_text(path)
+        if len(text) > max_chars:
+            return text[: max_chars - 20] + "\n\n… [truncated]"
+        return text
+
+    def read_wiki_index(self, class_id: Optional[str] = None) -> str:
+        text = self.read_text(self.index_path)
+        if not class_id:
+            return text
+        marker = f"## Class: {class_id}"
+        alt = f"## Class —"
+        if marker in text:
+            start = text.index(marker)
+            rest = text[start + len(marker) :]
+            next_class = rest.find("\n## Class")
+            section = text[start : start + len(marker) + (next_class if next_class >= 0 else len(rest))]
+            if next_class >= 0:
+                section = text[start : start + len(marker) + next_class]
+            return section
+        cls = self.get_class(class_id)
+        if cls.label in text:
+            start = text.find(f"## Class — {cls.label}")
+            if start >= 0:
+                rest = text[start + 10 :]
+                next_class = rest.find("\n## Class")
+                end = start + 10 + (next_class if next_class >= 0 else len(rest))
+                return text[start:end]
+        return text
+
+    def list_class_pages(
+        self, class_id: str, kind: Optional[str] = None
+    ) -> list[dict[str, str]]:
+        self.get_class(class_id)
+        pages: list[dict[str, str]] = []
+        base = self.class_dir(class_id)
+        kinds = {kind} if kind else {"rollups", "lessons", "students", "timeline", "raw"}
+
+        if "rollups" in kinds:
+            for key, path in self.roll_up_paths(class_id).items():
+                pages.append(
+                    {"kind": "rollup", "id": key, "path": self.rel_wiki(path)}
+                )
+            for name in ("timeline.md", "class_config.md"):
+                p = base / name
+                if p.exists():
+                    pages.append({"kind": "meta", "id": name, "path": self.rel_wiki(p)})
+
+        if "lessons" in kinds:
+            lessons_root = base / "lessons"
+            if lessons_root.exists():
+                for day_dir in sorted(lessons_root.iterdir()):
+                    if not day_dir.is_dir():
+                        continue
+                    for fname in ("lesson_results.md", "lesson_plan.md"):
+                        p = day_dir / fname
+                        if p.exists():
+                            pages.append(
+                                {
+                                    "kind": "lesson",
+                                    "id": day_dir.name,
+                                    "path": self.rel_wiki(p),
+                                }
+                            )
+
+        if "students" in kinds:
+            sdir = self.students_dir(class_id)
+            if sdir.exists():
+                for p in sorted(sdir.glob("S-*.md")):
+                    pages.append(
+                        {
+                            "kind": "student",
+                            "id": p.stem,
+                            "path": self.rel_wiki(p),
+                        }
+                    )
+
+        if "raw" in kinds:
+            raw_root = self.root / "raw" / "classes" / class_id
+            if raw_root.exists():
+                for p in sorted(raw_root.glob("*.md")):
+                    pages.append(
+                        {"kind": "raw", "id": p.stem, "path": self.rel_wiki(p)}
+                    )
+        return pages
+
+    def search_wiki(
+        self, class_id: str, query: str, max_results: int = 15
+    ) -> list[dict[str, str]]:
+        self.get_class(class_id)
+        q = query.lower().strip()
+        if not q:
+            return []
+        hits: list[dict[str, str]] = []
+        for page in self.list_class_pages(class_id):
+            try:
+                text = self.read_text(self.resolve_path(page["path"]))
+            except ValueError:
+                continue
+            if q in text.lower():
+                idx = text.lower().index(q)
+                start = max(0, idx - 80)
+                snippet = " ".join(text[start : idx + 80].split())
+                hits.append(
+                    {
+                        "path": page["path"],
+                        "snippet": snippet[:200],
+                    }
+                )
+            if len(hits) >= max_results:
+                break
+        return hits
+
     # --- registry ---
 
     def list_classes(self) -> list[ClassSummary]:
+        discovered: list[ClassSummary] = []
+        classes_root = self.root / "wiki" / "classes"
+        if classes_root.exists():
+            for class_dir in sorted(classes_root.iterdir()):
+                if not class_dir.is_dir():
+                    continue
+                class_id = class_dir.name
+                label, subject = self._read_class_meta(class_id)
+                discovered.append(
+                    ClassSummary(id=class_id, label=label, subject=subject)
+                )
+        if discovered:
+            return discovered
         return CLASS_REGISTRY
 
-    def get_class(self, class_id: str) -> ClassSummary:
+    def _read_class_meta(self, class_id: str) -> tuple[str, str]:
+        config = self.read_text(self.class_config_path(class_id))
+        label = class_id.replace("_", " ")
+        subject = "general"
+        m = re.search(r"^#\s+(.+)$", config, re.M)
+        if m:
+            label = m.group(1).strip()
+        m = re.search(r"^subject:\s*(\S+)", config, re.M | re.I)
+        if m:
+            subject = m.group(1).strip().lower()
         for c in CLASS_REGISTRY:
+            if c.id == class_id:
+                return c.label, c.subject
+        return label, subject
+
+    def get_class(self, class_id: str) -> ClassSummary:
+        for c in self.list_classes():
             if c.id == class_id:
                 return c
         raise KeyError(f"Unknown class: {class_id}")
@@ -258,13 +440,6 @@ class WikiStore:
         )
         applied.append(self.rel_wiki(paths["misconceptions"]))
 
-        notes = self._remove_date_section(self.read_text(paths["student_notes"]), lesson_date)
-        self.write_text(
-            paths["student_notes"],
-            self._merge_student_notes(notes, students, lesson_date),
-        )
-        applied.append(self.rel_wiki(paths["student_notes"]))
-
         loops = self._remove_date_section(self.read_text(paths["open_loops"]), lesson_date)
         self.write_text(
             paths["open_loops"],
@@ -272,8 +447,9 @@ class WikiStore:
         )
         applied.append(self.rel_wiki(paths["open_loops"]))
 
+        self._finalize_lesson_writes(class_id, diary_md, lesson_date, title, applied)
         self._append_log(class_id, lesson_date, title, applied, kind="revise")
-        self._update_index(class_id)
+        self.rebuild_index()
         timeline = self.get_timeline(class_id)
         entry = next((e for e in timeline.entries if e.date == lesson_date), None)
         if entry is None:
@@ -330,6 +506,18 @@ class WikiStore:
                 )
             )
 
+        for path, content, rationale in self._compile_students_and_timeline(
+            class_id, diary_md, lesson_date, title
+        ):
+            proposals.append(
+                WikiUpdateProposal(
+                    wiki_path=self.rel_wiki(path),
+                    current_content=self.read_text(path),
+                    proposed_content=content,
+                    rationale=rationale,
+                )
+            )
+
         return lesson_date, proposals
 
     def commit_ingest(
@@ -367,51 +555,186 @@ class WikiStore:
             self.write_text(path, update.content)
             applied.append(update.wiki_path)
 
-        log_id = self._append_log(class_id, lesson_date, title, applied)
-        self._update_index(class_id)
-        return self.rel_wiki(raw_path), applied, log_id
+        raw_rel = self.rel_wiki(raw_path)
+        if raw_rel not in applied:
+            applied.insert(0, raw_rel)
+
+        self._finalize_lesson_writes(class_id, diary_md, lesson_date, title, applied)
+        log_id = self._append_log(class_id, lesson_date, title, applied, kind="ingest")
+        self.rebuild_index()
+        return raw_rel, applied, log_id
 
     def save_lesson_plan(self, class_id: str, lesson_date: str, content: str) -> str:
         path = self.lesson_dir(class_id, lesson_date) / "lesson_plan.md"
+        self.lesson_dir(class_id, lesson_date).mkdir(parents=True, exist_ok=True)
         self.write_text(path, content)
-        self._update_index(class_id)
+        self.rebuild_index()
         return self.rel_wiki(path)
 
-    def load_class_context(self, class_id: str) -> str:
+    def build_plan_context(self, class_id: str) -> str:
+        """Memory pack for planning the *next* lesson — forward-looking rollups + last real lesson."""
+        snapshot = self.get_snapshot(class_id)
+        cls = self.get_class(class_id)
+        timeline = self.get_timeline(class_id)
+        parts = [
+            f"# Session: Plan next lesson — {snapshot.label} ({class_id})",
+            f"Subject: {cls.subject} | Current unit: {snapshot.current_unit}",
+            f"Open loops (count): {snapshot.open_loop_count}",
+            "",
+            "Use this to propose activities, timing, and homework for the upcoming lesson.",
+            "",
+            "## Top misconceptions to address",
+        ]
+        if snapshot.top_misconceptions:
+            parts.extend(f"- {m}" for m in snapshot.top_misconceptions)
+        else:
+            parts.append("- None listed")
+        parts.append("")
+
+        if snapshot.recent_lessons:
+            parts.extend(["## Recent lessons (titles)", *[f"- {line}" for line in snapshot.recent_lessons], ""])
+
+        if snapshot.last_committed_date:
+            try:
+                detail = self.get_lesson_detail(class_id, snapshot.last_committed_date)
+                parts.extend(
+                    [
+                        f"## Last committed lesson ({snapshot.last_committed_date})",
+                        detail.diary_markdown[:5000],
+                        "",
+                    ]
+                )
+                if detail.lesson_plan_markdown:
+                    parts.extend(
+                        [
+                            f"## Existing plan on file ({snapshot.last_committed_date})",
+                            detail.lesson_plan_markdown[:3000],
+                            "",
+                        ]
+                    )
+            except KeyError:
+                pass
+
+        for key in ("course_state", "open_loops", "misconceptions"):
+            path = self.roll_up_paths(class_id)[key]
+            label = ROLLUP_LABELS.get(key, key)
+            parts.extend([f"## {label}", self.read_text(path)[:2500], ""])
+
+        planned = [e for e in timeline.entries if e.has_plan][:3]
+        if planned:
+            parts.append("## Lessons that already have a saved plan")
+            for e in planned:
+                parts.append(f"- {e.date} — {e.title}")
+            parts.append("")
+
+        parts.extend(
+            [
+                "## Teacher profile (excerpt)",
+                self.read_text(self.root / "wiki" / "teacher_profile.md")[:1200],
+                "",
+                f"## Subject guide: {cls.subject} (excerpt)",
+                self.read_text(self.root / "wiki" / "subjects" / f"{cls.subject}.md")[:1200],
+            ]
+        )
+        return "\n".join(parts)
+
+    def build_ingest_context(self, class_id: str) -> str:
+        """Memory pack for logging today's lesson — student IDs, prior lesson, light rollups."""
+        snapshot = self.get_snapshot(class_id)
         cls = self.get_class(class_id)
         parts = [
-            f"# Class context: {cls.label}",
+            f"# Session: Update lesson notes — {snapshot.label} ({class_id})",
+            f"Subject: {cls.subject} | Current unit: {snapshot.current_unit}",
             "",
-            "## AGENTS conventions",
-            self.read_text(self.root / "AGENTS.md")[:3000],
+            "Help the teacher record what happened today. Use only what they say; use context for IDs and continuity.",
             "",
-            "## Teacher profile",
-            self.read_text(self.root / "wiki" / "teacher_profile.md"),
-            "",
-            f"## Subject: {cls.subject}",
-            self.read_text(self.root / "wiki" / "subjects" / f"{cls.subject}.md"),
+            "## Student notes (use S-xxx pseudonyms from here)",
+            self.read_text(self.roll_up_paths(class_id)["student_notes"])[:4500],
             "",
             "## Course state",
-            self.read_text(self.roll_up_paths(class_id)["course_state"]),
+            self.read_text(self.roll_up_paths(class_id)["course_state"])[:2000],
             "",
-            "## Open loops",
-            self.read_text(self.roll_up_paths(class_id)["open_loops"]),
-            "",
-            "## Misconceptions",
-            self.read_text(self.roll_up_paths(class_id)["misconceptions"]),
-            "",
-            "## Student notes",
-            self.read_text(self.roll_up_paths(class_id)["student_notes"]),
-            "",
-            "## Recent lessons",
         ]
-        timeline = self.get_timeline(class_id)
-        for entry in timeline.entries[:5]:
-            results_path = self.lesson_dir(class_id, entry.date) / "lesson_results.md"
-            parts.append(f"### {entry.date} — {entry.title}")
-            parts.append(self.read_text(results_path)[:2000])
-            parts.append("")
+
+        if snapshot.last_committed_date:
+            try:
+                detail = self.get_lesson_detail(class_id, snapshot.last_committed_date)
+                parts.extend(
+                    [
+                        f"## Previous lesson ({snapshot.last_committed_date}) — continuity only",
+                        detail.diary_markdown[:3500],
+                        "",
+                    ]
+                )
+            except KeyError:
+                pass
+
+        parts.extend(
+            [
+                "## Open loops (teacher may close or add while logging)",
+                self.read_text(self.roll_up_paths(class_id)["open_loops"])[:1500],
+                "",
+                "## Misconceptions (brief — note new ones if the teacher reports them)",
+            ]
+        )
+        if snapshot.top_misconceptions:
+            parts.extend(f"- {m}" for m in snapshot.top_misconceptions[:5])
+        else:
+            parts.append("- None listed yet")
+        parts.extend(
+            [
+                "",
+                "## Wiki logging conventions (excerpt)",
+                self.read_text(self.root / "AGENTS.md")[:1200],
+            ]
+        )
         return "\n".join(parts)
+
+    def empty_plan_template(self, lesson_date: Optional[str] = None) -> str:
+        d = lesson_date or date.today().isoformat()
+        return (
+            f"# Lesson Plan — Next lesson\n\n"
+            f"> Duration: 45 min | Target date: {d}\n\n"
+            "## Learning goals\n\n\n"
+            "## Lesson flow\n\n"
+            "- **Opening** (5 min):\n\n"
+            "- **Main teaching** (25 min):\n\n"
+            "- **Practice** (10 min):\n\n"
+            "- **Close** (5 min):\n\n"
+            "## Warmup\n\n\n"
+            "## Practice tasks\n\n-\n\n"
+            "## Homework\n\n\n"
+            "## Teacher notes\n\n"
+        )
+
+    def is_plan_ready(self, plan_md: str) -> bool:
+        required = ("## Learning goals", "## Lesson flow", "## Warmup")
+        text = plan_md.lower()
+        return all(h.lower() in text for h in required) and len(plan_md.strip()) > 200
+
+    def load_index_context(self, class_id: str, max_chars: int = 4000) -> str:
+        """Index-first context for agent tool loops."""
+        cls = self.get_class(class_id)
+        parts = [
+            f"# Wiki index (read pages via tools as needed)",
+            f"Class: {cls.label} ({class_id})",
+            "",
+            self.read_wiki_index(class_id)[:max_chars],
+            "",
+            "## Roll-up excerpts",
+            self.read_text(self.roll_up_paths(class_id)["course_state"])[:1500],
+            "",
+            self.read_text(self.roll_up_paths(class_id)["open_loops"])[:1000],
+        ]
+        return "\n".join(parts)
+
+    def load_class_context(self, class_id: str) -> str:
+        """Broad legacy dump. Prefer build_ingest_context or build_plan_context per workflow."""
+        return (
+            self.load_index_context(class_id)
+            + "\n\n---\n\n"
+            + self.build_ingest_context(class_id)
+        )[:24000]
 
     def empty_diary_template(self, lesson_date: Optional[str] = None) -> str:
         d = lesson_date or date.today().isoformat()
@@ -461,10 +784,11 @@ class WikiStore:
         new_misc = self._append_bullets(misc, self._lines_to_bullets(didnt), lesson_date)
         results.append(("misconceptions", new_misc, "Add problems from this lesson."))
 
-        # student_notes
-        notes = self.read_text(paths["student_notes"])
-        new_notes = self._merge_student_notes(notes, students, lesson_date)
-        results.append(("student_notes", new_notes, "Merge student observations."))
+        # student_notes index (entity pages compiled separately)
+        new_notes = self._rebuild_student_notes_index(class_id)
+        results.append(
+            ("student_notes", new_notes, "Refresh student index from entity pages.")
+        )
 
         # open_loops
         loops = self.read_text(paths["open_loops"])
@@ -501,12 +825,239 @@ class WikiStore:
         lines.append("")
         return "\n".join(lines)
 
-    def _merge_student_notes(self, existing: str, students_block: str, lesson_date: str) -> str:
-        header = "# Student Notes\n\n"
-        body = existing if existing.strip() else header
-        if students_block.strip():
-            body = body.rstrip() + f"\n\n## {lesson_date}\n{students_block.strip()}\n"
-        return body
+    def _parse_student_observations(self, students_block: str) -> dict[str, list[str]]:
+        """Map S-### -> observation bullets from diary section."""
+        by_student: dict[str, list[str]] = {}
+        if not students_block.strip():
+            return by_student
+        current: Optional[str] = None
+        for line in students_block.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            hm = re.match(r"^##\s+(S-\d{3})\s*$", line, re.I)
+            if hm:
+                current = hm.group(1).upper()
+                by_student.setdefault(current, [])
+                continue
+            sm = re.match(r"^-\s*(S-\d{3})\s*:\s*(.+)$", line, re.I)
+            if sm:
+                sid = sm.group(1).upper()
+                by_student.setdefault(sid, []).append(sm.group(2).strip())
+                continue
+            if current and line.startswith("-"):
+                by_student[current].append(line.lstrip("- ").strip())
+            else:
+                for sid in STUDENT_ID_RE.findall(line):
+                    sid = sid.upper()
+                    by_student.setdefault(sid, []).append(line.lstrip("- ").strip())
+        return by_student
+
+    def _upsert_student_entity(
+        self, class_id: str, student_id: str, lesson_date: str, bullets: list[str]
+    ) -> Path:
+        path = self.student_path(class_id, student_id)
+        existing = self.read_text(path)
+        if not existing.strip():
+            existing = f"# {student_id}\n\n> Class: {class_id}\n"
+        section_pattern = rf"##\s*{re.escape(lesson_date)}\s*\n"
+        if re.search(section_pattern, existing):
+            existing = re.sub(
+                rf"\n?##\s*{re.escape(lesson_date)}\s*\n.*?(?=\n##\s|\Z)",
+                "",
+                existing,
+                flags=re.S,
+            ).rstrip()
+        lines = [existing.rstrip(), "", f"## {lesson_date}"]
+        for b in bullets:
+            lines.append(f"- {b}")
+        lines.append("")
+        self.write_text(path, "\n".join(lines))
+        return path
+
+    def _rebuild_student_notes_index(
+        self, class_id: str, previews: Optional[dict[str, str]] = None
+    ) -> str:
+        lines = [
+            "# Student Notes",
+            "",
+            "> Index of student entity pages. Details live in `students/S-###.md`.",
+            "",
+        ]
+        previews = previews or {}
+        sdir = self.students_dir(class_id)
+        ids: set[str] = set(previews.keys())
+        if sdir.exists():
+            ids.update(p.stem.upper() for p in sdir.glob("S-*.md"))
+        for sid in sorted(ids):
+            text = previews.get(sid) or self.read_text(self.student_path(class_id, sid))
+            if not text.strip():
+                continue
+            p = self.student_path(class_id, sid)
+            one_liner = ""
+            for ln in text.splitlines():
+                if ln.strip().startswith("- "):
+                    one_liner = ln.strip().lstrip("- ")[:120]
+                    break
+            rel = f"students/{sid}.md"
+            lines.append(f"## {sid}")
+            if one_liner:
+                lines.append(f"- {one_liner}")
+            lines.append(f"- Page: [{sid}]({rel})")
+            lines.append("")
+        return "\n".join(lines).rstrip() + "\n"
+
+    def _compile_timeline_entry(
+        self,
+        class_id: str,
+        lesson_date: str,
+        title: str,
+        diary_md: str,
+    ) -> str:
+        results_path = self.lesson_dir(class_id, lesson_date) / "lesson_results.md"
+        lesson_results = self.read_text(results_path)
+        if not lesson_results.strip():
+            lesson_results = self._format_lesson_results(
+                class_id,
+                self.get_class(class_id).subject,
+                diary_md,
+                lesson_date,
+                title,
+            )
+        summary, highlights, _, _ = self._build_timeline_summary(lesson_results)
+        lesson_link = f"lessons/{lesson_date}/lesson_results.md"
+        block = (
+            f"## {lesson_date} — {title}\n"
+            f"- [{title}]({lesson_link})\n"
+            f"- {summary}\n"
+        )
+        if highlights:
+            block += f"- Highlight: {highlights[0]}\n"
+        return block
+
+    def _upsert_timeline_md(
+        self, class_id: str, lesson_date: str, title: str, diary_md: str
+    ) -> str:
+        path = self.timeline_path(class_id)
+        existing = self.read_text(path)
+        if not existing.strip():
+            existing = f"# Lesson Timeline\n\n> Class: {class_id}\n\n"
+        new_block = self._compile_timeline_entry(class_id, lesson_date, title, diary_md)
+        pattern = rf"\n?##\s*{re.escape(lesson_date)}\s*—.*?(?=\n##\s|\Z)"
+        if re.search(pattern, existing, re.S):
+            existing = re.sub(pattern, "", existing, flags=re.S).rstrip()
+        parts = [existing.rstrip(), "", new_block.rstrip(), ""]
+        body = "\n".join(parts)
+        sections = re.split(r"(?=^##\s+\d{4}-\d{2}-\d{2}\s*—)", body, flags=re.M)
+        header = sections[0] if sections else body
+        dated = [s for s in sections[1:] if s.strip()]
+        dated.sort(key=lambda s: s.split("—")[0].replace("##", "").strip(), reverse=True)
+        return header.rstrip() + "\n\n" + "\n\n".join(dated).rstrip() + "\n"
+
+    def _compile_students_and_timeline(
+        self,
+        class_id: str,
+        diary_md: str,
+        lesson_date: str,
+        title: str,
+    ) -> list[tuple[Path, str, str]]:
+        students_block = self._extract_section_body(diary_md, "Student observations")
+        by_student = self._parse_student_observations(students_block)
+        outputs: list[tuple[Path, str, str]] = []
+
+        for sid, bullets in by_student.items():
+            path = self.student_path(class_id, sid)
+            proposed_path = path
+            content = self.read_text(path)
+            if bullets:
+                preview = content
+                if not preview.strip():
+                    preview = f"# {sid}\n\n> Class: {class_id}\n"
+                section_pattern = rf"##\s*{re.escape(lesson_date)}\s*\n"
+                if not re.search(section_pattern, preview):
+                    preview = (
+                        preview.rstrip()
+                        + "\n\n"
+                        + f"## {lesson_date}\n"
+                        + "\n".join(f"- {b}" for b in bullets)
+                        + "\n"
+                    )
+                outputs.append(
+                    (
+                        proposed_path,
+                        preview,
+                        f"Update observations for {sid} from this lesson.",
+                    )
+                )
+
+        notes_path = self.roll_up_paths(class_id)["student_notes"]
+        previews: dict[str, str] = {}
+        for sid, bullets in by_student.items():
+            path = self.student_path(class_id, sid)
+            content = self.read_text(path)
+            if bullets:
+                if not content.strip():
+                    content = f"# {sid}\n\n> Class: {class_id}\n"
+                if f"## {lesson_date}" not in content:
+                    content = (
+                        content.rstrip()
+                        + "\n\n"
+                        + f"## {lesson_date}\n"
+                        + "\n".join(f"- {b}" for b in bullets)
+                        + "\n"
+                    )
+                previews[sid] = content
+        index_content = self._rebuild_student_notes_index(class_id, previews=previews)
+        outputs.append(
+            (
+                notes_path,
+                index_content,
+                "Rebuild student index linking to entity pages.",
+            )
+        )
+
+        timeline_path = self.timeline_path(class_id)
+        timeline_content = self._upsert_timeline_md(class_id, lesson_date, title, diary_md)
+        outputs.append(
+            (
+                timeline_path,
+                timeline_content,
+                "Update chronological lesson timeline.",
+            )
+        )
+        return outputs
+
+    def _finalize_lesson_writes(
+        self,
+        class_id: str,
+        diary_md: str,
+        lesson_date: str,
+        title: str,
+        applied: list[str],
+    ) -> None:
+        """Apply student entities, index, and timeline after lesson commit/revise."""
+        students_block = self._extract_section_body(diary_md, "Student observations")
+        by_student = self._parse_student_observations(students_block)
+        for sid, bullets in by_student.items():
+            path = self._upsert_student_entity(class_id, sid, lesson_date, bullets)
+            rel = self.rel_wiki(path)
+            if rel not in applied:
+                applied.append(rel)
+
+        notes_path = self.roll_up_paths(class_id)["student_notes"]
+        self.write_text(notes_path, self._rebuild_student_notes_index(class_id))
+        rel_notes = self.rel_wiki(notes_path)
+        if rel_notes not in applied:
+            applied.append(rel_notes)
+
+        timeline_path = self.timeline_path(class_id)
+        self.write_text(
+            timeline_path,
+            self._upsert_timeline_md(class_id, lesson_date, title, diary_md),
+        )
+        rel_tl = self.rel_wiki(timeline_path)
+        if rel_tl not in applied:
+            applied.append(rel_tl)
 
     def _lines_to_bullets(self, text: str) -> list[str]:
         bullets = []
@@ -618,39 +1169,63 @@ class WikiStore:
             return "# Notes\n\n" if "misconception" not in text.lower() else "# Misconceptions\n\n"
         return cleaned + "\n"
 
+    def _parse_log_entry(self, header: str, block: str) -> Optional[dict]:
+        m = LOG_HEADER_RE.match(header.strip())
+        if m:
+            _ts, _kind, lesson_date, title, entry_id = m.groups()
+            lesson_date = (lesson_date or "").strip()
+        else:
+            m = LOG_HEADER_LEGACY_RE.match(header.strip())
+            if not m:
+                return None
+            lesson_date, _kind, title, entry_id = m.groups()
+        paths = re.findall(r"- Updated:\s*(.+)", block)
+        meta_m = re.search(r"> Lesson date:\s*(\d{4}-\d{2}-\d{2})", block)
+        if meta_m:
+            lesson_date = meta_m.group(1)
+        elif not lesson_date:
+            lesson_date = header[1:11] if len(header) > 10 else ""
+        ts_m = re.match(r"##\s*\[([^\]]+)\]", header.strip())
+        committed_at = ts_m.group(1) if ts_m else lesson_date
+        return {
+            "lesson_date": lesson_date,
+            "title": title.strip(),
+            "entry_id": entry_id,
+            "wiki_paths": [p.strip() for p in paths],
+            "committed_at": committed_at,
+        }
+
     def _parse_log_by_date(self) -> dict[str, dict]:
         """Map lesson_date -> latest log metadata."""
-        log_text = self.read_text(self.root / "log.md")
+        log_text = self.read_text(self.log_path)
         by_date: dict[str, dict] = {}
-        for m in re.finditer(
-            r"##\s*\[(\d{4}-\d{2}-\d{2})\]\s+(\w+)\s*\|\s*(.+?)\s*\(id:([a-f0-9]+)\)",
-            log_text,
-        ):
-            lesson_date, _kind, title, entry_id = m.groups()
-            block_end = m.end()
-            next_m = re.search(r"\n##\s*\[", log_text[block_end:])
-            block = log_text[block_end : block_end + next_m.start()] if next_m else log_text[block_end:]
-            paths = re.findall(r"- Updated:\s*(.+)", block)
-            by_date[lesson_date] = {
-                "title": title.strip(),
-                "entry_id": entry_id,
-                "wiki_paths": [p.strip() for p in paths],
-                "committed_at": lesson_date,
-            }
+        headers = list(re.finditer(r"^##\s*\[", log_text, re.M))
+        for i, hm in enumerate(headers):
+            start = hm.start()
+            end = headers[i + 1].start() if i + 1 < len(headers) else len(log_text)
+            block = log_text[start:end]
+            header_line = block.split("\n", 1)[0]
+            meta = self._parse_log_entry(header_line, block)
+            if meta and meta["lesson_date"]:
+                by_date[meta["lesson_date"]] = meta
         return by_date
 
     def _latest_log_commit(self) -> dict[str, str]:
-        log_text = self.read_text(self.root / "log.md")
-        matches = list(
-            re.finditer(
-                r"##\s*\[(\d{4}-\d{2}-\d{2})\]\s+(\w+)\s*\|\s*(.+?)\s*\(id:",
-                log_text,
-            )
-        )
-        if not matches:
+        log_text = self.read_text(self.log_path)
+        headers = list(re.finditer(r"^##\s*\[", log_text, re.M))
+        if not headers:
             return {}
-        last = matches[-1]
-        return {"lesson_date": last.group(1), "committed_at": last.group(1), "title": last.group(3).strip()}
+        last_start = headers[-1].start()
+        block = log_text[last_start:]
+        header_line = block.split("\n", 1)[0]
+        meta = self._parse_log_entry(header_line, block)
+        if not meta:
+            return {}
+        return {
+            "lesson_date": meta["lesson_date"],
+            "committed_at": meta["committed_at"],
+            "title": meta["title"],
+        }
 
     def _append_log(
         self,
@@ -660,9 +1235,14 @@ class WikiStore:
         applied: list[str],
         kind: str = "ingest",
     ) -> str:
-        log_path = self.root / "log.md"
+        log_path = self.log_path
         entry_id = str(uuid.uuid4())[:8]
-        lines = [f"\n## [{lesson_date}] {kind} | {title} (id:{entry_id})"]
+        ts = datetime.now().isoformat(timespec="seconds")
+        lines = [
+            f"\n## [{ts}] {kind} | {lesson_date} — {title} (id:{entry_id})",
+            f"> Class: {class_id}",
+            f"> Lesson date: {lesson_date}",
+        ]
         for path in applied:
             lines.append(f"- Updated: {path}")
         existing = self.read_text(log_path)
@@ -671,19 +1251,76 @@ class WikiStore:
         self.write_text(log_path, existing.rstrip() + "\n" + "\n".join(lines) + "\n")
         return entry_id
 
-    def _update_index(self, class_id: str) -> None:
-        cls = self.get_class(class_id)
-        index_path = self.root / "index.md"
-        timeline = self.get_timeline(class_id)
+    def rebuild_index(self, class_id: Optional[str] = None) -> None:
+        """Regenerate index.md for all classes (or verify one class exists)."""
+        if class_id:
+            self.get_class(class_id)
+        classes = [self.get_class(c.id) for c in self.list_classes()]
         lines = [
             "# KlassenPilot Wiki Index",
             "",
-            f"## Class — {cls.label}",
+            "> Read this file first when querying the wiki.",
             "",
-            "| Date | Title | Has plan |",
-            "|------|-------|----------|",
+            "## Classes",
         ]
-        for e in timeline.entries:
-            lines.append(f"| {e.date} | {e.title} | {'yes' if e.has_plan else 'no'} |")
+        for cls in classes:
+            lines.append(f"- **{cls.label}** (`{cls.id}`) — subject: {cls.subject}")
         lines.append("")
-        self.write_text(index_path, "\n".join(lines))
+
+        for cls in classes:
+            cid = cls.id
+            timeline = self.get_timeline(cid)
+            lines.extend(
+                [
+                    f"## Class: {cid} — {cls.label}",
+                    "",
+                    "### Roll-ups",
+                ]
+            )
+            for key, path in self.roll_up_paths(cid).items():
+                lines.append(f"- [{ROLLUP_LABELS.get(key, key)}]({self.rel_wiki(path)})")
+            tl = self.timeline_path(cid)
+            if tl.exists():
+                lines.append(f"- [Lesson timeline]({self.rel_wiki(tl)})")
+            lines.extend(["", "### Lessons", ""])
+            if timeline.entries:
+                lines.append("| Date | Title | Summary | Plan | Path |")
+                lines.append("|------|-------|---------|------|------|")
+                for e in timeline.entries:
+                    results_path = self.lesson_dir(cid, e.date) / "lesson_results.md"
+                    summary = self._one_line(e.summary, 80)
+                    lines.append(
+                        f"| {e.date} | {e.title} | {summary} | "
+                        f"{'yes' if e.has_plan else 'no'} | {self.rel_wiki(results_path)} |"
+                    )
+            else:
+                lines.append("_No lessons yet._")
+            lines.extend(["", "### Students", ""])
+            sdir = self.students_dir(cid)
+            if sdir.exists() and list(sdir.glob("S-*.md")):
+                for p in sorted(sdir.glob("S-*.md")):
+                    sid = p.stem.upper()
+                    text = self.read_text(p)
+                    one = ""
+                    for ln in text.splitlines():
+                        if ln.strip().startswith("- "):
+                            one = self._one_line(ln.lstrip("- "), 60)
+                            break
+                    lines.append(
+                        f"- [{sid}]({self.rel_wiki(p)})" + (f" — {one}" if one else "")
+                    )
+            else:
+                lines.append("_No student entity pages yet._")
+            lines.extend(["", "### Raw sources", ""])
+            raw_root = self.root / "raw" / "classes" / cid
+            if raw_root.exists():
+                for p in sorted(raw_root.glob("*.md")):
+                    lines.append(f"- [{p.name}]({self.rel_wiki(p)})")
+            else:
+                lines.append("_No raw diaries yet._")
+            lines.append("")
+
+        self.write_text(self.index_path, "\n".join(lines))
+
+    def _update_index(self, class_id: str) -> None:
+        self.rebuild_index(class_id)

@@ -1,113 +1,27 @@
-"""Agent prompts and OpenAI-backed agent runners."""
+"""Agent runners using OpenAI Agents SDK with wiki tools."""
 
 from __future__ import annotations
 
 from typing import Optional
 
+from agents import Runner
 from openai import OpenAI
-from pydantic import BaseModel, Field
 
 from app.config import Settings
-from app.schemas.api import ChatMessage, CompletenessChecklist, LessonPlan, LessonFlowPhase
+from app.schemas.api import ChatAttachment, ChatMessage, CompletenessChecklist, LessonPlan
+from app.teacher_agent.agent import (
+    build_compile_agent,
+    build_ingest_agent,
+    build_lint_agent,
+    build_plan_chat_agent,
+    build_plan_lesson_agent,
+    build_plan_opening_agent,
+)
+from app.teacher_agent.models import CompileOutput, IngestTurnOutput, PlanOutput, PlanTurnOutput
+from app.teacher_agent.tools import WikiToolContext
 from app.teacher_agent.wiki_store import DIARY_SECTION_HEADINGS, WikiStore
 
-INGEST_SYSTEM = """You are KlassenPilot, a private teacher copilot for Gymnasium teachers.
-
-You help teachers log lessons through conversation. Each turn you must:
-1. Reply conversationally — reflect what you understood, ask at most ONE clarifying question when important diary sections are missing.
-2. Update diary_markdown — the live lesson results draft shown in the teacher's side panel.
-
-Required diary sections (all must be covered before save):
-{sections}
-
-Diary markdown format (use exactly these ## headings):
-# Lesson Results — YYYY-MM-DD — {{short title}}
-
-## What was covered
-...
-
-## Student participation
-...
-
-## What went well
-...
-
-## What didn't go well
-...
-
-## Student observations
-...
-
-## Homework & follow-ups
-...
-
-Rules:
-- Use pseudonymous student IDs (S-001, S-014) — never real names.
-- Do not infer sensitive facts beyond what the teacher said.
-- Merge new information from the conversation into diary_markdown; preserve manual edits from the current draft.
-- Be practical, concise, and teacher-friendly.
-- When all sections are filled, tell the teacher they can click "Ready to save memory".
-
-Class context:
-{context}
-"""
-
-COMPILE_SYSTEM = """You compile a teacher conversation into a structured lesson results markdown document.
-
-Output ONLY valid markdown with this exact structure:
-
-# Lesson Results — YYYY-MM-DD — {title}
-
-## What was covered
-...
-
-## Student participation
-...
-
-## What went well
-...
-
-## What didn't go well
-...
-
-## Student observations
-...
-
-## Homework & follow-ups
-...
-
-Use today's date if not specified. Fill every section. Use "None" only if teacher explicitly said nothing applied.
-"""
-
-PLAN_SYSTEM = """You create lesson plans for Gymnasium teachers grounded in class wiki memory.
-
-Return structured JSON matching the LessonPlan schema.
-Prefer 45-minute lessons with clear phases. Address open loops and misconceptions when relevant.
-Use English. Be practical and specific to the class context provided.
-"""
-
-
-class CompileOutput(BaseModel):
-    diary_markdown: str = Field(description="Full lesson results markdown with all sections")
-
-
-class IngestTurnOutput(BaseModel):
-    reply: str = Field(description="Conversational reply to the teacher")
-    diary_markdown: str = Field(description="Updated full lesson results markdown with all sections")
-
-
-class PlanOutput(BaseModel):
-    title: str
-    lesson_date: Optional[str] = None
-    duration_minutes: int = 45
-    learning_goals: list[str]
-    lesson_flow: list[LessonFlowPhase]
-    warmup: str
-    practice_tasks: list[str]
-    homework: str
-    teacher_notes: str
-    addresses_open_loops: list[str] = Field(default_factory=list)
-    addresses_misconceptions: list[str] = Field(default_factory=list)
+MAX_AGENT_TURNS = 8
 
 
 class AgentRunner:
@@ -125,64 +39,108 @@ class AgentRunner:
             raise RuntimeError("OPENAI_API_KEY is not configured")
         return self.client
 
+    def _wiki_ctx(self, class_id: str) -> WikiToolContext:
+        return WikiToolContext(wiki=self.wiki, class_id=class_id)
+
+    def _format_attachments(self, attachments: list[ChatAttachment]) -> str:
+        if not attachments:
+            return ""
+        blocks = []
+        for att in attachments:
+            blocks.append(f"### Upload: {att.filename}\n{att.content[:8000]}")
+        return "\n\n".join(blocks)
+
+    def _build_user_input(
+        self,
+        messages: list[ChatMessage],
+        draft_label: str,
+        draft_content: str,
+        attachments: list[ChatAttachment] | None = None,
+    ) -> str:
+        parts = [f"{draft_label}:\n{draft_content[:6000]}\n"]
+        if attachments:
+            parts.append(
+                f"Uploaded materials this turn:\n{self._format_attachments(attachments)}\n"
+            )
+        for m in messages:
+            parts.append(f"{m.role}: {m.content}")
+        return "\n".join(parts)
+
+    def _run_structured(self, agent, user_input: str):
+        self._require_client()
+        result = Runner.run_sync(agent, user_input, max_turns=MAX_AGENT_TURNS)
+        return result.final_output
+
+    def plan_opening(self, class_id: str) -> str:
+        context = self.wiki.load_index_context(class_id) + "\n\n" + self.wiki.build_plan_context(class_id)
+        agent = build_plan_opening_agent(context[:14000], self.model)
+        out = self._run_structured(agent, "Open the planning session for this class.")
+        text = out if isinstance(out, str) else str(out)
+        return text.strip() or (
+            "I've loaded your class memory. Tell me what you want to cover in the next lesson, "
+            "or attach a worksheet or draft plan with the + button."
+        )
+
+    def plan_chat(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        partial_plan: str = "",
+        attachments: list[ChatAttachment] | None = None,
+    ) -> tuple[str, str, bool]:
+        context = self.wiki.load_index_context(class_id)
+        agent = build_plan_chat_agent(self._wiki_ctx(class_id), context, self.model)
+        current_draft = partial_plan.strip() or self.wiki.empty_plan_template()
+        user_input = self._build_user_input(
+            messages, "Current plan draft (update each turn)", current_draft, attachments
+        )
+        parsed = self._run_structured(agent, user_input)
+        if not isinstance(parsed, PlanTurnOutput):
+            return "I had trouble processing that — could you try again?", current_draft, False
+        reply = parsed.reply
+        plan_md = parsed.plan_markdown.strip() or current_draft
+        ready = self.wiki.is_plan_ready(plan_md) or "ready to save" in reply.lower()
+        return reply, plan_md, ready
+
     def ingest_chat(
         self,
         class_id: str,
         messages: list[ChatMessage],
         partial_diary: str = "",
+        attachments: list[ChatAttachment] | None = None,
     ) -> tuple[str, str, CompletenessChecklist, bool]:
-        context = self.wiki.load_class_context(class_id)
+        context = self.wiki.load_index_context(class_id) + "\n\n" + self.wiki.build_ingest_context(class_id)
         sections = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
-        system = INGEST_SYSTEM.format(sections=sections, context=context[:12000])
-
+        agent = build_ingest_agent(self._wiki_ctx(class_id), sections, context[:10000], self.model)
         current_draft = partial_diary.strip() or self.wiki.empty_diary_template()
-        oai_messages = [
-            {"role": "system", "content": system},
-            {
-                "role": "system",
-                "content": f"Current diary draft (update this each turn):\n{current_draft[:6000]}",
-            },
-        ]
-        for m in messages:
-            oai_messages.append({"role": m.role, "content": m.content})
-
-        response = self._require_client().beta.chat.completions.parse(
-            model=self.model,
-            messages=oai_messages,
-            response_format=IngestTurnOutput,
-            temperature=0.4,
+        user_input = self._build_user_input(
+            messages, "Current diary draft (update each turn)", current_draft, attachments
         )
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            reply = "I had trouble processing that — could you try again?"
-            diary_md = current_draft
-        else:
-            reply = parsed.reply
-            diary_md = parsed.diary_markdown.strip() or current_draft
-
+        parsed = self._run_structured(agent, user_input)
+        if not isinstance(parsed, IngestTurnOutput):
+            return (
+                "I had trouble processing that — could you try again?",
+                current_draft,
+                self.wiki.checklist_from_diary(current_draft),
+                False,
+            )
+        reply = parsed.reply
+        diary_md = parsed.diary_markdown.strip() or current_draft
         checklist = self.wiki.checklist_from_diary(diary_md)
         ready = self.wiki.is_diary_complete(diary_md) or "ready to save" in reply.lower()
         return reply, diary_md, checklist, ready
 
     def compile_diary(self, class_id: str, messages: list[ChatMessage]) -> str:
-        context = self.wiki.load_class_context(class_id)
+        context = self.wiki.load_index_context(class_id)
         transcript = "\n".join(f"{m.role}: {m.content}" for m in messages)
         prompt = (
             f"Class context:\n{context[:8000]}\n\n"
             f"Conversation transcript:\n{transcript}\n\n"
             "Compile the lesson results markdown now."
         )
-        response = self._require_client().beta.chat.completions.parse(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": COMPILE_SYSTEM},
-                {"role": "user", "content": prompt},
-            ],
-            response_format=CompileOutput,
-            temperature=0.3,
-        )
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
+        agent = build_compile_agent(self.model)
+        parsed = self._run_structured(agent, prompt)
+        if not isinstance(parsed, CompileOutput):
             return self.wiki.empty_diary_template()
         return parsed.diary_markdown
 
@@ -192,22 +150,24 @@ class AgentRunner:
         duration_minutes: int = 45,
         anchor_date: Optional[str] = None,
     ) -> LessonPlan:
-        context = self.wiki.load_class_context(class_id)
+        context = self.wiki.load_index_context(class_id)
         user = (
             f"Create a {duration_minutes}-minute lesson plan for class {class_id}.\n"
             f"Anchor date: {anchor_date or 'next lesson after last logged entry'}.\n\n"
-            f"Wiki context:\n{context[:12000]}"
+            f"Start from index.md via tools, then open relevant pages.\n"
+            f"Context excerpt:\n{context[:4000]}"
         )
-        response = self._require_client().beta.chat.completions.parse(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": PLAN_SYSTEM},
-                {"role": "user", "content": user},
-            ],
-            response_format=PlanOutput,
-            temperature=0.5,
-        )
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
+        agent = build_plan_lesson_agent(self._wiki_ctx(class_id), self.model)
+        parsed = self._run_structured(agent, user)
+        if not isinstance(parsed, PlanOutput):
             raise RuntimeError("Failed to generate lesson plan")
         return LessonPlan(**parsed.model_dump())
+
+    def lint_wiki(self, class_id: str) -> str:
+        context = self.wiki.read_wiki_index(class_id)
+        agent = build_lint_agent(self._wiki_ctx(class_id), context, self.model)
+        out = self._run_structured(
+            agent,
+            f"Lint the wiki for class {class_id}. Read index.md and scan lessons, students, roll-ups.",
+        )
+        return out if isinstance(out, str) else str(out)
