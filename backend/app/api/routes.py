@@ -85,8 +85,6 @@ def revise_lesson(
         return ReviseLessonResponse(entry=entry, applied_wiki_paths=applied)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/classes/{class_id}/snapshot", response_model=ClassMemorySnapshot)
@@ -144,12 +142,10 @@ def ingest_chat(
             session_id, body.message, body.diary_markdown, attachments=body.attachments
         )
     except KeyError as e:
-        msg = str(e)
-        if msg.startswith("Unknown session:"):
+        msg = e.args[0] if e.args else str(e)
+        if isinstance(msg, str) and msg.startswith("Unknown session:"):
             raise HTTPException(status_code=404, detail=msg) from e
-        raise HTTPException(status_code=500, detail=msg) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise  # unexpected KeyError -> global handler logs full traceback
 
 
 @router.patch(
@@ -187,8 +183,6 @@ def ingest_propose(
         return ingest.propose(session_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get(
@@ -235,9 +229,11 @@ def start_plan_session(
 ) -> PlanSession:
     try:
         wiki.get_class(class_id)
+        return plan_svc.start_session(class_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    return plan_svc.start_session(class_id)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
 
 
 @router.post(
@@ -261,12 +257,10 @@ def plan_chat(
             attachments=body.attachments,
         )
     except KeyError as e:
-        msg = str(e)
-        if msg.startswith("Unknown session:"):
+        msg = e.args[0] if e.args else str(e)
+        if isinstance(msg, str) and msg.startswith("Unknown session:"):
             raise HTTPException(status_code=404, detail=msg) from e
-        raise HTTPException(status_code=500, detail=msg) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise  # unexpected KeyError -> global handler logs full traceback
 
 
 @router.get(
@@ -318,8 +312,6 @@ def plan_save(
         return plan_svc.save(class_id, body)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/classes/{class_id}/plan-lesson", response_model=LessonPlan)
@@ -334,5 +326,3 @@ def plan_lesson(
         return plan_svc.generate(class_id, body)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e

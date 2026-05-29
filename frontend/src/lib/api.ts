@@ -78,11 +78,30 @@ export type ApprovedWikiUpdate = {
   content: string;
   approved: boolean;
 };
+export type ChatAttachment = { filename: string; content: string };
 export type ChatResponse = {
   reply: string;
   diary_markdown: string;
   completeness: CompletenessChecklist;
   ready_to_propose: boolean;
+};
+export type PlanSession = {
+  session_id: string;
+  class_id: string;
+  status: string;
+  messages: ChatMessage[];
+  opening_message: string;
+};
+export type PlanDraft = { plan_markdown: string };
+export type PlanChatResponse = {
+  reply: string;
+  plan_markdown: string;
+  ready_to_save: boolean;
+};
+export type SavePlanResponse = {
+  lesson_date: string;
+  title: string;
+  plan_path: string;
 };
 export type LessonFlowPhase = { phase: string; minutes: number; description: string };
 export type LessonPlan = {
@@ -119,8 +138,12 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const text = await res.text();
     let message = text || res.statusText;
     try {
-      const body = JSON.parse(text) as { detail?: string };
-      if (body.detail) message = body.detail;
+      const body = JSON.parse(text) as {
+        error?: { message?: string };
+        detail?: string;
+      };
+      // Typed envelope { error: { message } }, with fallback to legacy { detail }.
+      message = body.error?.message ?? body.detail ?? message;
     } catch {
       /* use raw text */
     }
@@ -187,12 +210,14 @@ export const client = {
     sessionId: string,
     message: string,
     diaryMarkdown?: string,
+    attachments?: ChatAttachment[],
   ) =>
     api<ChatResponse>(`/api/classes/${classId}/ingest/sessions/${sessionId}/chat`, {
       method: "POST",
       body: JSON.stringify({
         message,
         diary_markdown: diaryMarkdown ?? null,
+        attachments: attachments ?? [],
       }),
     }),
   ingestGetDraft: (classId: string, sessionId: string) =>
@@ -229,6 +254,44 @@ export const client = {
         }),
       },
     ),
+  startPlanSession: (classId: string) =>
+    api<PlanSession>(`/api/classes/${classId}/plan/sessions`, { method: "POST" }),
+  planChat: (
+    classId: string,
+    sessionId: string,
+    message: string,
+    planMarkdown?: string,
+    attachments?: ChatAttachment[],
+  ) =>
+    api<PlanChatResponse>(`/api/classes/${classId}/plan/sessions/${sessionId}/chat`, {
+      method: "POST",
+      body: JSON.stringify({
+        message,
+        plan_markdown: planMarkdown ?? null,
+        attachments: attachments ?? [],
+      }),
+    }),
+  planGetDraft: (classId: string, sessionId: string) =>
+    api<PlanDraft>(`/api/classes/${classId}/plan/sessions/${sessionId}/draft`),
+  planUpdateDraft: (classId: string, sessionId: string, planMarkdown: string) =>
+    api<PlanDraft>(`/api/classes/${classId}/plan/sessions/${sessionId}/draft`, {
+      method: "PATCH",
+      body: JSON.stringify({ plan_markdown: planMarkdown }),
+    }),
+  planSave: (
+    classId: string,
+    sessionId: string,
+    lessonDate: string,
+    planMarkdown: string,
+  ) =>
+    api<SavePlanResponse>(`/api/classes/${classId}/plan/save`, {
+      method: "POST",
+      body: JSON.stringify({
+        session_id: sessionId,
+        lesson_date: lessonDate,
+        plan_markdown: planMarkdown,
+      }),
+    }),
   planLesson: (classId: string, durationMinutes = 45) =>
     api<LessonPlan>(`/api/classes/${classId}/plan-lesson`, {
       method: "POST",

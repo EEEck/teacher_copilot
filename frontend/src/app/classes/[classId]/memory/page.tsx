@@ -7,17 +7,12 @@ import {
   IngestRuntimeProvider,
   useIngestRuntime,
 } from "@/components/assistant-ui/ingest-runtime-provider";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/assistant-ui/resizable";
+import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
 import { DiaryDraftPanel } from "@/components/klassenpilot/diary-draft-panel";
 import { WikiProposalCard } from "@/components/klassenpilot/wiki-proposal-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   client,
   type CompletenessChecklist,
@@ -87,7 +82,13 @@ export default function MemoryPage() {
     return (
       <div>
         <PageHeader backHref={`/classes/${classId}`} backLabel="Class home" title="Update memory" />
-        <p className="text-muted-foreground">Starting session…</p>
+        {error ? (
+          <Alert className="mb-6 border-destructive/30 bg-[var(--error-bg)] text-destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : (
+          <p className="text-muted-foreground">Starting session…</p>
+        )}
       </div>
     );
   }
@@ -195,24 +196,11 @@ function MemoryWorkspace({
 
   return (
     <div className="space-y-8">
-      <ResizablePanelGroup orientation="horizontal" className="min-h-[560px] rounded-lg border">
-        <ResizablePanel defaultSize={58} minSize={40}>
-          <div className="flex h-full flex-col gap-3 p-4">
-            <Card className="min-h-0 flex-1 overflow-hidden">
-              <CardContent className="flex h-full min-h-[480px] flex-col p-0">
-                <IngestThread />
-              </CardContent>
-            </Card>
-            <ReadyToSaveButton onReady={handleReadyToSave} loading={loading} />
-          </div>
-        </ResizablePanel>
-        <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={42} minSize={30}>
-          <div className="h-full p-4">
-            <DiaryDraftPanel />
-          </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+      <ArtifactSessionWorkspace
+        thread={<IngestThread />}
+        draftPanel={<DiaryDraftPanel />}
+        footer={<ReadyToSaveButton onReady={handleReadyToSave} loading={loading} />}
+      />
 
       {showWiki && draft && (
         <section className="space-y-4">

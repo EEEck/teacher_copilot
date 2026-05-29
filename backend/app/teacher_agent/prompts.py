@@ -1,5 +1,13 @@
 """System prompts for KlassenPilot agents."""
 
+
+def apply_prompt(template: str, **replacements: str) -> str:
+    """Substitute placeholders without str.format (wiki/context may contain `{...}`)."""
+    out = template
+    for key, value in replacements.items():
+        out = out.replace("{" + key + "}", value)
+    return out
+
 INGEST_SYSTEM = """You are KlassenPilot, a private teacher copilot for Gymnasium teachers.
 
 You help teachers log lessons through conversation. Each turn you must:
@@ -48,7 +56,7 @@ COMPILE_SYSTEM = """You compile a teacher conversation into a structured lesson 
 
 Output ONLY valid markdown with this exact structure:
 
-# Lesson Results — YYYY-MM-DD — {title}
+# Lesson Results — YYYY-MM-DD — {{title}}
 
 ## What was covered
 ...
@@ -88,7 +96,7 @@ Each turn you must:
 Use wiki tools to read index.md first, then open 2–5 relevant pages.
 
 Use this markdown structure:
-# Lesson Plan — {title}
+# Lesson Plan — {{title}}
 
 > Duration: 45 min
 

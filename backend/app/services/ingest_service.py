@@ -7,6 +7,7 @@ from datetime import date
 from dataclasses import dataclass, field
 
 from app.schemas.api import (
+    ChatAttachment,
     ChatMessage,
     ChatResponse,
     CommitIngestRequest,
@@ -14,8 +15,6 @@ from app.schemas.api import (
     IngestDraft,
     IngestSession,
     IngestSessionStatus,
-    LessonPlan,
-    PlanLessonRequest,
 )
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.wiki_store import WikiStore
@@ -60,7 +59,13 @@ class IngestService:
             completeness=self.wiki.checklist_from_diary(diary_md),
         )
 
-    def chat(self, session_id: str, message: str, diary_markdown: str | None = None) -> ChatResponse:
+    def chat(
+        self,
+        session_id: str,
+        message: str,
+        diary_markdown: str | None = None,
+        attachments: list[ChatAttachment] | None = None,
+    ) -> ChatResponse:
         session = self.get_session(session_id)
         if diary_markdown is not None:
             self.store.partial_diaries[session_id] = diary_markdown
@@ -69,7 +74,10 @@ class IngestService:
         partial = self.store.partial_diaries.get(session_id, "")
 
         reply, diary_md, checklist, ready = self.agents.ingest_chat(
-            session.class_id, session.messages, partial
+            session.class_id,
+            session.messages,
+            partial,
+            attachments=attachments or [],
         )
         session.messages.append(ChatMessage(role="assistant", content=reply))
         session.completeness = checklist
@@ -137,16 +145,3 @@ class IngestService:
             lesson_date=lesson_date,
             title=title,
         )
-
-
-class PlanService:
-    def __init__(self, wiki: WikiStore, agents: AgentRunner) -> None:
-        self.wiki = wiki
-        self.agents = agents
-
-    def generate(self, class_id: str, req: PlanLessonRequest) -> LessonPlan:
-        anchor = req.anchor_lesson_date.isoformat() if req.anchor_lesson_date else None
-        return self.agents.plan_lesson(class_id, req.duration_minutes, anchor)
-
-    def save_plan(self, class_id: str, lesson_date: str, plan: LessonPlan) -> str:
-        return self.wiki.save_lesson_plan(class_id, lesson_date, plan.to_markdown())

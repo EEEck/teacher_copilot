@@ -16,6 +16,41 @@ $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $BackendPort = 8001
 $FrontendPort = 3000
 
+function Import-DotEnvFile {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) {
+        Write-Warning "No .env at $Path (OPENAI_API_KEY must be set another way)"
+        return
+    }
+    Get-Content $Path | ForEach-Object {
+        $line = $_.Trim()
+        if (-not $line -or $line.StartsWith("#")) { return }
+        $eq = $line.IndexOf("=")
+        if ($eq -lt 1) { return }
+        $name = $line.Substring(0, $eq).Trim()
+        $value = $line.Substring($eq + 1).Trim().Trim('"').Trim("'")
+        if ($name) {
+            [Environment]::SetEnvironmentVariable($name, $value, "Process")
+        }
+    }
+}
+
+function Get-BackendEnvBootstrap {
+    return @"
+if (Test-Path '.env') {
+  Get-Content '.env' | ForEach-Object {
+    `$line = `$_.Trim()
+    if (-not `$line -or `$line.StartsWith('#')) { return }
+    `$eq = `$line.IndexOf('=')
+    if (`$eq -lt 1) { return }
+    `$name = `$line.Substring(0, `$eq).Trim()
+    `$value = `$line.Substring(`$eq + 1).Trim().Trim('"').Trim("'")
+    if (`$name) { Set-Item -Path "env:`$name" -Value `$value }
+  }
+}
+"@
+}
+
 function Stop-PortListeners {
     param([int]$Port)
     Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue |
@@ -81,8 +116,10 @@ if ($restartBackend) {
         Write-Error "Backend venv not found. Run: cd backend; python -m venv .venv; pip install -r requirements.txt"
         exit 1
     }
+    Import-DotEnvFile -Path (Join-Path $backendDir ".env")
+    $envBootstrap = Get-BackendEnvBootstrap
     Start-DevProcess -Name "backend" -WorkingDirectory $backendDir `
-        -Command ".\.venv\Scripts\uvicorn app.main:app --reload --port $BackendPort"
+        -Command "$envBootstrap .\.venv\Scripts\uvicorn app.main:app --reload --port $BackendPort"
 }
 
 if ($restartFrontend) {
@@ -91,7 +128,10 @@ if ($restartFrontend) {
         Write-Error "Frontend deps not installed. Run: cd frontend; npm install"
         exit 1
     }
-    Start-DevProcess -Name "frontend" -WorkingDirectory $frontendDir -Command "npm run dev"
+    $npmCmd = "npm"
+    $npmPath = Join-Path ${env:ProgramFiles} "nodejs\npm.cmd"
+    if (Test-Path $npmPath) { $npmCmd = "& '$npmPath'" } else { $npmCmd = "npm" }
+    Start-DevProcess -Name "frontend" -WorkingDirectory $frontendDir -Command "$npmCmd run dev"
 }
 
 Start-Sleep -Seconds 3
@@ -100,3 +140,10 @@ Write-Host ""
 Write-Host "Dev servers restarted:"
 if ($restartBackend) { Write-Host "  Backend:  http://127.0.0.1:$BackendPort/api/health" }
 if ($restartFrontend) { Write-Host "  Frontend: http://localhost:$FrontendPort" }
+if ($restartFrontend) {
+    $feUp = Get-NetTCPConnection -LocalPort $FrontendPort -State Listen -ErrorAction SilentlyContinue
+    if (-not $feUp) {
+        Write-Warning "Frontend may not have started (npm not on PATH?). Run manually:"
+        Write-Host "  cd frontend; npm run dev"
+    }
+}

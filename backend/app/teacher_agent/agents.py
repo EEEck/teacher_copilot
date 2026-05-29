@@ -71,15 +71,37 @@ class AgentRunner:
         result = Runner.run_sync(agent, user_input, max_turns=MAX_AGENT_TURNS)
         return result.final_output
 
-    def plan_opening(self, class_id: str) -> str:
-        context = self.wiki.load_index_context(class_id) + "\n\n" + self.wiki.build_plan_context(class_id)
-        agent = build_plan_opening_agent(context[:14000], self.model)
-        out = self._run_structured(agent, "Open the planning session for this class.")
-        text = out if isinstance(out, str) else str(out)
-        return text.strip() or (
-            "I've loaded your class memory. Tell me what you want to cover in the next lesson, "
-            "or attach a worksheet or draft plan with the + button."
+    def _plan_opening_fallback(self, class_id: str) -> str:
+        snap = self.wiki.get_snapshot(class_id)
+        lines = [
+            f"I've loaded class memory for **{snap.label}**.",
+            f"Current unit: {snap.current_unit}.",
+        ]
+        if snap.last_committed_date:
+            lines.append(f"Last logged lesson: {snap.last_committed_date}.")
+        if snap.open_loop_count:
+            lines.append(f"Open loops tracked: {snap.open_loop_count}.")
+        if snap.top_misconceptions:
+            lines.append(f"Misconception to watch: {snap.top_misconceptions[0]}")
+        lines.append(
+            "What do you want to cover in the next lesson? "
+            "Use the + button to attach a worksheet or draft plan (.md or .txt)."
         )
+        return "\n\n".join(lines)
+
+    def plan_opening(self, class_id: str) -> str:
+        if self.client is None:
+            return self._plan_opening_fallback(class_id)
+        try:
+            context = self.wiki.load_index_context(class_id) + "\n\n" + self.wiki.build_plan_context(
+                class_id
+            )
+            agent = build_plan_opening_agent(context[:14000], self.model)
+            out = self._run_structured(agent, "Open the planning session for this class.")
+            text = out if isinstance(out, str) else str(out)
+            return text.strip() or self._plan_opening_fallback(class_id)
+        except Exception:
+            return self._plan_opening_fallback(class_id)
 
     def plan_chat(
         self,

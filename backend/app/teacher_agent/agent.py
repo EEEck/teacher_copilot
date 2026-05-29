@@ -12,12 +12,15 @@ from app.teacher_agent.prompts import (
     PLAN_CHAT_SYSTEM,
     PLAN_OPENING_SYSTEM,
     PLAN_SYSTEM,
+    apply_prompt,
 )
 from app.teacher_agent.tools import WikiToolContext, create_wiki_tools
 
 
 def build_ingest_agent(ctx: WikiToolContext, sections: str, context: str, model: str) -> Agent:
-    instructions = INGEST_SYSTEM.format(sections=sections, context=context[:8000])
+    instructions = apply_prompt(
+        INGEST_SYSTEM, sections=sections, context=context[:8000]
+    )
     return Agent(
         name="KlassenPilot Ingest",
         instructions=instructions,
@@ -30,7 +33,7 @@ def build_ingest_agent(ctx: WikiToolContext, sections: str, context: str, model:
 def build_plan_chat_agent(ctx: WikiToolContext, context: str, model: str) -> Agent:
     return Agent(
         name="KlassenPilot Plan Chat",
-        instructions=PLAN_CHAT_SYSTEM.format(context=context[:8000]),
+        instructions=apply_prompt(PLAN_CHAT_SYSTEM, context=context[:8000]),
         model=model,
         tools=create_wiki_tools(ctx),
         output_type=PlanTurnOutput,
@@ -40,7 +43,7 @@ def build_plan_chat_agent(ctx: WikiToolContext, context: str, model: str) -> Age
 def build_plan_opening_agent(context: str, model: str) -> Agent:
     return Agent(
         name="KlassenPilot Plan Opening",
-        instructions=PLAN_OPENING_SYSTEM.format(context=context[:12000]),
+        instructions=apply_prompt(PLAN_OPENING_SYSTEM, context=context[:12000]),
         model=model,
     )
 
