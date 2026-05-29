@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8001";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
 
 export type ClassSummary = { id: string; label: string; subject: string };
 export type TimelineEntry = {
@@ -13,6 +13,7 @@ export type TimelineEntry = {
   homework?: string | null;
   raw_path?: string | null;
   has_plan: boolean;
+  status: "taught" | "planned";
   committed_at?: string | null;
   wiki_paths: string[];
 };
@@ -28,6 +29,7 @@ export type ClassMemorySnapshot = {
   last_lesson_date?: string | null;
   last_committed_date?: string | null;
   last_committed_at?: string | null;
+  last_committed_title?: string | null;
   open_loop_count: number;
   top_misconceptions: string[];
   recent_lessons: string[];
@@ -68,6 +70,15 @@ export type WikiUpdateProposal = {
   proposed_content: string;
   rationale: string;
 };
+
+/** One card per wiki path — guards against duplicate proposals from the API. */
+export function uniqueWikiProposals(proposals: WikiUpdateProposal[]): WikiUpdateProposal[] {
+  const byPath = new Map<string, WikiUpdateProposal>();
+  for (const p of proposals) {
+    if (!byPath.has(p.wiki_path)) byPath.set(p.wiki_path, p);
+  }
+  return [...byPath.values()];
+}
 export type IngestDraft = {
   diary_markdown: string;
   wiki_proposals: WikiUpdateProposal[];
@@ -131,7 +142,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     });
   } catch {
     throw new Error(
-      `Cannot reach API at ${API_BASE}. Start the backend with: uvicorn app.main:app --reload --port 8001`,
+      `Cannot reach API at ${API_BASE}. Start the backend with: ./scripts/restart-dev.ps1 -NoNewWindow`,
     );
   }
   if (!res.ok) {
@@ -156,9 +167,14 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 function normalizeTimelineEntry(raw: Partial<TimelineEntry> & Pick<TimelineEntry, "date" | "title">): TimelineEntry {
   const month_key = raw.month_key ?? raw.date.slice(0, 7);
   const covered = raw.covered ?? [];
+  const status = raw.status === "planned" ? "planned" : "taught";
   const summary =
     raw.summary?.trim() ||
-    (covered.length > 0 ? `Covered: ${covered[0]}` : `Lesson: ${raw.title}`);
+    (status === "planned"
+      ? "Planned — not taught yet."
+      : covered.length > 0
+        ? `Covered: ${covered[0]}`
+        : `Lesson: ${raw.title}`);
   return {
     date: raw.date,
     title: raw.title,
@@ -171,6 +187,7 @@ function normalizeTimelineEntry(raw: Partial<TimelineEntry> & Pick<TimelineEntry
     homework: raw.homework ?? null,
     raw_path: raw.raw_path ?? null,
     has_plan: raw.has_plan ?? false,
+    status,
     committed_at: raw.committed_at ?? null,
     wiki_paths: raw.wiki_paths ?? [],
   };
@@ -292,36 +309,4 @@ export const client = {
         plan_markdown: planMarkdown,
       }),
     }),
-  planLesson: (classId: string, durationMinutes = 45) =>
-    api<LessonPlan>(`/api/classes/${classId}/plan-lesson`, {
-      method: "POST",
-      body: JSON.stringify({ duration_minutes: durationMinutes }),
-    }),
 };
-
-export function planToMarkdown(plan: LessonPlan): string {
-  const lines = [
-    `# Lesson Plan — ${plan.title}`,
-    "",
-    `> Duration: ${plan.duration_minutes} min`,
-    "",
-    "## Learning goals",
-    ...plan.learning_goals.map((g) => `- ${g}`),
-    "",
-    "## Lesson flow",
-    ...plan.lesson_flow.map((p) => `- **${p.phase}** (${p.minutes} min): ${p.description}`),
-    "",
-    "## Warmup",
-    plan.warmup,
-    "",
-    "## Practice",
-    ...plan.practice_tasks.map((t) => `- ${t}`),
-    "",
-    "## Homework",
-    plan.homework,
-    "",
-    "## Teacher notes",
-    plan.teacher_notes,
-  ];
-  return lines.join("\n");
-}

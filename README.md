@@ -11,15 +11,31 @@ Private teacher copilot for Gymnasium teachers. Log lessons through chat, review
 
 ## Quick start
 
-### Option A — dev script (recommended on Windows)
+### Option A — dev script (recommended)
 
-From the repo root:
+**Windows (Cursor terminal / PowerShell)** — use the PowerShell script (do not type `bash`; that often opens WSL, which may not be installed):
 
 ```powershell
-.\scripts\restart-dev.ps1
+.\scripts\restart-dev.ps1 -NoNewWindow
+.\scripts\restart-dev.ps1 -Stop
+.\scripts\restart-dev.ps1 -Status
 ```
 
-Starts backend on **8001** and frontend on **3000** in separate windows. The script loads `backend/.env` into the backend process so the Agents SDK can reach OpenAI.
+Or from any shell: `scripts\restart-dev.cmd`
+
+**Git Bash / macOS / Linux:**
+
+```bash
+./scripts/restart-dev.sh
+./scripts/restart-dev.sh stop
+./scripts/restart-dev.sh status
+```
+
+Starts backend on **8010** and frontend on **3000** (8010 avoids a stuck Windows :8001 ghost listener). Logs: `scripts/.logs/`. Loads `backend/.env` for OpenAI.
+
+```bash
+tail -f scripts/.logs/backend.log
+```
 
 ### Option B — manual
 
@@ -31,10 +47,10 @@ python -m venv .venv
 .venv\Scripts\activate        # Windows
 pip install -e .
 copy ..\.env.example .env     # add OPENAI_API_KEY (see below)
-uvicorn app.main:app --reload --port 8001
+uvicorn app.main:app --reload --port 8010
 ```
 
-API docs: http://127.0.0.1:8001/docs
+API docs: http://127.0.0.1:8010/docs
 
 **2. Frontend**
 
@@ -42,7 +58,7 @@ Requires **Node.js 18+** with npm. Uses [assistant-ui](https://github.com/assist
 
 ```bash
 cd frontend
-copy ..\.env.example .env.local   # NEXT_PUBLIC_API_BASE_URL=http://localhost:8001
+copy ..\.env.example .env.local   # NEXT_PUBLIC_API_BASE_URL=http://localhost:8010
 npm install
 npm run dev
 ```
@@ -77,7 +93,7 @@ teacher_wiki/
 | `OPENAI_API_KEY` | `backend/.env` | OpenAI API (required for chat & plan) |
 | `OPENAI_MODEL` | `backend/.env` | Default `gpt-4o-mini` |
 | `WIKI_ROOT` | `backend/.env` | Path to `teacher_wiki` |
-| `NEXT_PUBLIC_API_BASE_URL` | `frontend/.env.local` | Backend URL (default `http://localhost:8001`) |
+| `NEXT_PUBLIC_API_BASE_URL` | `frontend/.env.local` | Backend URL (default `http://localhost:8010`) |
 
 ### OpenAI API key (required for chat & plan)
 
@@ -102,7 +118,7 @@ Get-Content .env | ForEach-Object {
     Set-Item "env:$($matches[1].Trim())" $matches[2].Trim()
   }
 }
-.\.venv\Scripts\uvicorn app.main:app --reload --port 8001
+.\.venv\Scripts\uvicorn app.main:app --reload --port 8010
 ```
 
 ## UI architecture

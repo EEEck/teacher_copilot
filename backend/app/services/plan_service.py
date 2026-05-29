@@ -1,13 +1,14 @@
-"""In-memory plan session store and orchestration."""
+"""Lesson-plan flow — thin adapter over ArtifactSessionService.
+
+Session lifecycle + chat turn loop live in the shared core; this adapter only
+maps the generic session/draft into the plan API schemas and owns the
+plan-specific single_file_save step plus the standalone one-shot generator.
+"""
 
 from __future__ import annotations
 
-import uuid
-from dataclasses import dataclass, field
-
 from app.schemas.api import (
     ChatAttachment,
-    ChatMessage,
     LessonPlan,
     PlanChatResponse,
     PlanDraft,
@@ -17,97 +18,75 @@ from app.schemas.api import (
     SavePlanRequest,
     SavePlanResponse,
 )
+from app.services.artifact_session_service import ArtifactSession, ArtifactSessionService
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.wiki_store import WikiStore
 
-
-@dataclass
-class PlanSessionStore:
-    sessions: dict[str, PlanSession] = field(default_factory=dict)
-    plan_markdown: dict[str, str] = field(default_factory=dict)
+MODE = "plan"
 
 
 class PlanService:
     def __init__(self, wiki: WikiStore, agents: AgentRunner) -> None:
         self.wiki = wiki
         self.agents = agents
-        self.store = PlanSessionStore()
+        self.core = ArtifactSessionService(wiki, agents)
 
-    def start_session(self, class_id: str) -> PlanSession:
-        session_id = str(uuid.uuid4())
-        opening = self.agents.plan_opening(class_id)
-        session = PlanSession(
-            session_id=session_id,
-            class_id=class_id,
-            status=PlanSessionStatus.chatting,
-            messages=[ChatMessage(role="assistant", content=opening)],
-            opening_message=opening,
+    def _to_model(self, s: ArtifactSession) -> PlanSession:
+        return PlanSession(
+            session_id=s.session_id,
+            class_id=s.class_id,
+            status=PlanSessionStatus(s.status),
+            messages=s.messages,
+            opening_message=s.opening_message,
         )
-        self.store.sessions[session_id] = session
-        self.store.plan_markdown[session_id] = self.wiki.empty_plan_template()
-        return session
 
-    def get_session(self, session_id: str) -> PlanSession:
-        if session_id not in self.store.sessions:
-            raise KeyError(f"Unknown session: {session_id}")
-        return self.store.sessions[session_id]
+    async def start_session(self, class_id: str) -> PlanSession:
+        session = await self.core.start_session(MODE, class_id)
+        return self._to_model(session)
+
+    def get_session(self, session_id: str) -> ArtifactSession:
+        return self.core.get_session(session_id)
 
     def get_draft(self, session_id: str) -> PlanDraft:
-        plan_md = self.store.plan_markdown.get(
-            session_id, self.wiki.empty_plan_template()
-        )
-        return PlanDraft(plan_markdown=plan_md)
+        draft = self.core.get_draft(session_id)
+        assert isinstance(draft, PlanDraft)
+        return draft
 
-    def chat(
+    async def chat(
         self,
         session_id: str,
         message: str,
         plan_markdown: str | None = None,
         attachments: list[ChatAttachment] | None = None,
     ) -> PlanChatResponse:
-        session = self.get_session(session_id)
-        if plan_markdown is not None:
-            self.store.plan_markdown[session_id] = plan_markdown
-
-        session.messages.append(ChatMessage(role="user", content=message))
-        partial = self.store.plan_markdown.get(session_id, "")
-
-        reply, plan_md, ready = self.agents.plan_chat(
-            session.class_id,
-            session.messages,
-            partial,
-            attachments=attachments or [],
+        result = await self.core.chat(session_id, message, plan_markdown, attachments)
+        return PlanChatResponse(
+            reply=result.reply,
+            plan_markdown=result.markdown,
+            ready_to_save=result.ready,
         )
-        session.messages.append(ChatMessage(role="assistant", content=reply))
-        self.store.plan_markdown[session_id] = plan_md
-        if ready:
-            session.status = PlanSessionStatus.ready_to_save
-
-        return PlanChatResponse(reply=reply, plan_markdown=plan_md, ready_to_save=ready)
 
     def update_draft(self, session_id: str, plan_markdown: str) -> PlanDraft:
-        session = self.get_session(session_id)
-        self.store.plan_markdown[session_id] = plan_markdown
-        if self.wiki.is_plan_ready(plan_markdown):
-            session.status = PlanSessionStatus.ready_to_save
-        return PlanDraft(plan_markdown=plan_markdown)
+        draft = self.core.update_draft(session_id, plan_markdown)
+        assert isinstance(draft, PlanDraft)
+        return draft
 
     def save(self, class_id: str, req: SavePlanRequest) -> SavePlanResponse:
-        session = self.get_session(req.session_id)
+        session = self.core.get_session(req.session_id)
         if session.class_id != class_id:
             raise KeyError("Session class mismatch")
         title = self.wiki._extract_title(req.plan_markdown) or "Lesson plan"
         path = self.wiki.save_lesson_plan(class_id, req.lesson_date, req.plan_markdown)
-        session.status = PlanSessionStatus.saved
+        self.core.set_status(req.session_id, PlanSessionStatus.saved.value)
         return SavePlanResponse(
             lesson_date=req.lesson_date,
             title=title,
             plan_path=path,
         )
 
-    def generate(self, class_id: str, req: PlanLessonRequest) -> LessonPlan:
+    async def generate(self, class_id: str, req: PlanLessonRequest) -> LessonPlan:
         anchor = req.anchor_lesson_date.isoformat() if req.anchor_lesson_date else None
-        return self.agents.plan_lesson(class_id, req.duration_minutes, anchor)
+        return await self.agents.plan_lesson(class_id, req.duration_minutes, anchor)
 
     def save_plan(self, class_id: str, lesson_date: str, plan: LessonPlan) -> str:
         return self.wiki.save_lesson_plan(class_id, lesson_date, plan.to_markdown())

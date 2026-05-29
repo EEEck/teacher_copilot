@@ -133,7 +133,12 @@ function LessonTimelineCard({
 }) {
   return (
     <li className="ml-6 list-none">
-      <span className="absolute -left-1.5 mt-3 h-3 w-3 rounded-full bg-primary" />
+      <span
+        className={cn(
+          "absolute -left-1.5 mt-3 h-3 w-3 rounded-full",
+          entry.status === "planned" ? "border-2 border-primary bg-background" : "bg-primary",
+        )}
+      />
       <Link
         href={`/classes/${classId}/lessons/${entry.date}`}
         className="block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
@@ -158,10 +163,16 @@ function LessonTimelineCard({
                     Just saved
                   </Badge>
                 )}
-                {entry.has_plan && (
-                  <Badge variant="outline" className="text-xs">
-                    Has plan
+                {entry.status === "planned" ? (
+                  <Badge variant="secondary" className="text-xs">
+                    Planned
                   </Badge>
+                ) : (
+                  entry.has_plan && (
+                    <Badge variant="outline" className="text-xs">
+                      Has plan
+                    </Badge>
+                  )
                 )}
               </div>
             </div>

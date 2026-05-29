@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from app.teacher_agent.prompts import (
+    CHAT_WIKI_TOOLS_POLICY,
     INGEST_SYSTEM,
     PLAN_CHAT_SYSTEM,
     PLAN_OPENING_SYSTEM,
@@ -36,7 +37,14 @@ def test_apply_prompt_does_not_treat_braces_as_format_fields():
     [
         (PLAN_CHAT_SYSTEM, {"context": HOSTILE_CONTEXT}),
         (PLAN_OPENING_SYSTEM, {"context": HOSTILE_CONTEXT}),
-        (INGEST_SYSTEM, {"sections": "- A\n- B", "context": HOSTILE_CONTEXT}),
+        (
+            INGEST_SYSTEM,
+            {
+                "sections": "- A\n- B",
+                "context": HOSTILE_CONTEXT,
+                "wiki_tools_policy": CHAT_WIKI_TOOLS_POLICY,
+            },
+        ),
     ],
 )
 def test_prompts_render_with_hostile_content(template, kwargs):

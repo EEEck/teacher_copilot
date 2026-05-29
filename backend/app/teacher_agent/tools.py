@@ -30,12 +30,12 @@ def create_wiki_tools(ctx: WikiToolContext) -> list:
 
     @function_tool
     def read_wiki_index() -> str:
-        """Read the wiki index for the current class (catalog of pages)."""
+        """Read the class wiki index. Rarely needed — index is already in the prompt context."""
         return wiki.read_wiki_index(class_id)
 
     @function_tool
     def list_class_pages(kind: str = "") -> str:
-        """List wiki pages for the class. kind: rollups, lessons, students, timeline, raw, or empty for all."""
+        """List wiki page paths. Use only when you need a path before read_wiki_page; avoid browsing."""
         k = kind.strip().lower() or None
         if k == "timeline":
             k = "rollups"
@@ -50,7 +50,7 @@ def create_wiki_tools(ctx: WikiToolContext) -> list:
 
     @function_tool
     def get_lesson_detail(lesson_date: str) -> str:
-        """Full lesson detail for YYYY-MM-DD (truncated)."""
+        """Lesson diary + rollups for YYYY-MM-DD. Use when that date is not in the context pack."""
         try:
             detail = wiki.get_lesson_detail(class_id, lesson_date)
             payload = {
@@ -68,7 +68,7 @@ def create_wiki_tools(ctx: WikiToolContext) -> list:
 
     @function_tool
     def search_wiki(query: str) -> str:
-        """Case-insensitive search over class wiki markdown files."""
+        """Search class wiki markdown. Use for a specific missing fact, not exploratory browsing."""
         hits = wiki.search_wiki(class_id, query)
         return json.dumps(hits, indent=2)
 
@@ -79,4 +79,14 @@ def create_wiki_tools(ctx: WikiToolContext) -> list:
         get_class_snapshot,
         get_lesson_detail,
         search_wiki,
+    ]
+
+
+def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
+    """Minimal tools for ingest/plan chat — fewer steps, agent decides when to call."""
+    full = create_wiki_tools(ctx)
+    by_name = {getattr(t, "name", None): t for t in full}
+    return [
+        by_name["get_lesson_detail"],
+        by_name["search_wiki"],
     ]

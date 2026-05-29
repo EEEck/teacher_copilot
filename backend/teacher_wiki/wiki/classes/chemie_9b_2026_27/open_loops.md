@@ -10,3 +10,9 @@
 
 ## 2026-05-25
 - (specifics needed)
+
+## 2026-05-29
+- Next lecture, focus on anions and clarify the misconception that oxidation always requires oxygen.
+
+## 2026-05-29
+- Next lecture, focus on anions and clarify the misconception that oxidation always requires oxygen.

@@ -45,8 +45,20 @@ LESSON_RESULTS_SECTIONS: list[tuple[str, str, bool]] = [
 DIARY_SECTION_HEADINGS = [label for _, label, _ in LESSON_RESULTS_SECTIONS]
 
 STUDENT_ID_RE = re.compile(r"\b(S-\d{3})\b", re.I)
+
+
+def dedupe_wiki_proposals(proposals: list[WikiUpdateProposal]) -> list[WikiUpdateProposal]:
+    """Keep first proposal per wiki_path (compile used to emit student_notes twice)."""
+    seen: set[str] = set()
+    unique: list[WikiUpdateProposal] = []
+    for proposal in proposals:
+        if proposal.wiki_path in seen:
+            continue
+        seen.add(proposal.wiki_path)
+        unique.append(proposal)
+    return unique
 LOG_HEADER_RE = re.compile(
-    r"##\s*\[([^\]]+)\]\s+(\w+)\s*\|\s*(?:([\d-]+)\s*—\s*)?(.+?)\s*\(id:([a-f0-9]+)\)"
+    r"##\s*\[([^\]]+)\]\s+(\w+)\s*\|\s*(?:([\d]{4}-[\d]{2}-[\d]{2})\s*[-—]\s*)?(.+?)\s*\(id:([a-f0-9]+)\)"
 )
 LOG_HEADER_LEGACY_RE = re.compile(
     r"##\s*\[(\d{4}-\d{2}-\d{2})\]\s+(\w+)\s*\|\s*(.+?)\s*\(id:([a-f0-9]+)\)"
@@ -289,33 +301,51 @@ class WikiStore:
                     continue
                 results = day_dir / "lesson_results.md"
                 plan = day_dir / "lesson_plan.md"
-                if not results.exists():
-                    continue
                 lesson_date = day_dir.name
-                text = results.read_text(encoding="utf-8")
-                title = self._extract_title(text) or lesson_date
-                covered = self._extract_section_bullets(text, "What was covered")
-                homework = self._extract_homework(text)
-                raw_path = self._extract_raw_link(text)
                 log_meta = log_by_date.get(lesson_date, {})
-                summary, highlights, issues, follow_ups = self._build_timeline_summary(text)
-                entries.append(
-                    TimelineEntry(
-                        date=lesson_date,
-                        title=title,
-                        month_key=lesson_date[:7] if len(lesson_date) >= 7 else lesson_date,
-                        summary=summary,
-                        highlights=highlights,
-                        issues=issues,
-                        follow_ups=follow_ups,
-                        covered=covered,
-                        homework=homework,
-                        raw_path=raw_path,
-                        has_plan=plan.exists(),
-                        committed_at=log_meta.get("committed_at"),
-                        wiki_paths=log_meta.get("wiki_paths", []),
+                month_key = lesson_date[:7] if len(lesson_date) >= 7 else lesson_date
+                if results.exists():
+                    text = results.read_text(encoding="utf-8")
+                    title = self._extract_title(text) or lesson_date
+                    covered = self._extract_section_bullets(text, "What was covered")
+                    homework = self._extract_homework(text)
+                    raw_path = self._extract_raw_link(text)
+                    summary, highlights, issues, follow_ups = self._build_timeline_summary(text)
+                    entries.append(
+                        TimelineEntry(
+                            date=lesson_date,
+                            title=title,
+                            month_key=month_key,
+                            summary=summary,
+                            highlights=highlights,
+                            issues=issues,
+                            follow_ups=follow_ups,
+                            covered=covered,
+                            homework=homework,
+                            raw_path=raw_path,
+                            has_plan=plan.exists(),
+                            status="taught",
+                            committed_at=log_meta.get("committed_at"),
+                            wiki_paths=log_meta.get("wiki_paths", []),
+                        )
                     )
-                )
+                elif plan.exists():
+                    # Planned but not yet taught: show it so saving a plan is visible.
+                    plan_text = plan.read_text(encoding="utf-8")
+                    title = self._extract_title(plan_text) or lesson_date
+                    entries.append(
+                        TimelineEntry(
+                            date=lesson_date,
+                            title=title,
+                            month_key=month_key,
+                            has_plan=True,
+                            status="planned",
+                            committed_at=log_meta.get("committed_at"),
+                            wiki_paths=log_meta.get("wiki_paths", []),
+                        )
+                    )
+                else:
+                    continue
         entries.sort(key=lambda e: e.date, reverse=True)
         months = sorted({e.month_key for e in entries if e.month_key}, reverse=True)
         return ClassTimeline(class_id=class_id, entries=entries, months=months)
@@ -348,6 +378,7 @@ class WikiStore:
             last_lesson_date=timeline.entries[0].date if timeline.entries else None,
             last_committed_date=last_committed.get("lesson_date"),
             last_committed_at=last_committed.get("committed_at"),
+            last_committed_title=last_committed.get("title") or None,
             open_loop_count=open_loop_count,
             top_misconceptions=top_misconceptions,
             recent_lessons=recent,
@@ -356,8 +387,26 @@ class WikiStore:
     def get_lesson_detail(self, class_id: str, lesson_date: str) -> LessonDetail:
         self.get_class(class_id)
         results_path = self.lesson_dir(class_id, lesson_date) / "lesson_results.md"
-        if not results_path.exists():
+        plan_path = self.lesson_dir(class_id, lesson_date) / "lesson_plan.md"
+        if not results_path.exists() and not plan_path.exists():
             raise KeyError(f"No lesson for date: {lesson_date}")
+
+        plan_md = self.read_text(plan_path) if plan_path.exists() else None
+
+        # Planned-only lesson (saved plan, not yet taught): no results/diary yet.
+        if not results_path.exists():
+            title = (self._extract_title(plan_md or "") if plan_md else "") or lesson_date
+            return LessonDetail(
+                class_id=class_id,
+                date=lesson_date,
+                title=title,
+                primary_markdown="",
+                diary_markdown="",
+                raw_markdown="",
+                lesson_plan_markdown=plan_md or None,
+                rollup_excerpts=[],
+            )
+
         primary = self.read_text(results_path)
         title = self._extract_title(primary) or lesson_date
         diary_md = self._diary_body_from_lesson_results(primary, lesson_date, title)
@@ -368,8 +417,6 @@ class WikiStore:
             raw_path = self.root / rel
             if raw_path.exists():
                 raw_md = self.read_text(raw_path)
-        plan_path = self.lesson_dir(class_id, lesson_date) / "lesson_plan.md"
-        plan_md = self.read_text(plan_path) if plan_path.exists() else None
         excerpts: list[RollupExcerpt] = []
         for key, path in self.roll_up_paths(class_id).items():
             excerpt = self._extract_date_section(self.read_text(path), lesson_date)
@@ -518,7 +565,7 @@ class WikiStore:
                 )
             )
 
-        return lesson_date, proposals
+        return lesson_date, dedupe_wiki_proposals(proposals)
 
     def commit_ingest(
         self,
@@ -712,11 +759,18 @@ class WikiStore:
         text = plan_md.lower()
         return all(h.lower() in text for h in required) and len(plan_md.strip()) > 200
 
-    def load_index_context(self, class_id: str, max_chars: int = 4000) -> str:
-        """Index-first context for agent tool loops."""
+    def load_index_context(
+        self, class_id: str, max_chars: int = 4000, *, for_tool_loop: bool = False
+    ) -> str:
+        """Index-first context bundled into chat prompts."""
         cls = self.get_class(class_id)
+        index_hint = (
+            "read pages via tools as needed"
+            if for_tool_loop
+            else "see sections below for detail"
+        )
         parts = [
-            f"# Wiki index (read pages via tools as needed)",
+            f"# Wiki index ({index_hint})",
             f"Class: {cls.label} ({class_id})",
             "",
             self.read_wiki_index(class_id)[:max_chars],
@@ -727,14 +781,6 @@ class WikiStore:
             self.read_text(self.roll_up_paths(class_id)["open_loops"])[:1000],
         ]
         return "\n".join(parts)
-
-    def load_class_context(self, class_id: str) -> str:
-        """Broad legacy dump. Prefer build_ingest_context or build_plan_context per workflow."""
-        return (
-            self.load_index_context(class_id)
-            + "\n\n---\n\n"
-            + self.build_ingest_context(class_id)
-        )[:24000]
 
     def empty_diary_template(self, lesson_date: Optional[str] = None) -> str:
         d = lesson_date or date.today().isoformat()
@@ -784,11 +830,7 @@ class WikiStore:
         new_misc = self._append_bullets(misc, self._lines_to_bullets(didnt), lesson_date)
         results.append(("misconceptions", new_misc, "Add problems from this lesson."))
 
-        # student_notes index (entity pages compiled separately)
-        new_notes = self._rebuild_student_notes_index(class_id)
-        results.append(
-            ("student_notes", new_notes, "Refresh student index from entity pages.")
-        )
+        # student_notes: built in _compile_students_and_timeline (with lesson previews)
 
         # open_loops
         loops = self.read_text(paths["open_loops"])
@@ -1170,6 +1212,9 @@ class WikiStore:
         return cleaned + "\n"
 
     def _parse_log_entry(self, header: str, block: str) -> Optional[dict]:
+        lesson_date = ""
+        title = ""
+        entry_id = ""
         m = LOG_HEADER_RE.match(header.strip())
         if m:
             _ts, _kind, lesson_date, title, entry_id = m.groups()
@@ -1184,7 +1229,13 @@ class WikiStore:
         if meta_m:
             lesson_date = meta_m.group(1)
         elif not lesson_date:
-            lesson_date = header[1:11] if len(header) > 10 else ""
+            bracket_m = re.search(r"\[(\d{4}-\d{2}-\d{2})\]", header)
+            if bracket_m:
+                lesson_date = bracket_m.group(1)
+            else:
+                return None
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", lesson_date):
+            return None
         ts_m = re.match(r"##\s*\[([^\]]+)\]", header.strip())
         committed_at = ts_m.group(1) if ts_m else lesson_date
         return {
@@ -1211,21 +1262,22 @@ class WikiStore:
         return by_date
 
     def _latest_log_commit(self) -> dict[str, str]:
+        """Newest log entry with a valid YYYY-MM-DD lesson date (skip malformed headers)."""
         log_text = self.read_text(self.log_path)
         headers = list(re.finditer(r"^##\s*\[", log_text, re.M))
-        if not headers:
-            return {}
-        last_start = headers[-1].start()
-        block = log_text[last_start:]
-        header_line = block.split("\n", 1)[0]
-        meta = self._parse_log_entry(header_line, block)
-        if not meta:
-            return {}
-        return {
-            "lesson_date": meta["lesson_date"],
-            "committed_at": meta["committed_at"],
-            "title": meta["title"],
-        }
+        for i in range(len(headers) - 1, -1, -1):
+            start = headers[i].start()
+            end = headers[i + 1].start() if i + 1 < len(headers) else len(log_text)
+            block = log_text[start:end]
+            header_line = block.split("\n", 1)[0]
+            meta = self._parse_log_entry(header_line, block)
+            if meta and meta.get("lesson_date"):
+                return {
+                    "lesson_date": meta["lesson_date"],
+                    "committed_at": meta["committed_at"],
+                    "title": meta["title"],
+                }
+        return {}
 
     def _append_log(
         self,

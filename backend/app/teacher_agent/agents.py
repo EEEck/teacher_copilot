@@ -1,11 +1,16 @@
-"""Agent runners using OpenAI Agents SDK with wiki tools."""
+"""Agent runners using OpenAI Agents SDK."""
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Optional
 
 from agents import Runner
+from agents.exceptions import AgentsException, MaxTurnsExceeded
 from openai import OpenAI
+
+logger = logging.getLogger("klassenpilot.agents")
 
 from app.config import Settings
 from app.schemas.api import ChatAttachment, ChatMessage, CompletenessChecklist, LessonPlan
@@ -21,7 +26,57 @@ from app.teacher_agent.models import CompileOutput, IngestTurnOutput, PlanOutput
 from app.teacher_agent.tools import WikiToolContext
 from app.teacher_agent.wiki_store import DIARY_SECTION_HEADINGS, WikiStore
 
-MAX_AGENT_TURNS = 8
+class AgentTurnLimitError(RuntimeError):
+    """Agent used too many tool/reasoning steps in one turn."""
+
+_TURN_LIMIT_REPLY = (
+    "I needed more steps than allowed to finish this turn. "
+    "Your draft is unchanged — try a shorter message or one topic at a time."
+)
+
+
+def _is_turn_limit_error(exc: BaseException) -> bool:
+    if isinstance(exc, MaxTurnsExceeded):
+        return True
+    return "max turns" in str(exc).lower()
+
+
+def _summarize_run_items(items) -> list[str]:
+    """Human-readable trace of what the agent did (tool calls, messages)."""
+    summary: list[str] = []
+    for item in items or []:
+        raw = getattr(item, "raw_item", None)
+        item_type = type(item).__name__
+        name = getattr(raw, "name", None)
+        if name is None and isinstance(raw, dict):
+            name = raw.get("name") or raw.get("type")
+        args = getattr(raw, "arguments", None)
+        if args is None and isinstance(raw, dict):
+            args = raw.get("arguments")
+        if args and len(str(args)) > 120:
+            args = str(args)[:120] + "…"
+        if name or args:
+            summary.append(f"{item_type}({name}) {args or ''}".strip())
+        else:
+            summary.append(item_type)
+    return summary
+
+
+def _log_turn_limit(label: str, exc: BaseException) -> None:
+    run_data = getattr(exc, "run_data", None)
+    if run_data is None:
+        logger.warning("[%s] turn limit hit; no run_data on exception", label)
+        return
+    raw_responses = getattr(run_data, "raw_responses", []) or []
+    new_items = getattr(run_data, "new_items", []) or []
+    trace = _summarize_run_items(new_items)
+    logger.warning(
+        "[%s] turn limit hit: %d model responses, %d items\n  %s",
+        label,
+        len(raw_responses),
+        len(new_items),
+        "\n  ".join(trace) if trace else "(no items)",
+    )
 
 
 class AgentRunner:
@@ -32,6 +87,8 @@ class AgentRunner:
         else:
             self.client = OpenAI(api_key=key)
         self.model = settings.openai_model
+        self.timeout = settings.agent_timeout_seconds
+        self.max_turns = settings.agent_max_turns
         self.wiki = wiki
 
     def _require_client(self) -> OpenAI:
@@ -66,9 +123,28 @@ class AgentRunner:
             parts.append(f"{m.role}: {m.content}")
         return "\n".join(parts)
 
-    def _run_structured(self, agent, user_input: str):
+    async def _run_structured(self, agent, user_input: str):
+        """Run an agent to completion, async + bounded by a wall-clock timeout.
+
+        Never use Runner.run_sync here: the FastAPI request handlers are async,
+        and a blocking run would stall the event loop for the whole turn.
+        """
         self._require_client()
-        result = Runner.run_sync(agent, user_input, max_turns=MAX_AGENT_TURNS)
+        try:
+            result = await asyncio.wait_for(
+                Runner.run(agent, user_input, max_turns=self.max_turns),
+                timeout=self.timeout,
+            )
+        except AgentsException as exc:
+            if _is_turn_limit_error(exc):
+                _log_turn_limit(getattr(agent, "name", "agent"), exc)
+                raise AgentTurnLimitError(_TURN_LIMIT_REPLY) from exc
+            raise
+        except Exception as exc:
+            if _is_turn_limit_error(exc):
+                _log_turn_limit(getattr(agent, "name", "agent"), exc)
+                raise AgentTurnLimitError(_TURN_LIMIT_REPLY) from exc
+            raise
         return result.final_output
 
     def _plan_opening_fallback(self, class_id: str) -> str:
@@ -89,7 +165,7 @@ class AgentRunner:
         )
         return "\n\n".join(lines)
 
-    def plan_opening(self, class_id: str) -> str:
+    async def plan_opening(self, class_id: str) -> str:
         if self.client is None:
             return self._plan_opening_fallback(class_id)
         try:
@@ -97,26 +173,33 @@ class AgentRunner:
                 class_id
             )
             agent = build_plan_opening_agent(context[:14000], self.model)
-            out = self._run_structured(agent, "Open the planning session for this class.")
+            out = await self._run_structured(agent, "Open the planning session for this class.")
             text = out if isinstance(out, str) else str(out)
             return text.strip() or self._plan_opening_fallback(class_id)
         except Exception:
             return self._plan_opening_fallback(class_id)
 
-    def plan_chat(
+    async def plan_chat(
         self,
         class_id: str,
         messages: list[ChatMessage],
         partial_plan: str = "",
         attachments: list[ChatAttachment] | None = None,
     ) -> tuple[str, str, bool]:
-        context = self.wiki.load_index_context(class_id)
+        context = (
+            self.wiki.load_index_context(class_id)
+            + "\n\n"
+            + self.wiki.build_plan_context(class_id)
+        )
         agent = build_plan_chat_agent(self._wiki_ctx(class_id), context, self.model)
         current_draft = partial_plan.strip() or self.wiki.empty_plan_template()
         user_input = self._build_user_input(
             messages, "Current plan draft (update each turn)", current_draft, attachments
         )
-        parsed = self._run_structured(agent, user_input)
+        try:
+            parsed = await self._run_structured(agent, user_input)
+        except AgentTurnLimitError as exc:
+            return str(exc), current_draft, False
         if not isinstance(parsed, PlanTurnOutput):
             return "I had trouble processing that — could you try again?", current_draft, False
         reply = parsed.reply
@@ -124,21 +207,33 @@ class AgentRunner:
         ready = self.wiki.is_plan_ready(plan_md) or "ready to save" in reply.lower()
         return reply, plan_md, ready
 
-    def ingest_chat(
+    async def ingest_chat(
         self,
         class_id: str,
         messages: list[ChatMessage],
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
     ) -> tuple[str, str, CompletenessChecklist, bool]:
-        context = self.wiki.load_index_context(class_id) + "\n\n" + self.wiki.build_ingest_context(class_id)
+        context = (
+            self.wiki.load_index_context(class_id)
+            + "\n\n"
+            + self.wiki.build_ingest_context(class_id)
+        )
         sections = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
-        agent = build_ingest_agent(self._wiki_ctx(class_id), sections, context[:10000], self.model)
+        agent = build_ingest_agent(self._wiki_ctx(class_id), sections, context, self.model)
         current_draft = partial_diary.strip() or self.wiki.empty_diary_template()
         user_input = self._build_user_input(
             messages, "Current diary draft (update each turn)", current_draft, attachments
         )
-        parsed = self._run_structured(agent, user_input)
+        try:
+            parsed = await self._run_structured(agent, user_input)
+        except AgentTurnLimitError as exc:
+            return (
+                str(exc),
+                current_draft,
+                self.wiki.checklist_from_diary(current_draft),
+                False,
+            )
         if not isinstance(parsed, IngestTurnOutput):
             return (
                 "I had trouble processing that — could you try again?",
@@ -152,7 +247,7 @@ class AgentRunner:
         ready = self.wiki.is_diary_complete(diary_md) or "ready to save" in reply.lower()
         return reply, diary_md, checklist, ready
 
-    def compile_diary(self, class_id: str, messages: list[ChatMessage]) -> str:
+    async def compile_diary(self, class_id: str, messages: list[ChatMessage]) -> str:
         context = self.wiki.load_index_context(class_id)
         transcript = "\n".join(f"{m.role}: {m.content}" for m in messages)
         prompt = (
@@ -161,12 +256,12 @@ class AgentRunner:
             "Compile the lesson results markdown now."
         )
         agent = build_compile_agent(self.model)
-        parsed = self._run_structured(agent, prompt)
+        parsed = await self._run_structured(agent, prompt)
         if not isinstance(parsed, CompileOutput):
             return self.wiki.empty_diary_template()
         return parsed.diary_markdown
 
-    def plan_lesson(
+    async def plan_lesson(
         self,
         class_id: str,
         duration_minutes: int = 45,
@@ -180,15 +275,15 @@ class AgentRunner:
             f"Context excerpt:\n{context[:4000]}"
         )
         agent = build_plan_lesson_agent(self._wiki_ctx(class_id), self.model)
-        parsed = self._run_structured(agent, user)
+        parsed = await self._run_structured(agent, user)
         if not isinstance(parsed, PlanOutput):
             raise RuntimeError("Failed to generate lesson plan")
         return LessonPlan(**parsed.model_dump())
 
-    def lint_wiki(self, class_id: str) -> str:
+    async def lint_wiki(self, class_id: str) -> str:
         context = self.wiki.read_wiki_index(class_id)
         agent = build_lint_agent(self._wiki_ctx(class_id), context, self.model)
-        out = self._run_structured(
+        out = await self._run_structured(
             agent,
             f"Lint the wiki for class {class_id}. Read index.md and scan lessons, students, roll-ups.",
         )

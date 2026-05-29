@@ -87,10 +87,10 @@ class StubAgentRunner:
         self.model = "stub-model"
         self.client = object()  # truthy: behaves as "configured"
 
-    def plan_opening(self, class_id: str) -> str:
+    async def plan_opening(self, class_id: str) -> str:
         return f"Opening planning session for {class_id}."
 
-    def plan_chat(
+    async def plan_chat(
         self,
         class_id: str,
         messages: list[ChatMessage],
@@ -99,7 +99,7 @@ class StubAgentRunner:
     ) -> tuple[str, str, bool]:
         return "Here is an updated plan draft.", READY_PLAN, True
 
-    def ingest_chat(
+    async def ingest_chat(
         self,
         class_id: str,
         messages: list[ChatMessage],
@@ -109,10 +109,10 @@ class StubAgentRunner:
         checklist = self.wiki.checklist_from_diary(COMPLETE_DIARY)
         return "Logged the lesson.", COMPLETE_DIARY, checklist, True
 
-    def compile_diary(self, class_id: str, messages: list[ChatMessage]) -> str:
+    async def compile_diary(self, class_id: str, messages: list[ChatMessage]) -> str:
         return COMPLETE_DIARY
 
-    def plan_lesson(
+    async def plan_lesson(
         self, class_id: str, duration_minutes: int = 45, anchor_date=None
     ) -> LessonPlan:
         return LessonPlan(
@@ -126,7 +126,7 @@ class StubAgentRunner:
             teacher_notes="Watch the misconception.",
         )
 
-    def lint_wiki(self, class_id: str) -> str:
+    async def lint_wiki(self, class_id: str) -> str:
         return "# Wiki lint report\n- All good."
 
 

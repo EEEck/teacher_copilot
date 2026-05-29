@@ -41,6 +41,7 @@ import {
   ChevronRightIcon,
   CopyIcon,
   DownloadIcon,
+  Loader2Icon,
   MoreHorizontalIcon,
   PencilIcon,
   RefreshCwIcon,
@@ -89,6 +90,7 @@ export const Thread: FC<{
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
             </ThreadPrimitive.Messages>
+            <ThreadRunningIndicator />
           </div>
 
           <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 mt-auto flex flex-col gap-4 overflow-visible rounded-t-(--composer-radius) bg-background pb-4 md:pb-6">
@@ -108,6 +110,20 @@ const ThreadMessage: FC = () => {
   if (isEditing) return <EditComposer />;
   if (role === "user") return <UserMessage />;
   return <AssistantMessage />;
+};
+
+// Visible feedback while a turn is in flight. Our adapter is non-streaming
+// (single yield at the end), so without this a slow turn shows the user message
+// alone with no sign anything is happening.
+const ThreadRunningIndicator: FC = () => {
+  return (
+    <AuiIf condition={(s) => s.thread.isRunning}>
+      <div className="flex items-center gap-2 px-2 text-sm text-muted-foreground">
+        <Loader2Icon className="size-4 animate-spin" />
+        <span>Working on it…</span>
+      </div>
+    </AuiIf>
+  );
 };
 
 const ThreadScrollToBottom: FC = () => {

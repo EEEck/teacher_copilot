@@ -9,3 +9,9 @@
 
 ## 2026-05-25
 - Lesson was interrupted, leading to time constraints; did not reach the planned topic on anions.
+
+## 2026-05-29
+- Kathy was confused throughout the lesson, and Joonho was disruptive, which affected the overall classroom environment.
+
+## 2026-05-29
+- Kathy was confused throughout the lesson, and Joonho was disruptive, which affected the overall classroom environment.

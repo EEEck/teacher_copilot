@@ -17,9 +17,9 @@ export default function ClassError({
         {error.message || "Something went wrong while loading this page."}
       </p>
       <p className="text-sm text-muted-foreground">
-        Make sure the API is running on port 8001:{" "}
+        Make sure the API is running (port 8010):{" "}
         <code className="rounded bg-accent px-1 text-accent-foreground">
-          uvicorn app.main:app --reload --port 8001
+          .\scripts\restart-dev.ps1 -NoNewWindow
         </code>
       </p>
       <div className="flex gap-3">

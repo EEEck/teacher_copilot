@@ -6,6 +6,7 @@ from agents import Agent
 
 from app.teacher_agent.models import CompileOutput, IngestTurnOutput, PlanOutput, PlanTurnOutput
 from app.teacher_agent.prompts import (
+    CHAT_WIKI_TOOLS_POLICY,
     COMPILE_SYSTEM,
     INGEST_SYSTEM,
     LINT_SYSTEM,
@@ -14,12 +15,17 @@ from app.teacher_agent.prompts import (
     PLAN_SYSTEM,
     apply_prompt,
 )
-from app.teacher_agent.tools import WikiToolContext, create_wiki_tools
+from app.teacher_agent.tools import WikiToolContext, create_chat_wiki_tools, create_wiki_tools
+
+_CHAT_CONTEXT_CHARS = 14_000
 
 
 def build_ingest_agent(ctx: WikiToolContext, sections: str, context: str, model: str) -> Agent:
     instructions = apply_prompt(
-        INGEST_SYSTEM, sections=sections, context=context[:8000]
+        INGEST_SYSTEM,
+        sections=sections,
+        context=context[:_CHAT_CONTEXT_CHARS],
+        wiki_tools_policy=CHAT_WIKI_TOOLS_POLICY,
     )
     return Agent(
         name="KlassenPilot Ingest",
@@ -33,9 +39,13 @@ def build_ingest_agent(ctx: WikiToolContext, sections: str, context: str, model:
 def build_plan_chat_agent(ctx: WikiToolContext, context: str, model: str) -> Agent:
     return Agent(
         name="KlassenPilot Plan Chat",
-        instructions=apply_prompt(PLAN_CHAT_SYSTEM, context=context[:8000]),
+        instructions=apply_prompt(
+            PLAN_CHAT_SYSTEM,
+            context=context[:_CHAT_CONTEXT_CHARS],
+            wiki_tools_policy=CHAT_WIKI_TOOLS_POLICY,
+        ),
         model=model,
-        tools=create_wiki_tools(ctx),
+        tools=create_chat_wiki_tools(ctx),
         output_type=PlanTurnOutput,
     )
 

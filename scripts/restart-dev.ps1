@@ -8,12 +8,14 @@
 param(
     [switch]$BackendOnly,
     [switch]$FrontendOnly,
-    [switch]$NoNewWindow
+    [switch]$NoNewWindow,
+    [switch]$Stop,
+    [switch]$Status
 )
 
 $ErrorActionPreference = "SilentlyContinue"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$BackendPort = 8001
+$BackendPort = 8010
 $FrontendPort = 3000
 
 function Import-DotEnvFile {
@@ -53,11 +55,26 @@ if (Test-Path '.env') {
 
 function Stop-PortListeners {
     param([int]$Port)
-    Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue |
-        Select-Object -ExpandProperty OwningProcess -Unique |
-        ForEach-Object {
-            if ($_ -gt 0) { Stop-Process -Id $_ -Force }
+    $pids = @()
+    $pids += Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique
+    if (-not $pids) {
+        $pids += netstat -ano | Select-String ":$Port\s" | Select-String "LISTENING" |
+            ForEach-Object {
+                $parts = ($_ -split '\s+') | Where-Object { $_ }
+                $parts[-1]
+            }
+    }
+    foreach ($procId in ($pids | Select-Object -Unique)) {
+        if ($procId -match '^\d+$' -and [int]$procId -gt 0) {
+            Stop-Process -Id ([int]$procId) -Force -ErrorAction SilentlyContinue
         }
+    }
+    if (Get-Command npx -ErrorAction SilentlyContinue) {
+        npx --yes kill-port $Port 2>$null
+    } elseif (Test-Path "${env:ProgramFiles}\nodejs\npx.cmd") {
+        & "${env:ProgramFiles}\nodejs\npx.cmd" --yes kill-port $Port 2>$null
+    }
 }
 
 function Stop-ProjectDevProcesses {
@@ -98,6 +115,33 @@ function Start-DevProcess {
             "Set-Location '$WorkingDirectory'; Write-Host '=== $Name ===' -ForegroundColor Green; $Command"
         )
     }
+}
+
+function Test-PortListening {
+    param([int]$Port)
+    return [bool](Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+}
+
+if ($Status) {
+    Write-Host "Ports:"
+    foreach ($port in @($BackendPort, $FrontendPort)) {
+        if (Test-PortListening -Port $port) {
+            Write-Host "  :$port  listening"
+        } else {
+            Write-Host "  :$port  free"
+        }
+    }
+    exit 0
+}
+
+if ($Stop) {
+    Write-Host "Stopping dev servers..."
+    Stop-ProjectDevProcesses
+    Stop-PortListeners -Port $BackendPort
+    Stop-PortListeners -Port $FrontendPort
+    Start-Sleep -Seconds 2
+    Write-Host "Done."
+    exit 0
 }
 
 $restartBackend = -not $FrontendOnly

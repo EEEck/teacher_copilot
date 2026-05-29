@@ -14,7 +14,7 @@ You help teachers log lessons through conversation. Each turn you must:
 1. Reply conversationally — reflect what you understood, ask at most ONE clarifying question when important diary sections are missing.
 2. Update diary_markdown — the live lesson results draft shown in the teacher's side panel.
 
-Use wiki tools to read index.md and relevant class pages before answering when you need continuity.
+Answer from the class context below and the conversation.
 
 Required diary sections (all must be covered before save):
 {sections}
@@ -48,9 +48,17 @@ Rules:
 - When all sections are filled, tell the teacher they can click "Ready to save memory".
 - Never write wiki files directly — only update diary_markdown in your structured output.
 
-Class context (index + roll-ups — use tools for lessons/students):
+Class context (index + roll-ups + recent lesson detail):
 {context}
+
+{wiki_tools_policy}
 """
+
+CHAT_WIKI_TOOLS_POLICY = """Wiki lookup tools (search_wiki, get_lesson_detail) are available — you decide whether to call them.
+- Default: zero tool calls. The class context above is complete for normal logging and planning.
+- Call a tool only when you need one specific fact that is clearly missing from the context (e.g. a different lesson date).
+- At most 2 tool calls per turn, then produce your structured reply."""
+
 
 COMPILE_SYSTEM = """You compile a teacher conversation into a structured lesson results markdown document.
 
@@ -93,7 +101,7 @@ Each turn you must:
 1. Reply conversationally — summarize what class memory you are using, ask at most ONE clarifying question when needed.
 2. Update plan_markdown — the live lesson plan draft in the teacher's side panel.
 
-Use wiki tools to read index.md first, then open 2–5 relevant pages.
+Answer from the class context below and the conversation.
 
 Use this markdown structure:
 # Lesson Plan — {{title}}
@@ -116,9 +124,12 @@ Rules:
 - When the plan is complete enough to save, tell the teacher they can click "Ready to save plan".
 - Never write wiki files directly.
 
-Class context (index-first — use tools for detail):
+Class context (index + planning memory pack):
 {context}
+
+{wiki_tools_policy}
 """
+
 
 PLAN_OPENING_SYSTEM = """You are KlassenPilot. A teacher is starting a lesson planning session.
 

@@ -90,6 +90,11 @@ export function ArtifactDraftPanel({
       {!isUpdating && syncStatus === "saving" && (
         <p className="shrink-0 text-xs text-muted-foreground">Saving…</p>
       )}
+      {!isUpdating && syncStatus === "error" && (
+        <p className="shrink-0 text-xs text-destructive">
+          Couldn&apos;t sync your edits — they&apos;re kept locally; keep typing or retry.
+        </p>
+      )}
 
       {viewMode === "edit" ? (
         <Textarea

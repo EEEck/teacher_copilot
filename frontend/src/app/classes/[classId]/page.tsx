@@ -54,7 +54,13 @@ export default async function ClassHomePage({
         <StatCard label="Open loops" value={String(snapshot.open_loop_count)} />
         <StatCard
           label="Last saved"
-          value={snapshot.last_committed_date ?? snapshot.last_lesson_date ?? "—"}
+          value={
+            snapshot.last_committed_date
+              ? snapshot.last_committed_title
+                ? `${snapshot.last_committed_date} — ${snapshot.last_committed_title}`
+                : snapshot.last_committed_date
+              : (snapshot.last_lesson_date ?? "—")
+          }
         />
         <StatCard label="Lessons logged" value={String(timeline.entries.length)} />
       </div>

@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps import get_agents, get_ingest_service, get_plan_service, get_wiki
+from app.config import get_settings
 from app.schemas.api import (
     ChatRequest,
     ChatResponse,
@@ -39,7 +40,8 @@ router = APIRouter(prefix="/api")
 
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    return HealthResponse()
+    settings = get_settings()
+    return HealthResponse(agent_max_turns=settings.agent_max_turns)
 
 
 @router.get("/classes", response_model=ClassesResponse)
@@ -96,14 +98,14 @@ def get_snapshot(class_id: str, wiki: WikiStore = Depends(get_wiki)) -> ClassMem
 
 
 @router.post("/classes/{class_id}/wiki/lint", response_model=WikiLintResponse)
-def lint_wiki(
+async def lint_wiki(
     class_id: str,
     agents: AgentRunner = Depends(get_agents),
     wiki: WikiStore = Depends(get_wiki),
 ) -> WikiLintResponse:
     try:
         wiki.get_class(class_id)
-        report = agents.lint_wiki(class_id)
+        report = await agents.lint_wiki(class_id)
         return WikiLintResponse(class_id=class_id, report_markdown=report)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -112,7 +114,7 @@ def lint_wiki(
 
 
 @router.post("/classes/{class_id}/ingest/sessions", response_model=IngestSession)
-def start_ingest_session(
+async def start_ingest_session(
     class_id: str,
     ingest: IngestService = Depends(get_ingest_service),
     wiki: WikiStore = Depends(get_wiki),
@@ -121,14 +123,14 @@ def start_ingest_session(
         wiki.get_class(class_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    return ingest.start_session(class_id)
+    return await ingest.start_session(class_id)
 
 
 @router.post(
     "/classes/{class_id}/ingest/sessions/{session_id}/chat",
     response_model=ChatResponse,
 )
-def ingest_chat(
+async def ingest_chat(
     class_id: str,
     session_id: str,
     body: ChatRequest,
@@ -138,7 +140,7 @@ def ingest_chat(
         session = ingest.get_session(session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
-        return ingest.chat(
+        return await ingest.chat(
             session_id, body.message, body.diary_markdown, attachments=body.attachments
         )
     except KeyError as e:
@@ -171,7 +173,7 @@ def ingest_update_draft(
     "/classes/{class_id}/ingest/sessions/{session_id}/propose",
     response_model=IngestDraft,
 )
-def ingest_propose(
+async def ingest_propose(
     class_id: str,
     session_id: str,
     ingest: IngestService = Depends(get_ingest_service),
@@ -180,7 +182,7 @@ def ingest_propose(
         session = ingest.get_session(session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
-        return ingest.propose(session_id)
+        return await ingest.propose(session_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -222,14 +224,14 @@ def ingest_commit(
 
 
 @router.post("/classes/{class_id}/plan/sessions", response_model=PlanSession)
-def start_plan_session(
+async def start_plan_session(
     class_id: str,
     plan_svc: PlanService = Depends(get_plan_service),
     wiki: WikiStore = Depends(get_wiki),
 ) -> PlanSession:
     try:
         wiki.get_class(class_id)
-        return plan_svc.start_session(class_id)
+        return await plan_svc.start_session(class_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except RuntimeError as e:
@@ -240,7 +242,7 @@ def start_plan_session(
     "/classes/{class_id}/plan/sessions/{session_id}/chat",
     response_model=PlanChatResponse,
 )
-def plan_chat(
+async def plan_chat(
     class_id: str,
     session_id: str,
     body: PlanChatRequest,
@@ -250,7 +252,7 @@ def plan_chat(
         session = plan_svc.get_session(session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
-        return plan_svc.chat(
+        return await plan_svc.chat(
             session_id,
             body.message,
             body.plan_markdown,
@@ -315,7 +317,7 @@ def plan_save(
 
 
 @router.post("/classes/{class_id}/plan-lesson", response_model=LessonPlan)
-def plan_lesson(
+async def plan_lesson(
     class_id: str,
     body: PlanLessonRequest,
     plan_svc: PlanService = Depends(get_plan_service),
@@ -323,6 +325,6 @@ def plan_lesson(
 ) -> LessonPlan:
     try:
         wiki.get_class(class_id)
-        return plan_svc.generate(class_id, body)
+        return await plan_svc.generate(class_id, body)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e

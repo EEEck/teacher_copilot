@@ -1,18 +1,20 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
-import { ArtifactDraftPanel } from "@/components/klassenpilot/artifact-draft-panel";
-import { PlanRuntimeProvider } from "@/components/assistant-ui/plan-runtime-provider";
-import { PlanThread } from "@/components/assistant-ui/plan-thread";
+import { useCallback, useState } from "react";
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
-import { PageHeader } from "@/components/layout/page-header";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PlanThread } from "@/components/assistant-ui/plan-thread";
+import { ArtifactDraftPanel } from "@/components/klassenpilot/artifact-draft-panel";
+import {
+  ArtifactSessionPage,
+  type ArtifactSessionBodyProps,
+} from "@/components/klassenpilot/artifact-session-page";
+import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { client, type PlanSession } from "@/lib/api";
+import { client } from "@/lib/api";
 
 function ReadyToSavePlan({
   classId,
@@ -27,6 +29,7 @@ function ReadyToSavePlan({
 }) {
   const { artifactMarkdown, isUpdating, readyToSave } = useArtifactSession();
   const [loading, setLoading] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [showSave, setShowSave] = useState(false);
   const [lessonDate, setLessonDate] = useState(() => new Date().toISOString().slice(0, 10));
 
@@ -48,16 +51,13 @@ function ReadyToSavePlan({
     setLoading(true);
     onError(null);
     try {
-      const result = await client.planSave(
-        classId,
-        sessionId,
-        lessonDate.trim(),
-        artifactMarkdown,
-      );
-      onDone(result.lesson_date);
+      const result = await client.planSave(classId, sessionId, lessonDate.trim(), artifactMarkdown);
+      // Show a clear "Saved" confirmation before navigating to the saved lesson.
+      setSaved(true);
+      setLoading(false);
+      setTimeout(() => onDone(result.lesson_date), 1500);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Save failed");
-    } finally {
       setLoading(false);
     }
   }, [classId, sessionId, lessonDate, artifactMarkdown, onError, onDone]);
@@ -85,10 +85,18 @@ function ReadyToSavePlan({
               className="w-[180px]"
             />
           </div>
-          <Button onClick={handleSave} disabled={loading || isUpdating}>
-            Save plan to lesson
+          <Button onClick={handleSave} disabled={loading || saved || isUpdating}>
+            {saved ? (
+              <>
+                <Check className="size-4" /> Saved — opening lesson…
+              </>
+            ) : loading ? (
+              "Saving…"
+            ) : (
+              "Save plan to lesson"
+            )}
           </Button>
-          <Button variant="ghost" onClick={() => setShowSave(false)} disabled={loading}>
+          <Button variant="ghost" onClick={() => setShowSave(false)} disabled={loading || saved}>
             Back
           </Button>
         </div>
@@ -102,66 +110,26 @@ export default function PlanPage() {
   const classId = params.classId as string;
   const router = useRouter();
 
-  const [session, setSession] = useState<PlanSession | null>(null);
-  const [initialPlan, setInitialPlan] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const s = await client.startPlanSession(classId);
-        if (cancelled) return;
-        setSession(s);
-        const d = await client.planGetDraft(classId, s.session_id);
-        if (cancelled) return;
-        setInitialPlan(d.plan_markdown);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to start session");
-      }
-    })();
-    return () => {
-      cancelled = true;
+  const bootstrap = useCallback(async () => {
+    const session = await client.startPlanSession(classId);
+    const draft = await client.planGetDraft(classId, session.session_id);
+    return {
+      sessionId: session.session_id,
+      initialMarkdown: draft.plan_markdown,
+      openingMessage: session.opening_message,
     };
   }, [classId]);
 
-  if (!session || !initialPlan) {
-    return (
-      <div>
-        <PageHeader backHref={`/classes/${classId}`} backLabel="Class home" title="Create lesson plan" />
-        {error ? (
-          <Alert className="mb-6 border-destructive/30 bg-[var(--error-bg)] text-destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : (
-          <p className="text-muted-foreground">Starting session…</p>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div>
-      <PageHeader
-        backHref={`/classes/${classId}`}
-        backLabel="Class home"
-        title="Create lesson plan"
-        description="Chat to plan the next lesson, refine the draft on the right, then save to a lesson date."
-      />
-
-      {error && (
-        <Alert className="mb-6 border-destructive/30 bg-[var(--error-bg)] text-destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <PlanRuntimeProvider
-        classId={classId}
-        sessionId={session.session_id}
-        initialPlanMarkdown={initialPlan}
-      >
+    <ArtifactSessionPage
+      mode="plan"
+      classId={classId}
+      title="Create lesson plan"
+      description="Chat to plan the next lesson, refine the draft on the right, then save to a lesson date."
+      bootstrap={bootstrap}
+      renderBody={({ sessionId, onError }: ArtifactSessionBodyProps) => (
         <ArtifactSessionWorkspace
-          thread={<PlanThread openingMessage={session.opening_message} />}
+          thread={<PlanThread />}
           draftPanel={
             <ArtifactDraftPanel
               title="Lesson plan"
@@ -172,16 +140,16 @@ export default function PlanPage() {
           footer={
             <ReadyToSavePlan
               classId={classId}
-              sessionId={session.session_id}
-              onError={setError}
+              sessionId={sessionId}
+              onError={onError}
               onDone={(lessonDate) => {
-                router.push(`/classes/${classId}?highlight=${encodeURIComponent(lessonDate)}`);
-                router.refresh();
+                // Land on the saved lesson so the teacher immediately sees the plan persisted.
+                router.push(`/classes/${classId}/lessons/${encodeURIComponent(lessonDate)}`);
               }}
             />
           }
         />
-      </PlanRuntimeProvider>
-    </div>
+      )}
+    />
   );
 }

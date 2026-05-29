@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class HealthResponse(BaseModel):
     status: str = "ok"
     version: str = "0.1.0"
+    agent_max_turns: int = 16
 
 
 class ClassSummary(BaseModel):
@@ -39,6 +40,8 @@ class TimelineEntry(BaseModel):
     homework: Optional[str] = None
     raw_path: Optional[str] = None
     has_plan: bool = False
+    # "taught" = lesson_results.md exists; "planned" = only a saved lesson_plan.md
+    status: str = "taught"
     committed_at: Optional[str] = None
     wiki_paths: list[str] = Field(default_factory=list)
 
@@ -56,6 +59,7 @@ class ClassMemorySnapshot(BaseModel):
     last_lesson_date: Optional[str] = None
     last_committed_date: Optional[str] = None
     last_committed_at: Optional[str] = None
+    last_committed_title: Optional[str] = None
     open_loop_count: int = 0
     top_misconceptions: list[str] = Field(default_factory=list)
     recent_lessons: list[str] = Field(default_factory=list)

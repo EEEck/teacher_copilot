@@ -43,6 +43,20 @@ export type ArtifactSessionConfig = {
   onCompletenessChange?: (checklist: CompletenessChecklist) => void;
 };
 
+const CHAT_ERROR_REPLY =
+  "I could not finish that turn. Your draft is unchanged — try a shorter message or one topic at a time.";
+
+function friendlyChatError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : "Something went wrong";
+  if (/max turns/i.test(raw) || /API 5\d\d/i.test(raw)) {
+    return CHAT_ERROR_REPLY;
+  }
+  if (raw.startsWith("API ")) {
+    return CHAT_ERROR_REPLY;
+  }
+  return raw;
+}
+
 type ArtifactSessionContextValue = {
   classId: string;
   sessionId: string;
@@ -173,6 +187,10 @@ export function ArtifactSessionRuntimeProvider({
           applyMeta(res.completeness ?? null, res.readyToSave);
           if (abortSignal?.aborted) return;
           yield { content: [{ type: "text", text: res.reply }] };
+        } catch (err) {
+          const message = friendlyChatError(err);
+          if (abortSignal?.aborted) return;
+          yield { content: [{ type: "text", text: message }] };
         } finally {
           setIsUpdating(false);
         }

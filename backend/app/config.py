@@ -18,6 +18,8 @@ class Settings(BaseSettings):
 
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4o-mini"
+    agent_timeout_seconds: float = 90.0
+    agent_max_turns: int = 16
     wiki_root: Path = Path(__file__).resolve().parent.parent / "teacher_wiki"
     cors_origins: list[str] = ["http://localhost:3000"]
     app_env: Literal["development", "production"] = "development"
