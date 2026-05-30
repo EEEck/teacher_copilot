@@ -10,9 +10,11 @@ thin adapters that wrap this core, since those touch different schemas/routes.
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
 from app.schemas.api import ChatAttachment, ChatMessage, CompletenessChecklist
+from app.teacher_agent.stream_events import SseError, SseEvent, SseFinal, sse_encode
 from app.services.artifact_spec import ArtifactSpec, TurnResult, default_specs
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.wiki_store import WikiStore
@@ -99,6 +101,54 @@ class ArtifactSessionService:
         if result.ready:
             session.status = spec.ready_status
         return result
+
+    def _apply_turn_result(self, session: ArtifactSession, result: TurnResult) -> None:
+        spec = self.specs[session.mode]
+        session.messages.append(ChatMessage(role="assistant", content=result.reply))
+        session.partial_markdown = result.markdown
+        if result.completeness is not None:
+            session.completeness = result.completeness
+        self.drafts[session.session_id] = spec.build_draft(
+            self.wiki, session.class_id, result.markdown
+        )
+        if result.ready:
+            session.status = spec.ready_status
+
+    async def chat_stream(
+        self,
+        session_id: str,
+        message: str,
+        markdown: str | None = None,
+        attachments: list[ChatAttachment] | None = None,
+    ) -> AsyncIterator[str]:
+        """SSE wire lines for one chat turn (ingest or plan)."""
+        session = self.get_session(session_id)
+        if markdown is not None:
+            session.partial_markdown = markdown
+        session.messages.append(ChatMessage(role="user", content=message))
+
+        stream_fn = (
+            self.agents.ingest_chat_stream
+            if session.mode == "ingest"
+            else self.agents.plan_chat_stream
+        )
+        async for event in stream_fn(
+            session.class_id,
+            session.messages,
+            session.partial_markdown,
+            attachments=attachments or [],
+        ):
+            if isinstance(event, SseFinal):
+                self._apply_turn_result(
+                    session,
+                    TurnResult(
+                        reply=event.reply,
+                        markdown=event.artifact_markdown,
+                        ready=event.ready,
+                        completeness=event.completeness,
+                    ),
+                )
+            yield sse_encode(event)
 
     def update_draft(self, session_id: str, markdown: str) -> object:
         session = self.get_session(session_id)

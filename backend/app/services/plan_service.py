@@ -7,6 +7,8 @@ plan-specific single_file_save step plus the standalone one-shot generator.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from app.schemas.api import (
     ChatAttachment,
     LessonPlan,
@@ -65,6 +67,18 @@ class PlanService:
             plan_markdown=result.markdown,
             ready_to_save=result.ready,
         )
+
+    async def chat_stream(
+        self,
+        session_id: str,
+        message: str,
+        plan_markdown: str | None = None,
+        attachments: list[ChatAttachment] | None = None,
+    ) -> AsyncIterator[str]:
+        async for line in self.core.chat_stream(
+            session_id, message, plan_markdown, attachments
+        ):
+            yield line
 
     def update_draft(self, session_id: str, plan_markdown: str) -> PlanDraft:
         draft = self.core.update_draft(session_id, plan_markdown)

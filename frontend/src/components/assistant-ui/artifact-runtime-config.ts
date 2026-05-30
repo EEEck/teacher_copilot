@@ -1,17 +1,41 @@
-import type { ArtifactSessionConfig } from "@/components/assistant-ui/artifact-session-runtime";
-import { client, type CompletenessChecklist } from "@/lib/api";
+import type {
+  ArtifactChatResult,
+  ArtifactSessionConfig,
+} from "@/components/assistant-ui/artifact-session-runtime";
+import { client, isUnknownSessionError, type CompletenessChecklist } from "@/lib/api";
+import { readSseJsonStream, StreamPartsAccumulator, type StreamPart } from "@/lib/sse-chat";
+import type { SessionAttachment } from "@/lib/session-attachments";
 
 export type ArtifactMode = "ingest" | "plan";
 
+export type ChatStreamChunk =
+  | { kind: "progress"; content: StreamPart[] }
+  | { kind: "final"; content: StreamPart[]; result: ArtifactChatResult };
+
 /**
  * Builds the per-mode runtime config consumed by ArtifactSessionRuntimeProvider.
- * Replaces the old PlanRuntimeProvider / IngestRuntimeProvider wrappers — adding
- * a new artifact mode means adding a branch here, not a new provider component.
  */
+async function withSessionRecovery<T>(
+  getSessionId: () => string,
+  onSessionLost: ((markdown: string) => Promise<void>) | undefined,
+  markdown: string,
+  run: (sessionId: string) => Promise<T>,
+): Promise<T> {
+  try {
+    return await run(getSessionId());
+  } catch (err) {
+    if (!onSessionLost || !isUnknownSessionError(err)) throw err;
+    await onSessionLost(markdown);
+    return await run(getSessionId());
+  }
+}
+
 export function createArtifactRuntimeConfig(args: {
   mode: ArtifactMode;
   classId: string;
   sessionId: string;
+  getSessionId?: () => string;
+  onSessionLost?: (preserveMarkdown: string) => Promise<void>;
   initialMarkdown: string;
   initialCompleteness?: CompletenessChecklist | null;
   onCompletenessChange?: (checklist: CompletenessChecklist) => void;
@@ -20,10 +44,72 @@ export function createArtifactRuntimeConfig(args: {
     mode,
     classId,
     sessionId,
+    getSessionId = () => sessionId,
+    onSessionLost,
     initialMarkdown,
     initialCompleteness = null,
     onCompletenessChange,
   } = args;
+
+  async function* chatStream({
+    message,
+    currentMarkdown,
+    attachments,
+    signal,
+  }: {
+    message: string;
+    currentMarkdown: string;
+    attachments?: SessionAttachment[];
+    signal?: AbortSignal;
+  }): AsyncGenerator<ChatStreamChunk> {
+    const res = await withSessionRecovery(
+      getSessionId,
+      onSessionLost,
+      currentMarkdown,
+      (sid) =>
+        mode === "ingest"
+          ? client.ingestChatStream(
+              classId,
+              sid,
+              message,
+              currentMarkdown,
+              attachments,
+              signal,
+            )
+          : client.planChatStream(
+              classId,
+              sid,
+              message,
+              currentMarkdown,
+              attachments,
+              signal,
+            ),
+    );
+
+    const acc = new StreamPartsAccumulator();
+    for await (const event of readSseJsonStream(res)) {
+      if (event.type === "error") {
+        throw new Error(event.message);
+      }
+      if (event.type === "final") {
+        const content = acc.parts(event.reply);
+        yield {
+          kind: "final",
+          content,
+          result: {
+            reply: event.reply,
+            artifactMarkdown: event.artifact_markdown,
+            readyToSave: event.ready,
+            completeness: event.completeness ?? null,
+          },
+        };
+        return;
+      }
+      acc.apply(event);
+      yield { kind: "progress", content: acc.parts() };
+    }
+    throw new Error("Stream ended without a final event");
+  }
 
   if (mode === "ingest") {
     return {
@@ -32,23 +118,11 @@ export function createArtifactRuntimeConfig(args: {
       initialMarkdown,
       initialCompleteness,
       onCompletenessChange,
-      chat: async ({ message, currentMarkdown, attachments }) => {
-        const res = await client.ingestChat(
-          classId,
-          sessionId,
-          message,
-          currentMarkdown,
-          attachments,
-        );
-        return {
-          reply: res.reply,
-          artifactMarkdown: res.diary_markdown,
-          completeness: res.completeness,
-          readyToSave: res.ready_to_propose,
-        };
-      },
+      chatStream,
       patchDraft: async (markdown: string) => {
-        const draft = await client.ingestUpdateDraft(classId, sessionId, markdown);
+        const draft = await withSessionRecovery(getSessionId, onSessionLost, markdown, (sid) =>
+          client.ingestUpdateDraft(classId, sid, markdown),
+        );
         const ready = draft.completeness.items.every((i) => !i.required || i.complete);
         return { completeness: draft.completeness, readyToSave: ready };
       },
@@ -59,22 +133,11 @@ export function createArtifactRuntimeConfig(args: {
     classId,
     sessionId,
     initialMarkdown,
-    chat: async ({ message, currentMarkdown, attachments }) => {
-      const res = await client.planChat(
-        classId,
-        sessionId,
-        message,
-        currentMarkdown,
-        attachments,
-      );
-      return {
-        reply: res.reply,
-        artifactMarkdown: res.plan_markdown,
-        readyToSave: res.ready_to_save,
-      };
-    },
+    chatStream,
     patchDraft: async (markdown: string) => {
-      await client.planUpdateDraft(classId, sessionId, markdown);
+      await withSessionRecovery(getSessionId, onSessionLost, markdown, (sid) =>
+        client.planUpdateDraft(classId, sid, markdown),
+      );
       return {};
     },
   };

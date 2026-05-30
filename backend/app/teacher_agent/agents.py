@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
+import time
+from collections.abc import AsyncIterator
+from typing import Any, Optional
 
 from agents import Runner
 from agents.exceptions import AgentsException, MaxTurnsExceeded
@@ -24,6 +26,7 @@ from app.teacher_agent.agent import (
 )
 from app.teacher_agent.models import CompileOutput, IngestTurnOutput, PlanOutput, PlanTurnOutput
 from app.teacher_agent.tools import WikiToolContext
+from app.teacher_agent.stream_events import SseError, SseEvent, SseFinal, translate_sdk_event
 from app.teacher_agent.wiki_store import DIARY_SECTION_HEADINGS, WikiStore
 
 class AgentTurnLimitError(RuntimeError):
@@ -87,6 +90,9 @@ class AgentRunner:
         else:
             self.client = OpenAI(api_key=key)
         self.model = settings.openai_model
+        self.chat_model = settings.openai_chat_model
+        self.fast_model = settings.openai_fast_model
+        self.reasoning_effort = settings.openai_reasoning_effort
         self.timeout = settings.agent_timeout_seconds
         self.max_turns = settings.agent_max_turns
         self.wiki = wiki
@@ -147,6 +153,137 @@ class AgentRunner:
             raise
         return result.final_output
 
+    async def _yield_stream_events(
+        self, agent: Any, user_input: str
+    ) -> AsyncIterator[SseEvent]:
+        """Drain one streamed run; caller reads _last_streamed_result.final_output after iteration."""
+        self._require_client()
+        self._last_streamed_result = None
+        result = Runner.run_streamed(agent, user_input, max_turns=self.max_turns)
+        started = time.monotonic()
+        try:
+            async for event in result.stream_events():
+                if time.monotonic() - started > self.timeout:
+                    yield SseError(message="The request timed out.", code="timeout")
+                    return
+                for translated in translate_sdk_event(event):
+                    yield translated
+        except AgentsException as exc:
+            if _is_turn_limit_error(exc):
+                _log_turn_limit(getattr(agent, "name", "agent"), exc)
+                yield SseError(message=_TURN_LIMIT_REPLY, code="turn_limit")
+                return
+            yield SseError(message=str(exc), code="agent_error")
+            return
+        except Exception as exc:
+            if _is_turn_limit_error(exc):
+                _log_turn_limit(getattr(agent, "name", "agent"), exc)
+                yield SseError(message=_TURN_LIMIT_REPLY, code="turn_limit")
+                return
+            yield SseError(message=str(exc), code="error")
+            return
+
+        self._last_streamed_result = result
+
+    async def ingest_chat_stream(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        partial_diary: str = "",
+        attachments: list[ChatAttachment] | None = None,
+    ) -> AsyncIterator[SseEvent]:
+        context = (
+            self.wiki.load_index_context(class_id)
+            + "\n\n"
+            + self.wiki.build_ingest_context(class_id)
+        )
+        sections = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
+        agent = build_ingest_agent(
+            self._wiki_ctx(class_id),
+            sections,
+            context,
+            self.chat_model,
+            reasoning_effort=self.reasoning_effort,
+        )
+        current_draft = partial_diary.strip() or self.wiki.empty_diary_template()
+        user_input = self._build_user_input(
+            messages, "Current diary draft (update each turn)", current_draft, attachments
+        )
+        async for event in self._yield_stream_events(agent, user_input):
+            if isinstance(event, SseError):
+                yield event
+                return
+            yield event
+
+        out = self._last_streamed_result
+        if out is None:
+            return
+        parsed = out.final_output
+        if not isinstance(parsed, IngestTurnOutput):
+            yield SseError(
+                message="I had trouble processing that — could you try again?",
+                code="parse_error",
+            )
+            return
+        reply = parsed.reply
+        diary_md = parsed.diary_markdown.strip() or current_draft
+        checklist = self.wiki.checklist_from_diary(diary_md)
+        ready = self.wiki.is_diary_complete(diary_md) or "ready to save" in reply.lower()
+        yield SseFinal(
+            reply=reply,
+            artifact_markdown=diary_md,
+            ready=ready,
+            completeness=checklist,
+        )
+
+    async def plan_chat_stream(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        partial_plan: str = "",
+        attachments: list[ChatAttachment] | None = None,
+    ) -> AsyncIterator[SseEvent]:
+        context = (
+            self.wiki.load_index_context(class_id)
+            + "\n\n"
+            + self.wiki.build_plan_context(class_id)
+        )
+        agent = build_plan_chat_agent(
+            self._wiki_ctx(class_id),
+            context,
+            self.chat_model,
+            reasoning_effort=self.reasoning_effort,
+        )
+        current_draft = partial_plan.strip() or self.wiki.empty_plan_template()
+        user_input = self._build_user_input(
+            messages, "Current plan draft (update each turn)", current_draft, attachments
+        )
+        async for event in self._yield_stream_events(agent, user_input):
+            if isinstance(event, SseError):
+                yield event
+                return
+            yield event
+
+        out = self._last_streamed_result
+        if out is None:
+            return
+        parsed = out.final_output
+        if not isinstance(parsed, PlanTurnOutput):
+            yield SseError(
+                message="I had trouble processing that — could you try again?",
+                code="parse_error",
+            )
+            return
+        reply = parsed.reply
+        plan_md = parsed.plan_markdown.strip() or current_draft
+        ready = self.wiki.is_plan_ready(plan_md) or "ready to save" in reply.lower()
+        yield SseFinal(
+            reply=reply,
+            artifact_markdown=plan_md,
+            ready=ready,
+            completeness=None,
+        )
+
     def _plan_opening_fallback(self, class_id: str) -> str:
         snap = self.wiki.get_snapshot(class_id)
         lines = [
@@ -191,7 +328,12 @@ class AgentRunner:
             + "\n\n"
             + self.wiki.build_plan_context(class_id)
         )
-        agent = build_plan_chat_agent(self._wiki_ctx(class_id), context, self.model)
+        agent = build_plan_chat_agent(
+            self._wiki_ctx(class_id),
+            context,
+            self.chat_model,
+            reasoning_effort=self.reasoning_effort,
+        )
         current_draft = partial_plan.strip() or self.wiki.empty_plan_template()
         user_input = self._build_user_input(
             messages, "Current plan draft (update each turn)", current_draft, attachments
@@ -220,7 +362,13 @@ class AgentRunner:
             + self.wiki.build_ingest_context(class_id)
         )
         sections = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
-        agent = build_ingest_agent(self._wiki_ctx(class_id), sections, context, self.model)
+        agent = build_ingest_agent(
+            self._wiki_ctx(class_id),
+            sections,
+            context,
+            self.chat_model,
+            reasoning_effort=self.reasoning_effort,
+        )
         current_draft = partial_diary.strip() or self.wiki.empty_diary_template()
         user_input = self._build_user_input(
             messages, "Current diary draft (update each turn)", current_draft, attachments
@@ -255,7 +403,7 @@ class AgentRunner:
             f"Conversation transcript:\n{transcript}\n\n"
             "Compile the lesson results markdown now."
         )
-        agent = build_compile_agent(self.model)
+        agent = build_compile_agent(self.fast_model)
         parsed = await self._run_structured(agent, prompt)
         if not isinstance(parsed, CompileOutput):
             return self.wiki.empty_diary_template()
@@ -274,7 +422,7 @@ class AgentRunner:
             f"Start from index.md via tools, then open relevant pages.\n"
             f"Context excerpt:\n{context[:4000]}"
         )
-        agent = build_plan_lesson_agent(self._wiki_ctx(class_id), self.model)
+        agent = build_plan_lesson_agent(self._wiki_ctx(class_id), self.fast_model)
         parsed = await self._run_structured(agent, user)
         if not isinstance(parsed, PlanOutput):
             raise RuntimeError("Failed to generate lesson plan")
@@ -282,7 +430,7 @@ class AgentRunner:
 
     async def lint_wiki(self, class_id: str) -> str:
         context = self.wiki.read_wiki_index(class_id)
-        agent = build_lint_agent(self._wiki_ctx(class_id), context, self.model)
+        agent = build_lint_agent(self._wiki_ctx(class_id), context, self.fast_model)
         out = await self._run_structured(
             agent,
             f"Lint the wiki for class {class_id}. Read index.md and scan lessons, students, roll-ups.",

@@ -2,6 +2,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -18,6 +20,9 @@ class Settings(BaseSettings):
 
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4o-mini"
+    openai_chat_model: str = "gpt-5.4-mini"
+    openai_fast_model: str = "gpt-4o-mini"
+    openai_reasoning_effort: ReasoningEffort = "medium"
     agent_timeout_seconds: float = 90.0
     agent_max_turns: int = 16
     wiki_root: Path = Path(__file__).resolve().parent.parent / "teacher_wiki"

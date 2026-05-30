@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_agents, get_ingest_service, get_plan_service, get_wiki
 from app.config import get_settings
@@ -175,6 +176,39 @@ async def ingest_chat(
         raise  # unexpected KeyError -> global handler logs full traceback
 
 
+@router.post("/classes/{class_id}/ingest/sessions/{session_id}/chat/stream")
+async def ingest_chat_stream(
+    class_id: str,
+    session_id: str,
+    body: ChatRequest,
+    ingest: IngestService = Depends(get_ingest_service),
+):
+    try:
+        session = ingest.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        async def event_generator():
+            async for line in ingest.chat_stream(
+                session_id,
+                body.message,
+                body.diary_markdown,
+                attachments=body.attachments,
+            ):
+                yield line
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+    except KeyError as e:
+        msg = e.args[0] if e.args else str(e)
+        if isinstance(msg, str) and msg.startswith("Unknown session:"):
+            raise HTTPException(status_code=404, detail=msg) from e
+        raise
+
+
 @router.patch(
     "/classes/{class_id}/ingest/sessions/{session_id}/draft",
     response_model=IngestDraft,
@@ -290,6 +324,39 @@ async def plan_chat(
         if isinstance(msg, str) and msg.startswith("Unknown session:"):
             raise HTTPException(status_code=404, detail=msg) from e
         raise  # unexpected KeyError -> global handler logs full traceback
+
+
+@router.post("/classes/{class_id}/plan/sessions/{session_id}/chat/stream")
+async def plan_chat_stream(
+    class_id: str,
+    session_id: str,
+    body: PlanChatRequest,
+    plan_svc: PlanService = Depends(get_plan_service),
+):
+    try:
+        session = plan_svc.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        async def event_generator():
+            async for line in plan_svc.chat_stream(
+                session_id,
+                body.message,
+                body.plan_markdown,
+                attachments=body.attachments,
+            ):
+                yield line
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+    except KeyError as e:
+        msg = e.args[0] if e.args else str(e)
+        if isinstance(msg, str) and msg.startswith("Unknown session:"):
+            raise HTTPException(status_code=404, detail=msg) from e
+        raise
 
 
 @router.get(

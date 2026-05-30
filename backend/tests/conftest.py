@@ -10,6 +10,7 @@ Provides an offline, deterministic test client:
 from __future__ import annotations
 
 import shutil
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Iterator
 
@@ -27,6 +28,7 @@ from app.schemas.api import (
 )
 from app.services.ingest_service import IngestService
 from app.services.plan_service import PlanService
+from app.teacher_agent.stream_events import SseFinal, SseReasoningDelta, SseToolCall
 from app.teacher_agent.wiki_store import WikiStore
 
 CLASS_ID = "chemie_9b_2026_27"
@@ -128,6 +130,37 @@ class StubAgentRunner:
 
     async def lint_wiki(self, class_id: str) -> str:
         return "# Wiki lint report\n- All good."
+
+    async def ingest_chat_stream(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        partial_diary: str = "",
+        attachments: list[ChatAttachment] | None = None,
+    ) -> AsyncIterator:
+        yield SseReasoningDelta(text="Reviewing class memory…")
+        checklist = self.wiki.checklist_from_diary(COMPLETE_DIARY)
+        yield SseFinal(
+            reply="Logged the lesson.",
+            artifact_markdown=COMPLETE_DIARY,
+            ready=True,
+            completeness=checklist,
+        )
+
+    async def plan_chat_stream(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        partial_plan: str = "",
+        attachments: list[ChatAttachment] | None = None,
+    ) -> AsyncIterator:
+        yield SseToolCall(name="search_wiki", args="{}", call_id="call-1")
+        yield SseFinal(
+            reply="Here is an updated plan draft.",
+            artifact_markdown=READY_PLAN,
+            ready=True,
+            completeness=None,
+        )
 
 
 @pytest.fixture

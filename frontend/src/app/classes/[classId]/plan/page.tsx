@@ -18,16 +18,15 @@ import { client } from "@/lib/api";
 
 function ReadyToSavePlan({
   classId,
-  sessionId,
   onError,
   onDone,
 }: {
   classId: string;
-  sessionId: string;
   onError: (message: string | null) => void;
   onDone: (lessonDate: string) => void;
 }) {
-  const { artifactMarkdown, isUpdating, readyToSave } = useArtifactSession();
+  const { artifactMarkdown, isUpdating, readyToSave, runWithSessionRecovery } =
+    useArtifactSession();
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showSave, setShowSave] = useState(false);
@@ -37,11 +36,13 @@ function ReadyToSavePlan({
     setShowSave(true);
     onError(null);
     try {
-      await client.planUpdateDraft(classId, sessionId, artifactMarkdown);
+      await runWithSessionRecovery((sessionId) =>
+        client.planUpdateDraft(classId, sessionId, artifactMarkdown),
+      );
     } catch (e) {
       onError(e instanceof Error ? e.message : "Could not sync draft");
     }
-  }, [classId, sessionId, artifactMarkdown, onError]);
+  }, [classId, artifactMarkdown, onError, runWithSessionRecovery]);
 
   const handleSave = useCallback(async () => {
     if (!lessonDate.trim()) {
@@ -51,7 +52,9 @@ function ReadyToSavePlan({
     setLoading(true);
     onError(null);
     try {
-      const result = await client.planSave(classId, sessionId, lessonDate.trim(), artifactMarkdown);
+      const result = await runWithSessionRecovery((sessionId) =>
+        client.planSave(classId, sessionId, lessonDate.trim(), artifactMarkdown),
+      );
       // Show a clear "Saved" confirmation before navigating to the saved lesson.
       setSaved(true);
       setLoading(false);
@@ -60,7 +63,7 @@ function ReadyToSavePlan({
       onError(e instanceof Error ? e.message : "Save failed");
       setLoading(false);
     }
-  }, [classId, sessionId, lessonDate, artifactMarkdown, onError, onDone]);
+  }, [classId, lessonDate, artifactMarkdown, onError, onDone, runWithSessionRecovery]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -110,15 +113,22 @@ export default function PlanPage() {
   const classId = params.classId as string;
   const router = useRouter();
 
-  const bootstrap = useCallback(async () => {
-    const session = await client.startPlanSession(classId);
-    const draft = await client.planGetDraft(classId, session.session_id);
-    return {
-      sessionId: session.session_id,
-      initialMarkdown: draft.plan_markdown,
-      openingMessage: session.opening_message,
-    };
-  }, [classId]);
+  const bootstrap = useCallback(
+    async (opts?: { preserveMarkdown?: string }) => {
+      const session = await client.startPlanSession(classId);
+      let draft = await client.planGetDraft(classId, session.session_id);
+      if (opts?.preserveMarkdown) {
+        await client.planUpdateDraft(classId, session.session_id, opts.preserveMarkdown);
+        draft = await client.planGetDraft(classId, session.session_id);
+      }
+      return {
+        sessionId: session.session_id,
+        initialMarkdown: draft.plan_markdown,
+        openingMessage: session.opening_message,
+      };
+    },
+    [classId],
+  );
 
   return (
     <ArtifactSessionPage
@@ -127,7 +137,7 @@ export default function PlanPage() {
       title="Create lesson plan"
       description="Chat to plan the next lesson, refine the draft on the right, then save to a lesson date."
       bootstrap={bootstrap}
-      renderBody={({ sessionId, onError }: ArtifactSessionBodyProps) => (
+      renderBody={({ onError }: ArtifactSessionBodyProps) => (
         <ArtifactSessionWorkspace
           thread={<PlanThread />}
           draftPanel={
@@ -140,7 +150,6 @@ export default function PlanPage() {
           footer={
             <ReadyToSavePlan
               classId={classId}
-              sessionId={sessionId}
               onError={onError}
               onDone={(lessonDate) => {
                 // Land on the saved lesson so the teacher immediately sees the plan persisted.

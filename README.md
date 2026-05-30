@@ -91,7 +91,10 @@ teacher_wiki/
 | Variable | Where | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | `backend/.env` | OpenAI API (required for chat & plan) |
-| `OPENAI_MODEL` | `backend/.env` | Default `gpt-4o-mini` |
+| `OPENAI_MODEL` | `backend/.env` | Default model fallback for legacy settings |
+| `OPENAI_CHAT_MODEL` | `backend/.env` | Chat turns (ingest/plan); default `gpt-5.4-mini` for reasoning + streaming |
+| `OPENAI_FAST_MODEL` | `backend/.env` | Compile/lint/opening; default `gpt-4o-mini` |
+| `OPENAI_REASONING_EFFORT` | `backend/.env` | `none`, `low`, `medium`, `high`, `xhigh` — hidden thinking tokens (billed as output). Default `medium`; use `none` or `low` to save cost |
 | `WIKI_ROOT` | `backend/.env` | Path to `teacher_wiki` |
 | `NEXT_PUBLIC_API_BASE_URL` | `frontend/.env.local` | Backend URL (default `http://localhost:8010`) |
 

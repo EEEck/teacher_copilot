@@ -7,6 +7,7 @@ ingest-specific propose/commit steps (the propose_review_commit strategy).
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import date
 
 from app.schemas.api import (
@@ -63,6 +64,18 @@ class IngestService:
             completeness=completeness,
             ready_to_propose=result.ready,
         )
+
+    async def chat_stream(
+        self,
+        session_id: str,
+        message: str,
+        diary_markdown: str | None = None,
+        attachments: list[ChatAttachment] | None = None,
+    ) -> AsyncIterator[str]:
+        async for line in self.core.chat_stream(
+            session_id, message, diary_markdown, attachments
+        ):
+            yield line
 
     def update_draft(self, session_id: str, diary_markdown: str) -> IngestDraft:
         draft = self.core.update_draft(session_id, diary_markdown)

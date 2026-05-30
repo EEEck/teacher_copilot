@@ -79,15 +79,13 @@ function ReadyToSaveButton({ onReady, loading }: { onReady: () => void; loading:
 
 function MemoryWorkspace({
   classId,
-  sessionId,
   onError,
 }: {
   classId: string;
-  sessionId: string;
   onError: (message: string | null) => void;
 }) {
   const router = useRouter();
-  const { artifactMarkdown: diaryMarkdown } = useArtifactSession();
+  const { artifactMarkdown: diaryMarkdown, runWithSessionRecovery } = useArtifactSession();
   const [draft, setDraft] = useState<IngestDraft | null>(null);
   const [wikiEdits, setWikiEdits] = useState<
     Record<string, { content: string; approved: boolean }>
@@ -110,8 +108,12 @@ function MemoryWorkspace({
     onError(null);
     setCommitResult(null);
     try {
-      await client.ingestUpdateDraft(classId, sessionId, diaryMarkdown);
-      const d = await client.ingestPropose(classId, sessionId);
+      await runWithSessionRecovery((sessionId) =>
+        client.ingestUpdateDraft(classId, sessionId, diaryMarkdown),
+      );
+      const d = await runWithSessionRecovery((sessionId) =>
+        client.ingestPropose(classId, sessionId),
+      );
       setDraft(d);
       const edits: Record<string, { content: string; approved: boolean }> = {};
       for (const p of uniqueWikiProposals(d.wiki_proposals)) {
@@ -127,21 +129,23 @@ function MemoryWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [classId, sessionId, diaryMarkdown, onError]);
+  }, [classId, diaryMarkdown, onError, runWithSessionRecovery]);
 
   const commit = useCallback(async () => {
     setLoading(true);
     onError(null);
     try {
-      const result = await client.ingestCommit(
-        classId,
-        sessionId,
-        diaryMarkdown,
-        Object.entries(wikiEdits).map(([wiki_path, v]) => ({
-          wiki_path,
-          content: v.content,
-          approved: v.approved,
-        })),
+      const result = await runWithSessionRecovery((sessionId) =>
+        client.ingestCommit(
+          classId,
+          sessionId,
+          diaryMarkdown,
+          Object.entries(wikiEdits).map(([wiki_path, v]) => ({
+            wiki_path,
+            content: v.content,
+            approved: v.approved,
+          })),
+        ),
       );
       setCommitResult({
         lesson_date: result.lesson_date,
@@ -156,7 +160,7 @@ function MemoryWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [classId, sessionId, diaryMarkdown, wikiEdits, onError, router]);
+  }, [classId, diaryMarkdown, wikiEdits, onError, router, runWithSessionRecovery]);
 
   const hasLessonResultsApproved = Object.entries(wikiEdits).some(
     ([path, v]) => v.approved && path.includes("lesson_results"),
@@ -272,15 +276,25 @@ export default function MemoryPage() {
   const params = useParams();
   const classId = params.classId as string;
 
-  const bootstrap = useCallback(async () => {
-    const session = await client.startIngestSession(classId);
-    const draft = await client.ingestGetDraft(classId, session.session_id);
-    return {
-      sessionId: session.session_id,
-      initialMarkdown: draft.diary_markdown,
-      initialCompleteness: draft.completeness,
-    };
-  }, [classId]);
+  const bootstrap = useCallback(
+    async (opts?: { preserveMarkdown?: string }) => {
+      const session = await client.startIngestSession(classId);
+      let draft = await client.ingestGetDraft(classId, session.session_id);
+      if (opts?.preserveMarkdown) {
+        draft = await client.ingestUpdateDraft(
+          classId,
+          session.session_id,
+          opts.preserveMarkdown,
+        );
+      }
+      return {
+        sessionId: session.session_id,
+        initialMarkdown: draft.diary_markdown,
+        initialCompleteness: draft.completeness,
+      };
+    },
+    [classId],
+  );
 
   return (
     <ArtifactSessionPage
@@ -289,8 +303,8 @@ export default function MemoryPage() {
       title="Update memory"
       description="Chat through the lesson, edit the diary on the right, then save when ready."
       bootstrap={bootstrap}
-      renderBody={({ sessionId, onError }: ArtifactSessionBodyProps) => (
-        <MemoryWorkspace classId={classId} sessionId={sessionId} onError={onError} />
+      renderBody={({ onError }: ArtifactSessionBodyProps) => (
+        <MemoryWorkspace classId={classId} onError={onError} />
       )}
     />
   );

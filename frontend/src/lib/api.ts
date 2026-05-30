@@ -129,6 +129,14 @@ export type LessonPlan = {
   addresses_misconceptions: string[];
 };
 
+/** Backend restarted or session expired — in-memory store no longer has this id. */
+export function isUnknownSessionError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    /API 404:.*Unknown session:/i.test(err.message)
+  );
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -161,6 +169,38 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`API ${res.status}: ${message}`);
   }
   return res.json() as Promise<T>;
+}
+
+async function apiStreamPost(path: string, body: object, signal?: AbortSignal): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      cache: "no-store",
+      signal,
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error(
+      `Cannot reach API at ${API_BASE}. Start the backend with: ./scripts/restart-dev.ps1 -NoNewWindow`,
+    );
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    let message = text || res.statusText;
+    try {
+      const parsed = JSON.parse(text) as {
+        error?: { message?: string };
+        detail?: string;
+      };
+      message = parsed.error?.message ?? parsed.detail ?? message;
+    } catch {
+      /* use raw text */
+    }
+    throw new Error(`API ${res.status}: ${message}`);
+  }
+  return res;
 }
 
 /** Backfill fields when an older API instance is still bound to port 8001. */
@@ -237,6 +277,23 @@ export const client = {
         attachments: attachments ?? [],
       }),
     }),
+  ingestChatStream: (
+    classId: string,
+    sessionId: string,
+    message: string,
+    diaryMarkdown?: string,
+    attachments?: ChatAttachment[],
+    signal?: AbortSignal,
+  ) =>
+    apiStreamPost(
+      `/api/classes/${classId}/ingest/sessions/${sessionId}/chat/stream`,
+      {
+        message,
+        diary_markdown: diaryMarkdown ?? null,
+        attachments: attachments ?? [],
+      },
+      signal,
+    ),
   ingestGetDraft: (classId: string, sessionId: string) =>
     api<IngestDraft>(`/api/classes/${classId}/ingest/sessions/${sessionId}/draft`),
   ingestUpdateDraft: (classId: string, sessionId: string, diaryMarkdown: string) =>
@@ -292,6 +349,23 @@ export const client = {
         attachments: attachments ?? [],
       }),
     }),
+  planChatStream: (
+    classId: string,
+    sessionId: string,
+    message: string,
+    planMarkdown?: string,
+    attachments?: ChatAttachment[],
+    signal?: AbortSignal,
+  ) =>
+    apiStreamPost(
+      `/api/classes/${classId}/plan/sessions/${sessionId}/chat/stream`,
+      {
+        message,
+        plan_markdown: planMarkdown ?? null,
+        attachments: attachments ?? [],
+      },
+      signal,
+    ),
   planGetDraft: (classId: string, sessionId: string) =>
     api<PlanDraft>(`/api/classes/${classId}/plan/sessions/${sessionId}/draft`),
   planUpdateDraft: (classId: string, sessionId: string, planMarkdown: string) =>

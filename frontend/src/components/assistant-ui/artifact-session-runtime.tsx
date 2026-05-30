@@ -16,7 +16,8 @@ import {
   type ChatModelAdapter,
   type ThreadMessage,
 } from "@assistant-ui/react";
-import type { CompletenessChecklist } from "@/lib/api";
+import { isUnknownSessionError, type CompletenessChecklist } from "@/lib/api";
+import type { ChatStreamChunk } from "@/components/assistant-ui/artifact-runtime-config";
 import { extractSessionAttachments, type SessionAttachment } from "@/lib/session-attachments";
 
 export type ArtifactChatResult = {
@@ -31,15 +32,18 @@ export type ArtifactSessionConfig = {
   sessionId: string;
   initialMarkdown: string;
   initialCompleteness?: CompletenessChecklist | null;
-  chat: (args: {
+  chatStream: (args: {
     message: string;
     currentMarkdown: string;
     attachments?: SessionAttachment[];
-  }) => Promise<ArtifactChatResult>;
+    signal?: AbortSignal;
+  }) => AsyncGenerator<ChatStreamChunk>;
   patchDraft?: (markdown: string) => Promise<{
     completeness?: CompletenessChecklist;
     readyToSave?: boolean;
   }>;
+  getSessionId?: () => string;
+  onSessionLost?: (preserveMarkdown: string) => Promise<void>;
   onCompletenessChange?: (checklist: CompletenessChecklist) => void;
 };
 
@@ -60,6 +64,11 @@ function friendlyChatError(err: unknown): string {
 type ArtifactSessionContextValue = {
   classId: string;
   sessionId: string;
+  /** Retries once after re-creating the server session when the backend was restarted. */
+  runWithSessionRecovery: <T>(
+    run: (sessionId: string) => Promise<T>,
+    preserveMarkdown?: string,
+  ) => Promise<T>;
   artifactMarkdown: string;
   setArtifactMarkdown: (value: string, source?: "manual" | "agent") => void;
   completeness: CompletenessChecklist | null;
@@ -101,10 +110,21 @@ export function ArtifactSessionRuntimeProvider({
     sessionId,
     initialMarkdown,
     initialCompleteness = null,
-    chat,
+    chatStream,
     patchDraft,
+    getSessionId: configGetSessionId,
+    onSessionLost,
     onCompletenessChange,
   } = config;
+
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = configGetSessionId?.() ?? sessionId;
+  const [activeSessionId, setActiveSessionId] = useState(sessionId);
+
+  useEffect(() => {
+    sessionIdRef.current = configGetSessionId?.() ?? sessionId;
+    setActiveSessionId(sessionIdRef.current);
+  }, [sessionId, configGetSessionId]);
 
   const [editor, setEditor] = useState<EditorState>({
     history: [initialMarkdown],
@@ -165,6 +185,25 @@ export function ArtifactSessionRuntimeProvider({
     [onCompletenessChange],
   );
 
+  const runWithSessionRecovery = useCallback(
+    async <T,>(run: (sessionId: string) => Promise<T>, preserveMarkdown?: string): Promise<T> => {
+      const markdown =
+        preserveMarkdown ??
+        editorRef.current.history[editorRef.current.index] ??
+        initialMarkdown;
+      try {
+        return await run(sessionIdRef.current);
+      } catch (err) {
+        if (!onSessionLost || !isUnknownSessionError(err)) throw err;
+        await onSessionLost(markdown);
+        sessionIdRef.current = configGetSessionId?.() ?? sessionIdRef.current;
+        setActiveSessionId(sessionIdRef.current);
+        return await run(sessionIdRef.current);
+      }
+    },
+    [initialMarkdown, onSessionLost, configGetSessionId, sessionId],
+  );
+
   const adapter = useMemo<ChatModelAdapter>(
     () => ({
       async *run({ messages, abortSignal }) {
@@ -177,16 +216,35 @@ export function ArtifactSessionRuntimeProvider({
           const attachments = await extractSessionAttachments(last);
           const currentMd =
             editorRef.current.history[editorRef.current.index] ?? initialMarkdown;
-          const res = await chat({
+          let finalResult: ArtifactChatResult | null = null;
+          for await (const chunk of chatStream({
             message: text,
             currentMarkdown: currentMd,
             attachments: attachments.length ? attachments : undefined,
-          });
-          pushMarkdown(res.artifactMarkdown, "agent");
-          lastSyncedRef.current = res.artifactMarkdown;
-          applyMeta(res.completeness ?? null, res.readyToSave);
-          if (abortSignal?.aborted) return;
-          yield { content: [{ type: "text", text: res.reply }] };
+            signal: abortSignal,
+          })) {
+            if (abortSignal?.aborted) return;
+            if (chunk.kind === "progress") {
+              if (chunk.content.length > 0) {
+                yield { content: chunk.content };
+              }
+              continue;
+            }
+            finalResult = chunk.result;
+            pushMarkdown(chunk.result.artifactMarkdown, "agent");
+            lastSyncedRef.current = chunk.result.artifactMarkdown;
+            applyMeta(chunk.result.completeness ?? null, chunk.result.readyToSave);
+            const content = chunk.content;
+            yield {
+              content:
+                content.length > 0
+                  ? content
+                  : [{ type: "text", text: chunk.result.reply }],
+            };
+          }
+          if (!finalResult && !abortSignal?.aborted) {
+            yield { content: [{ type: "text", text: CHAT_ERROR_REPLY }] };
+          }
         } catch (err) {
           const message = friendlyChatError(err);
           if (abortSignal?.aborted) return;
@@ -196,7 +254,7 @@ export function ArtifactSessionRuntimeProvider({
         }
       },
     }),
-    [chat, initialMarkdown, pushMarkdown, applyMeta],
+    [chatStream, initialMarkdown, pushMarkdown, applyMeta],
   );
 
   const runtime = useLocalRuntime(adapter);
@@ -229,7 +287,8 @@ export function ArtifactSessionRuntimeProvider({
   const ctx = useMemo<ArtifactSessionContextValue>(
     () => ({
       classId,
-      sessionId,
+      sessionId: activeSessionId,
+      runWithSessionRecovery,
       artifactMarkdown,
       setArtifactMarkdown,
       completeness,
@@ -243,7 +302,8 @@ export function ArtifactSessionRuntimeProvider({
     }),
     [
       classId,
-      sessionId,
+      activeSessionId,
+      runWithSessionRecovery,
       artifactMarkdown,
       setArtifactMarkdown,
       completeness,
