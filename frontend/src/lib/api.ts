@@ -248,6 +248,10 @@ export const client = {
     api<IngestDraft>(`/api/classes/${classId}/ingest/sessions/${sessionId}/propose`, {
       method: "POST",
     }),
+  getWikiFile: (classId: string, wikiPath: string) =>
+    api<{ wiki_path: string; markdown: string }>(
+      `/api/classes/${classId}/wiki/file?path=${encodeURIComponent(wikiPath)}`,
+    ),
   ingestCommit: (
     classId: string,
     sessionId: string,

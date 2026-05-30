@@ -28,6 +28,7 @@ from app.schemas.api import (
     SavePlanResponse,
     UpdateDraftRequest,
     UpdatePlanDraftRequest,
+    WikiFileResponse,
     WikiLintResponse,
 )
 from app.services.ingest_service import IngestService
@@ -94,6 +95,30 @@ def get_snapshot(class_id: str, wiki: WikiStore = Depends(get_wiki)) -> ClassMem
     try:
         return wiki.get_snapshot(class_id)
     except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.get("/classes/{class_id}/wiki/file", response_model=WikiFileResponse)
+def get_wiki_file(
+    class_id: str,
+    path: str,
+    wiki: WikiStore = Depends(get_wiki),
+) -> WikiFileResponse:
+    try:
+        wiki.get_class(class_id)
+        rel = path.strip().lstrip("/")
+        if not rel:
+            raise HTTPException(status_code=400, detail="path query parameter is required")
+        full = wiki.resolve_path(rel)
+        if not full.exists():
+            raise HTTPException(status_code=404, detail=f"Wiki file not found: {rel}")
+        markdown = wiki.read_wiki_page(rel)
+        return WikiFileResponse(wiki_path=rel, markdown=markdown)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
@@ -219,6 +244,8 @@ def ingest_commit(
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
         return ingest.commit(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 

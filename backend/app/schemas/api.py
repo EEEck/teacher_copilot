@@ -155,6 +155,11 @@ class CommitIngestResponse(BaseModel):
     title: str = ""
 
 
+class WikiFileResponse(BaseModel):
+    wiki_path: str
+    markdown: str
+
+
 class ChatAttachment(BaseModel):
     filename: str
     content: str

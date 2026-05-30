@@ -565,6 +565,17 @@ class WikiStore:
                 )
             )
 
+        slug = self._slugify(title)
+        raw_path = self.root / "raw" / "classes" / class_id / f"{lesson_date}-{slug}.md"
+        proposals.append(
+            WikiUpdateProposal(
+                wiki_path=self.rel_wiki(raw_path),
+                current_content=self.read_text(raw_path),
+                proposed_content=f"{diary_md.strip()}\n",
+                rationale="Immutable approved diary snapshot (raw layer).",
+            )
+        )
+
         return lesson_date, dedupe_wiki_proposals(proposals)
 
     def commit_ingest(
@@ -577,7 +588,6 @@ class WikiStore:
         lesson_date = self._extract_date_from_diary(diary_md) or date.today().isoformat()
         title = self._extract_title(diary_md) or "lesson"
         slug = self._slugify(title)
-
         raw_path = (
             self.root
             / "raw"
@@ -585,31 +595,32 @@ class WikiStore:
             / class_id
             / f"{lesson_date}-{slug}.md"
         )
-        raw_body = (
-            f"> Session: {session_id}\n"
-            f"> Committed: {datetime.now().isoformat(timespec='seconds')}\n\n"
-            f"{diary_md.strip()}\n"
-        )
-        self.write_text(raw_path, raw_body)
+        raw_rel = self.rel_wiki(raw_path)
+
+        approved_writes = [u for u in approved if u.approved]
+        if not approved_writes:
+            raise ValueError("At least one wiki update must be approved to commit.")
+        if not any("lesson_results.md" in u.wiki_path for u in approved_writes):
+            raise ValueError("lesson_results.md must be approved to commit.")
 
         applied: list[str] = []
-        for update in approved:
-            if not update.approved:
-                continue
-            path = Path(update.wiki_path)
-            if not path.is_absolute():
-                path = self.root / update.wiki_path
-            self.write_text(path, update.content)
+        for update in approved_writes:
+            rel = update.wiki_path.strip().lstrip("/").replace("\\", "/")
+            path = self.resolve_path(rel)
+            if rel == raw_rel or rel.startswith("raw/"):
+                body = (
+                    f"> Session: {session_id}\n"
+                    f"> Committed: {datetime.now().isoformat(timespec='seconds')}\n\n"
+                    f"{update.content.strip()}\n"
+                )
+                self.write_text(path, body)
+            else:
+                self.write_text(path, update.content)
             applied.append(update.wiki_path)
 
-        raw_rel = self.rel_wiki(raw_path)
-        if raw_rel not in applied:
-            applied.insert(0, raw_rel)
-
-        self._finalize_lesson_writes(class_id, diary_md, lesson_date, title, applied)
         log_id = self._append_log(class_id, lesson_date, title, applied, kind="ingest")
         self.rebuild_index()
-        return raw_rel, applied, log_id
+        return raw_rel if raw_rel in applied else (applied[0] if applied else raw_rel), applied, log_id
 
     def save_lesson_plan(self, class_id: str, lesson_date: str, content: str) -> str:
         path = self.lesson_dir(class_id, lesson_date) / "lesson_plan.md"
