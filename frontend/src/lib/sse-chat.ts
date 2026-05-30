@@ -1,4 +1,35 @@
+import type { ChatModelRunResult } from "@assistant-ui/react";
+
 import type { CompletenessChecklist } from "@/lib/api";
+
+/** Map SSE stream parts to assistant-ui run content (tool-call requires `args`). */
+export function streamPartsToRunContent(
+  parts: StreamPart[],
+): ChatModelRunResult["content"] {
+  return parts.map((part) => {
+    if (part.type !== "tool-call") return part;
+    let args: Record<string, unknown> = {};
+    if (part.argsText.trim()) {
+      try {
+        const parsed = JSON.parse(part.argsText) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          args = parsed as Record<string, unknown>;
+        }
+      } catch {
+        args = { raw: part.argsText };
+      }
+    }
+    return {
+      type: "tool-call" as const,
+      toolName: part.toolName,
+      toolCallId: part.toolCallId,
+      args,
+      argsText: part.argsText,
+      result: part.result,
+      status: part.status,
+    };
+  }) as ChatModelRunResult["content"];
+}
 
 export type SseEvent =
   | { type: "reasoning_delta"; text: string }

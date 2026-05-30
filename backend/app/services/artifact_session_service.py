@@ -71,6 +71,14 @@ class ArtifactSessionService:
             raise KeyError(f"Unknown session: {session_id}")
         return self.sessions[session_id]
 
+    async def _ensure_lazy_opening(self, session: ArtifactSession) -> None:
+        spec = self.specs[session.mode]
+        if not spec.lazy_opening or session.messages:
+            return
+        opening = await spec.lazy_opening(self.agents, session.class_id)
+        session.opening_message = opening
+        session.messages.append(ChatMessage(role="assistant", content=opening))
+
     async def chat(
         self,
         session_id: str,
@@ -83,6 +91,7 @@ class ArtifactSessionService:
         if markdown is not None:
             session.partial_markdown = markdown
 
+        await self._ensure_lazy_opening(session)
         session.messages.append(ChatMessage(role="user", content=message))
         result = await spec.run_turn(
             self.agents,
@@ -125,6 +134,7 @@ class ArtifactSessionService:
         session = self.get_session(session_id)
         if markdown is not None:
             session.partial_markdown = markdown
+        await self._ensure_lazy_opening(session)
         session.messages.append(ChatMessage(role="user", content=message))
 
         stream_fn = (

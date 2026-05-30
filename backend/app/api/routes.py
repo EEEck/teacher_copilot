@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_agents, get_ingest_service, get_plan_service, get_wiki
 from app.config import get_settings
+from app.openai_bootstrap import is_openai_configured
 from app.schemas.api import (
     ChatRequest,
     ChatResponse,
@@ -43,7 +44,10 @@ router = APIRouter(prefix="/api")
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     settings = get_settings()
-    return HealthResponse(agent_max_turns=settings.agent_max_turns)
+    return HealthResponse(
+        agent_max_turns=settings.agent_max_turns,
+        openai_configured=is_openai_configured(settings),
+    )
 
 
 @router.get("/classes", response_model=ClassesResponse)

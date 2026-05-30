@@ -57,6 +57,7 @@ class ArtifactSpec:
         Awaitable[TurnResult],
     ]
     opening: Optional[Callable[["AgentRunner", str], Awaitable[str]]] = None
+    lazy_opening: Optional[Callable[["AgentRunner", str], Awaitable[str]]] = None
 
 
 # --- ingest (lesson diary) -------------------------------------------------
@@ -155,7 +156,8 @@ PLAN_SPEC = ArtifactSpec(
     completeness_of=_plan_completeness,
     build_draft=_plan_build_draft,
     run_turn=_plan_run_turn,
-    opening=_plan_opening,
+    opening=None,
+    lazy_opening=_plan_opening,
 )
 
 

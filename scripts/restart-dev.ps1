@@ -157,7 +157,7 @@ if ($restartBackend) {
     $backendDir = Join-Path $Root "backend"
     $uvicorn = Join-Path $backendDir ".venv\Scripts\uvicorn.exe"
     if (-not (Test-Path $uvicorn)) {
-        Write-Error "Backend venv not found. Run: cd backend; python -m venv .venv; pip install -r requirements.txt"
+        Write-Error "Backend venv not found. Run: cd backend; python -m venv .venv; pip install -e ."
         exit 1
     }
     Import-DotEnvFile -Path (Join-Path $backendDir ".env")

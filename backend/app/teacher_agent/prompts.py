@@ -54,9 +54,10 @@ Class context (index + roll-ups + recent lesson detail):
 {wiki_tools_policy}
 """
 
-CHAT_WIKI_TOOLS_POLICY = """Wiki lookup tools (search_wiki, get_lesson_detail) are available — you decide whether to call them.
-- Default: zero tool calls. The class context above is complete for normal logging and planning.
-- Call a tool only when you need one specific fact that is clearly missing from the context (e.g. a different lesson date).
+CHAT_WIKI_TOOLS_POLICY = """Wiki lookup tools (recall_lesson, find_in_memory, read_memory_page) — use only when the context pack lacks one specific fact.
+- Default: zero tool calls. The index excerpt and roll-ups above are enough for normal logging and planning.
+- If you need an older lesson by date: recall_lesson(YYYY-MM-DD).
+- If you need a topic not in the pack: find_in_memory(query) — checks index.md first — then read_memory_page(path) on the best hit if the snippet is not enough.
 - At most 2 tool calls per turn, then produce your structured reply."""
 
 

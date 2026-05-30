@@ -19,6 +19,7 @@ import {
 import { isUnknownSessionError, type CompletenessChecklist } from "@/lib/api";
 import type { ChatStreamChunk } from "@/components/assistant-ui/artifact-runtime-config";
 import { extractSessionAttachments, type SessionAttachment } from "@/lib/session-attachments";
+import { streamPartsToRunContent } from "@/lib/sse-chat";
 
 export type ArtifactChatResult = {
   reply: string;
@@ -226,7 +227,7 @@ export function ArtifactSessionRuntimeProvider({
             if (abortSignal?.aborted) return;
             if (chunk.kind === "progress") {
               if (chunk.content.length > 0) {
-                yield { content: chunk.content };
+                yield { content: streamPartsToRunContent(chunk.content) };
               }
               continue;
             }
@@ -238,7 +239,7 @@ export function ArtifactSessionRuntimeProvider({
             yield {
               content:
                 content.length > 0
-                  ? content
+                  ? streamPartsToRunContent(content)
                   : [{ type: "text", text: chunk.result.reply }],
             };
           }

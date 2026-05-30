@@ -72,6 +72,12 @@ def create_wiki_tools(ctx: WikiToolContext) -> list:
         hits = wiki.search_wiki(class_id, query)
         return json.dumps(hits, indent=2)
 
+    @function_tool
+    def find_in_memory(query: str) -> str:
+        """Search index.md first, then page bodies. Returns paths + snippets for read_memory_page."""
+        hits = wiki.find_in_memory(class_id, query)
+        return json.dumps(hits, indent=2)
+
     return [
         read_wiki_page,
         read_wiki_index,
@@ -79,14 +85,47 @@ def create_wiki_tools(ctx: WikiToolContext) -> list:
         get_class_snapshot,
         get_lesson_detail,
         search_wiki,
+        find_in_memory,
     ]
 
 
 def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
-    """Minimal tools for ingest/plan chat — fewer steps, agent decides when to call."""
-    full = create_wiki_tools(ctx)
-    by_name = {getattr(t, "name", None): t for t in full}
-    return [
-        by_name["get_lesson_detail"],
-        by_name["search_wiki"],
-    ]
+    """Minimal Karpathy-style read tools for ingest/plan chat."""
+    wiki = ctx.wiki
+    class_id = ctx.class_id
+
+    @function_tool
+    def recall_lesson(lesson_date: str) -> str:
+        """Load one lesson by date (YYYY-MM-DD): diary + rollup excerpts."""
+        try:
+            detail = wiki.get_lesson_detail(class_id, lesson_date)
+            payload = {
+                "date": detail.date,
+                "title": detail.title,
+                "diary_markdown": detail.diary_markdown[:6000],
+                "rollup_excerpts": [
+                    {"path": e.wiki_path, "markdown": e.markdown[:1500]}
+                    for e in detail.rollup_excerpts
+                ],
+            }
+            return json.dumps(payload, indent=2)
+        except KeyError as e:
+            return f"Error: {e}"
+
+    @function_tool
+    def find_in_memory(query: str) -> str:
+        """Find wiki paths: checks index lesson table first, then full-text scan."""
+        hits = wiki.find_in_memory(class_id, query, max_results=5)
+        return json.dumps(hits, indent=2)
+
+    @function_tool
+    def read_memory_page(path: str) -> str:
+        """Read one class wiki page by path from find_in_memory (under wiki/classes/{class_id}/)."""
+        if not wiki.is_class_memory_path(class_id, path):
+            return f"Error: path must be under wiki/classes/{class_id}/"
+        try:
+            return wiki.read_wiki_page(path)
+        except ValueError as e:
+            return f"Error: {e}"
+
+    return [recall_lesson, find_in_memory, read_memory_page]

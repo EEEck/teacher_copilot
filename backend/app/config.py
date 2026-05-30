@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     app_env: Literal["development", "production"] = "development"
     log_level: str = "INFO"
     api_host: str = "0.0.0.0"
-    api_port: int = 8000
+    api_port: int = 8010
 
 
 @lru_cache

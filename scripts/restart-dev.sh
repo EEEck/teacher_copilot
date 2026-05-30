@@ -161,10 +161,19 @@ show_status() {
   done
 }
 
+stop_ports() {
+  if ! $FRONTEND_ONLY; then
+    kill_port "$BACKEND_PORT"
+  fi
+  if ! $BACKEND_ONLY; then
+    kill_port "$FRONTEND_PORT"
+  fi
+}
+
 stop_all() {
   echo "Stopping dev servers..."
-  $FRONTEND_ONLY || kill_port "$BACKEND_PORT"
-  $BACKEND_ONLY || kill_port "$FRONTEND_PORT"
+  kill_project_dev_processes
+  stop_ports
   sleep 1
   echo "Done."
 }
@@ -216,7 +225,8 @@ case "$MODE" in
     ;;
 esac
 
-stop_all
+kill_project_dev_processes
+stop_ports
 sleep 1
 
 $FRONTEND_ONLY || start_backend

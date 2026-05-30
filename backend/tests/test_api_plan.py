@@ -19,7 +19,7 @@ def test_plan_full_flow(client: TestClient):
     assert start.status_code == 200, start.text
     start_body = start.json()
     session_id = start_body["session_id"]
-    assert start_body["opening_message"]
+    assert start_body["opening_message"] == ""
 
     chat = client.post(
         f"{base}/sessions/{session_id}/chat",

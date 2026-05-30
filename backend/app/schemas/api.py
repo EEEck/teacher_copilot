@@ -11,6 +11,7 @@ class HealthResponse(BaseModel):
     status: str = "ok"
     version: str = "0.1.0"
     agent_max_turns: int = 16
+    openai_configured: bool = False
 
 
 class ClassSummary(BaseModel):

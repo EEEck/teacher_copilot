@@ -1,4 +1,14 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
+/** Browser uses localhost; SSR in Docker uses INTERNAL_API_BASE_URL (backend service). */
+function getApiBase(): string {
+  if (typeof window === "undefined") {
+    return (
+      process.env.INTERNAL_API_BASE_URL ??
+      process.env.NEXT_PUBLIC_API_BASE_URL ??
+      "http://localhost:8010"
+    );
+  }
+  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
+}
 
 export type ClassSummary = { id: string; label: string; subject: string };
 export type TimelineEntry = {
@@ -140,7 +150,7 @@ export function isUnknownSessionError(err: unknown): boolean {
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, {
+    res = await fetch(`${getApiBase()}${path}`, {
       ...init,
       cache: "no-store",
       headers: {
@@ -150,7 +160,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     });
   } catch {
     throw new Error(
-      `Cannot reach API at ${API_BASE}. Start the backend with: ./scripts/restart-dev.ps1 -NoNewWindow`,
+      `Cannot reach API at ${getApiBase()}. Start the backend (docker compose up, or ./scripts/restart-dev.ps1 -NoNewWindow).`,
     );
   }
   if (!res.ok) {
@@ -174,7 +184,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 async function apiStreamPost(path: string, body: object, signal?: AbortSignal): Promise<Response> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, {
+    res = await fetch(`${getApiBase()}${path}`, {
       method: "POST",
       cache: "no-store",
       signal,
@@ -183,7 +193,7 @@ async function apiStreamPost(path: string, body: object, signal?: AbortSignal): 
     });
   } catch {
     throw new Error(
-      `Cannot reach API at ${API_BASE}. Start the backend with: ./scripts/restart-dev.ps1 -NoNewWindow`,
+      `Cannot reach API at ${getApiBase()}. Start the backend (docker compose up, or ./scripts/restart-dev.ps1 -NoNewWindow).`,
     );
   }
   if (!res.ok) {

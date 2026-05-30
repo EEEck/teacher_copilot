@@ -1,0 +1,44 @@
+# Dev stack: hot reload + bind mounts. First run: docker compose up --build
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    env_file: backend/.env
+    environment:
+      WIKI_ROOT: /data/teacher_wiki
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/teacher_wiki:/data/teacher_wiki
+    ports:
+      - "8010:8010"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/api/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      INTERNAL_API_BASE_URL: http://backend:8010
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8010
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
