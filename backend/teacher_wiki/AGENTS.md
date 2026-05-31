@@ -1,5 +1,10 @@
 # KlassenPilot AGENTS.md — LLM Wiki Schema
 
+This file is the wiki-specific schema and workflow contract for
+`backend/teacher_wiki/`. For full repo onboarding and agent development context,
+read [`../../AGENTS.md`](../../AGENTS.md) first. For current behavior contracts,
+read [`../../implementation_plans/agent_contracts.md`](../../implementation_plans/agent_contracts.md).
+
 ## Three layers
 
 1. **Raw** — `raw/classes/{class_id}/{YYYY-MM-DD}-{slug}.md` — immutable approved diaries. Never edit after commit.

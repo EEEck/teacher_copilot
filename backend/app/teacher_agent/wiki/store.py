@@ -70,7 +70,7 @@ class WikiStore:
     def resolve_path(self, relative_path):
         return paths_io.resolve_path(self, relative_path)
 
-    def read_wiki_page(self, relative_path, max_chars):
+    def read_wiki_page(self, relative_path, max_chars=12000):
         return paths_io.read_wiki_page(self, relative_path, max_chars)
 
     def read_wiki_index(self, class_id):
@@ -79,10 +79,10 @@ class WikiStore:
     def list_class_pages(self, class_id, kind=None):
         return search.list_class_pages(self, class_id, kind)
 
-    def find_in_memory(self, class_id, query, max_results):
+    def find_in_memory(self, class_id, query, max_results=5):
         return search.find_in_memory(self, class_id, query, max_results)
 
-    def search_wiki(self, class_id, query, max_results):
+    def search_wiki(self, class_id, query, max_results=15):
         return search.search_wiki(self, class_id, query, max_results)
 
     def is_class_memory_path(self, class_id, relative_path):

@@ -2,6 +2,21 @@
 
 Private teacher copilot for Gymnasium teachers. Log lessons through chat, review structured memory with human-in-the-loop approval, and plan the next lesson from accumulated class wiki memory.
 
+## For developers and AI agents
+
+Start with [`AGENTS.md`](AGENTS.md) when changing agent behavior or onboarding a
+new coding agent. It points to the current behavior contracts, design plans, wiki
+schema rules, and the local AutoSci reference repo.
+
+Current design and implementation notes live in [`implementation_plans/`](implementation_plans/):
+
+- [`agent_contracts.md`](implementation_plans/agent_contracts.md) — reviewable
+  read/write/tool/output contracts for the teacher agents.
+- [`agent_design_plan.md`](implementation_plans/agent_design_plan.md) — MVP
+  design rationale and AutoSci/Karpathy learnings.
+- [`teacher_wiki_browsing_plan.md`](implementation_plans/teacher_wiki_browsing_plan.md)
+  — focused lesson-planning wiki browsing plan.
+
 ## Architecture
 
 - **Backend:** FastAPI + OpenAI Agents SDK (`backend/`)

@@ -412,6 +412,8 @@ def plan_save(
         return plan_svc.save(class_id, body)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
 
 @router.post("/classes/{class_id}/plan-lesson", response_model=LessonPlan)

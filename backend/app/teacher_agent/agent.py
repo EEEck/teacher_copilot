@@ -8,11 +8,12 @@ from openai.types.shared import Reasoning
 
 from app.teacher_agent.models import CompileOutput, IngestTurnOutput, PlanOutput, PlanTurnOutput
 from app.teacher_agent.prompts import (
-    CHAT_WIKI_TOOLS_POLICY,
     COMPILE_SYSTEM,
+    INGEST_WIKI_TOOLS_POLICY,
     INGEST_SYSTEM,
     LINT_SYSTEM,
     PLAN_CHAT_SYSTEM,
+    PLAN_WIKI_TOOLS_POLICY,
     PLAN_OPENING_SYSTEM,
     PLAN_SYSTEM,
     apply_prompt,
@@ -45,7 +46,7 @@ def build_ingest_agent(
         INGEST_SYSTEM,
         sections=sections,
         context=context[:_CHAT_CONTEXT_CHARS],
-        wiki_tools_policy=CHAT_WIKI_TOOLS_POLICY,
+        wiki_tools_policy=INGEST_WIKI_TOOLS_POLICY,
     )
     settings = chat_model_settings(reasoning_effort)
     return Agent(
@@ -71,7 +72,7 @@ def build_plan_chat_agent(
         instructions=apply_prompt(
             PLAN_CHAT_SYSTEM,
             context=context[:_CHAT_CONTEXT_CHARS],
-            wiki_tools_policy=CHAT_WIKI_TOOLS_POLICY,
+            wiki_tools_policy=PLAN_WIKI_TOOLS_POLICY,
         ),
         model=model,
         **({"model_settings": settings} if settings else {}),

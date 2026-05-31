@@ -54,11 +54,25 @@ Class context (index + roll-ups + recent lesson detail):
 {wiki_tools_policy}
 """
 
-CHAT_WIKI_TOOLS_POLICY = """Wiki lookup tools (recall_lesson, find_in_memory, read_memory_page) — use only when the context pack lacks one specific fact.
-- Default: zero tool calls. The index excerpt and roll-ups above are enough for normal logging and planning.
-- If you need an older lesson by date: recall_lesson(YYYY-MM-DD).
-- If you need a topic not in the pack: find_in_memory(query) — checks index.md first — then read_memory_page(path) on the best hit if the snippet is not enough.
-- At most 2 tool calls per turn, then produce your structured reply."""
+INGEST_WIKI_TOOLS_POLICY = """Wiki lookup tools are available for continuity only.
+- Use the context pack first. It already contains the recent lesson, student notes, and roll-ups needed for normal logging.
+- If you need a specific older lesson, use get_lesson_detail(YYYY-MM-DD).
+- If you need a class-memory fact not in the pack, use find_in_memory(query), then read_wiki_page(path) only when the snippet is not enough.
+- Keep lookup use small and focused. Never write wiki files directly."""
+
+# Backward-compatible name for tests and older call sites.
+CHAT_WIKI_TOOLS_POLICY = INGEST_WIKI_TOOLS_POLICY
+
+
+PLAN_WIKI_TOOLS_POLICY = """Wiki browsing tools are available for class-scoped lesson planning.
+- Use the base planning pack first. Do not browse when it fully covers a normal next-lesson request.
+- Browse when the teacher asks for older lessons, a date range, a topic not visible in the pack, or a test/quiz spanning prior weeks.
+- For date ranges, call list_lessons(start_date, end_date, topic) first, then read_lesson_range(start_date, end_date, topic) when details are needed.
+- For one known date, use read_lesson(YYYY-MM-DD).
+- For a topic, use search_memory(query), then read_memory_page(path) only if the snippet is not enough.
+- Cite used lessons or memory pages inline in plan_markdown, for example "based on the 2026-05-29 lesson notes".
+- If memory is sparse or missing for the requested range, say what you found, ask at most one targeted question, and avoid unsupported claims.
+- Never write wiki files directly."""
 
 
 COMPILE_SYSTEM = """You compile a teacher conversation into a structured lesson results markdown document.

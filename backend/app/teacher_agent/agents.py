@@ -154,11 +154,11 @@ class AgentRunner:
         return result.final_output
 
     async def _yield_stream_events(
-        self, agent: Any, user_input: str
+        self, agent: Any, user_input: str, result_holder: dict[str, Any]
     ) -> AsyncIterator[SseEvent]:
-        """Drain one streamed run; caller reads _last_streamed_result.final_output after iteration."""
+        """Drain one streamed run and store its result in a caller-owned holder."""
         self._require_client()
-        self._last_streamed_result = None
+        result_holder["result"] = None
         result = Runner.run_streamed(agent, user_input, max_turns=self.max_turns)
         started = time.monotonic()
         try:
@@ -183,7 +183,7 @@ class AgentRunner:
             yield SseError(message=str(exc), code="error")
             return
 
-        self._last_streamed_result = result
+        result_holder["result"] = result
 
     async def ingest_chat_stream(
         self,
@@ -209,13 +209,14 @@ class AgentRunner:
         user_input = self._build_user_input(
             messages, "Current diary draft (update each turn)", current_draft, attachments
         )
-        async for event in self._yield_stream_events(agent, user_input):
+        result_holder: dict[str, Any] = {}
+        async for event in self._yield_stream_events(agent, user_input, result_holder):
             if isinstance(event, SseError):
                 yield event
                 return
             yield event
 
-        out = self._last_streamed_result
+        out = result_holder.get("result")
         if out is None:
             return
         parsed = out.final_output
@@ -258,13 +259,14 @@ class AgentRunner:
         user_input = self._build_user_input(
             messages, "Current plan draft (update each turn)", current_draft, attachments
         )
-        async for event in self._yield_stream_events(agent, user_input):
+        result_holder: dict[str, Any] = {}
+        async for event in self._yield_stream_events(agent, user_input, result_holder):
             if isinstance(event, SseError):
                 yield event
                 return
             yield event
 
-        out = self._last_streamed_result
+        out = result_holder.get("result")
         if out is None:
             return
         parsed = out.final_output

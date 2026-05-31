@@ -13,4 +13,10 @@ def test_create_chat_wiki_tools_exposes_mvp_names():
     ctx = WikiToolContext(wiki=wiki, class_id=CLASS_ID)
     tools = create_chat_wiki_tools(ctx)
     names = {getattr(t, "name", None) for t in tools}
-    assert names == {"recall_lesson", "find_in_memory", "read_memory_page"}
+    assert names == {
+        "list_lessons",
+        "read_lesson",
+        "read_lesson_range",
+        "search_memory",
+        "read_memory_page",
+    }

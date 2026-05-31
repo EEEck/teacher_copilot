@@ -1,8 +1,10 @@
 """Tests for index-first wiki search and chat read path guards."""
 
+from datetime import date
 from pathlib import Path
 
 from app.teacher_agent.wiki_store import WikiStore
+from app.teacher_agent.tools import _list_lessons_payload
 
 CLASS_ID = "chemie_9b_2026_27"
 _WIKI_ROOT = Path(__file__).resolve().parent.parent / "teacher_wiki"
@@ -40,3 +42,42 @@ def test_is_class_memory_path_allows_class_scoped_wiki():
     assert not wiki.is_class_memory_path(CLASS_ID, "wiki/classes/other_class/foo.md")
     assert not wiki.is_class_memory_path(CLASS_ID, "../../../etc/passwd")
     assert not wiki.is_class_memory_path(CLASS_ID, "index.md")
+
+
+def test_list_lessons_payload_filters_by_date_range():
+    wiki = WikiStore(root=_WIKI_ROOT)
+    payload = _list_lessons_payload(
+        wiki,
+        CLASS_ID,
+        start_date=date(2026, 5, 1),
+        end_date=date(2026, 5, 31),
+        max_results=10,
+    )
+    dates = [lesson["date"] for lesson in payload["lessons"]]
+    assert dates == ["2026-05-25", "2026-05-29"]
+    assert all(lesson["paths"] for lesson in payload["lessons"])
+
+
+def test_list_lessons_payload_topic_falls_back_to_lesson_body():
+    wiki = WikiStore(root=_WIKI_ROOT)
+    payload = _list_lessons_payload(
+        wiki,
+        CLASS_ID,
+        start_date=date(2026, 5, 1),
+        end_date=date(2026, 5, 31),
+        topic="participation",
+    )
+    dates = [lesson["date"] for lesson in payload["lessons"]]
+    assert "2026-05-25" in dates
+
+
+def test_list_lessons_payload_reports_reversed_date_range():
+    wiki = WikiStore(root=_WIKI_ROOT)
+    payload = _list_lessons_payload(
+        wiki,
+        CLASS_ID,
+        start_date=date(2026, 5, 31),
+        end_date=date(2026, 5, 1),
+    )
+    assert payload["lessons"] == []
+    assert payload["warnings"] == ["start_date must be on or before end_date"]

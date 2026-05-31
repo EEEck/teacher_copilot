@@ -8,6 +8,7 @@ plan-specific single_file_save step plus the standalone one-shot generator.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import date
 
 from app.schemas.api import (
     ChatAttachment,
@@ -89,11 +90,15 @@ class PlanService:
         session = self.core.get_session(req.session_id)
         if session.class_id != class_id:
             raise KeyError("Session class mismatch")
+        try:
+            lesson_date = date.fromisoformat(req.lesson_date).isoformat()
+        except ValueError as exc:
+            raise ValueError("lesson_date must be YYYY-MM-DD") from exc
         title = self.wiki._extract_title(req.plan_markdown) or "Lesson plan"
-        path = self.wiki.save_lesson_plan(class_id, req.lesson_date, req.plan_markdown)
+        path = self.wiki.save_lesson_plan(class_id, lesson_date, req.plan_markdown)
         self.core.set_status(req.session_id, PlanSessionStatus.saved.value)
         return SavePlanResponse(
-            lesson_date=req.lesson_date,
+            lesson_date=lesson_date,
             title=title,
             plan_path=path,
         )
