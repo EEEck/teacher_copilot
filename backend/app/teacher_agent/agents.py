@@ -96,6 +96,8 @@ class AgentRunner:
         self.timeout = settings.agent_timeout_seconds
         self.max_turns = settings.agent_max_turns
         self.wiki = wiki
+        self.tool_output_limit: int | None = 500
+        self.tool_args_limit: int | None = 500
 
     def _require_client(self) -> OpenAI:
         if self.client is None:
@@ -166,7 +168,11 @@ class AgentRunner:
                 if time.monotonic() - started > self.timeout:
                     yield SseError(message="The request timed out.", code="timeout")
                     return
-                for translated in translate_sdk_event(event):
+                for translated in translate_sdk_event(
+                    event,
+                    tool_output_limit=self.tool_output_limit,
+                    tool_args_limit=self.tool_args_limit,
+                ):
                     yield translated
         except AgentsException as exc:
             if _is_turn_limit_error(exc):

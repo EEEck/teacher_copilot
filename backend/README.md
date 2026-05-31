@@ -27,6 +27,27 @@ Ingest and plan sessions are stored **in memory** (`ArtifactSessionService`). Re
 
 **SQLite is not required for the prototype.** Session persistence is deferred until multi-worker deploys or durable server-side history are needed. See [`docs/REFACTOR_STATUS.md`](../docs/REFACTOR_STATUS.md) for refactor completion scope.
 
+## Agent debug CLI
+
+Interactive multi-turn chat against the real `AgentRunner` (no FastAPI). Shows reasoning, wiki tool calls, and **full** tool results (not capped like browser SSE).
+
+```bash
+cd backend
+.venv\Scripts\activate
+python -m app.cli chat --mode ingest --class chemie_9b_2026_27
+```
+
+Useful flags:
+
+- `--show-context` — print the ingest/plan memory pack at startup
+- `--trace runs/debug.jsonl` — append JSONL of each SSE-shaped event per turn
+- `--message "We covered redox today"` — one turn, then exit
+- `--tool-limit 2000` — cap tool output size (default: unlimited in CLI)
+
+REPL commands: `/context`, `/draft`, `/tools`, `/propose` (ingest only), `/help`, `/quit`.
+
+Requires `OPENAI_API_KEY` in `backend/.env`. Not run in CI (live model calls).
+
 ## Tests
 
 ```bash
