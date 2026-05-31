@@ -41,13 +41,23 @@ copy .env.example backend\.env    # Windows
 
 ```bash
 docker compose up --build
+# or (Git Bash / macOS / Linux):
+./scripts/docker-dev.sh
 ```
 
 - App: http://localhost:3000  
 - API health: http://localhost:8010/api/health  
 - Wiki files: `backend/teacher_wiki/` (bind-mounted; edits persist on the host)
 
-Stop: `Ctrl+C`, or `docker compose down` in another terminal.
+Stop: `Ctrl+C` (foreground), `./scripts/docker-dev.sh down`, or `docker compose down`.
+
+```bash
+./scripts/docker-dev.sh down      # stop containers
+./scripts/docker-dev.sh logs      # follow logs
+./scripts/docker-dev.sh ps        # status
+./scripts/docker-dev.sh up-fg     # foreground (see logs in terminal)
+./scripts/docker-dev.sh rebuild backend   # after pyproject.toml changes
+```
 
 Python and frontend code reload automatically inside the containers (see [Developing & restarting](#developing--restarting)). Rebuild a service after dependency changes: `docker compose up --build backend` or `... frontend`.
 
