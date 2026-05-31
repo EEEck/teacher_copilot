@@ -7,6 +7,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Push-Location "$root\frontend"
 npm run typecheck
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+npm run test
 $code = $LASTEXITCODE
 Pop-Location
 exit $code

@@ -105,6 +105,45 @@ def test_ingest_commit_skips_unapproved_wiki_paths(client: TestClient):
     assert "## 2026-10-01" not in after.json()["markdown"]
 
 
+def test_ingest_commit_writes_teacher_edited_content(client: TestClient):
+    """Commit payload content (not just propose output) is what gets written."""
+    base = f"/api/classes/{CLASS_ID}/ingest"
+    wiki_base = f"/api/classes/{CLASS_ID}/wiki/file"
+    marker = "TEACHER_EDIT_VIA_API"
+
+    start = client.post(f"{base}/sessions")
+    session_id = start.json()["session_id"]
+    client.patch(
+        f"{base}/sessions/{session_id}/draft",
+        json={"diary_markdown": COMPLETE_DIARY},
+    )
+    propose = client.post(f"{base}/sessions/{session_id}/propose")
+    lesson_prop = next(
+        p for p in propose.json()["wiki_proposals"] if "lesson_results.md" in p["wiki_path"]
+    )
+    edited = lesson_prop["proposed_content"].replace("Topic A", f"Topic A ({marker})")
+
+    commit = client.post(
+        f"/api/classes/{CLASS_ID}/ingest/commit",
+        json={
+            "session_id": session_id,
+            "diary_markdown": COMPLETE_DIARY,
+            "approved_updates": [
+                {
+                    "wiki_path": lesson_prop["wiki_path"],
+                    "content": edited,
+                    "approved": True,
+                },
+            ],
+        },
+    )
+    assert commit.status_code == 200, commit.text
+
+    file_res = client.get(wiki_base, params={"path": lesson_prop["wiki_path"]})
+    assert file_res.status_code == 200
+    assert marker in file_res.json()["markdown"]
+
+
 def test_ingest_commit_requires_lesson_results_approved(client: TestClient):
     base = f"/api/classes/{CLASS_ID}/ingest"
 

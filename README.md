@@ -185,6 +185,24 @@ Get-Content .env | ForEach-Object {
 .\.venv\Scripts\uvicorn app.main:app --reload --port 8010
 ```
 
+## Architecture refactor
+
+The unified artifact-session refactor (Phases 0–5) is **complete** on this branch. Summary: one backend session service, streaming chat, decomposed wiki package, trustworthy ingest commit, and Cursor-style review UI. Details: [`docs/REFACTOR_STATUS.md`](docs/REFACTOR_STATUS.md).
+
+## Testing
+
+Offline, deterministic tests — no OpenAI calls.
+
+```powershell
+.\scripts\test.ps1
+```
+
+Runs backend `pytest` (agent stub + tmp wiki copy) and frontend `tsc` + Vitest (`src/lib/sse-chat.test.ts`). From `backend/` only: `pytest`.
+
+## Prototype limitations (sessions)
+
+Ingest/plan **session IDs and chat history** live in server RAM (`ArtifactSessionService`). Restarting uvicorn (or `docker compose restart backend`) drops sessions. The UI recovers by starting a new session and keeping your **draft markdown** in the browser; in-thread chat history is not restored. **SQLite (or any DB) is not required for the prototype** — add persistence only when you need multi-worker deploys or durable server-side history.
+
 ## UI architecture
 
 | Layer | Location | Purpose |

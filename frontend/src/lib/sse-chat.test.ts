@@ -1,0 +1,75 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  parseSseChunk,
+  streamPartsToRunContent,
+  StreamPartsAccumulator,
+  type SseEvent,
+} from "./sse-chat";
+
+describe("parseSseChunk", () => {
+  it("parses complete SSE blocks and keeps a trailing partial buffer", () => {
+    const buffer =
+      'data: {"type":"reasoning_delta","text":"Hi"}\n\n' +
+      'data: {"type":"final","reply":"ok","artifact_markdown":"# x","ready":true}\n\n' +
+      'data: {"type":"reasoning_delta","text":"par';
+    const { events, rest } = parseSseChunk(buffer);
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ type: "reasoning_delta", text: "Hi" });
+    expect(events[1]).toMatchObject({ type: "final", reply: "ok" });
+    expect(rest).toContain("par");
+  });
+});
+
+describe("StreamPartsAccumulator", () => {
+  it("accumulates reasoning, tool call, and tool result", () => {
+    const acc = new StreamPartsAccumulator();
+    const events: SseEvent[] = [
+      { type: "reasoning_delta", text: "Thinking…" },
+      { type: "tool_call", name: "search_wiki", args: '{"q":"redox"}', call_id: "c1" },
+      { type: "tool_result", name: "search_wiki", output: "hits", call_id: "c1" },
+    ];
+    for (const e of events) acc.apply(e);
+    const parts = acc.parts("Done.");
+    expect(parts[0]).toEqual({ type: "reasoning", text: "Thinking…" });
+    const tool = parts.find((p) => p.type === "tool-call");
+    expect(tool).toMatchObject({
+      toolName: "search_wiki",
+      toolCallId: "c1",
+      argsText: '{"q":"redox"}',
+      result: "hits",
+      status: { type: "complete" },
+    });
+    expect(parts.at(-1)).toEqual({ type: "text", text: "Done." });
+  });
+});
+
+describe("streamPartsToRunContent", () => {
+  it("parses tool args JSON for assistant-ui", () => {
+    const content = streamPartsToRunContent([
+      {
+        type: "tool-call",
+        toolName: "search_wiki",
+        toolCallId: "c1",
+        argsText: '{"q":"acids"}',
+      },
+    ]);
+    expect(content).toHaveLength(1);
+    const part = content[0] as { type: string; args?: Record<string, unknown> };
+    expect(part.type).toBe("tool-call");
+    expect(part.args).toEqual({ q: "acids" });
+  });
+
+  it("falls back to raw args text when JSON is invalid", () => {
+    const content = streamPartsToRunContent([
+      {
+        type: "tool-call",
+        toolName: "search_wiki",
+        toolCallId: "c1",
+        argsText: "not-json",
+      },
+    ]);
+    const part = content[0] as { args?: Record<string, unknown> };
+    expect(part.args).toEqual({ raw: "not-json" });
+  });
+});

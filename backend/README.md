@@ -23,7 +23,9 @@ Scripts or REPL code that construct `AgentRunner` without importing `app.main` m
 
 ## Chat sessions (prototype)
 
-Ingest and plan sessions are stored **in memory** (`ArtifactSessionService`). Restarting uvicorn clears server-side session state. The frontend recreates a session and restores the draft markdown when the API returns “unknown session”; chat history in the tab is not restored. Persistent session storage is deferred until multi-worker or production needs it.
+Ingest and plan sessions are stored **in memory** (`ArtifactSessionService`). Restarting uvicorn clears server-side session state. The frontend recreates a session and restores the draft markdown when the API returns “unknown session”; chat history in the tab is not restored.
+
+**SQLite is not required for the prototype.** Session persistence is deferred until multi-worker deploys or durable server-side history are needed. See [`docs/REFACTOR_STATUS.md`](../docs/REFACTOR_STATUS.md) for refactor completion scope.
 
 ## Tests
 
