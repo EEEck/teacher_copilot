@@ -5,7 +5,7 @@ param(
 )
 
 $ErrorActionPreference = "SilentlyContinue"
-$BackendPort = 8001
+$BackendPort = 8010
 $FrontendPort = 3000
 
 function Stop-PortListeners {

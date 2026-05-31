@@ -82,13 +82,15 @@ export default function LessonDetailPage() {
     );
   }
 
+  const isPlanned = !detail.primary_markdown.trim();
+
   return (
     <div className="space-y-6">
       <PageHeader
         backHref={`/classes/${classId}`}
         backLabel="Class home"
         title={detail.title}
-        description={`Lesson · ${detail.date}`}
+        description={isPlanned ? `Planned lesson · ${detail.date}` : `Lesson · ${detail.date}`}
       />
 
       {error && (
@@ -102,32 +104,39 @@ export default function LessonDetailPage() {
         </Alert>
       )}
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Lesson results</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Edit the diary below if something is wrong; saving updates lesson files and class rollups.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <MarkdownDocumentPanel
-            label="Lesson diary"
-            markdown={diaryMarkdown}
-            onChange={setDiaryMarkdown}
-          />
-          <Button className="mt-4" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save changes"}
-          </Button>
-        </CardContent>
-      </Card>
-
       {detail.lesson_plan_markdown && (
-        <Card>
+        <Card variant={isPlanned ? "highlight" : "default"}>
           <CardHeader>
             <CardTitle className="text-base">Lesson plan</CardTitle>
+            {isPlanned && (
+              <p className="text-sm text-muted-foreground">
+                Saved plan for this date. After you teach it, log what happened via Update memory.
+              </p>
+            )}
           </CardHeader>
           <CardContent>
             <MarkdownPreview markdown={detail.lesson_plan_markdown} />
+          </CardContent>
+        </Card>
+      )}
+
+      {!isPlanned && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Lesson results</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Edit the diary below if something is wrong; saving updates lesson files and class rollups.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <MarkdownDocumentPanel
+              label="Lesson diary"
+              markdown={diaryMarkdown}
+              onChange={setDiaryMarkdown}
+            />
+            <Button className="mt-4" onClick={save} disabled={saving}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
           </CardContent>
         </Card>
       )}

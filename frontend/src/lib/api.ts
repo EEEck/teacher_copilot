@@ -1,4 +1,14 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8001";
+/** Browser uses localhost; SSR in Docker uses INTERNAL_API_BASE_URL (backend service). */
+function getApiBase(): string {
+  if (typeof window === "undefined") {
+    return (
+      process.env.INTERNAL_API_BASE_URL ??
+      process.env.NEXT_PUBLIC_API_BASE_URL ??
+      "http://localhost:8010"
+    );
+  }
+  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
+}
 
 export type ClassSummary = { id: string; label: string; subject: string };
 export type TimelineEntry = {
@@ -13,6 +23,7 @@ export type TimelineEntry = {
   homework?: string | null;
   raw_path?: string | null;
   has_plan: boolean;
+  status: "taught" | "planned";
   committed_at?: string | null;
   wiki_paths: string[];
 };
@@ -28,6 +39,7 @@ export type ClassMemorySnapshot = {
   last_lesson_date?: string | null;
   last_committed_date?: string | null;
   last_committed_at?: string | null;
+  last_committed_title?: string | null;
   open_loop_count: number;
   top_misconceptions: string[];
   recent_lessons: string[];
@@ -68,6 +80,15 @@ export type WikiUpdateProposal = {
   proposed_content: string;
   rationale: string;
 };
+
+/** One card per wiki path — guards against duplicate proposals from the API. */
+export function uniqueWikiProposals(proposals: WikiUpdateProposal[]): WikiUpdateProposal[] {
+  const byPath = new Map<string, WikiUpdateProposal>();
+  for (const p of proposals) {
+    if (!byPath.has(p.wiki_path)) byPath.set(p.wiki_path, p);
+  }
+  return [...byPath.values()];
+}
 export type IngestDraft = {
   diary_markdown: string;
   wiki_proposals: WikiUpdateProposal[];
@@ -78,11 +99,30 @@ export type ApprovedWikiUpdate = {
   content: string;
   approved: boolean;
 };
+export type ChatAttachment = { filename: string; content: string };
 export type ChatResponse = {
   reply: string;
   diary_markdown: string;
   completeness: CompletenessChecklist;
   ready_to_propose: boolean;
+};
+export type PlanSession = {
+  session_id: string;
+  class_id: string;
+  status: string;
+  messages: ChatMessage[];
+  opening_message: string;
+};
+export type PlanDraft = { plan_markdown: string };
+export type PlanChatResponse = {
+  reply: string;
+  plan_markdown: string;
+  ready_to_save: boolean;
+};
+export type SavePlanResponse = {
+  lesson_date: string;
+  title: string;
+  plan_path: string;
 };
 export type LessonFlowPhase = { phase: string; minutes: number; description: string };
 export type LessonPlan = {
@@ -99,10 +139,18 @@ export type LessonPlan = {
   addresses_misconceptions: string[];
 };
 
+/** Backend restarted or session expired — in-memory store no longer has this id. */
+export function isUnknownSessionError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    /API 404:.*Unknown session:/i.test(err.message)
+  );
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, {
+    res = await fetch(`${getApiBase()}${path}`, {
       ...init,
       cache: "no-store",
       headers: {
@@ -112,15 +160,19 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     });
   } catch {
     throw new Error(
-      `Cannot reach API at ${API_BASE}. Start the backend with: uvicorn app.main:app --reload --port 8001`,
+      `Cannot reach API at ${getApiBase()}. Start the backend (docker compose up, or ./scripts/restart-dev.ps1 -NoNewWindow).`,
     );
   }
   if (!res.ok) {
     const text = await res.text();
     let message = text || res.statusText;
     try {
-      const body = JSON.parse(text) as { detail?: string };
-      if (body.detail) message = body.detail;
+      const body = JSON.parse(text) as {
+        error?: { message?: string };
+        detail?: string;
+      };
+      // Typed envelope { error: { message } }, with fallback to legacy { detail }.
+      message = body.error?.message ?? body.detail ?? message;
     } catch {
       /* use raw text */
     }
@@ -129,13 +181,50 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function apiStreamPost(path: string, body: object, signal?: AbortSignal): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetch(`${getApiBase()}${path}`, {
+      method: "POST",
+      cache: "no-store",
+      signal,
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error(
+      `Cannot reach API at ${getApiBase()}. Start the backend (docker compose up, or ./scripts/restart-dev.ps1 -NoNewWindow).`,
+    );
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    let message = text || res.statusText;
+    try {
+      const parsed = JSON.parse(text) as {
+        error?: { message?: string };
+        detail?: string;
+      };
+      message = parsed.error?.message ?? parsed.detail ?? message;
+    } catch {
+      /* use raw text */
+    }
+    throw new Error(`API ${res.status}: ${message}`);
+  }
+  return res;
+}
+
 /** Backfill fields when an older API instance is still bound to port 8001. */
 function normalizeTimelineEntry(raw: Partial<TimelineEntry> & Pick<TimelineEntry, "date" | "title">): TimelineEntry {
   const month_key = raw.month_key ?? raw.date.slice(0, 7);
   const covered = raw.covered ?? [];
+  const status = raw.status === "planned" ? "planned" : "taught";
   const summary =
     raw.summary?.trim() ||
-    (covered.length > 0 ? `Covered: ${covered[0]}` : `Lesson: ${raw.title}`);
+    (status === "planned"
+      ? "Planned — not taught yet."
+      : covered.length > 0
+        ? `Covered: ${covered[0]}`
+        : `Lesson: ${raw.title}`);
   return {
     date: raw.date,
     title: raw.title,
@@ -148,6 +237,7 @@ function normalizeTimelineEntry(raw: Partial<TimelineEntry> & Pick<TimelineEntry
     homework: raw.homework ?? null,
     raw_path: raw.raw_path ?? null,
     has_plan: raw.has_plan ?? false,
+    status,
     committed_at: raw.committed_at ?? null,
     wiki_paths: raw.wiki_paths ?? [],
   };
@@ -187,14 +277,33 @@ export const client = {
     sessionId: string,
     message: string,
     diaryMarkdown?: string,
+    attachments?: ChatAttachment[],
   ) =>
     api<ChatResponse>(`/api/classes/${classId}/ingest/sessions/${sessionId}/chat`, {
       method: "POST",
       body: JSON.stringify({
         message,
         diary_markdown: diaryMarkdown ?? null,
+        attachments: attachments ?? [],
       }),
     }),
+  ingestChatStream: (
+    classId: string,
+    sessionId: string,
+    message: string,
+    diaryMarkdown?: string,
+    attachments?: ChatAttachment[],
+    signal?: AbortSignal,
+  ) =>
+    apiStreamPost(
+      `/api/classes/${classId}/ingest/sessions/${sessionId}/chat/stream`,
+      {
+        message,
+        diary_markdown: diaryMarkdown ?? null,
+        attachments: attachments ?? [],
+      },
+      signal,
+    ),
   ingestGetDraft: (classId: string, sessionId: string) =>
     api<IngestDraft>(`/api/classes/${classId}/ingest/sessions/${sessionId}/draft`),
   ingestUpdateDraft: (classId: string, sessionId: string, diaryMarkdown: string) =>
@@ -206,6 +315,10 @@ export const client = {
     api<IngestDraft>(`/api/classes/${classId}/ingest/sessions/${sessionId}/propose`, {
       method: "POST",
     }),
+  getWikiFile: (classId: string, wikiPath: string) =>
+    api<{ wiki_path: string; markdown: string }>(
+      `/api/classes/${classId}/wiki/file?path=${encodeURIComponent(wikiPath)}`,
+    ),
   ingestCommit: (
     classId: string,
     sessionId: string,
@@ -229,36 +342,59 @@ export const client = {
         }),
       },
     ),
-  planLesson: (classId: string, durationMinutes = 45) =>
-    api<LessonPlan>(`/api/classes/${classId}/plan-lesson`, {
+  startPlanSession: (classId: string) =>
+    api<PlanSession>(`/api/classes/${classId}/plan/sessions`, { method: "POST" }),
+  planChat: (
+    classId: string,
+    sessionId: string,
+    message: string,
+    planMarkdown?: string,
+    attachments?: ChatAttachment[],
+  ) =>
+    api<PlanChatResponse>(`/api/classes/${classId}/plan/sessions/${sessionId}/chat`, {
       method: "POST",
-      body: JSON.stringify({ duration_minutes: durationMinutes }),
+      body: JSON.stringify({
+        message,
+        plan_markdown: planMarkdown ?? null,
+        attachments: attachments ?? [],
+      }),
+    }),
+  planChatStream: (
+    classId: string,
+    sessionId: string,
+    message: string,
+    planMarkdown?: string,
+    attachments?: ChatAttachment[],
+    signal?: AbortSignal,
+  ) =>
+    apiStreamPost(
+      `/api/classes/${classId}/plan/sessions/${sessionId}/chat/stream`,
+      {
+        message,
+        plan_markdown: planMarkdown ?? null,
+        attachments: attachments ?? [],
+      },
+      signal,
+    ),
+  planGetDraft: (classId: string, sessionId: string) =>
+    api<PlanDraft>(`/api/classes/${classId}/plan/sessions/${sessionId}/draft`),
+  planUpdateDraft: (classId: string, sessionId: string, planMarkdown: string) =>
+    api<PlanDraft>(`/api/classes/${classId}/plan/sessions/${sessionId}/draft`, {
+      method: "PATCH",
+      body: JSON.stringify({ plan_markdown: planMarkdown }),
+    }),
+  planSave: (
+    classId: string,
+    sessionId: string,
+    lessonDate: string,
+    planMarkdown: string,
+  ) =>
+    api<SavePlanResponse>(`/api/classes/${classId}/plan/save`, {
+      method: "POST",
+      body: JSON.stringify({
+        session_id: sessionId,
+        lesson_date: lessonDate,
+        plan_markdown: planMarkdown,
+      }),
     }),
 };
-
-export function planToMarkdown(plan: LessonPlan): string {
-  const lines = [
-    `# Lesson Plan — ${plan.title}`,
-    "",
-    `> Duration: ${plan.duration_minutes} min`,
-    "",
-    "## Learning goals",
-    ...plan.learning_goals.map((g) => `- ${g}`),
-    "",
-    "## Lesson flow",
-    ...plan.lesson_flow.map((p) => `- **${p.phase}** (${p.minutes} min): ${p.description}`),
-    "",
-    "## Warmup",
-    plan.warmup,
-    "",
-    "## Practice",
-    ...plan.practice_tasks.map((t) => `- ${t}`),
-    "",
-    "## Homework",
-    plan.homework,
-    "",
-    "## Teacher notes",
-    plan.teacher_notes,
-  ];
-  return lines.join("\n");
-}

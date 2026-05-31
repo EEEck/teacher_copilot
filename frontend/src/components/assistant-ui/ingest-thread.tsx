@@ -1,11 +1,11 @@
 "use client";
 
+import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { Thread } from "@/components/assistant-ui/thread";
-import { useIngestRuntime } from "@/components/assistant-ui/ingest-runtime-provider";
 import { DiaryChecklist } from "@/components/klassenpilot/diary-checklist";
 
 function IngestWelcomeChecklist() {
-  const { completeness } = useIngestRuntime();
+  const { completeness } = useArtifactSession();
   return <DiaryChecklist checklist={completeness} inline />;
 }
 

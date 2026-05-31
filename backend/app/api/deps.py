@@ -1,7 +1,8 @@
 from functools import lru_cache
 
 from app.config import Settings, get_settings
-from app.services.ingest_service import IngestService, PlanService
+from app.services.ingest_service import IngestService
+from app.services.plan_service import PlanService
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.wiki_store import WikiStore
 

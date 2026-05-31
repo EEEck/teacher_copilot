@@ -1,48 +1,249 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { IngestThread } from "@/components/assistant-ui/ingest-thread";
 import {
-  IngestRuntimeProvider,
-  useIngestRuntime,
-} from "@/components/assistant-ui/ingest-runtime-provider";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/assistant-ui/resizable";
+  ArtifactSessionPage,
+  type ArtifactSessionBodyProps,
+} from "@/components/klassenpilot/artifact-session-page";
+import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
 import { DiaryDraftPanel } from "@/components/klassenpilot/diary-draft-panel";
-import { WikiProposalCard } from "@/components/klassenpilot/wiki-proposal-card";
-import { PageHeader } from "@/components/layout/page-header";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
-  client,
-  type CompletenessChecklist,
-  type IngestDraft,
-  type IngestSession,
-} from "@/lib/api";
+  FileChangeReviewPanel,
+  MarkdownLineDiff,
+  useFileChangeReview,
+  WikiProposalEditor,
+} from "@/components/klassenpilot/review";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { client, uniqueWikiProposals, type WikiUpdateProposal } from "@/lib/api";
 
-function ReadyToSaveButton({
-  onReady,
-  loading,
-}: {
-  onReady: () => void;
-  loading: boolean;
-}) {
-  const { isUpdating, readyToPropose } = useIngestRuntime();
+type CommitResult = {
+  lesson_date: string;
+  title: string;
+  log_entry_id: string;
+  applied_wiki_paths: string[];
+};
+
+function ReadyToSaveButton({ onReady, loading }: { onReady: () => void; loading: boolean }) {
+  const { isUpdating, readyToSave } = useArtifactSession();
 
   return (
     <div className="flex flex-col gap-1">
       <Button className="w-fit" onClick={onReady} disabled={loading || isUpdating}>
-        Ready to save memory
+        {loading ? "Compiling wiki updates…" : "Ready to save memory"}
       </Button>
-      {readyToPropose && (
+      {readyToSave && !loading && (
         <p className="text-xs text-primary">
-          All sections filled — review wiki updates below before saving.
+          All sections filled — compile and review wiki file changes before saving.
         </p>
+      )}
+    </div>
+  );
+}
+
+function MemoryWorkspace({
+  classId,
+  onError,
+}: {
+  classId: string;
+  onError: (message: string | null) => void;
+}) {
+  const router = useRouter();
+  const { artifactMarkdown: diaryMarkdown, runWithSessionRecovery } = useArtifactSession();
+  const [proposals, setProposals] = useState<WikiUpdateProposal[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [inReview, setInReview] = useState(false);
+  const [editingWiki, setEditingWiki] = useState(false);
+  const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
+
+  const {
+    items: reviewItems,
+    selected: selectedChange,
+    selectedPath,
+    setSelectedPath,
+    contentByPath,
+    updateContent,
+    getCommitPayload,
+    setApproved,
+    approveAll,
+    initFromProposals,
+    clear: clearReview,
+    hasLessonResultsApproved,
+  } = useFileChangeReview(proposals);
+
+  const selectFile = useCallback(
+    (path: string) => {
+      setSelectedPath(path);
+      setEditingWiki(true);
+    },
+    [setSelectedPath],
+  );
+
+  const viewerAllHref = commitResult
+    ? `/classes/${classId}/wiki/view?paths=${encodeURIComponent(commitResult.applied_wiki_paths.join(","))}`
+    : "";
+
+  const handleReadyToSave = useCallback(async () => {
+    setLoading(true);
+    onError(null);
+    setCommitResult(null);
+    try {
+      await runWithSessionRecovery((sessionId) =>
+        client.ingestUpdateDraft(classId, sessionId, diaryMarkdown),
+      );
+      const d = await runWithSessionRecovery((sessionId) =>
+        client.ingestPropose(classId, sessionId),
+      );
+      const unique = uniqueWikiProposals(d.wiki_proposals);
+      setProposals(unique);
+      initFromProposals(unique);
+      setInReview(true);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Could not prepare save");
+    } finally {
+      setLoading(false);
+    }
+  }, [classId, diaryMarkdown, onError, runWithSessionRecovery, initFromProposals]);
+
+  const commit = useCallback(async () => {
+    setLoading(true);
+    onError(null);
+    try {
+      const result = await runWithSessionRecovery((sessionId) =>
+        client.ingestCommit(classId, sessionId, diaryMarkdown, getCommitPayload()),
+      );
+      setCommitResult({
+        lesson_date: result.lesson_date,
+        title: result.title,
+        log_entry_id: result.log_entry_id,
+        applied_wiki_paths: result.applied_wiki_paths,
+      });
+      setInReview(false);
+      setProposals([]);
+      clearReview();
+      router.refresh();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Commit failed");
+    } finally {
+      setLoading(false);
+    }
+  }, [classId, diaryMarkdown, getCommitPayload, clearReview, onError, router, runWithSessionRecovery]);
+
+  const keepAll = useCallback(() => {
+    approveAll();
+    void commit();
+  }, [approveAll, commit]);
+
+  const undoAll = useCallback(() => {
+    setInReview(false);
+    setEditingWiki(false);
+    setProposals([]);
+    clearReview();
+    onError(null);
+  }, [onError, clearReview]);
+
+  const draftPanel =
+    inReview && editingWiki && selectedPath && selectedPath in contentByPath ? (
+      <WikiProposalEditor
+        wikiPath={selectedPath}
+        markdown={contentByPath[selectedPath]}
+        onChange={(value) => updateContent(selectedPath, value)}
+        onBackToDiary={() => setEditingWiki(false)}
+      />
+    ) : (
+      <DiaryDraftPanel />
+    );
+
+  return (
+    <div className="space-y-8">
+      <ArtifactSessionWorkspace
+        thread={<IngestThread />}
+        draftPanel={draftPanel}
+        footer={
+          !inReview ? <ReadyToSaveButton onReady={handleReadyToSave} loading={loading} /> : null
+        }
+        reviewDiff={
+          inReview && selectedChange ? (
+            <MarkdownLineDiff
+              path={selectedChange.path}
+              before={selectedChange.before}
+              after={selectedChange.after}
+              className="h-full min-h-[12rem]"
+            />
+          ) : null
+        }
+        reviewFileList={
+          inReview && reviewItems.length > 0 ? (
+            <FileChangeReviewPanel
+              items={reviewItems}
+              selectedPath={selectedPath ?? reviewItems[0]?.path ?? null}
+              onSelectPath={selectFile}
+              onSetApproved={setApproved}
+              onUndoAll={undoAll}
+              onKeepAll={keepAll}
+              onSave={commit}
+              saving={loading}
+              saveDisabled={!hasLessonResultsApproved}
+              saveLabel="Save selected files"
+            />
+          ) : null
+        }
+      />
+
+      {inReview && !hasLessonResultsApproved && (
+        <p className="text-xs text-destructive">
+          Keep <span className="font-mono">lesson_results.md</span> to save this lesson to memory.
+        </p>
+      )}
+
+      {commitResult && (
+        <Card variant="highlight">
+          <CardHeader>
+            <CardTitle className="text-base">Memory saved</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {commitResult.title} ({commitResult.lesson_date}) — log entry{" "}
+              <span className="font-mono text-xs">{commitResult.log_entry_id}</span>
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-foreground">
+              {commitResult.applied_wiki_paths.length} file
+              {commitResult.applied_wiki_paths.length === 1 ? "" : "s"} updated.
+            </p>
+            <ul className="space-y-1 text-sm">
+              {commitResult.applied_wiki_paths.map((path) => (
+                <li key={path}>
+                  <Link
+                    href={`/classes/${classId}/wiki/view?path=${encodeURIComponent(path)}`}
+                    className="font-mono text-xs text-primary hover:underline"
+                  >
+                    {path}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-3 pt-1">
+              <Button asChild>
+                <Link href={viewerAllHref}>View all changes</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link
+                  href={
+                    commitResult.lesson_date
+                      ? `/classes/${classId}?highlight=${encodeURIComponent(commitResult.lesson_date)}`
+                      : `/classes/${classId}`
+                  }
+                >
+                  Back to class home
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
@@ -51,203 +252,37 @@ function ReadyToSaveButton({
 export default function MemoryPage() {
   const params = useParams();
   const classId = params.classId as string;
-  const router = useRouter();
 
-  const [session, setSession] = useState<IngestSession | null>(null);
-  const [initialDiary, setInitialDiary] = useState<string>("");
-  const [checklist, setChecklist] = useState<CompletenessChecklist | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const s = await client.startIngestSession(classId);
-        if (cancelled) return;
-        setSession(s);
-        setChecklist(s.completeness);
-        const d = await client.ingestGetDraft(classId, s.session_id);
-        if (cancelled) return;
-        setInitialDiary(d.diary_markdown);
-        setChecklist(d.completeness);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to start session");
+  const bootstrap = useCallback(
+    async (opts?: { preserveMarkdown?: string }) => {
+      const session = await client.startIngestSession(classId);
+      let draft = await client.ingestGetDraft(classId, session.session_id);
+      if (opts?.preserveMarkdown) {
+        draft = await client.ingestUpdateDraft(
+          classId,
+          session.session_id,
+          opts.preserveMarkdown,
+        );
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [classId]);
-
-  const onCompletenessChange = useCallback((c: CompletenessChecklist) => {
-    setChecklist(c);
-  }, []);
-
-  if (!session || !initialDiary) {
-    return (
-      <div>
-        <PageHeader backHref={`/classes/${classId}`} backLabel="Class home" title="Update memory" />
-        <p className="text-muted-foreground">Starting session…</p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <PageHeader
-        backHref={`/classes/${classId}`}
-        backLabel="Class home"
-        title="Update memory"
-        description="Chat through the lesson, edit the diary on the right, then save when ready."
-      />
-
-      {error && (
-        <Alert className="mb-6 border-destructive/30 bg-[var(--error-bg)] text-destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <IngestRuntimeProvider
-        classId={classId}
-        sessionId={session.session_id}
-        initialDiaryMarkdown={initialDiary}
-        initialCompleteness={checklist}
-        onCompletenessChange={onCompletenessChange}
-      >
-        <MemoryWorkspace
-          classId={classId}
-          sessionId={session.session_id}
-          onError={setError}
-          onDone={(lessonDate) => {
-            router.push(
-              lessonDate
-                ? `/classes/${classId}?highlight=${encodeURIComponent(lessonDate)}`
-                : `/classes/${classId}`,
-            );
-            router.refresh();
-          }}
-        />
-      </IngestRuntimeProvider>
-    </div>
+      return {
+        sessionId: session.session_id,
+        initialMarkdown: draft.diary_markdown,
+        initialCompleteness: draft.completeness,
+      };
+    },
+    [classId],
   );
-}
-
-function MemoryWorkspace({
-  classId,
-  sessionId,
-  onError,
-  onDone,
-}: {
-  classId: string;
-  sessionId: string;
-  onError: (message: string | null) => void;
-  onDone: (lessonDate?: string) => void;
-}) {
-  const { diaryMarkdown } = useIngestRuntime();
-  const [draft, setDraft] = useState<IngestDraft | null>(null);
-  const [wikiEdits, setWikiEdits] = useState<
-    Record<string, { content: string; approved: boolean }>
-  >({});
-  const [loading, setLoading] = useState(false);
-  const [showWiki, setShowWiki] = useState(false);
-
-  const handleReadyToSave = useCallback(async () => {
-    setLoading(true);
-    onError(null);
-    try {
-      await client.ingestUpdateDraft(classId, sessionId, diaryMarkdown);
-      const d = await client.ingestPropose(classId, sessionId);
-      setDraft(d);
-      const edits: Record<string, { content: string; approved: boolean }> = {};
-      for (const p of d.wiki_proposals) {
-        edits[p.wiki_path] = { content: p.proposed_content, approved: true };
-      }
-      setWikiEdits(edits);
-      setShowWiki(true);
-    } catch (e) {
-      onError(e instanceof Error ? e.message : "Could not prepare save");
-    } finally {
-      setLoading(false);
-    }
-  }, [classId, sessionId, diaryMarkdown, onError]);
-
-  const commit = useCallback(async () => {
-    setLoading(true);
-    onError(null);
-    try {
-      const result = await client.ingestCommit(
-        classId,
-        sessionId,
-        diaryMarkdown,
-        Object.entries(wikiEdits).map(([wiki_path, v]) => ({
-          wiki_path,
-          content: v.content,
-          approved: v.approved,
-        })),
-      );
-      onDone(result.lesson_date || undefined);
-    } catch (e) {
-      onError(e instanceof Error ? e.message : "Commit failed");
-    } finally {
-      setLoading(false);
-    }
-  }, [classId, sessionId, diaryMarkdown, wikiEdits, onError, onDone]);
 
   return (
-    <div className="space-y-8">
-      <ResizablePanelGroup orientation="horizontal" className="min-h-[560px] rounded-lg border">
-        <ResizablePanel defaultSize={58} minSize={40}>
-          <div className="flex h-full flex-col gap-3 p-4">
-            <Card className="min-h-0 flex-1 overflow-hidden">
-              <CardContent className="flex h-full min-h-[480px] flex-col p-0">
-                <IngestThread />
-              </CardContent>
-            </Card>
-            <ReadyToSaveButton onReady={handleReadyToSave} loading={loading} />
-          </div>
-        </ResizablePanel>
-        <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={42} minSize={30}>
-          <div className="h-full p-4">
-            <DiaryDraftPanel />
-          </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
-
-      {showWiki && draft && (
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Memory files (wiki)</h2>
-          <p className="text-sm text-muted-foreground">
-            Review proposed wiki updates before committing.
-          </p>
-          {draft.wiki_proposals.map((p) => (
-            <WikiProposalCard
-              key={p.wiki_path}
-              proposal={p}
-              content={wikiEdits[p.wiki_path]?.content ?? p.proposed_content}
-              approved={wikiEdits[p.wiki_path]?.approved ?? true}
-              onContentChange={(value) =>
-                setWikiEdits((prev) => ({
-                  ...prev,
-                  [p.wiki_path]: { content: value, approved: prev[p.wiki_path]?.approved ?? true },
-                }))
-              }
-              onApprovedChange={(value) =>
-                setWikiEdits((prev) => ({
-                  ...prev,
-                  [p.wiki_path]: {
-                    content: prev[p.wiki_path]?.content ?? p.proposed_content,
-                    approved: value,
-                  },
-                }))
-              }
-            />
-          ))}
-          <Button onClick={commit} disabled={loading}>
-            Save approved updates
-          </Button>
-        </section>
+    <ArtifactSessionPage
+      mode="ingest"
+      classId={classId}
+      title="Update memory"
+      description="Chat through the lesson, edit the diary on the right, then save when ready."
+      bootstrap={bootstrap}
+      renderBody={({ onError }: ArtifactSessionBodyProps) => (
+        <MemoryWorkspace classId={classId} onError={onError} />
       )}
-    </div>
+    />
   );
 }

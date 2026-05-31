@@ -1,0 +1,30 @@
+# Teacher wiki package
+
+Deterministic markdown wiki for KlassenPilot: compile lesson diaries, human-in-the-loop commit, index rebuild, and REST/dashboard read APIs.
+
+## Layout
+
+| Module | Responsibility |
+|--------|----------------|
+| `constants.py` | Class registry, section headings, log/index regexes, `dedupe_wiki_proposals` |
+| `parsing.py` | Pure diary/lesson/log markdown parsers (no I/O) |
+| `paths_io.py` | Paths, read/write, `resolve_path`, `read_wiki_page` |
+| `search.py` | `find_in_memory` (index-first), `list_class_pages` |
+| `registry.py` | Class list and metadata |
+| `read_api.py` | Timeline, snapshot, lesson detail, revise |
+| `diary.py` | Diary completeness checklist |
+| `rollups.py` | Roll-up compile helpers (course state, students, timeline) |
+| `commit.py` | `compile_from_diary`, `commit_ingest`, lesson plans |
+| `context_packs.py` | Agent prompt context bundles |
+| `indexing.py` | `log.md`, `index.md` rebuild |
+| `store.py` | `WikiStore` facade delegating to modules |
+
+`wiki_store.py` at package parent re-exports `WikiStore` and constants for backward compatibility.
+
+## Boundaries
+
+- **This package** — trusted writes after teacher approval, deterministic compile, index/log maintenance.
+- **`tools.py`** — read-only agent tools (`recall_lesson`, `find_in_memory`, `read_memory_page`).
+- **Dashboard** — uses REST (`get_timeline`, `get_snapshot`); does not require agent tools.
+
+Agents should read `index.md` first (via prompt context or tools), then open specific pages.

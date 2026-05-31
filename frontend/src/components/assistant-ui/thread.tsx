@@ -41,6 +41,7 @@ import {
   ChevronRightIcon,
   CopyIcon,
   DownloadIcon,
+  Loader2Icon,
   MoreHorizontalIcon,
   PencilIcon,
   RefreshCwIcon,
@@ -48,7 +49,21 @@ import {
 } from "lucide-react";
 import type { FC, ReactNode } from "react";
 
-export const Thread: FC<{ welcomeExtra?: ReactNode }> = ({ welcomeExtra }) => {
+export type ThreadWelcomeConfig = {
+  title: string;
+  subtitle: string;
+};
+
+const DEFAULT_WELCOME: ThreadWelcomeConfig = {
+  title: "What happened in today's lesson?",
+  subtitle: "Walk through the lesson — I'll help structure it into memory.",
+};
+
+export const Thread: FC<{
+  welcome?: ThreadWelcomeConfig;
+  welcomeExtra?: ReactNode;
+  showSuggestions?: boolean;
+}> = ({ welcome = DEFAULT_WELCOME, welcomeExtra, showSuggestions = true }) => {
   return (
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root @container flex h-full flex-col bg-background"
@@ -65,7 +80,7 @@ export const Thread: FC<{ welcomeExtra?: ReactNode }> = ({ welcomeExtra }) => {
       >
         <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
           <AuiIf condition={(s) => s.thread.isEmpty}>
-            <ThreadWelcome extra={welcomeExtra} />
+            <ThreadWelcome welcome={welcome} extra={welcomeExtra} showSuggestions={showSuggestions} />
           </AuiIf>
 
           <div
@@ -75,6 +90,7 @@ export const Thread: FC<{ welcomeExtra?: ReactNode }> = ({ welcomeExtra }) => {
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
             </ThreadPrimitive.Messages>
+            <ThreadRunningIndicator />
           </div>
 
           <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 mt-auto flex flex-col gap-4 overflow-visible rounded-t-(--composer-radius) bg-background pb-4 md:pb-6">
@@ -96,6 +112,20 @@ const ThreadMessage: FC = () => {
   return <AssistantMessage />;
 };
 
+// Visible feedback while a turn is in flight. Our adapter is non-streaming
+// (single yield at the end), so without this a slow turn shows the user message
+// alone with no sign anything is happening.
+const ThreadRunningIndicator: FC = () => {
+  return (
+    <AuiIf condition={(s) => s.thread.isRunning}>
+      <div className="flex items-center gap-2 px-2 text-sm text-muted-foreground">
+        <Loader2Icon className="size-4 animate-spin" />
+        <span>Working on it…</span>
+      </div>
+    </AuiIf>
+  );
+};
+
 const ThreadScrollToBottom: FC = () => {
   return (
     <ThreadPrimitive.ScrollToBottom asChild>
@@ -110,21 +140,25 @@ const ThreadScrollToBottom: FC = () => {
   );
 };
 
-const ThreadWelcome: FC<{ extra?: ReactNode }> = ({ extra }) => {
+const ThreadWelcome: FC<{
+  welcome: ThreadWelcomeConfig;
+  extra?: ReactNode;
+  showSuggestions?: boolean;
+}> = ({ welcome, extra, showSuggestions = true }) => {
   return (
     <div className="aui-thread-welcome-root my-auto flex grow flex-col">
       <div className="aui-thread-welcome-center flex w-full grow flex-col items-center justify-center">
         <div className="aui-thread-welcome-message flex size-full flex-col justify-center px-4">
           <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both font-semibold text-2xl duration-200">
-            What happened in today&apos;s lesson?
+            {welcome.title}
           </h1>
           <p className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-muted-foreground text-xl delay-75 duration-200">
-            Walk through the lesson — I&apos;ll help structure it into memory.
+            {welcome.subtitle}
           </p>
           {extra}
         </div>
       </div>
-      <ThreadSuggestions />
+      {showSuggestions ? <ThreadSuggestions /> : null}
     </div>
   );
 };

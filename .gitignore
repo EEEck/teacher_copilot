@@ -1,3 +1,5 @@
+#Project specific
+ref_repos
 # Python
 backend/.env
 backend/.venv/
@@ -9,6 +11,7 @@ __pycache__/
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local
+frontend/*.tsbuildinfo
 
 # OS
 .DS_Store
@@ -36,8 +39,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/

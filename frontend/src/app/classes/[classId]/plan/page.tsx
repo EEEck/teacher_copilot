@@ -1,69 +1,257 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { useState } from "react";
-import { PageHeader } from "@/components/layout/page-header";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
+import { PlanThread } from "@/components/assistant-ui/plan-thread";
+import { ArtifactDraftPanel } from "@/components/klassenpilot/artifact-draft-panel";
+import {
+  ArtifactSessionPage,
+  type ArtifactSessionBodyProps,
+} from "@/components/klassenpilot/artifact-session-page";
+import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
+import {
+  FileChangeReviewPanel,
+  fromPlanSave,
+  MarkdownLineDiff,
+} from "@/components/klassenpilot/review";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { client, LessonPlan, planToMarkdown } from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { client } from "@/lib/api";
+
+function PlanSaveFooter({
+  classId,
+  onError,
+  inReview,
+  setInReview,
+  lessonDate,
+  setLessonDate,
+  setBeforePlan,
+}: {
+  classId: string;
+  onError: (message: string | null) => void;
+  inReview: boolean;
+  setInReview: (v: boolean) => void;
+  lessonDate: string;
+  setLessonDate: (v: string) => void;
+  setBeforePlan: (v: string) => void;
+}) {
+  const { artifactMarkdown, isUpdating, readyToSave, runWithSessionRecovery } =
+    useArtifactSession();
+  const [loading, setLoading] = useState(false);
+
+  const handleReady = useCallback(async () => {
+    if (!lessonDate.trim()) {
+      onError("Enter a lesson date (YYYY-MM-DD).");
+      return;
+    }
+    setLoading(true);
+    onError(null);
+    try {
+      await runWithSessionRecovery((sessionId) =>
+        client.planUpdateDraft(classId, sessionId, artifactMarkdown),
+      );
+      const path = `wiki/classes/${classId}/lessons/${lessonDate.trim()}/lesson_plan.md`;
+      try {
+        const file = await client.getWikiFile(classId, path);
+        setBeforePlan(file.markdown);
+      } catch {
+        setBeforePlan("");
+      }
+      setInReview(true);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Could not prepare save");
+    } finally {
+      setLoading(false);
+    }
+  }, [classId, artifactMarkdown, lessonDate, onError, runWithSessionRecovery, setBeforePlan, setInReview]);
+
+  if (inReview) {
+    return (
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="lesson-date-review">Lesson date</Label>
+          <Input
+            id="lesson-date-review"
+            type="date"
+            value={lessonDate}
+            onChange={(e) => setLessonDate(e.target.value)}
+            className="w-[180px]"
+            disabled={loading}
+          />
+        </div>
+        <Button variant="ghost" onClick={() => setInReview(false)} disabled={loading}>
+          Back
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="lesson-date">Lesson date</Label>
+          <Input
+            id="lesson-date"
+            type="date"
+            value={lessonDate}
+            onChange={(e) => setLessonDate(e.target.value)}
+            className="w-[180px]"
+          />
+        </div>
+        <Button className="w-fit" onClick={handleReady} disabled={loading || isUpdating}>
+          {loading ? "Preparing save…" : "Ready to save plan"}
+        </Button>
+      </div>
+      {readyToSave && (
+        <p className="text-xs text-primary">
+          Plan looks complete — pick a date, then review changes before saving.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function PlanWorkspace({
+  classId,
+  onError,
+}: {
+  classId: string;
+  onError: (message: string | null) => void;
+}) {
+  const router = useRouter();
+  const { artifactMarkdown, runWithSessionRecovery } = useArtifactSession();
+  const [inReview, setInReview] = useState(false);
+  const [lessonDate, setLessonDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [beforePlan, setBeforePlan] = useState("");
+  const [approved, setApproved] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  const fileItem = useMemo(() => {
+    if (!inReview || !lessonDate.trim()) return null;
+    return fromPlanSave(classId, lessonDate.trim(), beforePlan, artifactMarkdown, approved);
+  }, [inReview, classId, lessonDate, beforePlan, artifactMarkdown, approved]);
+
+  const savePlan = useCallback(async () => {
+    if (!approved || !lessonDate.trim()) return;
+    setLoading(true);
+    onError(null);
+    try {
+      await runWithSessionRecovery((sessionId) =>
+        client.planSave(classId, sessionId, lessonDate.trim(), artifactMarkdown),
+      );
+      router.push(`/classes/${classId}/lessons/${encodeURIComponent(lessonDate.trim())}`);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setLoading(false);
+    }
+  }, [approved, lessonDate, classId, artifactMarkdown, onError, router, runWithSessionRecovery]);
+
+  useEffect(() => {
+    if (!inReview || !lessonDate.trim()) return;
+    const path = `wiki/classes/${classId}/lessons/${lessonDate.trim()}/lesson_plan.md`;
+    let cancelled = false;
+    void client.getWikiFile(classId, path).then(
+      (file) => {
+        if (!cancelled) setBeforePlan(file.markdown);
+      },
+      () => {
+        if (!cancelled) setBeforePlan("");
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [inReview, classId, lessonDate]);
+
+  return (
+    <ArtifactSessionWorkspace
+      thread={<PlanThread />}
+      draftPanel={
+        <ArtifactDraftPanel
+          title="Lesson plan"
+          placeholder="Your lesson plan will build here as you chat, or type directly…"
+          updatingLabel="Updating plan from chat…"
+        />
+      }
+      footer={
+        <PlanSaveFooter
+          classId={classId}
+          onError={onError}
+          inReview={inReview}
+          setInReview={setInReview}
+          lessonDate={lessonDate}
+          setLessonDate={setLessonDate}
+          setBeforePlan={setBeforePlan}
+        />
+      }
+      reviewDiff={
+        inReview && fileItem ? (
+          <MarkdownLineDiff
+            path={fileItem.path}
+            before={fileItem.before}
+            after={fileItem.after}
+            className="h-full min-h-[12rem]"
+          />
+        ) : null
+      }
+      reviewFileList={
+        inReview && fileItem ? (
+          <FileChangeReviewPanel
+            items={[fileItem]}
+            selectedPath={fileItem.path}
+            onSelectPath={() => {}}
+            onSetApproved={(_, v) => setApproved(v)}
+            onUndoAll={() => setInReview(false)}
+            onKeepAll={() => {
+              setApproved(true);
+              void savePlan();
+            }}
+            onSave={savePlan}
+            saving={loading}
+            saveDisabled={!approved}
+            saveLabel="Save plan"
+          />
+        ) : null
+      }
+    />
+  );
+}
 
 export default function PlanPage() {
   const params = useParams();
   const classId = params.classId as string;
-  const [plan, setPlan] = useState<LessonPlan | null>(null);
-  const [markdown, setMarkdown] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function generate() {
-    setLoading(true);
-    setError(null);
-    try {
-      const p = await client.planLesson(classId);
-      setPlan(p);
-      setMarkdown(planToMarkdown(p));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to generate plan");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const bootstrap = useCallback(
+    async (opts?: { preserveMarkdown?: string }) => {
+      const session = await client.startPlanSession(classId);
+      let draft = await client.planGetDraft(classId, session.session_id);
+      if (opts?.preserveMarkdown) {
+        await client.planUpdateDraft(classId, session.session_id, opts.preserveMarkdown);
+        draft = await client.planGetDraft(classId, session.session_id);
+      }
+      return {
+        sessionId: session.session_id,
+        initialMarkdown: draft.plan_markdown,
+        openingMessage: session.opening_message,
+      };
+    },
+    [classId],
+  );
 
   return (
-    <div>
-      <PageHeader
-        backHref={`/classes/${classId}`}
-        backLabel="Class home"
-        title="Create lesson plan"
-        description="Generate a 45-minute plan grounded in your class wiki memory."
-      />
-
-      {error && (
-        <Alert className="mb-6 border-destructive/50 bg-destructive/5 text-destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+    <ArtifactSessionPage
+      mode="plan"
+      classId={classId}
+      title="Create lesson plan"
+      description="Chat to plan the next lesson, refine the draft on the right, then save to a lesson date."
+      bootstrap={bootstrap}
+      renderBody={({ onError }: ArtifactSessionBodyProps) => (
+        <PlanWorkspace classId={classId} onError={onError} />
       )}
-
-      <Button onClick={generate} disabled={loading}>
-        {loading ? "Generating…" : "Generate next lesson plan"}
-      </Button>
-
-      {plan && (
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>{plan.title}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Textarea
-              className="min-h-[480px] font-mono text-sm"
-              value={markdown}
-              onChange={(e) => setMarkdown(e.target.value)}
-            />
-          </CardContent>
-        </Card>
-      )}
-    </div>
+    />
   );
 }

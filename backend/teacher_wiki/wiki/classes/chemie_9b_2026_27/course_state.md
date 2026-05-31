@@ -1,13 +1,13 @@
 # Course State
 
 ## Current unit
-- Redox reactions basics (specifics needed)
+- Focus on redox reactions, particularly involving metals.
 
 ## Last lesson
-- 2026-05-25: Redox Chemistry
+- 2026-05-29: Redox Reactions with Metals
 
 ## Next planned focus
-- See open loops
+- Next lecture, focus on anions and clarify the misconception that oxidation always requires oxygen.
 
 ## Overall status
-- Updated 2026-05-25
+- Updated 2026-05-29

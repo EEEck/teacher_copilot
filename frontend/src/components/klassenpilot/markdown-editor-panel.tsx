@@ -1,0 +1,133 @@
+"use client";
+
+import { Redo2, Undo2 } from "lucide-react";
+import { useState } from "react";
+
+import { MarkdownPreview } from "@/components/klassenpilot/markdown-preview";
+import { Button } from "@/components/ui/button";
+import { SegmentedToggle } from "@/components/ui/segmented-toggle";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+
+type ViewMode = "edit" | "preview";
+
+export type MarkdownEditorPanelProps = {
+  label: string;
+  markdown: string;
+  onChange?: (value: string) => void;
+  placeholder?: string;
+  /** Shown in preview when markdown is empty; omit for artifact drafts (empty preview). */
+  emptyPreviewFallback?: string;
+  readOnly?: boolean;
+  className?: string;
+  isUpdating?: boolean;
+  updatingLabel?: string;
+  syncStatus?: "idle" | "saving" | "error";
+  showUndoRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+};
+
+export function MarkdownEditorPanel({
+  label,
+  markdown,
+  onChange,
+  placeholder,
+  emptyPreviewFallback,
+  readOnly = false,
+  className,
+  isUpdating = false,
+  updatingLabel = "Updating draft from chat…",
+  syncStatus = "idle",
+  showUndoRedo = false,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
+}: MarkdownEditorPanelProps) {
+  const [viewMode, setViewMode] = useState<ViewMode>("preview");
+  const editable = !readOnly && Boolean(onChange);
+  const showToggle = editable;
+
+  const previewMarkdown =
+    markdown.trim() !== ""
+      ? markdown
+      : (emptyPreviewFallback ?? "");
+
+  return (
+    <div className={cn("flex h-full flex-col gap-2", className)}>
+      <div className="flex shrink-0 items-center justify-between">
+        <p className="text-sm font-medium">{label}</p>
+        <div className="flex items-center gap-1">
+          {showUndoRedo && (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={onUndo}
+                disabled={!canUndo}
+                aria-label="Undo"
+              >
+                <Undo2 className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={onRedo}
+                disabled={!canRedo}
+                aria-label="Redo"
+              >
+                <Redo2 className="size-4" />
+              </Button>
+            </>
+          )}
+          {showToggle && (
+            <SegmentedToggle
+              className={showUndoRedo ? "ml-1" : undefined}
+              value={viewMode}
+              onValueChange={(v) => setViewMode(v as ViewMode)}
+              size="sm"
+              aria-label="View mode"
+              options={[
+                { value: "preview", label: "Preview" },
+                { value: "edit", label: "Edit" },
+              ]}
+            />
+          )}
+        </div>
+      </div>
+
+      {isUpdating && (
+        <p className="shrink-0 text-xs text-muted-foreground">{updatingLabel}</p>
+      )}
+      {!isUpdating && syncStatus === "saving" && (
+        <p className="shrink-0 text-xs text-muted-foreground">Saving…</p>
+      )}
+      {!isUpdating && syncStatus === "error" && (
+        <p className="shrink-0 text-xs text-destructive">
+          Couldn&apos;t sync your edits — they&apos;re kept locally; keep typing or retry.
+        </p>
+      )}
+
+      {editable && viewMode === "edit" ? (
+        <Textarea
+          className="min-h-0 flex-1 resize-none font-mono text-sm"
+          value={markdown}
+          onChange={(e) => onChange?.(e.target.value)}
+          placeholder={placeholder}
+          aria-label={`${label} markdown`}
+        />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-md border bg-background p-3">
+          <MarkdownPreview markdown={previewMarkdown} />
+        </div>
+      )}
+    </div>
+  );
+}

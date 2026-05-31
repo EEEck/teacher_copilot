@@ -8,21 +8,73 @@
 param(
     [switch]$BackendOnly,
     [switch]$FrontendOnly,
-    [switch]$NoNewWindow
+    [switch]$NoNewWindow,
+    [switch]$Stop,
+    [switch]$Status
 )
 
 $ErrorActionPreference = "SilentlyContinue"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$BackendPort = 8001
+$BackendPort = 8010
 $FrontendPort = 3000
+
+function Import-DotEnvFile {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) {
+        Write-Warning "No .env at $Path (OPENAI_API_KEY must be set another way)"
+        return
+    }
+    Get-Content $Path | ForEach-Object {
+        $line = $_.Trim()
+        if (-not $line -or $line.StartsWith("#")) { return }
+        $eq = $line.IndexOf("=")
+        if ($eq -lt 1) { return }
+        $name = $line.Substring(0, $eq).Trim()
+        $value = $line.Substring($eq + 1).Trim().Trim('"').Trim("'")
+        if ($name) {
+            [Environment]::SetEnvironmentVariable($name, $value, "Process")
+        }
+    }
+}
+
+function Get-BackendEnvBootstrap {
+    return @"
+if (Test-Path '.env') {
+  Get-Content '.env' | ForEach-Object {
+    `$line = `$_.Trim()
+    if (-not `$line -or `$line.StartsWith('#')) { return }
+    `$eq = `$line.IndexOf('=')
+    if (`$eq -lt 1) { return }
+    `$name = `$line.Substring(0, `$eq).Trim()
+    `$value = `$line.Substring(`$eq + 1).Trim().Trim('"').Trim("'")
+    if (`$name) { Set-Item -Path "env:`$name" -Value `$value }
+  }
+}
+"@
+}
 
 function Stop-PortListeners {
     param([int]$Port)
-    Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue |
-        Select-Object -ExpandProperty OwningProcess -Unique |
-        ForEach-Object {
-            if ($_ -gt 0) { Stop-Process -Id $_ -Force }
+    $pids = @()
+    $pids += Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique
+    if (-not $pids) {
+        $pids += netstat -ano | Select-String ":$Port\s" | Select-String "LISTENING" |
+            ForEach-Object {
+                $parts = ($_ -split '\s+') | Where-Object { $_ }
+                $parts[-1]
+            }
+    }
+    foreach ($procId in ($pids | Select-Object -Unique)) {
+        if ($procId -match '^\d+$' -and [int]$procId -gt 0) {
+            Stop-Process -Id ([int]$procId) -Force -ErrorAction SilentlyContinue
         }
+    }
+    if (Get-Command npx -ErrorAction SilentlyContinue) {
+        npx --yes kill-port $Port 2>$null
+    } elseif (Test-Path "${env:ProgramFiles}\nodejs\npx.cmd") {
+        & "${env:ProgramFiles}\nodejs\npx.cmd" --yes kill-port $Port 2>$null
+    }
 }
 
 function Stop-ProjectDevProcesses {
@@ -65,6 +117,33 @@ function Start-DevProcess {
     }
 }
 
+function Test-PortListening {
+    param([int]$Port)
+    return [bool](Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+}
+
+if ($Status) {
+    Write-Host "Ports:"
+    foreach ($port in @($BackendPort, $FrontendPort)) {
+        if (Test-PortListening -Port $port) {
+            Write-Host "  :$port  listening"
+        } else {
+            Write-Host "  :$port  free"
+        }
+    }
+    exit 0
+}
+
+if ($Stop) {
+    Write-Host "Stopping dev servers..."
+    Stop-ProjectDevProcesses
+    Stop-PortListeners -Port $BackendPort
+    Stop-PortListeners -Port $FrontendPort
+    Start-Sleep -Seconds 2
+    Write-Host "Done."
+    exit 0
+}
+
 $restartBackend = -not $FrontendOnly
 $restartFrontend = -not $BackendOnly
 
@@ -78,11 +157,13 @@ if ($restartBackend) {
     $backendDir = Join-Path $Root "backend"
     $uvicorn = Join-Path $backendDir ".venv\Scripts\uvicorn.exe"
     if (-not (Test-Path $uvicorn)) {
-        Write-Error "Backend venv not found. Run: cd backend; python -m venv .venv; pip install -r requirements.txt"
+        Write-Error "Backend venv not found. Run: cd backend; python -m venv .venv; pip install -e ."
         exit 1
     }
+    Import-DotEnvFile -Path (Join-Path $backendDir ".env")
+    $envBootstrap = Get-BackendEnvBootstrap
     Start-DevProcess -Name "backend" -WorkingDirectory $backendDir `
-        -Command ".\.venv\Scripts\uvicorn app.main:app --reload --port $BackendPort"
+        -Command "$envBootstrap .\.venv\Scripts\uvicorn app.main:app --reload --port $BackendPort"
 }
 
 if ($restartFrontend) {
@@ -91,7 +172,10 @@ if ($restartFrontend) {
         Write-Error "Frontend deps not installed. Run: cd frontend; npm install"
         exit 1
     }
-    Start-DevProcess -Name "frontend" -WorkingDirectory $frontendDir -Command "npm run dev"
+    $npmCmd = "npm"
+    $npmPath = Join-Path ${env:ProgramFiles} "nodejs\npm.cmd"
+    if (Test-Path $npmPath) { $npmCmd = "& '$npmPath'" } else { $npmCmd = "npm" }
+    Start-DevProcess -Name "frontend" -WorkingDirectory $frontendDir -Command "$npmCmd run dev"
 }
 
 Start-Sleep -Seconds 3
@@ -100,3 +184,10 @@ Write-Host ""
 Write-Host "Dev servers restarted:"
 if ($restartBackend) { Write-Host "  Backend:  http://127.0.0.1:$BackendPort/api/health" }
 if ($restartFrontend) { Write-Host "  Frontend: http://localhost:$FrontendPort" }
+if ($restartFrontend) {
+    $feUp = Get-NetTCPConnection -LocalPort $FrontendPort -State Listen -ErrorAction SilentlyContinue
+    if (-not $feUp) {
+        Write-Warning "Frontend may not have started (npm not on PATH?). Run manually:"
+        Write-Host "  cd frontend; npm run dev"
+    }
+}

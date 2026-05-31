@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_agents, get_ingest_service, get_plan_service, get_wiki
+from app.config import get_settings
+from app.openai_bootstrap import is_openai_configured
 from app.schemas.api import (
     ChatRequest,
     ChatResponse,
@@ -16,12 +19,22 @@ from app.schemas.api import (
     IngestSession,
     LessonDetail,
     LessonPlan,
+    PlanChatRequest,
+    PlanChatResponse,
+    PlanDraft,
     PlanLessonRequest,
+    PlanSession,
     ReviseLessonRequest,
     ReviseLessonResponse,
+    SavePlanRequest,
+    SavePlanResponse,
     UpdateDraftRequest,
+    UpdatePlanDraftRequest,
+    WikiFileResponse,
+    WikiLintResponse,
 )
-from app.services.ingest_service import IngestService, PlanService
+from app.services.ingest_service import IngestService
+from app.services.plan_service import PlanService
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.wiki_store import WikiStore
 
@@ -30,7 +43,11 @@ router = APIRouter(prefix="/api")
 
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    return HealthResponse()
+    settings = get_settings()
+    return HealthResponse(
+        agent_max_turns=settings.agent_max_turns,
+        openai_configured=is_openai_configured(settings),
+    )
 
 
 @router.get("/classes", response_model=ClassesResponse)
@@ -76,8 +93,6 @@ def revise_lesson(
         return ReviseLessonResponse(entry=entry, applied_wiki_paths=applied)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/classes/{class_id}/snapshot", response_model=ClassMemorySnapshot)
@@ -88,8 +103,48 @@ def get_snapshot(class_id: str, wiki: WikiStore = Depends(get_wiki)) -> ClassMem
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
+@router.get("/classes/{class_id}/wiki/file", response_model=WikiFileResponse)
+def get_wiki_file(
+    class_id: str,
+    path: str,
+    wiki: WikiStore = Depends(get_wiki),
+) -> WikiFileResponse:
+    try:
+        wiki.get_class(class_id)
+        rel = path.strip().lstrip("/")
+        if not rel:
+            raise HTTPException(status_code=400, detail="path query parameter is required")
+        full = wiki.resolve_path(rel)
+        if not full.exists():
+            raise HTTPException(status_code=404, detail=f"Wiki file not found: {rel}")
+        markdown = wiki.read_wiki_page(rel, max_chars=120_000)
+        return WikiFileResponse(wiki_path=rel, markdown=markdown)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post("/classes/{class_id}/wiki/lint", response_model=WikiLintResponse)
+async def lint_wiki(
+    class_id: str,
+    agents: AgentRunner = Depends(get_agents),
+    wiki: WikiStore = Depends(get_wiki),
+) -> WikiLintResponse:
+    try:
+        wiki.get_class(class_id)
+        report = await agents.lint_wiki(class_id)
+        return WikiLintResponse(class_id=class_id, report_markdown=report)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
 @router.post("/classes/{class_id}/ingest/sessions", response_model=IngestSession)
-def start_ingest_session(
+async def start_ingest_session(
     class_id: str,
     ingest: IngestService = Depends(get_ingest_service),
     wiki: WikiStore = Depends(get_wiki),
@@ -98,14 +153,14 @@ def start_ingest_session(
         wiki.get_class(class_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    return ingest.start_session(class_id)
+    return await ingest.start_session(class_id)
 
 
 @router.post(
     "/classes/{class_id}/ingest/sessions/{session_id}/chat",
     response_model=ChatResponse,
 )
-def ingest_chat(
+async def ingest_chat(
     class_id: str,
     session_id: str,
     body: ChatRequest,
@@ -115,14 +170,47 @@ def ingest_chat(
         session = ingest.get_session(session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
-        return ingest.chat(session_id, body.message, body.diary_markdown)
+        return await ingest.chat(
+            session_id, body.message, body.diary_markdown, attachments=body.attachments
+        )
     except KeyError as e:
-        msg = str(e)
-        if msg.startswith("Unknown session:"):
+        msg = e.args[0] if e.args else str(e)
+        if isinstance(msg, str) and msg.startswith("Unknown session:"):
             raise HTTPException(status_code=404, detail=msg) from e
-        raise HTTPException(status_code=500, detail=msg) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise  # unexpected KeyError -> global handler logs full traceback
+
+
+@router.post("/classes/{class_id}/ingest/sessions/{session_id}/chat/stream")
+async def ingest_chat_stream(
+    class_id: str,
+    session_id: str,
+    body: ChatRequest,
+    ingest: IngestService = Depends(get_ingest_service),
+):
+    try:
+        session = ingest.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        async def event_generator():
+            async for line in ingest.chat_stream(
+                session_id,
+                body.message,
+                body.diary_markdown,
+                attachments=body.attachments,
+            ):
+                yield line
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+    except KeyError as e:
+        msg = e.args[0] if e.args else str(e)
+        if isinstance(msg, str) and msg.startswith("Unknown session:"):
+            raise HTTPException(status_code=404, detail=msg) from e
+        raise
 
 
 @router.patch(
@@ -148,7 +236,7 @@ def ingest_update_draft(
     "/classes/{class_id}/ingest/sessions/{session_id}/propose",
     response_model=IngestDraft,
 )
-def ingest_propose(
+async def ingest_propose(
     class_id: str,
     session_id: str,
     ingest: IngestService = Depends(get_ingest_service),
@@ -157,11 +245,9 @@ def ingest_propose(
         session = ingest.get_session(session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
-        return ingest.propose(session_id)
+        return await ingest.propose(session_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get(
@@ -196,12 +282,140 @@ def ingest_commit(
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
         return ingest.commit(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post("/classes/{class_id}/plan/sessions", response_model=PlanSession)
+async def start_plan_session(
+    class_id: str,
+    plan_svc: PlanService = Depends(get_plan_service),
+    wiki: WikiStore = Depends(get_wiki),
+) -> PlanSession:
+    try:
+        wiki.get_class(class_id)
+        return await plan_svc.start_session(class_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@router.post(
+    "/classes/{class_id}/plan/sessions/{session_id}/chat",
+    response_model=PlanChatResponse,
+)
+async def plan_chat(
+    class_id: str,
+    session_id: str,
+    body: PlanChatRequest,
+    plan_svc: PlanService = Depends(get_plan_service),
+) -> PlanChatResponse:
+    try:
+        session = plan_svc.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return await plan_svc.chat(
+            session_id,
+            body.message,
+            body.plan_markdown,
+            attachments=body.attachments,
+        )
+    except KeyError as e:
+        msg = e.args[0] if e.args else str(e)
+        if isinstance(msg, str) and msg.startswith("Unknown session:"):
+            raise HTTPException(status_code=404, detail=msg) from e
+        raise  # unexpected KeyError -> global handler logs full traceback
+
+
+@router.post("/classes/{class_id}/plan/sessions/{session_id}/chat/stream")
+async def plan_chat_stream(
+    class_id: str,
+    session_id: str,
+    body: PlanChatRequest,
+    plan_svc: PlanService = Depends(get_plan_service),
+):
+    try:
+        session = plan_svc.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        async def event_generator():
+            async for line in plan_svc.chat_stream(
+                session_id,
+                body.message,
+                body.plan_markdown,
+                attachments=body.attachments,
+            ):
+                yield line
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+    except KeyError as e:
+        msg = e.args[0] if e.args else str(e)
+        if isinstance(msg, str) and msg.startswith("Unknown session:"):
+            raise HTTPException(status_code=404, detail=msg) from e
+        raise
+
+
+@router.get(
+    "/classes/{class_id}/plan/sessions/{session_id}/draft",
+    response_model=PlanDraft,
+)
+def plan_draft(
+    class_id: str,
+    session_id: str,
+    plan_svc: PlanService = Depends(get_plan_service),
+) -> PlanDraft:
+    try:
+        session = plan_svc.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return plan_svc.get_draft(session_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.patch(
+    "/classes/{class_id}/plan/sessions/{session_id}/draft",
+    response_model=PlanDraft,
+)
+def plan_update_draft(
+    class_id: str,
+    session_id: str,
+    body: UpdatePlanDraftRequest,
+    plan_svc: PlanService = Depends(get_plan_service),
+) -> PlanDraft:
+    try:
+        session = plan_svc.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return plan_svc.update_draft(session_id, body.plan_markdown)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post("/classes/{class_id}/plan/save", response_model=SavePlanResponse)
+def plan_save(
+    class_id: str,
+    body: SavePlanRequest,
+    plan_svc: PlanService = Depends(get_plan_service),
+    wiki: WikiStore = Depends(get_wiki),
+) -> SavePlanResponse:
+    try:
+        wiki.get_class(class_id)
+        return plan_svc.save(class_id, body)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.post("/classes/{class_id}/plan-lesson", response_model=LessonPlan)
-def plan_lesson(
+async def plan_lesson(
     class_id: str,
     body: PlanLessonRequest,
     plan_svc: PlanService = Depends(get_plan_service),
@@ -209,8 +423,6 @@ def plan_lesson(
 ) -> LessonPlan:
     try:
         wiki.get_class(class_id)
-        return plan_svc.generate(class_id, body)
+        return await plan_svc.generate(class_id, body)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
