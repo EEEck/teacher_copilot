@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import {
   parseSseChunk,
@@ -54,10 +54,14 @@ describe("streamPartsToRunContent", () => {
         argsText: '{"q":"acids"}',
       },
     ]);
+    assert(content);
     expect(content).toHaveLength(1);
-    const part = content[0] as { type: string; args?: Record<string, unknown> };
+    const part = content[0];
+    assert(part);
     expect(part.type).toBe("tool-call");
-    expect(part.args).toEqual({ q: "acids" });
+    if (part.type === "tool-call") {
+      expect(part.args).toEqual({ q: "acids" });
+    }
   });
 
   it("falls back to raw args text when JSON is invalid", () => {
@@ -69,7 +73,12 @@ describe("streamPartsToRunContent", () => {
         argsText: "not-json",
       },
     ]);
-    const part = content[0] as { args?: Record<string, unknown> };
-    expect(part.args).toEqual({ raw: "not-json" });
+    assert(content);
+    expect(content).toHaveLength(1);
+    const part = content[0];
+    assert(part);
+    if (part.type === "tool-call") {
+      expect(part.args).toEqual({ raw: "not-json" });
+    }
   });
 });
