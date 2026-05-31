@@ -43,8 +43,14 @@ wiki/classes/{class_id}/
 
 1. Read `index.md` first, then relevant class pages via tools.
 2. Chat → update diary draft → `compile_from_diary` proposes wiki diffs.
-3. Teacher approves per file in UI → `commit_ingest` writes raw + approved paths.
-4. System updates `timeline.md`, student entity pages, `index.md`, `log.md`.
+3. Teacher approves per file in UI → `commit_ingest` writes **only** approved paths (plus log/index rebuild).
+4. Unchecked files (e.g. a student entity page) are not written — there is no bypass after commit.
+
+### Lesson revise (not ingest HITL)
+
+1. Teacher submits an updated diary for an existing lesson date via the revise API.
+2. The system re-writes lesson results, roll-ups, students, timeline, and raw in one deterministic pass (no per-file approval UI).
+3. Prefer ingest + checkboxes for new lessons; use revise only to fix an already-committed lesson.
 
 ### Query / plan
 
@@ -59,6 +65,6 @@ wiki/classes/{class_id}/
 
 ## Rules
 
-- **Never** write curated wiki without teacher approval (ingest commit or lesson revise endpoint).
+- **Never** write curated wiki on ingest without teacher approval (`commit_ingest` per-file checkboxes). Lesson revise is an explicit teacher action that re-applies all derived files for that date.
 - Student IDs: `S-001` … `S-999` only.
 - Do not infer sensitive facts beyond what the teacher said.

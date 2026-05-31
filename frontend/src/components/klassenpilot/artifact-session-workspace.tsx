@@ -12,11 +12,18 @@ export function ArtifactSessionWorkspace({
   thread,
   draftPanel,
   footer,
+  reviewDiff,
+  reviewFileList,
 }: {
   thread: ReactNode;
   draftPanel: ReactNode;
   footer?: ReactNode;
+  /** Shown above the thread while reviewing proposed file writes (Cursor-style diff). */
+  reviewDiff?: ReactNode;
+  /** Compact file list below the thread during review. */
+  reviewFileList?: ReactNode;
 }) {
+  const inReview = Boolean(reviewDiff || reviewFileList);
   return (
     // Fixed `vh` height (NOT dvh): the thread scrolls *inside* the panel instead
     // of growing the page. dvh fluctuates with scrollbars/toolbars and, combined
@@ -31,7 +38,21 @@ export function ArtifactSessionWorkspace({
         <div className="flex h-full min-h-0 flex-col gap-3 p-4">
           <Card className="min-h-0 flex-1 overflow-hidden">
             <CardContent className="flex h-full min-h-0 flex-col p-0">
-              {thread}
+              {reviewDiff ? (
+                <div className="max-h-[42%] shrink-0 overflow-hidden border-b border-border p-3">
+                  {reviewDiff}
+                </div>
+              ) : null}
+              <div
+                className={
+                  inReview ? "min-h-0 flex-1 overflow-hidden" : "flex h-full min-h-0 flex-col"
+                }
+              >
+                {thread}
+              </div>
+              {reviewFileList ? (
+                <div className="shrink-0 border-t border-border p-3">{reviewFileList}</div>
+              ) : null}
             </CardContent>
           </Card>
           {footer ? <div className="shrink-0">{footer}</div> : null}

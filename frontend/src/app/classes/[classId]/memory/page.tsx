@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { IngestThread } from "@/components/assistant-ui/ingest-thread";
 import {
@@ -11,15 +11,15 @@ import {
 } from "@/components/klassenpilot/artifact-session-page";
 import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
 import { DiaryDraftPanel } from "@/components/klassenpilot/diary-draft-panel";
-import { WikiProposalCard } from "@/components/klassenpilot/wiki-proposal-card";
+import {
+  FileChangeReviewPanel,
+  MarkdownLineDiff,
+  useFileChangeReview,
+  WikiProposalEditor,
+} from "@/components/klassenpilot/review";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  client,
-  uniqueWikiProposals,
-  type IngestDraft,
-  type WikiUpdateProposal,
-} from "@/lib/api";
+import { client, uniqueWikiProposals, type WikiUpdateProposal } from "@/lib/api";
 
 type CommitResult = {
   lesson_date: string;
@@ -28,49 +28,17 @@ type CommitResult = {
   applied_wiki_paths: string[];
 };
 
-function wikiProposalCategory(path: string): string {
-  if (path.includes("lesson_results")) return "Lesson";
-  if (path.startsWith("raw/")) return "Raw archive";
-  if (path.includes("/students/")) return "Students";
-  if (path.endsWith("timeline.md")) return "Timeline";
-  if (
-    path.includes("course_state") ||
-    path.includes("misconceptions") ||
-    path.includes("open_loops") ||
-    path.includes("student_notes")
-  ) {
-    return "Roll-ups";
-  }
-  return "Other";
-}
-
-const CATEGORY_ORDER = ["Lesson", "Roll-ups", "Students", "Timeline", "Raw archive", "Other"];
-
-function groupProposals(proposals: WikiUpdateProposal[]) {
-  const groups = new Map<string, WikiUpdateProposal[]>();
-  for (const p of uniqueWikiProposals(proposals)) {
-    const cat = wikiProposalCategory(p.wiki_path);
-    const list = groups.get(cat) ?? [];
-    list.push(p);
-    groups.set(cat, list);
-  }
-  return CATEGORY_ORDER.filter((k) => groups.has(k)).map((category) => ({
-    category,
-    items: groups.get(category)!,
-  }));
-}
-
 function ReadyToSaveButton({ onReady, loading }: { onReady: () => void; loading: boolean }) {
   const { isUpdating, readyToSave } = useArtifactSession();
 
   return (
     <div className="flex flex-col gap-1">
       <Button className="w-fit" onClick={onReady} disabled={loading || isUpdating}>
-        Ready to save memory
+        {loading ? "Compiling wiki updates…" : "Ready to save memory"}
       </Button>
-      {readyToSave && (
+      {readyToSave && !loading && (
         <p className="text-xs text-primary">
-          All sections filled — review wiki updates below before saving.
+          All sections filled — compile and review wiki file changes before saving.
         </p>
       )}
     </div>
@@ -86,17 +54,33 @@ function MemoryWorkspace({
 }) {
   const router = useRouter();
   const { artifactMarkdown: diaryMarkdown, runWithSessionRecovery } = useArtifactSession();
-  const [draft, setDraft] = useState<IngestDraft | null>(null);
-  const [wikiEdits, setWikiEdits] = useState<
-    Record<string, { content: string; approved: boolean }>
-  >({});
+  const [proposals, setProposals] = useState<WikiUpdateProposal[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showWiki, setShowWiki] = useState(false);
+  const [inReview, setInReview] = useState(false);
+  const [editingWiki, setEditingWiki] = useState(false);
   const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
 
-  const grouped = useMemo(
-    () => (draft ? groupProposals(draft.wiki_proposals) : []),
-    [draft],
+  const {
+    items: reviewItems,
+    selected: selectedChange,
+    selectedPath,
+    setSelectedPath,
+    contentByPath,
+    updateContent,
+    getCommitPayload,
+    setApproved,
+    approveAll,
+    initFromProposals,
+    clear: clearReview,
+    hasLessonResultsApproved,
+  } = useFileChangeReview(proposals);
+
+  const selectFile = useCallback(
+    (path: string) => {
+      setSelectedPath(path);
+      setEditingWiki(true);
+    },
+    [setSelectedPath],
   );
 
   const viewerAllHref = commitResult
@@ -114,38 +98,23 @@ function MemoryWorkspace({
       const d = await runWithSessionRecovery((sessionId) =>
         client.ingestPropose(classId, sessionId),
       );
-      setDraft(d);
-      const edits: Record<string, { content: string; approved: boolean }> = {};
-      for (const p of uniqueWikiProposals(d.wiki_proposals)) {
-        edits[p.wiki_path] = { content: p.proposed_content, approved: true };
-      }
-      setWikiEdits(edits);
-      setShowWiki(true);
-      requestAnimationFrame(() => {
-        document.getElementById("wiki-review")?.scrollIntoView({ behavior: "smooth" });
-      });
+      const unique = uniqueWikiProposals(d.wiki_proposals);
+      setProposals(unique);
+      initFromProposals(unique);
+      setInReview(true);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Could not prepare save");
     } finally {
       setLoading(false);
     }
-  }, [classId, diaryMarkdown, onError, runWithSessionRecovery]);
+  }, [classId, diaryMarkdown, onError, runWithSessionRecovery, initFromProposals]);
 
   const commit = useCallback(async () => {
     setLoading(true);
     onError(null);
     try {
       const result = await runWithSessionRecovery((sessionId) =>
-        client.ingestCommit(
-          classId,
-          sessionId,
-          diaryMarkdown,
-          Object.entries(wikiEdits).map(([wiki_path, v]) => ({
-            wiki_path,
-            content: v.content,
-            approved: v.approved,
-          })),
-        ),
+        client.ingestCommit(classId, sessionId, diaryMarkdown, getCommitPayload()),
       );
       setCommitResult({
         lesson_date: result.lesson_date,
@@ -153,26 +122,83 @@ function MemoryWorkspace({
         log_entry_id: result.log_entry_id,
         applied_wiki_paths: result.applied_wiki_paths,
       });
-      setShowWiki(false);
+      setInReview(false);
+      setProposals([]);
+      clearReview();
       router.refresh();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Commit failed");
     } finally {
       setLoading(false);
     }
-  }, [classId, diaryMarkdown, wikiEdits, onError, router, runWithSessionRecovery]);
+  }, [classId, diaryMarkdown, getCommitPayload, clearReview, onError, router, runWithSessionRecovery]);
 
-  const hasLessonResultsApproved = Object.entries(wikiEdits).some(
-    ([path, v]) => v.approved && path.includes("lesson_results"),
-  );
+  const keepAll = useCallback(() => {
+    approveAll();
+    void commit();
+  }, [approveAll, commit]);
+
+  const undoAll = useCallback(() => {
+    setInReview(false);
+    setEditingWiki(false);
+    setProposals([]);
+    clearReview();
+    onError(null);
+  }, [onError, clearReview]);
+
+  const draftPanel =
+    inReview && editingWiki && selectedPath && selectedPath in contentByPath ? (
+      <WikiProposalEditor
+        wikiPath={selectedPath}
+        markdown={contentByPath[selectedPath]}
+        onChange={(value) => updateContent(selectedPath, value)}
+        onBackToDiary={() => setEditingWiki(false)}
+      />
+    ) : (
+      <DiaryDraftPanel />
+    );
 
   return (
     <div className="space-y-8">
       <ArtifactSessionWorkspace
         thread={<IngestThread />}
-        draftPanel={<DiaryDraftPanel />}
-        footer={<ReadyToSaveButton onReady={handleReadyToSave} loading={loading} />}
+        draftPanel={draftPanel}
+        footer={
+          !inReview ? <ReadyToSaveButton onReady={handleReadyToSave} loading={loading} /> : null
+        }
+        reviewDiff={
+          inReview && selectedChange ? (
+            <MarkdownLineDiff
+              path={selectedChange.path}
+              before={selectedChange.before}
+              after={selectedChange.after}
+              className="h-full min-h-[12rem]"
+            />
+          ) : null
+        }
+        reviewFileList={
+          inReview && reviewItems.length > 0 ? (
+            <FileChangeReviewPanel
+              items={reviewItems}
+              selectedPath={selectedPath ?? reviewItems[0]?.path ?? null}
+              onSelectPath={selectFile}
+              onSetApproved={setApproved}
+              onUndoAll={undoAll}
+              onKeepAll={keepAll}
+              onSave={commit}
+              saving={loading}
+              saveDisabled={!hasLessonResultsApproved}
+              saveLabel="Save selected files"
+            />
+          ) : null
+        }
       />
+
+      {inReview && !hasLessonResultsApproved && (
+        <p className="text-xs text-destructive">
+          Keep <span className="font-mono">lesson_results.md</span> to save this lesson to memory.
+        </p>
+      )}
 
       {commitResult && (
         <Card variant="highlight">
@@ -218,55 +244,6 @@ function MemoryWorkspace({
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {showWiki && draft && (
-        <section id="wiki-review" className="scroll-mt-8 space-y-4">
-          <h2 className="text-lg font-semibold">Memory files (wiki)</h2>
-          <p className="text-sm text-muted-foreground">
-            Uncheck any file you do not want written.{" "}
-            <span className="text-foreground">lesson_results.md</span> must stay checked to save.
-          </p>
-          {grouped.map(({ category, items }) => (
-            <div key={category} className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground">{category}</h3>
-              {items.map((p, index) => (
-                <WikiProposalCard
-                  key={`${p.wiki_path}::${index}`}
-                  proposal={p}
-                  content={wikiEdits[p.wiki_path]?.content ?? p.proposed_content}
-                  approved={wikiEdits[p.wiki_path]?.approved ?? true}
-                  onContentChange={(value) =>
-                    setWikiEdits((prev) => ({
-                      ...prev,
-                      [p.wiki_path]: {
-                        content: value,
-                        approved: prev[p.wiki_path]?.approved ?? true,
-                      },
-                    }))
-                  }
-                  onApprovedChange={(value) =>
-                    setWikiEdits((prev) => ({
-                      ...prev,
-                      [p.wiki_path]: {
-                        content: prev[p.wiki_path]?.content ?? p.proposed_content,
-                        approved: value,
-                      },
-                    }))
-                  }
-                />
-              ))}
-            </div>
-          ))}
-          <Button onClick={commit} disabled={loading || !hasLessonResultsApproved}>
-            {loading ? "Saving…" : "Save approved updates"}
-          </Button>
-          {!hasLessonResultsApproved && (
-            <p className="text-xs text-destructive">
-              Approve lesson_results.md to commit this lesson to memory.
-            </p>
-          )}
-        </section>
       )}
     </div>
   );

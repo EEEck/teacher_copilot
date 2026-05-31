@@ -117,7 +117,7 @@ def get_wiki_file(
         full = wiki.resolve_path(rel)
         if not full.exists():
             raise HTTPException(status_code=404, detail=f"Wiki file not found: {rel}")
-        markdown = wiki.read_wiki_page(rel)
+        markdown = wiki.read_wiki_page(rel, max_chars=120_000)
         return WikiFileResponse(wiki_path=rel, markdown=markdown)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e

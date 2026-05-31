@@ -22,9 +22,18 @@ Each ingest diary uses these `##` headings (see `DIARY_SECTION_HEADINGS` in code
 
 ## Commit rules
 
-- `lesson_results.md` must be approved for `commit_ingest`.
-- Unapproved proposal paths are not written.
-- Student entities, student index, and timeline are updated only from approved lesson commit flows.
+### Ingest (`commit_ingest`)
+
+- `compile_from_diary` proposes every path that may change: `lesson_results.md`, roll-ups, `students/S-###.md`, `student_notes.md`, `timeline.md`, and `raw/classes/...`.
+- The teacher approves per file in the UI; only rows with `approved: true` are written.
+- `lesson_results.md` must be approved or commit returns 400.
+- Unapproved paths are never written (no hidden finalize step).
+
+### Lesson revise (`revise_lesson` API)
+
+- Separate from ingest HITL: the teacher edits an existing lesson diary and calls the revise endpoint.
+- Deterministically re-applies lesson results, roll-ups, student entities, student index, and timeline in one shot (no per-file checkboxes).
+- Use ingest when logging a new lesson; use revise when correcting an already-committed lesson.
 
 ## Agent query flow
 

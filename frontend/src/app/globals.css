@@ -16,6 +16,8 @@
     --panel-bg: #f7f9f7;
     --error: #b42318;
     --error-bg: #fdecea;
+    --diff-added-bg: #e8f5ec;
+    --diff-removed-bg: #fdecea;
 
     /* HSL channels for Tailwind opacity modifiers (no blue ring fallback) */
     --background: 0 0% 100%;

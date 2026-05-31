@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { PlanThread } from "@/components/assistant-ui/plan-thread";
 import { ArtifactDraftPanel } from "@/components/klassenpilot/artifact-draft-panel";
@@ -10,41 +10,38 @@ import {
   type ArtifactSessionBodyProps,
 } from "@/components/klassenpilot/artifact-session-page";
 import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
-import { Check } from "lucide-react";
+import {
+  FileChangeReviewPanel,
+  fromPlanSave,
+  MarkdownLineDiff,
+} from "@/components/klassenpilot/review";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { client } from "@/lib/api";
 
-function ReadyToSavePlan({
+function PlanSaveFooter({
   classId,
   onError,
-  onDone,
+  inReview,
+  setInReview,
+  lessonDate,
+  setLessonDate,
+  setBeforePlan,
 }: {
   classId: string;
   onError: (message: string | null) => void;
-  onDone: (lessonDate: string) => void;
+  inReview: boolean;
+  setInReview: (v: boolean) => void;
+  lessonDate: string;
+  setLessonDate: (v: string) => void;
+  setBeforePlan: (v: string) => void;
 }) {
   const { artifactMarkdown, isUpdating, readyToSave, runWithSessionRecovery } =
     useArtifactSession();
   const [loading, setLoading] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [showSave, setShowSave] = useState(false);
-  const [lessonDate, setLessonDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const handleReady = useCallback(async () => {
-    setShowSave(true);
-    onError(null);
-    try {
-      await runWithSessionRecovery((sessionId) =>
-        client.planUpdateDraft(classId, sessionId, artifactMarkdown),
-      );
-    } catch (e) {
-      onError(e instanceof Error ? e.message : "Could not sync draft");
-    }
-  }, [classId, artifactMarkdown, onError, runWithSessionRecovery]);
-
-  const handleSave = useCallback(async () => {
     if (!lessonDate.trim()) {
       onError("Enter a lesson date (YYYY-MM-DD).");
       return;
@@ -52,66 +49,181 @@ function ReadyToSavePlan({
     setLoading(true);
     onError(null);
     try {
-      const result = await runWithSessionRecovery((sessionId) =>
-        client.planSave(classId, sessionId, lessonDate.trim(), artifactMarkdown),
+      await runWithSessionRecovery((sessionId) =>
+        client.planUpdateDraft(classId, sessionId, artifactMarkdown),
       );
-      // Show a clear "Saved" confirmation before navigating to the saved lesson.
-      setSaved(true);
-      setLoading(false);
-      setTimeout(() => onDone(result.lesson_date), 1500);
+      const path = `wiki/classes/${classId}/lessons/${lessonDate.trim()}/lesson_plan.md`;
+      try {
+        const file = await client.getWikiFile(classId, path);
+        setBeforePlan(file.markdown);
+      } catch {
+        setBeforePlan("");
+      }
+      setInReview(true);
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Save failed");
+      onError(e instanceof Error ? e.message : "Could not prepare save");
+    } finally {
       setLoading(false);
     }
-  }, [classId, lessonDate, artifactMarkdown, onError, onDone, runWithSessionRecovery]);
+  }, [classId, artifactMarkdown, lessonDate, onError, runWithSessionRecovery, setBeforePlan, setInReview]);
+
+  if (inReview) {
+    return (
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="lesson-date-review">Lesson date</Label>
+          <Input
+            id="lesson-date-review"
+            type="date"
+            value={lessonDate}
+            onChange={(e) => setLessonDate(e.target.value)}
+            className="w-[180px]"
+            disabled={loading}
+          />
+        </div>
+        <Button variant="ghost" onClick={() => setInReview(false)} disabled={loading}>
+          Back
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3">
-      {!showSave ? (
-        <div className="flex flex-col gap-1">
-          <Button className="w-fit" onClick={handleReady} disabled={loading || isUpdating}>
-            Ready to save plan
-          </Button>
-          {readyToSave && (
-            <p className="text-xs text-primary">Plan looks complete — pick a lesson date to save.</p>
-          )}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="lesson-date">Lesson date</Label>
+          <Input
+            id="lesson-date"
+            type="date"
+            value={lessonDate}
+            onChange={(e) => setLessonDate(e.target.value)}
+            className="w-[180px]"
+          />
         </div>
-      ) : (
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <Label htmlFor="lesson-date">Lesson date</Label>
-            <Input
-              id="lesson-date"
-              type="date"
-              value={lessonDate}
-              onChange={(e) => setLessonDate(e.target.value)}
-              className="w-[180px]"
-            />
-          </div>
-          <Button onClick={handleSave} disabled={loading || saved || isUpdating}>
-            {saved ? (
-              <>
-                <Check className="size-4" /> Saved — opening lesson…
-              </>
-            ) : loading ? (
-              "Saving…"
-            ) : (
-              "Save plan to lesson"
-            )}
-          </Button>
-          <Button variant="ghost" onClick={() => setShowSave(false)} disabled={loading || saved}>
-            Back
-          </Button>
-        </div>
+        <Button className="w-fit" onClick={handleReady} disabled={loading || isUpdating}>
+          {loading ? "Preparing save…" : "Ready to save plan"}
+        </Button>
+      </div>
+      {readyToSave && (
+        <p className="text-xs text-primary">
+          Plan looks complete — pick a date, then review changes before saving.
+        </p>
       )}
     </div>
+  );
+}
+
+function PlanWorkspace({
+  classId,
+  onError,
+}: {
+  classId: string;
+  onError: (message: string | null) => void;
+}) {
+  const router = useRouter();
+  const { artifactMarkdown, runWithSessionRecovery } = useArtifactSession();
+  const [inReview, setInReview] = useState(false);
+  const [lessonDate, setLessonDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [beforePlan, setBeforePlan] = useState("");
+  const [approved, setApproved] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  const fileItem = useMemo(() => {
+    if (!inReview || !lessonDate.trim()) return null;
+    return fromPlanSave(classId, lessonDate.trim(), beforePlan, artifactMarkdown, approved);
+  }, [inReview, classId, lessonDate, beforePlan, artifactMarkdown, approved]);
+
+  const savePlan = useCallback(async () => {
+    if (!approved || !lessonDate.trim()) return;
+    setLoading(true);
+    onError(null);
+    try {
+      await runWithSessionRecovery((sessionId) =>
+        client.planSave(classId, sessionId, lessonDate.trim(), artifactMarkdown),
+      );
+      router.push(`/classes/${classId}/lessons/${encodeURIComponent(lessonDate.trim())}`);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setLoading(false);
+    }
+  }, [approved, lessonDate, classId, artifactMarkdown, onError, router, runWithSessionRecovery]);
+
+  useEffect(() => {
+    if (!inReview || !lessonDate.trim()) return;
+    const path = `wiki/classes/${classId}/lessons/${lessonDate.trim()}/lesson_plan.md`;
+    let cancelled = false;
+    void client.getWikiFile(classId, path).then(
+      (file) => {
+        if (!cancelled) setBeforePlan(file.markdown);
+      },
+      () => {
+        if (!cancelled) setBeforePlan("");
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [inReview, classId, lessonDate]);
+
+  return (
+    <ArtifactSessionWorkspace
+      thread={<PlanThread />}
+      draftPanel={
+        <ArtifactDraftPanel
+          title="Lesson plan"
+          placeholder="Your lesson plan will build here as you chat, or type directly…"
+          updatingLabel="Updating plan from chat…"
+        />
+      }
+      footer={
+        <PlanSaveFooter
+          classId={classId}
+          onError={onError}
+          inReview={inReview}
+          setInReview={setInReview}
+          lessonDate={lessonDate}
+          setLessonDate={setLessonDate}
+          setBeforePlan={setBeforePlan}
+        />
+      }
+      reviewDiff={
+        inReview && fileItem ? (
+          <MarkdownLineDiff
+            path={fileItem.path}
+            before={fileItem.before}
+            after={fileItem.after}
+            className="h-full min-h-[12rem]"
+          />
+        ) : null
+      }
+      reviewFileList={
+        inReview && fileItem ? (
+          <FileChangeReviewPanel
+            items={[fileItem]}
+            selectedPath={fileItem.path}
+            onSelectPath={() => {}}
+            onSetApproved={(_, v) => setApproved(v)}
+            onUndoAll={() => setInReview(false)}
+            onKeepAll={() => {
+              setApproved(true);
+              void savePlan();
+            }}
+            onSave={savePlan}
+            saving={loading}
+            saveDisabled={!approved}
+            saveLabel="Save plan"
+          />
+        ) : null
+      }
+    />
   );
 }
 
 export default function PlanPage() {
   const params = useParams();
   const classId = params.classId as string;
-  const router = useRouter();
 
   const bootstrap = useCallback(
     async (opts?: { preserveMarkdown?: string }) => {
@@ -138,26 +250,7 @@ export default function PlanPage() {
       description="Chat to plan the next lesson, refine the draft on the right, then save to a lesson date."
       bootstrap={bootstrap}
       renderBody={({ onError }: ArtifactSessionBodyProps) => (
-        <ArtifactSessionWorkspace
-          thread={<PlanThread />}
-          draftPanel={
-            <ArtifactDraftPanel
-              title="Lesson plan"
-              placeholder="Your lesson plan will build here as you chat, or type directly…"
-              updatingLabel="Updating plan from chat…"
-            />
-          }
-          footer={
-            <ReadyToSavePlan
-              classId={classId}
-              onError={onError}
-              onDone={(lessonDate) => {
-                // Land on the saved lesson so the teacher immediately sees the plan persisted.
-                router.push(`/classes/${classId}/lessons/${encodeURIComponent(lessonDate)}`);
-              }}
-            />
-          }
-        />
+        <PlanWorkspace classId={classId} onError={onError} />
       )}
     />
   );
