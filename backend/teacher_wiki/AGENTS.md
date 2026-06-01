@@ -1,4 +1,4 @@
-# KlassenPilot AGENTS.md — LLM Wiki Schema
+﻿# KlassenPilot AGENTS.md â€” LLM Wiki Schema
 
 This file is the wiki-specific schema and workflow contract for
 `backend/teacher_wiki/`. For full repo onboarding and agent development context,
@@ -7,9 +7,9 @@ read [`../../implementation_plans/agent_contracts.md`](../../implementation_plan
 
 ## Three layers
 
-1. **Raw** — `raw/classes/{class_id}/{YYYY-MM-DD}-{slug}.md` — immutable approved diaries. Never edit after commit.
-2. **Curated wiki** — `wiki/classes/{class_id}/` — structured pages maintained by the agent (with teacher HITL on ingest).
-3. **Navigation** — `index.md` (catalog), `log.md` (append-only changelog).
+1. **Raw** â€” `raw/classes/{class_id}/{YYYY-MM-DD}-{slug}.md` â€” immutable approved diaries. Never edit after commit.
+2. **Curated wiki** â€” `wiki/classes/{class_id}/` â€” structured pages maintained by the agent (with teacher HITL on ingest).
+3. **Navigation** â€” `index.md` (catalog), `log.md` (append-only changelog).
 
 ## Directory layout
 
@@ -19,6 +19,12 @@ wiki/classes/{class_id}/
   course_state.md
   misconceptions.md
   open_loops.md
+  memory/
+    taught_so_far.md
+    planning_brief.md
+    teaching_patterns.md
+    copilot_profile.md
+    session_summaries.md
   students.md           # class student index / roster
   timeline.md           # chronological narrative with links to lessons
   students/S-###.md     # entity pages (compounding observations)
@@ -33,7 +39,7 @@ wiki/classes/{class_id}/
 2. Student participation
 3. What went well
 4. What didn't go well
-5. Student observations (pseudonyms `S-###` only — never real names)
+5. Student observations (pseudonyms `S-###` only â€” never real names)
 6. Homework & follow-ups
 
 ## Linking
@@ -47,9 +53,9 @@ wiki/classes/{class_id}/
 ### Ingest
 
 1. Read `index.md` first, then relevant class pages via tools.
-2. Chat → update diary draft → `compile_from_diary` proposes wiki diffs.
-3. Teacher approves per file in UI → `commit_ingest` writes **only** approved paths (plus log/index rebuild).
-4. Unchecked files (e.g. a student entity page) are not written — there is no bypass after commit.
+2. Chat â†’ update diary draft â†’ `compile_from_diary` proposes wiki diffs.
+3. Teacher approves per file in UI â†’ `commit_ingest` writes **only** approved paths (plus log/index rebuild).
+4. Unchecked files (e.g. a student entity page) are not written â€” there is no bypass after commit.
 
 ### Lesson revise (not ingest HITL)
 
@@ -59,17 +65,17 @@ wiki/classes/{class_id}/
 
 ### Query / plan
 
-1. Read `index.md` → open 2–5 relevant pages (roll-ups, lessons, students).
+1. Read `index.md` -> open 2-5 relevant pages (roll-ups, compact memory, lessons, students).
 2. Synthesize with citations to wiki paths.
 3. Do not write wiki files unless teacher saves via HITL commit or explicit revise API.
 
 ### Lint
 
 1. Read-only scan: orphans, missing `students/S-###` for IDs mentioned in lessons, stale contradictions, broken links.
-2. Output a markdown report; optional proposals only — no auto-commit.
+2. Output a markdown report; optional proposals only â€” no auto-commit.
 
 ## Rules
 
 - **Never** write curated wiki on ingest without teacher approval (`commit_ingest` per-file checkboxes). Lesson revise is an explicit teacher action that re-applies all derived files for that date.
-- Student IDs: `S-001` … `S-999` only.
+- Student IDs: `S-001` â€¦ `S-999` only.
 - Do not infer sensitive facts beyond what the teacher said.

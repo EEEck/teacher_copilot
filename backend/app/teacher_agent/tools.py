@@ -197,7 +197,7 @@ def create_wiki_tools(ctx: WikiToolContext) -> list:
 
     @function_tool
     def find_in_memory(query: str) -> str:
-        """Search index.md first, then page bodies. Returns paths + snippets for read_memory_page."""
+        """Rank class wiki paths for a topic; returns source-bearing candidates for read_wiki_page."""
         hits = wiki.find_in_memory(class_id, query)
         return json.dumps(hits, indent=2)
 
@@ -292,7 +292,7 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
 
     @function_tool
     def search_memory(query: str, max_results: int = 8) -> str:
-        """Find wiki paths: checks index lesson table first, then full-text scan."""
+        """Rank class wiki paths for a topic; returns path, kind, title, score, matched terms, snippet."""
         limit = max(1, min(max_results or 8, 20))
         hits = wiki.find_in_memory(class_id, query, max_results=limit)
         return json.dumps(hits, indent=2)

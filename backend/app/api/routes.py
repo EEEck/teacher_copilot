@@ -19,6 +19,8 @@ from app.schemas.api import (
     IngestSession,
     LessonDetail,
     LessonPlan,
+    MemoryCompactRequest,
+    MemoryCompactResponse,
     PlanChatRequest,
     PlanChatResponse,
     PlanDraft,
@@ -139,6 +141,47 @@ async def lint_wiki(
         return WikiLintResponse(class_id=class_id, report_markdown=report)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@router.post("/classes/{class_id}/memory/compact", response_model=MemoryCompactResponse)
+async def compact_memory(
+    class_id: str,
+    body: MemoryCompactRequest | None = None,
+    agents: AgentRunner = Depends(get_agents),
+    wiki: WikiStore = Depends(get_wiki),
+) -> MemoryCompactResponse:
+    try:
+        req = body or MemoryCompactRequest()
+        wiki.get_class(class_id)
+        output, source_paths, warnings = await agents.compact_memory(
+            class_id,
+            start_date=req.start_date,
+            end_date=req.end_date,
+        )
+        pages = {
+            "taught_so_far": output.taught_so_far_markdown,
+            "planning_brief": output.planning_brief_markdown,
+            "teaching_patterns": output.teaching_patterns_markdown,
+            "copilot_profile": output.copilot_profile_markdown,
+        }
+        if output.session_summaries_markdown.strip():
+            pages["session_summaries"] = output.session_summaries_markdown
+        applied, log_id = wiki.commit_memory_compaction(
+            class_id, pages, source_paths=source_paths
+        )
+        return MemoryCompactResponse(
+            class_id=class_id,
+            applied_wiki_paths=applied,
+            log_entry_id=log_id,
+            source_paths=source_paths,
+            warnings=warnings,
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 

@@ -17,6 +17,7 @@ logger = logging.getLogger("klassenpilot.agents")
 from app.config import Settings
 from app.schemas.api import ChatAttachment, ChatMessage, CompletenessChecklist, LessonPlan
 from app.teacher_agent.agent import (
+    build_memory_compact_agent,
     build_compile_agent,
     build_ingest_agent,
     build_lint_agent,
@@ -24,7 +25,13 @@ from app.teacher_agent.agent import (
     build_plan_lesson_agent,
     build_plan_opening_agent,
 )
-from app.teacher_agent.models import CompileOutput, IngestTurnOutput, PlanOutput, PlanTurnOutput
+from app.teacher_agent.models import (
+    CompileOutput,
+    IngestTurnOutput,
+    MemoryCompactOutput,
+    PlanOutput,
+    PlanTurnOutput,
+)
 from app.teacher_agent.tools import WikiToolContext
 from app.teacher_agent.stream_events import SseError, SseEvent, SseFinal, translate_sdk_event
 from app.teacher_agent.wiki_store import DIARY_SECTION_HEADINGS, WikiStore
@@ -198,11 +205,7 @@ class AgentRunner:
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
     ) -> AsyncIterator[SseEvent]:
-        context = (
-            self.wiki.load_index_context(class_id)
-            + "\n\n"
-            + self.wiki.build_ingest_context(class_id)
-        )
+        context = self.wiki.build_context_package(class_id, "ingest")
         sections = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
         agent = build_ingest_agent(
             self._wiki_ctx(class_id),
@@ -250,11 +253,7 @@ class AgentRunner:
         partial_plan: str = "",
         attachments: list[ChatAttachment] | None = None,
     ) -> AsyncIterator[SseEvent]:
-        context = (
-            self.wiki.load_index_context(class_id)
-            + "\n\n"
-            + self.wiki.build_plan_context(class_id)
-        )
+        context = self.wiki.build_context_package(class_id, "plan")
         agent = build_plan_chat_agent(
             self._wiki_ctx(class_id),
             context,
@@ -314,9 +313,7 @@ class AgentRunner:
         if self.client is None:
             return self._plan_opening_fallback(class_id)
         try:
-            context = self.wiki.load_index_context(class_id) + "\n\n" + self.wiki.build_plan_context(
-                class_id
-            )
+            context = self.wiki.build_context_package(class_id, "plan")
             agent = build_plan_opening_agent(context[:14000], self.model)
             out = await self._run_structured(agent, "Open the planning session for this class.")
             text = out if isinstance(out, str) else str(out)
@@ -331,11 +328,7 @@ class AgentRunner:
         partial_plan: str = "",
         attachments: list[ChatAttachment] | None = None,
     ) -> tuple[str, str, bool]:
-        context = (
-            self.wiki.load_index_context(class_id)
-            + "\n\n"
-            + self.wiki.build_plan_context(class_id)
-        )
+        context = self.wiki.build_context_package(class_id, "plan")
         agent = build_plan_chat_agent(
             self._wiki_ctx(class_id),
             context,
@@ -364,11 +357,7 @@ class AgentRunner:
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
     ) -> tuple[str, str, CompletenessChecklist, bool]:
-        context = (
-            self.wiki.load_index_context(class_id)
-            + "\n\n"
-            + self.wiki.build_ingest_context(class_id)
-        )
+        context = self.wiki.build_context_package(class_id, "ingest")
         sections = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
         agent = build_ingest_agent(
             self._wiki_ctx(class_id),
@@ -444,3 +433,23 @@ class AgentRunner:
             f"Lint the wiki for class {class_id}. Read index.md and scan lessons, students, roll-ups.",
         )
         return out if isinstance(out, str) else str(out)
+
+    async def compact_memory(
+        self,
+        class_id: str,
+        start_date=None,
+        end_date=None,
+    ) -> tuple[MemoryCompactOutput, list[str], list[str]]:
+        source = self.wiki.build_memory_compaction_source_packet(
+            class_id, start_date=start_date, end_date=end_date
+        )
+        agent = build_memory_compact_agent(self.fast_model)
+        prompt = (
+            "Compact the approved class wiki memory into durable class memory pages.\n\n"
+            f"{source['packet'][:30000]}"
+        )
+        parsed = await self._run_structured(agent, prompt)
+        if not isinstance(parsed, MemoryCompactOutput):
+            raise RuntimeError("Failed to compact class memory")
+        warnings = list(source.get("warnings", [])) + list(parsed.warnings)
+        return parsed, source.get("source_paths", []), warnings

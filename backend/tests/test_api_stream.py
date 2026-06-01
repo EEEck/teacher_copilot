@@ -49,3 +49,26 @@ def test_plan_chat_stream(client: TestClient):
     events = _parse_sse(res.text)
     assert any(e.get("type") == "tool_call" for e in events)
     assert any(e.get("type") == "final" for e in events)
+
+
+def test_plan_chat_stream_fckw_redox_uses_memory_pathfinder(client: TestClient):
+    start = client.post(f"/api/classes/{CLASS_ID}/plan/sessions")
+    session_id = start.json()["session_id"]
+
+    res = client.post(
+        f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/chat/stream",
+        json={
+            "message": (
+                "Plan the next 45-minute lesson for Chemie 9b. Topic: redox "
+                "reactions applied to CFC/FCKW compounds. Build on our "
+                "existing redox lessons in the wiki."
+            )
+        },
+    )
+    assert res.status_code == 200
+    events = _parse_sse(res.text)
+    tool_names = [e.get("name") for e in events if e.get("type") == "tool_call"]
+    assert "search_memory" in tool_names
+    assert "read_lesson_range" in tool_names
+    final = [e for e in events if e.get("type") == "final"][-1]
+    assert "2026-05-25" in final["artifact_markdown"]

@@ -24,10 +24,31 @@ plans and updating memory.
 - Separate read-only planning from write/update actions.
 - Report missing or sparse memory honestly.
 - Copy AutoSci's discipline, not its full machinery.
+- Use deterministic, source-bearing retrieval as a pathfinder; keep query packs
+  small, purpose-specific, and rebuildable.
+- Prefer compact compiled memory plus ranked evidence over flat top-k dumping.
 
 The most important AutoSci pattern is not a large agent architecture. It is the
 operating discipline: each workflow has a clear read/write contract, bounded
 retrieval, evidence-grounded synthesis, and explicit handoff before mutations.
+
+The useful 2026 retrieval lesson is that a Karpathy-style wiki does not remove
+the need for search. The wiki is the readable map; deterministic pathfinder
+tools are the compass. Current best practice is small high-signal context,
+just-in-time retrieval, compact durable memory, and source-bearing tool results.
+OpenAI-style tool/context guidance, Anthropic context-engineering guidance,
+LlamaIndex's short-term versus long-term memory split, and recent agent-memory
+research all point in the same direction: avoid dumping flat top-k context into
+the model; first isolate reusable facts and ranked candidate pages, then let the
+LLM synthesize from selected evidence.
+
+For this MVP, AutoSci is the best local reference for this behavior. We should
+borrow its deterministic corpus/ranking and purpose-specific query-pack pattern:
+tokenize content, weight titles/frontmatter/compiled pages higher than raw body
+text, return a small ranked list with provenance, and compile workflow-specific
+context packs under a fixed budget. We should not copy AutoSci's graph engine or
+multi-agent research workflow unless the class wiki grows enough to prove that
+need.
 
 For the teacher copilot, this means lesson planning should browse and cite class
 memory, but it should not silently update the wiki. Memory updates remain a
@@ -46,6 +67,13 @@ code.
   - read one lesson
   - read a compact lesson range
   - search/read class memory
+- Use AutoSci-style deterministic retrieval for broad topic lookup:
+  - build a class-scoped relevance corpus from index rows, compact memory,
+    roll-ups, and lesson pages
+  - rank with BM25-style lexical scoring and stable tie-breaks
+  - return path, kind, title, snippet, score, matched terms, and source
+- Add purpose-specific read-only query packs for planning, ingest, and review
+  so the model gets the right map before broader browsing.
 - Use lightweight inline citations in generated plans.
 - Ask one targeted question when memory is sparse or missing for the teacher's
   requested range.
@@ -65,7 +93,7 @@ The target behavior is:
 - Multi-agent review pass.
 - Broad wiki lint/check system.
 - Raw-source fallback as normal behavior.
-- Big schema or index redesign.
+- Big schema, vector database, or opaque semantic index redesign.
 - Non-planning backend hardening unless touched by the browsing work.
 
 ## Later Todos

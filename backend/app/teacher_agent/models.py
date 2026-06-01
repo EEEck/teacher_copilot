@@ -35,3 +35,23 @@ class PlanOutput(BaseModel):
     teacher_notes: str
     addresses_open_loops: list[str] = Field(default_factory=list)
     addresses_misconceptions: list[str] = Field(default_factory=list)
+
+
+class MemoryCompactOutput(BaseModel):
+    taught_so_far_markdown: str = Field(
+        description="Compact year-to-date content sequence for the class"
+    )
+    planning_brief_markdown: str = Field(
+        description="Planning-oriented summary of readiness, open loops, and misconception priorities"
+    )
+    teaching_patterns_markdown: str = Field(
+        description="Durable patterns about what worked or failed for this class"
+    )
+    copilot_profile_markdown: str = Field(
+        description="Bounded Honcho-style teacher/class/copilot profile"
+    )
+    session_summaries_markdown: str = Field(
+        default="",
+        description="Optional compact summaries of prior workflow sessions",
+    )
+    warnings: list[str] = Field(default_factory=list)

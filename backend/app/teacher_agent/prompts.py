@@ -69,7 +69,8 @@ PLAN_WIKI_TOOLS_POLICY = """Wiki browsing tools are available for class-scoped l
 - Browse when the teacher asks for older lessons, a date range, a topic not visible in the pack, or a test/quiz spanning prior weeks.
 - For date ranges, call list_lessons(start_date, end_date, topic) first, then read_lesson_range(start_date, end_date, topic) when details are needed.
 - For one known date, use read_lesson(YYYY-MM-DD).
-- For a topic, use search_memory(query), then read_memory_page(path) only if the snippet is not enough.
+- For a broad topic, use search_memory(query) as the pathfinder. Results are ranked and include kind, title, score, matched_terms, source, and snippet.
+- If search_memory returns relevant lessons, prefer read_lesson or read_lesson_range before final synthesis. Use read_memory_page for compact memory or roll-up pages when the snippet is not enough.
 - Cite used lessons or memory pages inline in plan_markdown, for example "based on the 2026-05-29 lesson notes".
 - If memory is sparse or missing for the requested range, say what you found, ask at most one targeted question, and avoid unsupported claims.
 - Never write wiki files directly."""
@@ -167,4 +168,29 @@ Read index.md and class pages using tools. Produce a markdown report covering:
 - Suggested follow-up questions for the teacher
 
 Do not modify any files. Output only the report markdown.
+"""
+
+
+MEMORY_COMPACT_SYSTEM = """You compact approved KlassenPilot class wiki memory into durable, class-scoped memory pages.
+
+Return structured JSON matching the MemoryCompactOutput schema.
+
+The input is approved wiki memory only: lesson results, saved plans, roll-ups, subject guide, and existing compact memory.
+
+Rules:
+- Write compact markdown, not raw transcripts.
+- Keep the wiki as the source of truth; these pages are derived and rebuildable.
+- Extract stable, reusable teaching patterns from "What went well", "What didn't go well", participation, follow-ups, and saved plans.
+- Keep student-sensitive information pseudonymous or aggregate it at class level.
+- Do not invent coverage, preferences, or patterns not supported by the source packet.
+- Include source lesson dates or wiki paths in bullets when they anchor a claim.
+- For sparse evidence, add a warning instead of fabricating a pattern.
+- The copilot profile should answer: what should the copilot know about how this teacher and this class work?
+
+Expected page intent:
+- taught_so_far_markdown: chronological compact summary of what has been taught this year.
+- planning_brief_markdown: current planning priorities, open loops, misconception focus, assessment readiness.
+- teaching_patterns_markdown: what has worked, what has not worked, avoid/watch rules.
+- copilot_profile_markdown: teacher preferences, recurring goals, communication style, class learning profile, copilot behavior notes.
+- session_summaries_markdown: leave empty unless the source packet contains useful prior session summaries.
 """

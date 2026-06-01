@@ -26,9 +26,15 @@ from app.schemas.api import (
     LessonFlowPhase,
     LessonPlan,
 )
+from app.teacher_agent.models import MemoryCompactOutput
 from app.services.ingest_service import IngestService
 from app.services.plan_service import PlanService
-from app.teacher_agent.stream_events import SseFinal, SseReasoningDelta, SseToolCall
+from app.teacher_agent.stream_events import (
+    SseFinal,
+    SseReasoningDelta,
+    SseToolCall,
+    SseToolResult,
+)
 from app.teacher_agent.wiki_store import WikiStore
 
 CLASS_ID = "chemie_9b_2026_27"
@@ -131,6 +137,38 @@ class StubAgentRunner:
     async def lint_wiki(self, class_id: str) -> str:
         return "# Wiki lint report\n- All good."
 
+    async def compact_memory(self, class_id: str, start_date=None, end_date=None):
+        source = self.wiki.build_memory_compaction_source_packet(
+            class_id, start_date=start_date, end_date=end_date
+        )
+        return (
+            MemoryCompactOutput(
+                taught_so_far_markdown=(
+                    "# Taught So Far\n\n"
+                    f"> Class: {class_id}\n\n"
+                    "- Reaction writing, balancing, oxidation numbers, and redox have been taught.\n"
+                ),
+                planning_brief_markdown=(
+                    "# Planning Brief\n\n"
+                    "- Keep contrasting ion charge and oxidation number.\n"
+                ),
+                teaching_patterns_markdown=(
+                    "# Teaching Patterns\n\n"
+                    "- Peer checking helps reduce balancing errors.\n"
+                ),
+                copilot_profile_markdown=(
+                    "# Class Copilot Profile\n\n"
+                    "## Teacher Preferences\n"
+                    "- Prefers concise 45-minute plans with Einstieg, practice, reflection.\n\n"
+                    "## Class Learning Profile\n"
+                    "- Concrete examples before symbolic abstraction work well.\n"
+                ),
+                warnings=[],
+            ),
+            source["source_paths"],
+            source["warnings"],
+        )
+
     async def ingest_chat_stream(
         self,
         class_id: str,
@@ -154,7 +192,32 @@ class StubAgentRunner:
         partial_plan: str = "",
         attachments: list[ChatAttachment] | None = None,
     ) -> AsyncIterator:
-        yield SseToolCall(name="search_wiki", args="{}", call_id="call-1")
+        latest = messages[-1].content.lower() if messages else ""
+        if "fckw" in latest or "redox" in latest:
+            yield SseToolCall(
+                name="search_memory",
+                args='{"query":"FCKW redox ozone layer", "max_results":5}',
+                call_id="call-1",
+            )
+            yield SseToolResult(
+                name="search_memory",
+                output='[{"path":"wiki/classes/chemie_9b_2026_27/lessons/2026-05-25/lesson_results.md","kind":"lesson","title":"Redox Reactions with Metals","score":7.4,"matched_terms":["redox"]}]',
+            )
+            yield SseToolCall(
+                name="read_lesson_range",
+                args='{"start_date":"2026-05-21","end_date":"2026-05-29","topic":"redox"}',
+                call_id="call-2",
+            )
+            plan = READY_PLAN + "\n## Sources\n- Based on the 2026-05-25 redox lesson notes.\n"
+            yield SseFinal(
+                reply="Using the recent redox lessons, including 2026-05-25.",
+                artifact_markdown=plan,
+                ready=True,
+                completeness=None,
+            )
+            return
+
+        yield SseToolCall(name="search_memory", args="{}", call_id="call-1")
         yield SseFinal(
             reply="Here is an updated plan draft.",
             artifact_markdown=READY_PLAN,

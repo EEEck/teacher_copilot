@@ -29,6 +29,19 @@ class WikiLintResponse(BaseModel):
     report_markdown: str
 
 
+class MemoryCompactRequest(BaseModel):
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+
+class MemoryCompactResponse(BaseModel):
+    class_id: str
+    applied_wiki_paths: list[str]
+    log_entry_id: str
+    source_paths: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class TimelineEntry(BaseModel):
     date: str
     title: str

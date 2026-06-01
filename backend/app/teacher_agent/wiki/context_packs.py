@@ -36,6 +36,197 @@ from app.teacher_agent.wiki.constants import (
 from app.teacher_agent.wiki import parsing
 
 
+def _recent_taught_entries(store, class_id: str, limit: int = 2):
+    entries = [e for e in store.get_timeline(class_id).entries if e.status == "taught"]
+    return entries[:limit]
+
+
+def _compact_memory_section(store, class_id: str, *, max_chars: int = 1400) -> list[str]:
+    excerpts = store.compact_memory_excerpts(class_id, max_chars=max_chars)
+    if not excerpts:
+        return [
+            "## Compact class memory",
+            "- No compact memory pages found yet. Use the manual compact endpoint after lessons accumulate.",
+            "",
+        ]
+    parts = ["## Compact class memory"]
+    for rel, text in excerpts:
+        parts.extend([f"### {rel}", text, ""])
+    return parts
+
+
+def _memory_page_excerpt(store, class_id: str, key: str, max_chars: int = 1200) -> str:
+    path = store.memory_paths(class_id).get(key)
+    if not path:
+        return ""
+    return store.read_text(path).strip()[:max_chars]
+
+
+def _lesson_sequence_lines(store, class_id: str, limit: int = 6) -> list[str]:
+    entries = [e for e in store.get_timeline(class_id).entries if e.status == "taught"]
+    return [
+        f"- {entry.date}: {entry.title} - {entry.summary}"
+        for entry in entries[:limit]
+    ]
+
+
+def build_planning_query_pack(store, class_id: str) -> str:
+    """AutoSci-style derived read-only pack for planning retrieval orientation."""
+    snapshot = store.get_snapshot(class_id)
+    parts = [
+        "# Planning Query Pack",
+        "Purpose: orient lesson planning before broader wiki search.",
+        "",
+        "## Recent taught sequence",
+    ]
+    sequence = _lesson_sequence_lines(store, class_id, limit=6)
+    parts.extend(sequence or ["- No taught lessons found."])
+    parts.extend(["", "## Misconception priorities"])
+    parts.extend(
+        [f"- {m}" for m in snapshot.top_misconceptions[:6]]
+        if snapshot.top_misconceptions
+        else ["- None listed."]
+    )
+    parts.extend(
+        [
+            "",
+            "## Planning brief",
+            _memory_page_excerpt(store, class_id, "planning_brief", 1200)
+            or "- No compact planning brief yet.",
+            "",
+            "## Teaching patterns",
+            _memory_page_excerpt(store, class_id, "teaching_patterns", 1200)
+            or "- No compact teaching patterns yet.",
+            "",
+            "## Open loops",
+            store.read_text(store.roll_up_paths(class_id)["open_loops"])[:1200],
+        ]
+    )
+    return "\n".join(parts)
+
+
+def build_ingest_query_pack(store, class_id: str) -> str:
+    """AutoSci-style derived read-only pack for memory-update orientation."""
+    snapshot = store.get_snapshot(class_id)
+    parts = [
+        "# Ingest Query Pack",
+        "Purpose: orient lesson logging while keeping durable writes approval-gated.",
+        "",
+        "## Previous lesson",
+    ]
+    if snapshot.last_committed_date:
+        try:
+            detail = store.get_lesson_detail(class_id, snapshot.last_committed_date)
+            parts.extend(
+                [
+                    f"### {snapshot.last_committed_date} - {detail.title}",
+                    detail.diary_markdown[:1600],
+                ]
+            )
+        except KeyError:
+            parts.append("- Previous lesson detail not found.")
+    else:
+        parts.append("- No previous lesson found.")
+    parts.extend(
+        [
+            "",
+            "## Student roster excerpt",
+            store.read_text(store.roll_up_paths(class_id)["students"])[:1600],
+            "",
+            "## Logging conventions",
+            store.read_text(store.root / "AGENTS.md")[:900],
+            "",
+            "## Compact class memory",
+            _memory_page_excerpt(store, class_id, "taught_so_far", 1000)
+            or "- No compact taught-so-far memory yet.",
+            "",
+            "## Open loops",
+            store.read_text(store.roll_up_paths(class_id)["open_loops"])[:900],
+        ]
+    )
+    return "\n".join(parts)
+
+
+def build_review_query_pack(store, class_id: str) -> str:
+    """AutoSci-style derived read-only pack for reviews or assessment spanning memory."""
+    snapshot = store.get_snapshot(class_id)
+    taught = _memory_page_excerpt(store, class_id, "taught_so_far", 1600)
+    if not taught:
+        taught = "\n".join(_lesson_sequence_lines(store, class_id, limit=10))
+    parts = [
+        "# Review Query Pack",
+        "Purpose: orient reviews, assessments, or cross-lesson synthesis.",
+        "",
+        "## Taught-so-far sequence",
+        taught or "- No taught sequence available.",
+        "",
+        "## Recurring misconceptions",
+    ]
+    parts.extend(
+        [f"- {m}" for m in snapshot.top_misconceptions[:8]]
+        if snapshot.top_misconceptions
+        else ["- None listed."]
+    )
+    parts.extend(
+        [
+            "",
+            "## Unresolved issues and planning priorities",
+            _memory_page_excerpt(store, class_id, "planning_brief", 1400)
+            or store.read_text(store.roll_up_paths(class_id)["open_loops"])[:1400],
+        ]
+    )
+    return "\n".join(parts)
+
+
+def build_base_class_context(store, class_id: str) -> str:
+    """Small class-scoped context shared by workflow packages."""
+    snapshot = store.get_snapshot(class_id)
+    cls = store.get_class(class_id)
+    subject_guide = store.read_text(store.root / "wiki" / "subjects" / f"{cls.subject}.md")
+    parts = [
+        f"# Base class context - {snapshot.label} ({class_id})",
+        f"Subject: {cls.subject}",
+        f"Current unit: {snapshot.current_unit}",
+        f"Last committed lesson: {snapshot.last_committed_date or 'None'}",
+        f"Open loops (count): {snapshot.open_loop_count}",
+        "",
+        "## Recent timeline",
+    ]
+    if snapshot.recent_lessons:
+        parts.extend(f"- {line}" for line in snapshot.recent_lessons[:5])
+    else:
+        parts.append("- No recent lessons")
+    parts.extend(["", "## Core misconceptions"])
+    if snapshot.top_misconceptions:
+        parts.extend(f"- {m}" for m in snapshot.top_misconceptions[:6])
+    else:
+        parts.append("- None listed")
+    parts.extend(
+        [
+            "",
+            "## Class copilot profile",
+            store.read_copilot_profile(class_id)[:1800] or "- No copilot profile yet.",
+            "",
+            f"## Subject guide: {cls.subject} (excerpt)",
+            subject_guide[:1400],
+        ]
+    )
+    return "\n".join(parts)
+
+
+def build_context_package(store, class_id: str, mode: str) -> str:
+    """Named frozen context package for a workflow session."""
+    normalized = mode.strip().lower()
+    parts = [store.load_index_context(class_id), build_base_class_context(store, class_id)]
+    if normalized in {"plan", "planning"}:
+        parts.append(build_plan_context(store, class_id))
+    elif normalized in {"ingest", "memory", "update_memory"}:
+        parts.append(build_ingest_context(store, class_id))
+    else:
+        raise ValueError(f"Unknown context package mode: {mode}")
+    return "\n\n".join(part for part in parts if part.strip())
+
+
 
 def build_plan_context(store, class_id: str) -> str:
     """Memory pack for planning the *next* lesson — forward-looking rollups + last real lesson."""
@@ -60,26 +251,33 @@ def build_plan_context(store, class_id: str) -> str:
     if snapshot.recent_lessons:
         parts.extend(["## Recent lessons (titles)", *[f"- {line}" for line in snapshot.recent_lessons], ""])
 
-    if snapshot.last_committed_date:
+    parts.extend([build_planning_query_pack(store, class_id), ""])
+
+    recent_taught = _recent_taught_entries(store, class_id, limit=2)
+    if recent_taught:
+        parts.append("## Last 2 taught lessons")
+    for entry in recent_taught:
         try:
-            detail = store.get_lesson_detail(class_id, snapshot.last_committed_date)
+            detail = store.get_lesson_detail(class_id, entry.date)
             parts.extend(
                 [
-                    f"## Last committed lesson ({snapshot.last_committed_date})",
-                    detail.diary_markdown[:5000],
+                    f"### {entry.date} - {entry.title}",
+                    detail.diary_markdown[:3000],
                     "",
                 ]
             )
             if detail.lesson_plan_markdown:
                 parts.extend(
                     [
-                        f"## Existing plan on file ({snapshot.last_committed_date})",
-                        detail.lesson_plan_markdown[:3000],
+                        f"#### Saved plan ({entry.date})",
+                        detail.lesson_plan_markdown[:1800],
                         "",
                     ]
                 )
         except KeyError:
-            pass
+            continue
+
+    parts.extend(_compact_memory_section(store, class_id, max_chars=1800))
 
     for key in ("course_state", "students", "open_loops", "misconceptions"):
         path = store.roll_up_paths(class_id)[key]
@@ -113,14 +311,17 @@ def build_ingest_context(store, class_id: str) -> str:
         f"Subject: {cls.subject} | Current unit: {snapshot.current_unit}",
         "",
         "Help the teacher record what happened today. Use only what they say; use context for IDs and continuity.",
+        "Use pseudonyms only for student references (S-001 style IDs).",
         "",
-        "## Students",
+        "## Student notes / roster",
         store.read_text(store.roll_up_paths(class_id)["students"])[:4500],
         "",
         "## Course state",
         store.read_text(store.roll_up_paths(class_id)["course_state"])[:2000],
         "",
     ]
+
+    parts.extend([build_ingest_query_pack(store, class_id), ""])
 
     if snapshot.last_committed_date:
         try:
@@ -134,6 +335,25 @@ def build_ingest_context(store, class_id: str) -> str:
             )
         except KeyError:
             pass
+
+    planned = [e for e in store.get_timeline(class_id).entries if e.has_plan][:3]
+    if planned:
+        parts.append("## Recent saved plans (continuity only)")
+        for entry in planned:
+            try:
+                detail = store.get_lesson_detail(class_id, entry.date)
+            except KeyError:
+                continue
+            if detail.lesson_plan_markdown:
+                parts.extend(
+                    [
+                        f"### {entry.date} - {entry.title}",
+                        detail.lesson_plan_markdown[:1200],
+                        "",
+                    ]
+                )
+
+    parts.extend(_compact_memory_section(store, class_id, max_chars=1200))
 
     parts.extend(
         [

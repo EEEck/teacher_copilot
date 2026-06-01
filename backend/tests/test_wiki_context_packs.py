@@ -20,9 +20,24 @@ def test_plan_context_emphasizes_forward_planning():
     wiki = WikiStore(root=SEED_WIKI)
     ctx = wiki.build_plan_context(CLASS_ID)
     assert "Plan next lesson" in ctx
+    assert "Planning Query Pack" in ctx
     assert "Top misconceptions" in ctx
     assert "upcoming lesson" in ctx.lower()
     assert "Student notes (use S-xxx" not in ctx
+
+
+def test_ingest_context_includes_ingest_query_pack():
+    wiki = WikiStore(root=SEED_WIKI)
+    ctx = wiki.build_ingest_context(CLASS_ID)
+    assert "Ingest Query Pack" in ctx
+    assert "Previous lesson" in ctx
+
+
+def test_review_query_pack_is_available():
+    wiki = WikiStore(root=SEED_WIKI)
+    ctx = wiki.build_review_query_pack(CLASS_ID)
+    assert "Review Query Pack" in ctx
+    assert "Taught-so-far sequence" in ctx
 
 
 def test_snapshot_last_committed_date_is_iso_not_bracketed():

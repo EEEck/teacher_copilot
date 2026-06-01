@@ -9,6 +9,10 @@ workflow.
 
 - Keep workflows bounded and explicit.
 - Prefer compiled wiki memory over raw sources.
+- Prefer compact class memory and workflow context packages before broader wiki
+  browsing.
+- Use deterministic, source-bearing retrieval as the pathfinder for large wiki
+  browsing; do not default to opaque vector recall.
 - Separate read-only reasoning from write/update actions.
 - Browse only when the base context is insufficient.
 - Cite or name the memory used when it affects a plan.
@@ -27,7 +31,8 @@ Purpose:
 
 Reads:
 
-- Base planning context pack from `load_index_context + build_plan_context`.
+- Base planning context package from `build_context_package(class_id, "plan")`.
+- Compact class memory from `wiki/classes/{class_id}/memory/*.md` when present.
 - Class-scoped lesson memory through planning tools.
 - Uploaded teacher materials supplied in the current turn.
 
@@ -56,6 +61,9 @@ Browsing policy:
 - For a single known date, use `read_lesson`.
 - For topic lookup, use `search_memory`, then `read_memory_page` only when the
   snippet is not enough.
+- Treat `search_memory` as a ranked pathfinder. Use returned `kind`, `title`,
+  `score`, `matched_terms`, `source`, and `snippet` to decide whether to drill
+  into a lesson, compact memory page, or roll-up.
 
 Output contract:
 
@@ -76,7 +84,8 @@ Purpose:
 
 Reads:
 
-- Base ingest context pack from `load_index_context + build_ingest_context`.
+- Base ingest context package from `build_context_package(class_id, "ingest")`.
+- Compact class memory from `wiki/classes/{class_id}/memory/*.md` when present.
 - Class-scoped memory only for continuity when needed.
 - Uploaded teacher materials supplied in the current turn.
 
@@ -108,6 +117,82 @@ use. They should prefer structured JSON with:
 Tool outputs should not expose files outside `wiki/classes/{class_id}/` through
 planning reads.
 
+`search_memory` should return source-bearing ranked results with:
+
+- `path`
+- `kind`
+- `title`
+- `snippet`
+- `score`
+- `matched_terms`
+- `source`
+
+The ranking should prefer compiled class wiki pages over raw sources. Compact
+memory, lesson titles, index rows, and roll-up headings are high-signal
+pathfinders; full page bodies are secondary evidence.
+
+## Compact Memory Contract
+
+Purpose:
+
+- Maintain small derived class memory pages for fast, personalized workflow
+  context.
+- Capture stable teaching patterns, current planning priorities, what has been
+  taught so far, and Honcho-style teacher/class copilot profile facts.
+
+Reads:
+
+- Approved wiki memory only: lesson results, saved plans, roll-ups, subject
+  guide, and existing compact memory.
+
+Writes:
+
+- Only explicit compact actions may write compact memory pages.
+- Compact writes are restricted to `wiki/classes/{class_id}/memory/*.md`.
+- Compact writes append a `compact` log entry and rebuild the wiki index.
+- Planning and ingest chat must not silently compact or write these pages.
+
+Allowed compact pages:
+
+- `taught_so_far.md`
+- `planning_brief.md`
+- `teaching_patterns.md`
+- `copilot_profile.md`
+- `session_summaries.md`
+
+Honcho-style profile rules:
+
+- Store stable, reusable teacher/class/copilot facts, not raw session logs.
+- Treat teacher corrections and explicit preferences as highest-priority
+  profile memory.
+- Keep student-specific sensitive details out of broad profile memory; use
+  pseudonymous student pages for individual continuity.
+- LLM synthesis may propose compact content, but backend code controls allowed
+  paths, scope, and persistence.
+
+## Query Pack Contract
+
+Purpose:
+
+- Provide AutoSci-style, read-only orientation packs that help the model browse
+  larger class memory without loading the full wiki.
+
+Allowed query packs:
+
+- `planning_query_pack`: recent taught sequence, misconception priorities,
+  planning brief, teaching patterns, and open loops.
+- `ingest_query_pack`: previous lesson, student roster excerpt, logging
+  conventions, compact class memory, and open loops.
+- `review_query_pack`: taught-so-far sequence, recurring misconceptions, and
+  unresolved issues for review or assessment synthesis.
+
+Rules:
+
+- Query packs are derived at read time and do not write wiki files.
+- Query packs can quote compact memory and roll-ups, but canonical lesson
+  records remain the source of truth.
+- If a query pack is sparse, say so rather than inventing a pattern.
+
 ## Backend Safety Contract
 
 - Plan stream final results must be request-local, not stored on shared runner
@@ -125,4 +210,5 @@ These are intentionally not part of the MVP contract:
 - AutoSci-style graph or edge schema.
 - Multi-agent review pass.
 - Full wiki health-check/lint workflow.
+- Vector database or embedding index as the default class-memory retrieval path.
 - Raw-source fallback as standard planner behavior.

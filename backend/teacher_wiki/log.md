@@ -105,3 +105,55 @@
 - Updated: wiki/classes/chemie_9b_2026_27/students/S-043.md
 - Updated: wiki/classes/chemie_9b_2026_27/students/S-044.md
 - Updated: wiki/classes/chemie_9b_2026_27/students/S-046.md
+
+## [2026-06-01T04:20:26] compact | 2026-06-01 — Compact class memory (id:1203e211)
+> Class: chemie_9b_2026_27
+> Lesson date: 2026-06-01
+- Updated: wiki/classes/chemie_9b_2026_27/memory/taught_so_far.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/planning_brief.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/teaching_patterns.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/copilot_profile.md
+- Updated: wiki/classes/chemie_9b_2026_27/course_state.md
+- Updated: wiki/classes/chemie_9b_2026_27/students.md
+- Updated: wiki/classes/chemie_9b_2026_27/misconceptions.md
+- Updated: wiki/classes/chemie_9b_2026_27/open_loops.md
+- Updated: wiki/subjects/chemie.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/taught_so_far.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/planning_brief.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/teaching_patterns.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/copilot_profile.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/session_summaries.md
+- Updated: wiki/classes/chemie_9b_2026_27/lessons/2026-04-24/lesson_results.md
+- Updated: wiki/classes/chemie_9b_2026_27/lessons/2026-04-24/lesson_plan.md
+- Updated: wiki/classes/chemie_9b_2026_27/lessons/2026-04-30/lesson_results.md
+- Updated: wiki/classes/chemie_9b_2026_27/lessons/2026-04-30/lesson_plan.md
+- Updated: wiki/classes/chemie_9b_2026_27/lessons/2026-05-07/lesson_results.md
+- Updated: wiki/classes/chemie_9b_2026_27/lessons/2026-05-07/lesson_plan.md
+- Updated: wiki/classes/chemie_9b_2026_27/lessons/2026-05-14/lesson_results.md
+- Updated: wiki/classes/chemie_9b_2026_27/lessons/2026-05-14/lesson_plan.md
+- Updated: wiki/classes/chemie_9b_2026_27/lessons/2026-05-21/lesson_results.md
+- Updated: wiki/classes/chemie_9b_2026_27/lessons/2026-05-21/lesson_plan.md
+
+## [2026-06-01T04:21:32] compact | 2026-06-01 — Compact class memory (id:dffc1555)
+> Class: chemie_9b_2026_27
+> Lesson date: 2026-06-01
+- Updated: wiki/classes/chemie_9b_2026_27/memory/taught_so_far.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/planning_brief.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/teaching_patterns.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/copilot_profile.md
+
+## [2026-06-01T04:36:12] compact | 2026-06-01 — Compact class memory (id:7c2fd038)
+> Class: chemie_9b_2026_27
+> Lesson date: 2026-06-01
+- Updated: wiki/classes/chemie_9b_2026_27/memory/taught_so_far.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/planning_brief.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/teaching_patterns.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/copilot_profile.md
+
+## [2026-06-01T04:39:00] compact | 2026-06-01 — Compact class memory (id:450d20a7)
+> Class: chemie_9b_2026_27
+> Lesson date: 2026-06-01
+- Updated: wiki/classes/chemie_9b_2026_27/memory/taught_so_far.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/planning_brief.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/teaching_patterns.md
+- Updated: wiki/classes/chemie_9b_2026_27/memory/copilot_profile.md

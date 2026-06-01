@@ -14,7 +14,7 @@ def test_compile_from_diary_produces_lesson_results_and_rollups():
     paths = {p.wiki_path for p in proposals}
     assert any("lesson_results.md" in p for p in paths)
     assert any("course_state.md" in p for p in paths)
-    assert any("student_notes.md" in p for p in paths)
+    assert any("students.md" in p for p in paths)
     assert any("timeline.md" in p for p in paths)
     assert any("students/S-014.md" in p for p in paths)
 

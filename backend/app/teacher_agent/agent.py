@@ -6,12 +6,19 @@ from agents import Agent
 from agents.model_settings import ModelSettings
 from openai.types.shared import Reasoning
 
-from app.teacher_agent.models import CompileOutput, IngestTurnOutput, PlanOutput, PlanTurnOutput
+from app.teacher_agent.models import (
+    CompileOutput,
+    IngestTurnOutput,
+    MemoryCompactOutput,
+    PlanOutput,
+    PlanTurnOutput,
+)
 from app.teacher_agent.prompts import (
     COMPILE_SYSTEM,
     INGEST_WIKI_TOOLS_POLICY,
     INGEST_SYSTEM,
     LINT_SYSTEM,
+    MEMORY_COMPACT_SYSTEM,
     PLAN_CHAT_SYSTEM,
     PLAN_WIKI_TOOLS_POLICY,
     PLAN_OPENING_SYSTEM,
@@ -114,4 +121,13 @@ def build_lint_agent(ctx: WikiToolContext, context: str, model: str) -> Agent:
         instructions=LINT_SYSTEM + f"\n\nClass: {ctx.class_id}\n\n{context[:4000]}",
         model=model,
         tools=create_wiki_tools(ctx),
+    )
+
+
+def build_memory_compact_agent(model: str) -> Agent:
+    return Agent(
+        name="KlassenPilot Memory Compact",
+        instructions=MEMORY_COMPACT_SYSTEM,
+        model=model,
+        output_type=MemoryCompactOutput,
     )

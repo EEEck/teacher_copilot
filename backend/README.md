@@ -40,13 +40,21 @@ python -m app.cli chat --mode ingest --class chemie_9b_2026_27
 Useful flags:
 
 - `--show-context` — print the ingest/plan memory pack at startup
-- `--trace runs/debug.jsonl` — append JSONL of each SSE-shaped event per turn
+- `--trace runs/debug.jsonl` — append compact JSONL (session, user messages, context pack if `--show-context`, tool calls/results, finals; no per-token reasoning unless `--trace-reasoning`)
 - `--message "We covered redox today"` — one turn, then exit
 - `--tool-limit 2000` — cap tool output size (default: unlimited in CLI)
 
 REPL commands: `/context`, `/draft`, `/tools`, `/propose` (ingest only), `/help`, `/quit`.
 
 Requires `OPENAI_API_KEY` in `backend/.env`. Not run in CI (live model calls).
+
+## Wiki memory
+
+The class wiki now includes compact memory pages under `wiki/classes/{class_id}/memory/`:
+`taught_so_far.md`, `planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and `session_summaries.md`.
+
+Planning and ingest context packs are derived from those pages plus the current lesson artifacts.
+`search_memory` is the deterministic pathfinder; use `read_memory_page` or `read_lesson_range` when the snippet is not enough.
 
 ## Tests
 

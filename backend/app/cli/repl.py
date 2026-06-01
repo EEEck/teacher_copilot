@@ -18,6 +18,8 @@ async def run_turn_interactive(
 ) -> bool:
     """Run one user turn. Returns False if the session should exit."""
     printer.reset_turn_buffers()
+    if trace is not None:
+        trace.write_user_message(user_message, turn=turn_number)
     events, final, error = await session.run_turn(user_message)
 
     for event in events:
@@ -82,11 +84,22 @@ async def run_repl(
     *,
     verbose: bool = True,
     trace_path: Path | None = None,
+    include_reasoning_trace: bool = False,
+    context_pack_for_trace: str | None = None,
     draft_file: Path | None = None,
 ) -> None:
     printer = TracePrinter(verbose=verbose)
-    trace = JsonlTraceWriter(trace_path) if trace_path else None
+    trace = (
+        JsonlTraceWriter(trace_path, include_reasoning=include_reasoning_trace)
+        if trace_path
+        else None
+    )
     turn = 0
+
+    if trace is not None:
+        trace.write_session_meta(mode=session.mode, class_id=session.class_id)
+        if context_pack_for_trace:
+            trace.write_context_pack(context_pack_for_trace)
 
     printer.stream.write(
         f"KlassenPilot agent CLI — mode={session.mode} class={session.class_id}\n"

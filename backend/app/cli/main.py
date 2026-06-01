@@ -36,6 +36,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     chat.add_argument("--trace", type=Path, default=None, help="Append JSONL trace file")
     chat.add_argument(
+        "--trace-reasoning",
+        action="store_true",
+        help="Include aggregated model reasoning in the trace (default: omit)",
+    )
+    chat.add_argument(
         "--show-context",
         action="store_true",
         help="Print memory context pack at startup",
@@ -87,12 +92,23 @@ async def _cmd_chat(args: argparse.Namespace) -> None:
 
     if args.show_context:
         print("--- context pack ---")
-        print(session.context_pack())
+        ctx = session.context_pack()
+        print(ctx)
         print("--- end context ---\n")
+    else:
+        ctx = None
 
     if args.message:
         printer = TracePrinter(verbose=args.verbose)
-        trace = JsonlTraceWriter(args.trace) if args.trace else None
+        trace = (
+            JsonlTraceWriter(args.trace, include_reasoning=args.trace_reasoning)
+            if args.trace
+            else None
+        )
+        if trace is not None:
+            trace.write_session_meta(mode=session.mode, class_id=session.class_id)
+            if ctx is not None:
+                trace.write_context_pack(ctx)
         turn = trace.start_turn() if trace else 1
         await run_turn_interactive(
             session,
@@ -111,6 +127,8 @@ async def _cmd_chat(args: argparse.Namespace) -> None:
         session,
         verbose=args.verbose,
         trace_path=args.trace,
+        include_reasoning_trace=args.trace_reasoning,
+        context_pack_for_trace=ctx,
         draft_file=args.draft_file,
     )
 

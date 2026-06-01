@@ -25,11 +25,9 @@ between raw lesson notes and future planning.
    contracts for the teacher agents.
 3. `implementation_plans/agent_design_plan.md` — MVP design rationale and
    AutoSci/Karpathy learnings.
-4. `implementation_plans/teacher_wiki_browsing_plan.md` — current lesson
-   planning browsing plan.
-5. `implementation_plans/product_backlog.md` — versioned product backlog (v1.1–v1.3);
+4. `implementation_plans/product_backlog.md` — versioned product backlog (v1.1-v1.3);
    v1.3 memo covers proactive briefing / suggested tasks on landing.
-6. `backend/teacher_wiki/AGENTS.md` — wiki schema and wiki-specific workflow
+5. `backend/teacher_wiki/AGENTS.md` — wiki schema and wiki-specific workflow
    rules when touching memory behavior.
 
 ## Current Boundaries

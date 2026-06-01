@@ -6,7 +6,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 from app.teacher_agent.stream_events import (
     SseError,
@@ -25,6 +25,8 @@ _GREEN = "\033[32m"
 _RED = "\033[31m"
 _YELLOW = "\033[33m"
 _RESET = "\033[0m"
+
+_TRACE_ARTIFACT_MAX = 4000
 
 
 def _supports_color(stream: TextIO) -> bool:
@@ -133,24 +135,96 @@ class TracePrinter:
 
 
 class JsonlTraceWriter:
-    def __init__(self, path: Path) -> None:
+    """Append high-signal events only (no per-token reasoning spam)."""
+
+    def __init__(self, path: Path, *, include_reasoning: bool = False) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._file = path.open("a", encoding="utf-8")
         self._turn = 0
+        self._include_reasoning = include_reasoning
+        self._reasoning_buf = ""
 
     def start_turn(self) -> int:
+        self._flush_reasoning()
         self._turn += 1
         return self._turn
 
-    def write_event(self, event: SseEvent, *, turn: int) -> None:
-        payload = event.model_dump(exclude_none=True)
-        payload["turn"] = turn
-        payload["ts"] = datetime.now(timezone.utc).isoformat()
-        self._file.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    def write_record(self, record: dict[str, Any]) -> None:
+        record.setdefault("ts", datetime.now(timezone.utc).isoformat())
+        self._file.write(json.dumps(record, ensure_ascii=False) + "\n")
         self._file.flush()
 
+    def write_session_meta(self, *, mode: str, class_id: str) -> None:
+        self.write_record(
+            {
+                "type": "session",
+                "mode": mode,
+                "class_id": class_id,
+                "turn": 0,
+            }
+        )
+
+    def write_context_pack(self, content: str) -> None:
+        self.write_record(
+            {
+                "type": "context_pack",
+                "turn": 0,
+                "chars": len(content),
+                "content": content,
+            }
+        )
+
+    def write_user_message(self, content: str, *, turn: int) -> None:
+        self._flush_reasoning(turn=turn)
+        self.write_record(
+            {
+                "type": "user_message",
+                "turn": turn,
+                "content": content,
+            }
+        )
+
+    def _flush_reasoning(self, *, turn: int | None = None) -> None:
+        if not self._include_reasoning or not self._reasoning_buf.strip():
+            self._reasoning_buf = ""
+            return
+        self.write_record(
+            {
+                "type": "reasoning",
+                "turn": turn if turn is not None else self._turn,
+                "text": self._reasoning_buf,
+            }
+        )
+        self._reasoning_buf = ""
+
+    def write_event(self, event: SseEvent, *, turn: int) -> None:
+        if isinstance(event, SseReasoningDelta):
+            if self._include_reasoning:
+                self._reasoning_buf += event.text
+            return
+
+        self._flush_reasoning(turn=turn)
+
+        if isinstance(event, SseFinal):
+            payload = event.model_dump(exclude_none=True)
+            md = payload.get("artifact_markdown") or ""
+            if len(md) > _TRACE_ARTIFACT_MAX:
+                payload["artifact_markdown_chars"] = len(md)
+                payload["artifact_markdown"] = (
+                    md[:_TRACE_ARTIFACT_MAX] + "\n\n… [truncated in trace]"
+                )
+            payload["type"] = "final"
+            payload["turn"] = turn
+            self.write_record(payload)
+            return
+
+        payload = event.model_dump(exclude_none=True)
+        payload["turn"] = turn
+        self.write_record(payload)
+
     def close(self) -> None:
+        self._flush_reasoning()
         self._file.close()
 
 
