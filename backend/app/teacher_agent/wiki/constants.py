@@ -10,7 +10,7 @@ ROLLUP_LABELS = {
     "course_state": "Course state",
     "open_loops": "Open loops",
     "misconceptions": "Misconceptions",
-    "student_notes": "Student notes",
+    "students": "Students",
 }
 
 CLASS_REGISTRY: list[ClassSummary] = [
@@ -40,7 +40,7 @@ INDEX_WIKI_PATH_RE = re.compile(r"(wiki/classes/[^\s|)]+?\.md)", re.I)
 
 
 def dedupe_wiki_proposals(proposals: list[WikiUpdateProposal]) -> list[WikiUpdateProposal]:
-    """Keep first proposal per wiki_path (compile used to emit student_notes twice)."""
+    """Keep first proposal per wiki_path (compile used to emit the student index twice)."""
     seen: set[str] = set()
     unique: list[WikiUpdateProposal] = []
     for proposal in proposals:

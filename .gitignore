@@ -1,5 +1,7 @@
 #Project specific
 ref_repos
+literature/*.pdf
+literature/**/*.pdf
 # Python
 backend/.env
 backend/.venv/

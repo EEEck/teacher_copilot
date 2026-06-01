@@ -84,6 +84,8 @@ Writes:
 
 - Only `diary_markdown` in the structured model output during chat.
 - Wiki updates happen only after teacher approval through the commit flow.
+- Commit/revise may update student pages, `students.md`, and the other class
+  roll-ups for the affected lesson.
 
 Allowed behavior:
 

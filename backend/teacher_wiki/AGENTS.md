@@ -19,7 +19,7 @@ wiki/classes/{class_id}/
   course_state.md
   misconceptions.md
   open_loops.md
-  student_notes.md      # index only: ## S-### + link to students/S-###.md
+  students.md           # class student index / roster
   timeline.md           # chronological narrative with links to lessons
   students/S-###.md     # entity pages (compounding observations)
   lessons/{YYYY-MM-DD}/
@@ -54,7 +54,7 @@ wiki/classes/{class_id}/
 ### Lesson revise (not ingest HITL)
 
 1. Teacher submits an updated diary for an existing lesson date via the revise API.
-2. The system re-writes lesson results, roll-ups, students, timeline, and raw in one deterministic pass (no per-file approval UI).
+2. The system re-writes lesson results, roll-ups, students index, students, timeline, and raw in one deterministic pass (no per-file approval UI).
 3. Prefer ingest + checkboxes for new lessons; use revise only to fix an already-committed lesson.
 
 ### Query / plan

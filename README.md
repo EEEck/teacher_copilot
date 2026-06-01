@@ -16,6 +16,8 @@ Current design and implementation notes live in [`implementation_plans/`](implem
   design rationale and AutoSci/Karpathy learnings.
 - [`teacher_wiki_browsing_plan.md`](implementation_plans/teacher_wiki_browsing_plan.md)
   — focused lesson-planning wiki browsing plan.
+- [`product_backlog.md`](implementation_plans/product_backlog.md) — v1.1–v1.3 product
+  backlog (proactive copilot / suggested tasks in v1.3).
 
 ## Architecture
 

@@ -1,13 +1,13 @@
 # Course State
 
 ## Current unit
-- Focus on redox reactions, particularly involving metals.
+- Reaction writing, balancing equations, oxidation numbers, and redox with ion follow-up.
 
 ## Last lesson
-- 2026-05-29: Redox Reactions with Metals
+- 2026-05-29: Anions and Oxidation State Review
 
 ## Next planned focus
-- Next lecture, focus on anions and clarify the misconception that oxidation always requires oxygen.
+- Apply oxidation-state rules to mixed ion practice and keep separating ion charge from oxidation number.
 
 ## Overall status
 - Updated 2026-05-29

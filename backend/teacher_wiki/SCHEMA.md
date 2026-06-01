@@ -6,7 +6,7 @@ Karpathy-style layers under `teacher_wiki/`:
 |-------|----------------|-------|
 | Index | `index.md` | Catalog; rebuilt on commit. Read first when searching. |
 | Log | `log.md` | Append-only commit audit trail. |
-| Class wiki | `wiki/classes/{class_id}/` | Approved lesson results, roll-ups, students, timeline. |
+| Class wiki | `wiki/classes/{class_id}/` | Approved lesson results, roll-ups, students index, students, timeline. |
 | Raw | `raw/classes/{class_id}/` | Immutable diary snapshot at commit time. |
 
 ## Lesson diary sections
@@ -24,7 +24,7 @@ Each ingest diary uses these `##` headings (see `DIARY_SECTION_HEADINGS` in code
 
 ### Ingest (`commit_ingest`)
 
-- `compile_from_diary` proposes every path that may change: `lesson_results.md`, roll-ups, `students/S-###.md`, `student_notes.md`, `timeline.md`, and `raw/classes/...`.
+- `compile_from_diary` proposes every path that may change: `lesson_results.md`, roll-ups, `students/S-###.md`, `students.md`, `timeline.md`, and `raw/classes/...`.
 - The teacher approves per file in the UI; only rows with `approved: true` are written.
 - `lesson_results.md` must be approved or commit returns 400.
 - Unapproved paths are never written (no hidden finalize step).

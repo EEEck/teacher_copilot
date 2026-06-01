@@ -64,7 +64,7 @@ def roll_up_paths(store, class_id: str) -> dict[str, Path]:
     base = store.class_dir(class_id)
     return {
         "course_state": base / "course_state.md",
-        "student_notes": base / "student_notes.md",
+        "students": base / "students.md",
         "misconceptions": base / "misconceptions.md",
         "open_loops": base / "open_loops.md",
     }

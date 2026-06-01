@@ -27,7 +27,9 @@ between raw lesson notes and future planning.
    AutoSci/Karpathy learnings.
 4. `implementation_plans/teacher_wiki_browsing_plan.md` — current lesson
    planning browsing plan.
-5. `backend/teacher_wiki/AGENTS.md` — wiki schema and wiki-specific workflow
+5. `implementation_plans/product_backlog.md` — versioned product backlog (v1.1–v1.3);
+   v1.3 memo covers proactive briefing / suggested tasks on landing.
+6. `backend/teacher_wiki/AGENTS.md` — wiki schema and wiki-specific workflow
    rules when touching memory behavior.
 
 ## Current Boundaries

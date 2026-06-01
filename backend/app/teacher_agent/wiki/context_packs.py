@@ -81,7 +81,7 @@ def build_plan_context(store, class_id: str) -> str:
         except KeyError:
             pass
 
-    for key in ("course_state", "open_loops", "misconceptions"):
+    for key in ("course_state", "students", "open_loops", "misconceptions"):
         path = store.roll_up_paths(class_id)[key]
         label = ROLLUP_LABELS.get(key, key)
         parts.extend([f"## {label}", store.read_text(path)[:2500], ""])
@@ -114,8 +114,8 @@ def build_ingest_context(store, class_id: str) -> str:
         "",
         "Help the teacher record what happened today. Use only what they say; use context for IDs and continuity.",
         "",
-        "## Student notes (use S-xxx pseudonyms from here)",
-        store.read_text(store.roll_up_paths(class_id)["student_notes"])[:4500],
+        "## Students",
+        store.read_text(store.roll_up_paths(class_id)["students"])[:4500],
         "",
         "## Course state",
         store.read_text(store.roll_up_paths(class_id)["course_state"])[:2000],

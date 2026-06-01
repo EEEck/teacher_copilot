@@ -162,8 +162,8 @@ class WikiStore:
     def _upsert_student_entity(self, class_id, student_id, lesson_date, bullets):
         return rollups._upsert_student_entity(self, class_id, student_id, lesson_date, bullets)
 
-    def _rebuild_student_notes_index(self, class_id, previews):
-        return rollups._rebuild_student_notes_index(self, class_id, previews)
+    def _rebuild_students_index(self, class_id, previews):
+        return rollups._rebuild_students_index(self, class_id, previews)
 
     def _compile_timeline_entry(self, class_id, lesson_date, title, diary_md):
         return rollups._compile_timeline_entry(self, class_id, lesson_date, title, diary_md)
