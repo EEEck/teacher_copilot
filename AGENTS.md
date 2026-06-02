@@ -21,14 +21,18 @@ between raw lesson notes and future planning.
 ## What To Read First
 
 1. `README.md` — how to run the app and overall architecture.
-2. `implementation_plans/agent_contracts.md` — current read/write/tool/output
+2. `implementation_plans/product_vision.md` — current product vision, scope,
+   and teacher-facing copilot behavior.
+3. `implementation_plans/product_backlog.md` — versioned feature direction.
+4. `implementation_plans/agent_architecture.md` — agent architecture,
+   memory/retrieval learnings, and implementation map.
+5. `implementation_plans/agent_contracts.md` — current read/write/tool/output
    contracts for the teacher agents.
-3. `implementation_plans/agent_design_plan.md` — MVP design rationale and
-   AutoSci/Karpathy learnings.
-4. `implementation_plans/product_backlog.md` — versioned product backlog (v1.1-v1.3);
-   v1.3 memo covers proactive briefing / suggested tasks on landing.
-5. `backend/teacher_wiki/AGENTS.md` — wiki schema and wiki-specific workflow
+6. `backend/teacher_wiki/AGENTS.md` — wiki schema and wiki-specific workflow
    rules when touching memory behavior.
+
+Optional learning/reference: `implementation_plans/agent_learning_guide.md`.
+It is an educational note, not a behavior contract.
 
 ## Current Boundaries
 
@@ -85,6 +89,7 @@ The useful learning from AutoSci is its discipline:
 - evidence packets and citations
 - proposal/action separation
 - maintenance and lint patterns
+- deterministic retrieval and purpose-specific context packs
 
 Do **not** port AutoSci wholesale into this MVP. In particular, avoid adding its
 graph engine, worktree fanout, multi-agent review pipeline, research-specific

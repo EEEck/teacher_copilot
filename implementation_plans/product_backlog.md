@@ -1,10 +1,11 @@
 ﻿# KlassenPilot Product Backlog
 
-Living backlog for post-MVP releases. **v1** is the current shipped prototype (see
-[`README.md`](../README.md) workflows and [`docs/REFACTOR_STATUS.md`](../docs/REFACTOR_STATUS.md)).
+Living backlog for post-MVP releases. **v1** is the current shipped prototype
+(see [`README.md`](../README.md) workflows).
 
 Behavior contracts stay in [`agent_contracts.md`](agent_contracts.md). This file is
-product direction only â€” not an implementation spec.
+product direction only â€” not an implementation spec. Product vision and scope
+live in [`product_vision.md`](product_vision.md).
 
 ---
 
@@ -24,15 +25,15 @@ Primary source: [`README.md`](../README.md) â€œv1.1 (planned)â€ plus re
 
 | Item | Notes |
 |------|--------|
-| **Test / exam generation** | New `ArtifactSpec` (seams exist in `artifact_spec.py`). Lesson-to-exam workflow from [`initial_plan.md`](../initial_plan.md) Phase 3. |
+| **Test / exam generation** | New `ArtifactSpec` (seams exist in `artifact_spec.py`). Generate tests from taught sequence, misconceptions, and assessment readiness. |
 | **Chat-driven wiki personalization** | Teacher edits `class_config.md` custom sections via memory chat; persisted through approved commit. Current implementation also includes compact class memory pages and deterministic query packs for planning and ingest. |
 | **Student report artifact** | Optional second artifact type using existing session/commit patterns. |
 | **Evidence / source panel (optional)** | Inline citations today; deferred API metadata for a UI source panel ([`agent_contracts.md`](agent_contracts.md)). |
 | **Wiki health check / lint** | `LINT_SYSTEM` prompt exists; expose as a bounded operator action, not silent background mutation. |
-| **Lightweight plan review** | Post-generation sanity pass after browsing behavior is stable ([`agent_design_plan.md`](agent_design_plan.md)). |
+| **Lightweight plan review** | Post-generation sanity pass after browsing behavior is stable ([`agent_architecture.md`](agent_architecture.md)). |
 | **Playwright E2E** | Deferred in refactor; add smoke paths for ingest commit and plan save. |
 
-**Not v1.1:** Postgres, multi-user accounts, Docling ingestion, grading â€” see [`initial_plan.md`](../initial_plan.md) Phases 2â€“4.
+**Not v1.1:** Postgres, multi-user accounts, Docling ingestion, grading.
 
 ---
 
@@ -45,8 +46,8 @@ Primary source: [`README.md`](../README.md) â€œv1.2 (planned)â€.
 | **Caddy reverse proxy (Docker Option B)** | Single entry port, same-origin `/api`, SSE-friendly. |
 | **Lean production images** | Next.js `standalone`, multi-stage slim Dockerfiles (non-dev CMD). |
 | **`compose.prod.yaml`** | Production profile without bind mounts. |
-| **Session persistence (optional)** | SQLite or similar when multi-worker or durable server-side chat history is needed ([`REFACTOR_STATUS.md`](../docs/REFACTOR_STATUS.md)). |
-| **Typed index / search improvements** | If wiki size makes range/topic tools insufficient ([`agent_design_plan.md`](agent_design_plan.md)). |
+| **Session persistence (optional)** | SQLite or similar when multi-worker or durable server-side chat history is needed. |
+| **Typed index / search improvements** | If deterministic wiki retrieval reaches measurable limits ([`agent_architecture.md`](agent_architecture.md)). |
 
 ---
 
@@ -143,8 +144,8 @@ validates class scope, size limits, and allowed paths before writing.
 
 ## Parking lot (unversioned)
 
-From [`initial_plan.md`](../initial_plan.md) and deferred contracts â€” revisit after v1.3
-if teacher demand is clear:
+Deferred contracts and older PRD ideas to revisit after v1.3 if teacher demand
+is clear:
 
 - Multiple classes polish, class calendar, lesson graph view
 - Docling ingestion (PDF/DOCX/PPTX)

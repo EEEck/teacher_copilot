@@ -10,12 +10,16 @@ schema rules, and the local AutoSci reference repo.
 
 Current design and implementation notes live in [`implementation_plans/`](implementation_plans/):
 
-- [`agent_contracts.md`](implementation_plans/agent_contracts.md) - reviewable
-  read/write/tool/output contracts for the teacher agents.
-- [`agent_design_plan.md`](implementation_plans/agent_design_plan.md) - MVP
-  design rationale and AutoSci/Karpathy retrieval learnings.
+- [`product_vision.md`](implementation_plans/product_vision.md) - current product
+  vision, product scope, and teacher-facing copilot behavior.
 - [`product_backlog.md`](implementation_plans/product_backlog.md) - v1.1-v1.3 product
   backlog (proactive copilot / suggested tasks in v1.3).
+- [`agent_architecture.md`](implementation_plans/agent_architecture.md) - agent
+  architecture, memory/retrieval learnings, and implementation map.
+- [`agent_contracts.md`](implementation_plans/agent_contracts.md) - reviewable
+  read/write/tool/output contracts for the teacher agents.
+- [`agent_learning_guide.md`](implementation_plans/agent_learning_guide.md) -
+  optional learning guide for agent concepts, reference repos, and best practices.
 
 ## Architecture
 
@@ -216,9 +220,17 @@ Get-Content .env | ForEach-Object {
 .\.venv\Scripts\uvicorn app.main:app --reload --port 8010
 ```
 
-## Architecture refactor
+## Developer docs
 
-The unified artifact-session refactor (Phases 0â€“5) is **complete** on this branch. Summary: one backend session service, streaming chat, decomposed wiki package, trustworthy ingest commit, and Cursor-style review UI. Details: [`docs/REFACTOR_STATUS.md`](docs/REFACTOR_STATUS.md).
+The current developer file stack is:
+
+- [`AGENTS.md`](AGENTS.md) - repo onboarding and agent/developer guardrails
+- [`implementation_plans/product_vision.md`](implementation_plans/product_vision.md) - product scope
+- [`implementation_plans/product_backlog.md`](implementation_plans/product_backlog.md) - roadmap
+- [`implementation_plans/agent_architecture.md`](implementation_plans/agent_architecture.md) - agent architecture and learnings
+- [`implementation_plans/agent_contracts.md`](implementation_plans/agent_contracts.md) - behavior contracts
+- [`implementation_plans/agent_learning_guide.md`](implementation_plans/agent_learning_guide.md) - optional agent learning/reference notes
+- [`backend/teacher_wiki/AGENTS.md`](backend/teacher_wiki/AGENTS.md) - wiki schema and workflow rules
 
 ## Testing
 
