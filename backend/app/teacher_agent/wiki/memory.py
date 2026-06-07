@@ -13,11 +13,54 @@ COMPACT_MEMORY_FILES: dict[str, str] = {
     "planning_brief": "planning_brief.md",
     "teaching_patterns": "teaching_patterns.md",
     "copilot_profile": "copilot_profile.md",
+    "class_state": "class_state.md",
     "session_summaries": "session_summaries.md",
 }
 
 PROFILE_SECTION_LIMIT = 12
 PROFILE_ENTRY_LIMIT = 280
+
+# Global, cross-class teacher profile ("user.md"). Single file per teacher.
+USER_PROFILE_REL = "wiki/teacher_profile.md"
+USER_PROFILE_SECTION_LIMIT = 8
+USER_PROFILE_ENTRY_LIMIT = 240
+
+# Hermes-style hard size budgets (chars). Enforced at write time (clamp on
+# every compaction/profile write) AND at inject time (slim context slice), so
+# durable memory never grows unbounded or pollutes the prompt.
+MEMORY_PAGE_BUDGETS: dict[str, int] = {
+    "user": 1500,
+    "copilot_profile": 1500,
+    "teaching_patterns": 2200,
+    "class_state": 1800,
+    "taught_so_far": 1500,
+    "planning_brief": 1200,
+    "session_summaries": 1200,
+    "subject_guide": 1400,
+}
+_DEFAULT_PAGE_BUDGET = 1800
+
+
+def memory_budget(key: str) -> int:
+    return MEMORY_PAGE_BUDGETS.get(key, _DEFAULT_PAGE_BUDGET)
+
+
+def clamp_memory_page(key: str, text: str) -> str:
+    """Trim a memory page to its budget on a line boundary, marking truncation.
+
+    Keeps pages small so they stay high-signal and never flood the context.
+    """
+    budget = memory_budget(key)
+    text = (text or "").rstrip()
+    if len(text) <= budget:
+        return text + ("\n" if text else "")
+    marker = "\n\n_… trimmed to size budget._\n"
+    keep = max(0, budget - len(marker))
+    clipped = text[:keep]
+    nl = clipped.rfind("\n")
+    if nl > keep * 0.5:
+        clipped = clipped[:nl]
+    return clipped.rstrip() + marker
 
 
 def memory_dir(store, class_id: str):
@@ -41,6 +84,15 @@ def compact_memory_excerpts(store, class_id: str, max_chars: int = 1600) -> list
 
 def read_copilot_profile(store, class_id: str) -> str:
     return store.read_text(memory_paths(store, class_id)["copilot_profile"])
+
+
+def user_profile_path(store):
+    return store.root / "wiki" / "teacher_profile.md"
+
+
+def read_user_profile(store) -> str:
+    """Global, cross-class teacher profile ("user.md")."""
+    return store.read_text(user_profile_path(store))
 
 
 def _normalize_profile_section(section: str) -> str:
@@ -107,7 +159,65 @@ def add_profile_conclusion(
             replacement = match.group(1) + "\n".join(existing_lines).rstrip() + "\n\n"
             text = text[: match.start()] + replacement + text[match.end() :]
 
-    store.write_text(path, text.rstrip() + "\n")
+    store.write_text(path, clamp_memory_page("copilot_profile", text))
+    return store.rel_wiki(path)
+
+
+def _ensure_user_profile_header(text: str) -> str:
+    if text.strip():
+        return text.rstrip() + "\n"
+    return (
+        "# Teacher Profile\n\n"
+        "> Global, cross-class teacher profile (communication style, stable "
+        "preferences, default lesson structure). Bounded local memory.\n\n"
+    )
+
+
+def add_user_profile_conclusion(
+    store,
+    section: str,
+    content: str,
+) -> str:
+    """Add/replace one small conclusion in the global teacher profile (user.md).
+
+    Bounded mirror of ``add_profile_conclusion`` for the cross-class profile.
+    """
+    clean = " ".join(content.strip().split())
+    if not clean:
+        raise ValueError("user profile conclusion cannot be empty")
+    if len(clean) > USER_PROFILE_ENTRY_LIMIT:
+        raise ValueError(
+            f"user profile conclusion must be <= {USER_PROFILE_ENTRY_LIMIT} chars"
+        )
+
+    sec = _normalize_profile_section(section)
+    path = user_profile_path(store)
+    text = _ensure_user_profile_header(store.read_text(path))
+    heading = f"## {sec}"
+    entry = f"- {clean}"
+
+    if entry in text:
+        return store.rel_wiki(path)
+
+    if heading not in text:
+        text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
+    else:
+        pattern = rf"(^##\s+{re.escape(sec)}\s*\n)(.*?)(?=^##\s+|\Z)"
+        match = re.search(pattern, text, flags=re.M | re.S)
+        if not match:
+            text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
+        else:
+            existing_lines = [
+                ln for ln in match.group(2).splitlines() if ln.strip().startswith("-")
+            ]
+            existing_lines = [ln for ln in existing_lines if clean not in ln]
+            existing_lines.append(entry)
+            if len(existing_lines) > USER_PROFILE_SECTION_LIMIT:
+                existing_lines = existing_lines[-USER_PROFILE_SECTION_LIMIT:]
+            replacement = match.group(1) + "\n".join(existing_lines).rstrip() + "\n\n"
+            text = text[: match.start()] + replacement + text[match.end() :]
+
+    store.write_text(path, clamp_memory_page("user", text))
     return store.rel_wiki(path)
 
 
@@ -280,6 +390,7 @@ def commit_memory_compaction(
         "planning_brief": "Planning Brief",
         "teaching_patterns": "Teaching Patterns",
         "copilot_profile": "Class Copilot Profile",
+        "class_state": "Class State",
         "session_summaries": "Session Summaries",
     }
     applied: list[str] = []
@@ -290,7 +401,8 @@ def commit_memory_compaction(
         rel = store.rel_wiki(path)
         if not rel.startswith(f"wiki/classes/{class_id}/memory/"):
             raise ValueError(f"Compact memory path outside class memory: {rel}")
-        store.write_text(path, _page_with_fallback(titles[key], content, class_id))
+        page = _page_with_fallback(titles[key], content, class_id)
+        store.write_text(path, clamp_memory_page(key, page))
         applied.append(rel)
 
     log_id = store._append_log(

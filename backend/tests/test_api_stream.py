@@ -60,8 +60,17 @@ def test_plan_chat_stream_fckw_redox_uses_memory_pathfinder(client: TestClient):
         json={
             "message": (
                 "Plan the next 45-minute lesson for Chemie 9b. Topic: redox "
-                "reactions applied to CFC/FCKW compounds. Build on our "
-                "existing redox lessons in the wiki."
+                "reactions applied to CFC/FCKW compounds "
+                "(Chlorfluorkohlenwasserstoffe). Include about 10 minutes on "
+                "environmental impact (ozone layer, Montreal Protocol, "
+                "alternatives). Build on our existing redox lessons in the wiki. "
+                "Exam-oriented Gymnasium level. Structure the lesson flow: "
+                "5 min redox recap, 15 min FCKW structure and redox half-reactions, "
+                "10 min environmental impact with one example (e.g. CFC-11), "
+                "10 min practice, 5 min exit ticket. Note the misconception: "
+                "oxidation number vs charge. Add differentiated practice and "
+                "homework (2 questions). Teacher notes: no real CFCs in the lab; "
+                "demo alternatives only."
             )
         },
     )
@@ -72,3 +81,24 @@ def test_plan_chat_stream_fckw_redox_uses_memory_pathfinder(client: TestClient):
     assert "read_lesson_range" in tool_names
     final = [e for e in events if e.get("type") == "final"][-1]
     assert "2026-05-25" in final["artifact_markdown"]
+    assert "CFC" in final["artifact_markdown"] or "FCKW" in final["artifact_markdown"]
+    assert "oxidation number" in final["artifact_markdown"]
+    assert "no real CFCs" in final["artifact_markdown"]
+    assert "Homework" in final["artifact_markdown"]
+
+    trace = client.get(f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/trace")
+    assert trace.status_code == 200, trace.text
+    body = trace.json()
+    assert body["prompt_stack"]["class_slice"]
+    assert body["prompt_assembly"]["stage"] == "plan_chat"
+    assert body["prompt_assembly"]["nested"]["class_slice"]["sections"]
+    assert body["prompt_stack"]["current_lessonplan_md"]
+    assert body["runtime"]["session_state"]["phase"] == "lesson_refinement"
+    assert body["runtime"]["lesson_planning_state"]["duration_minutes"] == 45
+    assert "wiki_search_001" in body["raw_evidence"]
+    event_types = [e["type"] for e in body["event_trace"]]
+    assert "reasoning_delta" not in event_types
+    assert event_types.count("prompt_assembly") >= 2
+    assert "tool_call" in event_types
+    assert "tool_result" in event_types
+    assert "final" in event_types

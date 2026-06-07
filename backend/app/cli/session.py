@@ -31,12 +31,10 @@ class CliSession:
                 self.draft = self.wiki.empty_plan_template()
 
     def context_pack(self) -> str:
-        index = self.wiki.load_index_context(self.class_id)
         if self.mode == "ingest":
-            pack = self.wiki.build_ingest_context(self.class_id)
+            return self.wiki.build_ingest_context_slim(self.class_id)
         else:
-            pack = self.wiki.build_plan_context(self.class_id)
-        return f"{index}\n\n{pack}"
+            return self.wiki.build_plan_context_slim(self.class_id)
 
     async def ensure_plan_opening(self) -> None:
         if self.mode != "plan" or self.plan_opening_done or self.messages:

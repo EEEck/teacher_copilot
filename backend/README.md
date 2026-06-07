@@ -48,6 +48,75 @@ REPL commands: `/context`, `/draft`, `/tools`, `/propose` (ingest only), `/help`
 
 Requires `OPENAI_API_KEY` in `backend/.env`. Not run in CI (live model calls).
 
+## Plan trace bundle
+
+Use this when debugging lesson-planning behavior, prompt assembly, tool calls, or
+context selection. It runs the default two-turn FCKW/CFC planning scenario
+against the local FastAPI backend and writes a complete run bundle under
+`backend/runs/{timestamp}-fckw-plan-2turn/`.
+
+Prerequisites:
+
+- Backend is running on `http://localhost:8010`.
+- `backend/.env` contains `OPENAI_API_KEY`.
+- The target class exists in `backend/teacher_wiki/`.
+
+PowerShell from repo root:
+
+```powershell
+.\scripts\run_plan_trace_bundle.ps1
+```
+
+Python from repo root:
+
+```powershell
+.\backend\.venv\Scripts\python .\scripts\run_plan_trace_bundle.py
+```
+
+Useful overrides:
+
+```powershell
+.\scripts\run_plan_trace_bundle.ps1 `
+  -ApiBase "http://localhost:8010" `
+  -ClassId "chemie_9b_2026_27" `
+  -OutputRoot "backend/runs" `
+  -RunName "manual-fckw-debug"
+
+.\backend\.venv\Scripts\python .\scripts\run_plan_trace_bundle.py `
+  --api-base "http://localhost:8010" `
+  --class-id "chemie_9b_2026_27" `
+  --output-root "backend/runs" `
+  --run-name "manual-fckw-debug"
+```
+
+To test a custom prompt while keeping the same debug bundle format:
+
+```powershell
+.\backend\.venv\Scripts\python .\scripts\run_plan_trace_bundle.py `
+  --prompt1-file ".\tmp\prompt1.txt" `
+  --prompt2-file ".\tmp\prompt2.txt"
+```
+
+The bundle includes:
+
+- `00-run-meta.json` - run metadata and the exact two prompts.
+- `03-turn1-sse.txt`, `05-turn2-sse.txt` - raw streamed events.
+- `06-trace-after-turn2.json` - final trace with prompt assemblies, tool calls,
+  evidence, and artifact state.
+- `07-final-lessonplan.md` - final teacher-facing plan.
+- `08-tool-calls-and-results.md` - readable tool call/result report.
+- `prompt-*-sections.md` - section-by-section view of what the model saw.
+- `raw-evidence/` - full captured tool outputs by `raw_ref`.
+
+Recommended debugging flow:
+
+1. Open the run folder `README.md`.
+2. Inspect `prompt-02-plan_chat-sections.md` or the latest
+   `prompt-*-sections.md` to see exact prompt context.
+3. Inspect `08-tool-calls-and-results.md` to verify browsing behavior.
+4. Inspect `07-final-lessonplan.md` to compare the final artifact against the
+   evidence and prompt instructions.
+
 ## Wiki memory
 
 The class wiki now includes compact memory pages under `wiki/classes/{class_id}/memory/`:

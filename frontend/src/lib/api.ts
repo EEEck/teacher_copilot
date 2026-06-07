@@ -118,11 +118,64 @@ export type PlanChatResponse = {
   reply: string;
   plan_markdown: string;
   ready_to_save: boolean;
+  phase?: string | null;
+  last_change_summary?: string;
+  session_state?: Record<string, unknown> | null;
+  lesson_planning_state?: Record<string, unknown> | null;
+  memory_candidates?: MemoryCandidate[];
+};
+export type MemoryCandidate = {
+  target: string;
+  section?: string;
+  candidate_update: string;
+  evidence?: string;
+  source?: string;
+  basis?: string;
+  confidence?: string;
+  requires_teacher_approval?: boolean;
 };
 export type SavePlanResponse = {
   lesson_date: string;
   title: string;
   plan_path: string;
+  session_state?: Record<string, unknown> | null;
+  lesson_planning_state?: Record<string, unknown> | null;
+  memory_candidates?: MemoryCandidate[];
+};
+export type PlanTraceResponse = {
+  class_id: string;
+  session_id: string;
+  status: string;
+  prompt_stack: Record<string, unknown>;
+  runtime: Record<string, unknown>;
+  messages: ChatMessage[];
+  artifact_markdown: string;
+  event_trace: Record<string, unknown>[];
+  raw_evidence: Record<string, string>;
+};
+export type ProfileCandidate = {
+  target: string;
+  section: string;
+  content: string;
+  basis: string;
+  confidence: string;
+  evidence?: string;
+};
+export type ProfileProposalResponse = {
+  class_id: string;
+  candidates: ProfileCandidate[];
+  warnings: string[];
+};
+export type MemoryApplyItem = {
+  target: string;
+  section?: string;
+  content: string;
+};
+export type MemoryApplyResponse = {
+  class_id: string;
+  applied_wiki_paths: string[];
+  skipped: string[];
+  warnings: string[];
 };
 export type LessonFlowPhase = { phase: string; minutes: number; description: string };
 export type LessonPlan = {
@@ -378,6 +431,8 @@ export const client = {
     ),
   planGetDraft: (classId: string, sessionId: string) =>
     api<PlanDraft>(`/api/classes/${classId}/plan/sessions/${sessionId}/draft`),
+  planTrace: (classId: string, sessionId: string) =>
+    api<PlanTraceResponse>(`/api/classes/${classId}/plan/sessions/${sessionId}/trace`),
   planUpdateDraft: (classId: string, sessionId: string, planMarkdown: string) =>
     api<PlanDraft>(`/api/classes/${classId}/plan/sessions/${sessionId}/draft`, {
       method: "PATCH",
@@ -396,5 +451,26 @@ export const client = {
         lesson_date: lessonDate,
         plan_markdown: planMarkdown,
       }),
+    }),
+  memoryProfilePropose: (
+    classId: string,
+    finalLessonMarkdown: string,
+    sessionState?: Record<string, unknown> | null,
+    lessonPlanningState?: Record<string, unknown> | null,
+    memoryCandidates?: MemoryCandidate[],
+  ) =>
+    api<ProfileProposalResponse>(`/api/classes/${classId}/memory/profile/propose`, {
+      method: "POST",
+      body: JSON.stringify({
+        final_lesson_markdown: finalLessonMarkdown,
+        session_state: sessionState ?? null,
+        lesson_planning_state: lessonPlanningState ?? null,
+        memory_candidates: memoryCandidates ?? [],
+      }),
+    }),
+  memoryApply: (classId: string, items: MemoryApplyItem[]) =>
+    api<MemoryApplyResponse>(`/api/classes/${classId}/memory/apply`, {
+      method: "POST",
+      body: JSON.stringify({ items }),
     }),
 };

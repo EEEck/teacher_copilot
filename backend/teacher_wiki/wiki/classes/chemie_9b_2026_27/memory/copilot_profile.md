@@ -1,13 +1,8 @@
-## Teacher Preferences  
+# Class Copilot Profile
 
 > Class: chemie_9b_2026_27
-- Prefers structured 45-minute lessons that include clear introductions, guided practices, and reflections on student progress.  
-- Utilizes durable wiki notes for enhanced operational clarity and student reference.  
+> Copilot working agreement for this class: planning patterns to apply, avoid-rules, repeated corrections, agent-behavior preferences. (Global teacher preferences live in user.md; how this class learns lives in teaching_patterns.md.)
 
-## Class Learning Profile  
-- Students thrive on concrete examples and require visual supports before grasping abstract symbolic rules.  
-- Regular scaffolding is essential to effectively differentiate between ion charge and oxidation number.  
-
-## Planning Patterns That Worked  
-- Quick diagnostic assessments effectively reveal students’ misconceptions in chemistry, allowing for timely intervention and support.  
-- Use of mixed examples paired with peer checking enhances accuracy and fosters collaborative learning.
+## Planning Patterns That Worked
+- Quick diagnostic assessments reveal misconceptions early; use them to target support within the lesson.
+- Mixed examples paired with peer checking improve accuracy and foster collaboration.

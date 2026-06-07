@@ -3,9 +3,9 @@
 Living backlog for post-MVP releases. **v1** is the current shipped prototype
 (see [`README.md`](../README.md) workflows).
 
-Behavior contracts stay in [`agent_contracts.md`](agent_contracts.md). This file is
-product direction only â€” not an implementation spec. Product vision and scope
-live in [`product_vision.md`](product_vision.md).
+Behavior contracts stay in [`docs/agent_contracts.md`](../docs/agent_contracts.md).
+This file is product direction only - not an implementation spec. Product
+vision and scope live in [`docs/product_vision.md`](../docs/product_vision.md).
 
 ---
 
@@ -28,9 +28,9 @@ Primary source: [`README.md`](../README.md) â€œv1.1 (planned)â€ plus re
 | **Test / exam generation** | New `ArtifactSpec` (seams exist in `artifact_spec.py`). Generate tests from taught sequence, misconceptions, and assessment readiness. |
 | **Chat-driven wiki personalization** | Teacher edits `class_config.md` custom sections via memory chat; persisted through approved commit. Current implementation also includes compact class memory pages and deterministic query packs for planning and ingest. |
 | **Student report artifact** | Optional second artifact type using existing session/commit patterns. |
-| **Evidence / source panel (optional)** | Inline citations today; deferred API metadata for a UI source panel ([`agent_contracts.md`](agent_contracts.md)). |
+| **Evidence / source panel (optional)** | Inline citations today; deferred API metadata for a UI source panel ([`docs/agent_contracts.md`](../docs/agent_contracts.md)). |
 | **Wiki health check / lint** | `LINT_SYSTEM` prompt exists; expose as a bounded operator action, not silent background mutation. |
-| **Lightweight plan review** | Post-generation sanity pass after browsing behavior is stable ([`agent_architecture.md`](agent_architecture.md)). |
+| **Lightweight plan review** | Post-generation sanity pass after browsing behavior is stable ([`docs/agent_architecture.md`](../docs/agent_architecture.md)). |
 | **Playwright E2E** | Deferred in refactor; add smoke paths for ingest commit and plan save. |
 
 **Not v1.1:** Postgres, multi-user accounts, Docling ingestion, grading.
@@ -47,7 +47,8 @@ Primary source: [`README.md`](../README.md) â€œv1.2 (planned)â€.
 | **Lean production images** | Next.js `standalone`, multi-stage slim Dockerfiles (non-dev CMD). |
 | **`compose.prod.yaml`** | Production profile without bind mounts. |
 | **Session persistence (optional)** | SQLite or similar when multi-worker or durable server-side chat history is needed. |
-| **Typed index / search improvements** | If deterministic wiki retrieval reaches measurable limits ([`agent_architecture.md`](agent_architecture.md)). |
+| **Typed index / search improvements** | If deterministic wiki retrieval reaches measurable limits ([`docs/agent_architecture.md`](../docs/agent_architecture.md)). |
+| **Trusted online source search (optional)** | Add a bounded web-search/read tool for Wikipedia, PhET, official curriculum/news, and other approved sources; keep class wiki retrieval as the default memory path. |
 
 ---
 
@@ -90,8 +91,9 @@ surface the next. Not a full project-management board.
    Kinds: `log_memory`, `plan_lesson`, `close_loop`, `review_commit`, `fill_gap`, `external_resource`.
    Dismiss / done states stored locally or in lightweight backend store.
 
-4. **Resource suggestions (bounded)** â€” Optional web lookup for PhET, Wikipedia, etc.;
-   output is **adaptation notes + links**, never auto-inserted into wiki.
+4. **Resource suggestions (bounded)** â€” Optional trusted-source lookup for PhET,
+   Wikipedia, official sources, news, etc.; output is **adaptation notes + links**,
+   never auto-inserted into wiki.
 
 5. **Post-commit follow-ups** â€” After ingest approve, enqueue 1â€“3 concrete next tasks
    (timeline, misconceptions, student note) with diff preview â€” extends current HITL commit UX.

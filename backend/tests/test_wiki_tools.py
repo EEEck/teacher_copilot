@@ -19,4 +19,5 @@ def test_create_chat_wiki_tools_exposes_mvp_names():
         "read_lesson_range",
         "search_memory",
         "read_memory_page",
+        "get_raw_evidence",
     }

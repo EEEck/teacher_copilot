@@ -3,13 +3,48 @@
 This file is the wiki-specific schema and workflow contract for
 `backend/teacher_wiki/`. For full repo onboarding and agent development context,
 read [`../../AGENTS.md`](../../AGENTS.md) first. For current behavior contracts,
-read [`../../implementation_plans/agent_contracts.md`](../../implementation_plans/agent_contracts.md).
+read [`../../docs/agent_contracts.md`](../../docs/agent_contracts.md).
 
 ## Three layers
 
 1. **Raw** â€” `raw/classes/{class_id}/{YYYY-MM-DD}-{slug}.md` â€” immutable approved diaries. Never edit after commit.
 2. **Curated wiki** â€” `wiki/classes/{class_id}/` â€” structured pages maintained by the agent (with teacher HITL on ingest).
 3. **Navigation** â€” `index.md` (catalog), `log.md` (append-only changelog).
+
+## Memory pages and scope
+
+Compact, size-budgeted derived pages back the copilot's working memory. Keep
+each scope clean (no cross-contamination); dedupe and replace stale facts.
+
+- `wiki/teacher_profile.md` (**user.md**, GLOBAL, one per teacher) â€” communication
+  style, stable preferences, default lesson structure. Agent-maintained, bounded.
+- `wiki/subjects/{subject}.md` (subject guide) - subject-wide teaching guidance,
+  common misconceptions, safety reminders, and reusable question patterns. Do
+  not store class-specific observations here.
+- `memory/teaching_patterns.md` (class + subject) â€” how THIS class learns and
+  which teaching approaches work/fail (holds the class learning profile).
+- `memory/copilot_profile.md` (**copilot.md**, class) â€” copilot working agreement
+  only: planning patterns, avoid-rules, repeated corrections, agent behavior.
+- `memory/class_state.md` (class) â€” derived current-state snapshot.
+- `memory/taught_so_far.md`, `memory/planning_brief.md`, `memory/session_summaries.md`.
+
+Durable writes to these pages are teacher-approved only (via the memory
+refresh/propose/apply endpoints); planning and ingest chat never write them.
+
+### Memory update routing
+
+During chat, collect possible durable updates as candidates only. The LLM may
+propose, but backend code validates scope and writes only after teacher approval.
+
+- Global teacher preference -> `wiki/teacher_profile.md`.
+- Subject-wide chemistry guidance -> `wiki/subjects/chemie.md` (manual/update
+  workflow only; do not infer from one class).
+- Class learning pattern -> `memory/teaching_patterns.md`.
+- Copilot behavior rule for this class -> `memory/copilot_profile.md`.
+- Current class state / likely next move -> `memory/class_state.md`.
+- Year-to-date taught sequence -> `memory/taught_so_far.md`.
+- Lesson facts -> `lessons/{YYYY-MM-DD}/lesson_results.md` through ingest HITL.
+- Student-specific facts -> `students/S-###.md`, pseudonymous only.
 
 ## Directory layout
 
@@ -22,8 +57,9 @@ wiki/classes/{class_id}/
   memory/
     taught_so_far.md
     planning_brief.md
-    teaching_patterns.md
-    copilot_profile.md
+    teaching_patterns.md   # class+subject teaching style (how this class learns)
+    copilot_profile.md     # class copilot working agreement (copilot.md)
+    class_state.md         # derived current-state snapshot
     session_summaries.md
   students.md           # class student index / roster
   timeline.md           # chronological narrative with links to lessons

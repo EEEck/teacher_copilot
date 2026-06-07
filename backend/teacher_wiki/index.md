@@ -18,7 +18,7 @@
 - [Taught So Far](wiki/classes/chemie_9b_2026_27/memory/taught_so_far.md)
 - [Planning Brief](wiki/classes/chemie_9b_2026_27/memory/planning_brief.md)
 - [Teaching Patterns](wiki/classes/chemie_9b_2026_27/memory/teaching_patterns.md)
-- [copilot_profile](wiki/classes/chemie_9b_2026_27/memory/copilot_profile.md)
+- [Class Copilot Profile](wiki/classes/chemie_9b_2026_27/memory/copilot_profile.md)
 - [Session Summaries](wiki/classes/chemie_9b_2026_27/memory/session_summaries.md)
 
 ### Lessons

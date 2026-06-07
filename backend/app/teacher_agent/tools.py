@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import date
+from typing import Optional
 
 from agents import function_tool
 
+from app.teacher_agent.planning_state import PlanRuntime
 from app.teacher_agent.wiki_store import WikiStore
 
 
@@ -15,6 +17,29 @@ from app.teacher_agent.wiki_store import WikiStore
 class WikiToolContext:
     wiki: WikiStore
     class_id: str
+    # When set (planning chat), tool outputs are captured into raw_store under a
+    # raw_ref so the model can summarize them into compact evidence briefs and
+    # fetch the raw later via get_raw_evidence (progressive exposure).
+    planning: Optional[PlanRuntime] = None
+
+
+def _capture(planning: Optional[PlanRuntime], kind: str, payload: str) -> str:
+    """Stash a raw tool output under a raw_ref and prefix the ref for the model."""
+    if planning is None:
+        return payload
+    raw_ref = planning.add_raw(kind, payload)
+    return f"raw_ref: {raw_ref}\n{payload}"
+
+
+def lookup_raw_evidence(planning: Optional[PlanRuntime], raw_ref: str) -> str:
+    """Return the captured raw output for a raw_ref (progressive exposure)."""
+    if planning is None:
+        return "Error: no evidence store for this session."
+    raw = planning.raw_store.get(raw_ref.strip())
+    if raw is None:
+        available = ", ".join(sorted(planning.raw_store)) or "(none)"
+        return f"Error: unknown raw_ref '{raw_ref}'. Available: {available}"
+    return raw
 
 
 def _lesson_paths(
@@ -224,18 +249,29 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
         topic: str = "",
         max_results: int = 12,
     ) -> str:
-        """List class lessons by optional YYYY-MM-DD range and topic before reading details."""
+        """Map the class lesson sequence.
+
+        Use this before reading details when the teacher asks about recent/older
+        lessons, a date range, a review of prior lectures, what has been taught,
+        or what class history should shape a new plan. Returns dates, titles,
+        summaries, covered topics, homework, and source paths.
+        """
         payload = _list_lessons_payload(
             wiki, class_id, start_date, end_date, topic, max_results
         )
-        return json.dumps(payload, indent=2)
+        return _capture(ctx.planning, "list_lessons", json.dumps(payload, indent=2))
 
     @function_tool
     def read_lesson(lesson_date: date) -> str:
-        """Read one lesson by date (YYYY-MM-DD): lesson notes, saved plan, and rollup excerpts."""
+        """Read evidence for one known lesson date.
+
+        Use after list_lessons/search_memory when one lesson needs source-level
+        detail. Returns lesson notes, saved lesson plan, misconception/open-loop
+        rollup excerpts, and source paths.
+        """
         try:
             payload = _lesson_detail_payload(wiki, class_id, lesson_date.isoformat())
-            return json.dumps(payload, indent=2)
+            return _capture(ctx.planning, "read_lesson", json.dumps(payload, indent=2))
         except KeyError as e:
             return f"Error: {e}"
 
@@ -246,7 +282,13 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
         topic: str = "",
         max_lessons: int = 12,
     ) -> str:
-        """Read a compact packet for lessons in a YYYY-MM-DD range; use for reviews/tests spanning weeks."""
+        """Read evidence across multiple lessons in a date range.
+
+        Use when the teacher asks to build from several lessons, review recent
+        lectures, diagnose recurring student confusion, plan a test/quiz, or
+        synthesize what was taught across weeks. Returns compact lesson notes,
+        covered topics, rollup excerpts, warnings, and source paths.
+        """
         listed = _list_lessons_payload(
             wiki, class_id, start_date, end_date, topic, max_lessons
         )
@@ -288,24 +330,45 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
             "lessons": lessons,
             "warnings": listed.get("warnings", []),
         }
-        return json.dumps(payload, indent=2)
+        return _capture(ctx.planning, "read_lesson_range", json.dumps(payload, indent=2))
 
     @function_tool
     def search_memory(query: str, max_results: int = 8) -> str:
-        """Rank class wiki paths for a topic; returns path, kind, title, score, matched terms, snippet."""
+        """Find relevant class wiki pages for a broad topic.
+
+        Use as the pathfinder when the teacher names a topic, misconception,
+        skill, or application and you do not yet know which wiki pages matter.
+        Returns ranked source-bearing results: path, kind, title, score,
+        matched_terms, source, and snippet.
+        """
         limit = max(1, min(max_results or 8, 20))
         hits = wiki.find_in_memory(class_id, query, max_results=limit)
-        return json.dumps(hits, indent=2)
+        return _capture(ctx.planning, "wiki_search", json.dumps(hits, indent=2))
 
     @function_tool
     def read_memory_page(path: str) -> str:
-        """Read one class wiki page by path from find_in_memory (under wiki/classes/{class_id}/)."""
+        """Read exact wording from one class wiki page.
+
+        Use for a path returned by search_memory/list_lessons when the snippet
+        is not enough, when provenance matters, or when you need exact rollup or
+        compact-memory wording. Path must stay under the selected class wiki.
+        """
         if not wiki.is_class_memory_path(class_id, path):
             return f"Error: path must be under wiki/classes/{class_id}/"
         try:
-            return wiki.read_wiki_page(path)
+            return _capture(ctx.planning, "read_memory_page", wiki.read_wiki_page(path))
         except ValueError as e:
             return f"Error: {e}"
+
+    @function_tool
+    def get_raw_evidence(raw_ref: str) -> str:
+        """Fetch full raw output for a previously captured evidence raw_ref.
+
+        Use only when a compact evidence brief is ambiguous, contradictory, or
+        needs exact wording/provenance. Normal planning should use the compact
+        evidence briefs already injected into the prompt.
+        """
+        return lookup_raw_evidence(ctx.planning, raw_ref)
 
     return [
         list_lessons,
@@ -313,4 +376,5 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
         read_lesson_range,
         search_memory,
         read_memory_page,
+        get_raw_evidence,
     ]

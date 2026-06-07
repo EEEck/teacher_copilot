@@ -22,6 +22,10 @@ Thumbs.db
 # Dev scripts
 scripts/.logs/
 
+# Local trace/run artifacts
+/runs/
+/backend/runs/
+
 # Secrets
 .env
 *.env.local

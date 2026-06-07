@@ -140,10 +140,16 @@ class WikiStore:
     def read_copilot_profile(self, class_id):
         return memory.read_copilot_profile(self, class_id)
 
+    def read_user_profile(self):
+        return memory.read_user_profile(self)
+
     def add_profile_conclusion(self, class_id, section, content, *, source_path=None):
         return memory.add_profile_conclusion(
             self, class_id, section, content, source_path=source_path
         )
+
+    def add_user_profile_conclusion(self, section, content):
+        return memory.add_user_profile_conclusion(self, section, content)
 
     def search_personal_memory(self, class_id, query, max_results=5):
         return memory.search_personal_memory(self, class_id, query, max_results)
@@ -161,8 +167,17 @@ class WikiStore:
     def build_plan_context(self, class_id):
         return context_packs.build_plan_context(self, class_id)
 
+    def build_plan_context_slim(self, class_id):
+        return context_packs.build_plan_context_slim(self, class_id)
+
+    def build_plan_context_slim_trace(self, class_id):
+        return context_packs.build_plan_context_slim_trace(self, class_id)
+
     def build_ingest_context(self, class_id):
         return context_packs.build_ingest_context(self, class_id)
+
+    def build_ingest_context_slim(self, class_id):
+        return context_packs.build_ingest_context_slim(self, class_id)
 
     def build_context_package(self, class_id, mode):
         return context_packs.build_context_package(self, class_id, mode)

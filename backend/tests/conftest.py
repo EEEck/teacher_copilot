@@ -27,6 +27,18 @@ from app.schemas.api import (
     LessonPlan,
 )
 from app.teacher_agent.models import MemoryCompactOutput
+from app.teacher_agent.planning_state import (
+    EvidenceBrief,
+    LessonPlanningState,
+    MemoryCandidate,
+    PlanRuntime,
+    SessionState,
+    LessonPlanningStatePatch,
+    SessionStatePatch,
+    StatePatch,
+    merge_turn_into_runtime,
+    planning_api_payload,
+)
 from app.services.ingest_service import IngestService
 from app.services.plan_service import PlanService
 from app.teacher_agent.stream_events import (
@@ -98,13 +110,82 @@ class StubAgentRunner:
     async def plan_opening(self, class_id: str) -> str:
         return f"Opening planning session for {class_id}."
 
+    def _emit_plan_state(
+        self,
+        planning: PlanRuntime,
+        messages: list[ChatMessage],
+        plan_md: str,
+        partial_plan: str,
+    ) -> None:
+        """Simulate the model emitting structured state for one plan turn."""
+        latest = messages[-1].content if messages else ""
+        briefs: list[EvidenceBrief] = []
+        if "redox" in latest.lower() or "fckw" in latest.lower():
+            ref = planning.next_raw_ref("wiki_search")
+            planning.raw_store[ref] = (
+                '[{"path":"wiki/classes/chemie_9b_2026_27/lessons/2026-05-25/'
+                'lesson_results.md","title":"Redox Reactions with Metals"}]'
+            )
+            briefs.append(
+                EvidenceBrief(
+                    type="wiki_search",
+                    purpose="Find prior redox context",
+                    brief=["Redox covered on 2026-05-25."],
+                    impact_on_plan="Reuse the 2026-05-25 redox examples.",
+                    raw_ref=ref,
+                    confidence="high",
+                )
+            )
+        merge_turn_into_runtime(
+            planning,
+            state_patch=StatePatch(
+                session_state=SessionStatePatch(
+                    phase="lesson_refinement",
+                    teacher_goal=latest[:80],
+                    decisions=[
+                        "Use a 45-minute Einstieg/practice/reflection structure."
+                    ],
+                ),
+                lesson_planning_state=LessonPlanningStatePatch(
+                    lesson_topic="Stub topic",
+                    duration_minutes=45,
+                    accepted_plan_elements=["Warmup diagnostic"],
+                ),
+            ),
+            session_state=SessionState(
+                phase="lesson_refinement",
+                teacher_goal=latest[:80],
+                decisions=["Use a 45-minute Einstieg/practice/reflection structure."],
+            ),
+            lesson_planning_state=LessonPlanningState(
+                lesson_topic="Stub topic",
+                duration_minutes=45,
+                accepted_plan_elements=["Warmup diagnostic"],
+            ),
+            new_evidence_briefs=briefs,
+            memory_candidates=[
+                MemoryCandidate(
+                    target="copilot.md",
+                    candidate_update="Draft early, then refine the markdown directly.",
+                    source="inferred_from_session",
+                    confidence="medium",
+                )
+            ],
+            last_change_summary="Updated plan draft.",
+            plan_changed=plan_md.strip() != (partial_plan or "").strip(),
+        )
+        planning.session_state.phase = "lesson_refinement"
+
     async def plan_chat(
         self,
         class_id: str,
         messages: list[ChatMessage],
         partial_plan: str = "",
         attachments: list[ChatAttachment] | None = None,
+        planning: PlanRuntime | None = None,
     ) -> tuple[str, str, bool]:
+        if planning is not None:
+            self._emit_plan_state(planning, messages, READY_PLAN, partial_plan)
         return "Here is an updated plan draft.", READY_PLAN, True
 
     async def ingest_chat(
@@ -158,15 +239,50 @@ class StubAgentRunner:
                 ),
                 copilot_profile_markdown=(
                     "# Class Copilot Profile\n\n"
-                    "## Teacher Preferences\n"
-                    "- Prefers concise 45-minute plans with Einstieg, practice, reflection.\n\n"
-                    "## Class Learning Profile\n"
-                    "- Concrete examples before symbolic abstraction work well.\n"
+                    "## Planning Patterns\n"
+                    "- Draft early, then refine the markdown artifact directly.\n"
                 ),
+                class_state_markdown=(
+                    "# Class State\n\n"
+                    "- Current unit: redox. Next: practice arrow direction.\n"
+                ),
+                stale_report=[],
                 warnings=[],
             ),
             source["source_paths"],
             source["warnings"],
+        )
+
+    async def propose_profile_updates(
+        self,
+        class_id: str,
+        final_lesson_markdown: str = "",
+        session_state=None,
+        lesson_planning_state=None,
+        memory_candidates=None,
+    ):
+        from app.teacher_agent.models import ProfileCandidateOut, ProfileProposalOutput
+
+        return ProfileProposalOutput(
+            user_candidates=[
+                ProfileCandidateOut(
+                    target="user.md",
+                    section="Communication",
+                    content="Prefers concise, practical plans with one strong main activity.",
+                    basis="inferred",
+                    confidence="medium",
+                )
+            ],
+            copilot_candidates=[
+                ProfileCandidateOut(
+                    target="copilot.md",
+                    section="Planning Patterns",
+                    content="Draft early, then refine the markdown directly.",
+                    basis="explicit",
+                    confidence="high",
+                )
+            ],
+            warnings=[],
         )
 
     async def ingest_chat_stream(
@@ -185,12 +301,32 @@ class StubAgentRunner:
             completeness=checklist,
         )
 
+    def _plan_final(
+        self,
+        reply: str,
+        plan_md: str,
+        planning: PlanRuntime | None,
+    ) -> SseFinal:
+        payload = planning_api_payload(planning) if planning is not None else {}
+        return SseFinal(
+            reply=reply,
+            artifact_markdown=plan_md,
+            ready=True,
+            completeness=None,
+            phase=payload.get("phase"),
+            last_change_summary=payload.get("last_change_summary"),
+            session_state=payload.get("session_state"),
+            lesson_planning_state=payload.get("lesson_planning_state"),
+            memory_candidates=payload.get("memory_candidates"),
+        )
+
     async def plan_chat_stream(
         self,
         class_id: str,
         messages: list[ChatMessage],
         partial_plan: str = "",
         attachments: list[ChatAttachment] | None = None,
+        planning: PlanRuntime | None = None,
     ) -> AsyncIterator:
         latest = messages[-1].content.lower() if messages else ""
         if "fckw" in latest or "redox" in latest:
@@ -209,20 +345,18 @@ class StubAgentRunner:
                 call_id="call-2",
             )
             plan = READY_PLAN + "\n## Sources\n- Based on the 2026-05-25 redox lesson notes.\n"
-            yield SseFinal(
-                reply="Using the recent redox lessons, including 2026-05-25.",
-                artifact_markdown=plan,
-                ready=True,
-                completeness=None,
+            if planning is not None:
+                self._emit_plan_state(planning, messages, plan, partial_plan)
+            yield self._plan_final(
+                "Using the recent redox lessons, including 2026-05-25.", plan, planning
             )
             return
 
         yield SseToolCall(name="search_memory", args="{}", call_id="call-1")
-        yield SseFinal(
-            reply="Here is an updated plan draft.",
-            artifact_markdown=READY_PLAN,
-            ready=True,
-            completeness=None,
+        if planning is not None:
+            self._emit_plan_state(planning, messages, READY_PLAN, partial_plan)
+        yield self._plan_final(
+            "Here is an updated plan draft.", READY_PLAN, planning
         )
 
 

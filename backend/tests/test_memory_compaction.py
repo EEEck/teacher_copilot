@@ -26,7 +26,7 @@ def test_context_packages_include_compact_memory_when_present(wiki: WikiStore):
     assert "Last 2 taught lessons" in plan
     assert "Compact sequence marker" in plan
     assert "Profile marker" in plan
-    assert "Recent saved plans" in ingest
+    assert "Ingest context (compact)" in ingest
     assert "Compact sequence marker" in ingest
 
 
@@ -111,4 +111,8 @@ def test_memory_compact_api_writes_only_class_memory(client: TestClient):
         params={"path": f"wiki/classes/{CLASS_ID}/memory/copilot_profile.md"},
     )
     assert file_res.status_code == 200
-    assert "Teacher Preferences" in file_res.json()["markdown"]
+    # copilot.md is now the narrowed working agreement (planning patterns, etc.);
+    # global teacher preferences live in user.md.
+    assert "Planning Patterns" in file_res.json()["markdown"]
+    # class_state is now also produced by compaction.
+    assert f"wiki/classes/{CLASS_ID}/memory/class_state.md" in applied

@@ -21,6 +21,7 @@ from app.schemas.api import (
     WikiUpdateProposal,
 )
 
+from app.context_limits import apply_char_limit, get_context_limits
 from app.teacher_agent.wiki.constants import (
     CLASS_REGISTRY,
     DIARY_SECTION_HEADINGS,
@@ -217,15 +218,282 @@ def build_base_class_context(store, class_id: str) -> str:
 def build_context_package(store, class_id: str, mode: str) -> str:
     """Named frozen context package for a workflow session."""
     normalized = mode.strip().lower()
+    if normalized in {"ingest", "memory", "update_memory"}:
+        return build_ingest_context_slim(store, class_id)
     parts = [store.load_index_context(class_id), build_base_class_context(store, class_id)]
     if normalized in {"plan", "planning"}:
         parts.append(build_plan_context(store, class_id))
-    elif normalized in {"ingest", "memory", "update_memory"}:
-        parts.append(build_ingest_context(store, class_id))
     else:
         raise ValueError(f"Unknown context package mode: {mode}")
     return "\n\n".join(part for part in parts if part.strip())
 
+
+
+def _trace_section(
+    *,
+    name: str,
+    function: str,
+    source: str,
+    text: str,
+    included: bool = True,
+) -> dict:
+    return {
+        "name": name,
+        "function": function,
+        "source": source,
+        "included": included,
+        "chars": len(text or ""),
+        "text": text or "",
+    }
+
+
+def build_plan_context_slim_trace(store, class_id: str) -> dict:
+    """Return the slim planning context plus a section-by-section debug trace.
+
+    Unlike ``build_plan_context`` (which stacks index + base + plan packs and
+    duplicates misconceptions/open loops several times), this returns each piece
+    once, each clamped to its ``MEMORY_PAGE_BUDGETS`` size, so the prompt stays
+    small and high-signal and never needs a blunt end-of-pack truncation.
+    """
+    from app.teacher_agent.wiki import memory as _mem
+
+    snapshot = store.get_snapshot(class_id)
+    cls = store.get_class(class_id)
+    paths = store.memory_paths(class_id)
+    sections: list[dict] = []
+    parts: list[str] = []
+
+    def add_section(
+        name: str,
+        source: str,
+        lines: list[str],
+        *,
+        function: str = "build_plan_context_slim",
+        included: bool = True,
+    ) -> None:
+        text = "\n".join(lines)
+        sections.append(
+            _trace_section(
+                name=name,
+                function=function,
+                source=source,
+                text=text,
+                included=included,
+            )
+        )
+        if included:
+            parts.extend(lines)
+
+    add_section(
+        "Class identity snapshot",
+        "get_snapshot() + get_class()",
+        [
+            f"# Class memory (compact) - {snapshot.label} ({class_id})",
+            f"Subject: {cls.subject} | Current unit: {snapshot.current_unit}",
+            f"Last committed lesson: {snapshot.last_committed_date or 'None'} | "
+            f"Open loops: {snapshot.open_loop_count}",
+        ],
+    )
+    add_section(
+        "Top misconceptions",
+        "snapshot.top_misconceptions",
+        [
+            "",
+            "## Top misconceptions",
+            *([f"- {m}" for m in snapshot.top_misconceptions[:6]] or ["- None listed"]),
+        ],
+    )
+    if snapshot.recent_lessons:
+        add_section(
+            "Recent lessons",
+            "snapshot.recent_lessons",
+            [
+                "",
+                "## Recent lessons",
+                *[f"- {line}" for line in snapshot.recent_lessons[:3]],
+            ],
+        )
+    subject_path = store.root / "wiki" / "subjects" / f"{cls.subject}.md"
+    subject_text = store.read_text(subject_path).strip()
+    if subject_text:
+        add_section(
+            "Subject guide",
+            store.rel_wiki(subject_path),
+            [
+                "",
+                f"## Subject guide: {cls.subject}",
+                _mem.clamp_memory_page("subject_guide", subject_text).rstrip(),
+            ],
+        )
+    else:
+        sections.append(
+            _trace_section(
+                name="Subject guide",
+                function="build_plan_context_slim",
+                source=store.rel_wiki(subject_path),
+                text="",
+                included=False,
+            )
+        )
+    for key, label in (
+        ("class_state", "Class state"),
+        ("planning_brief", "Planning brief"),
+        ("teaching_patterns", "Teaching patterns"),
+    ):
+        text = store.read_text(paths[key]).strip() if key in paths else ""
+        source = store.rel_wiki(paths[key]) if key in paths else f"memory/{key}.md"
+        if text:
+            add_section(
+                label,
+                source,
+                ["", f"## {label}", _mem.clamp_memory_page(key, text).rstrip()],
+            )
+        else:
+            sections.append(
+                _trace_section(
+                    name=label,
+                    function="build_plan_context_slim",
+                    source=source,
+                    text="",
+                    included=False,
+                )
+            )
+    rendered = "\n".join(parts)
+    return {
+        "function": "build_plan_context_slim",
+        "chars": len(rendered),
+        "text": rendered,
+        "sections": sections,
+    }
+
+
+def build_plan_context_slim(store, class_id: str) -> str:
+    """Deduped, budgeted compact class slice for the planning chat prompt."""
+    return build_plan_context_slim_trace(store, class_id)["text"]
+
+
+def build_ingest_context_slim(store, class_id: str) -> str:
+    """Deduped, purpose-built context slice for lesson-memory ingest chat.
+
+    Live ingest chat only needs continuity for logging today's lesson: class
+    identity, previous lesson, roster IDs, course/open-loop state, compact memory,
+    and logging conventions. It should not stack index + base + query pack,
+    because that repeats the same roll-ups several times.
+    """
+    from app.teacher_agent.wiki import memory as _mem
+
+    lim = get_context_limits()
+    snapshot = store.get_snapshot(class_id)
+    cls = store.get_class(class_id)
+    rollups = store.roll_up_paths(class_id)
+    mem_paths = store.memory_paths(class_id)
+
+    parts = [
+        f"# Ingest context (compact) - {snapshot.label} ({class_id})",
+        f"Subject: {cls.subject} | Current unit: {snapshot.current_unit}",
+        f"Last committed lesson: {snapshot.last_committed_date or 'None'} | "
+        f"Open loops: {snapshot.open_loop_count}",
+        "",
+        "Use this context for continuity only. Log only what the teacher says happened today.",
+        "Use pseudonymous student IDs only (S-001 style IDs).",
+        "",
+    ]
+
+    if snapshot.last_committed_date:
+        try:
+            detail = store.get_lesson_detail(class_id, snapshot.last_committed_date)
+            previous = apply_char_limit(
+                detail.diary_markdown, lim.ingest_previous_lesson_chars
+            )
+            parts.extend(
+                [
+                    f"## Previous lesson ({snapshot.last_committed_date})",
+                    previous or "- Previous lesson detail is empty.",
+                    "",
+                ]
+            )
+        except KeyError:
+            parts.extend(["## Previous lesson", "- Previous lesson detail not found.", ""])
+    else:
+        parts.extend(["## Previous lesson", "- No previous lesson found.", ""])
+
+    parts.extend(
+        [
+            "## Student roster excerpt",
+            apply_char_limit(
+                store.read_text(rollups["students"]), lim.ingest_student_roster_chars
+            )
+            or "- No student roster found.",
+            "",
+            "## Course state",
+            apply_char_limit(
+                store.read_text(rollups["course_state"]), lim.ingest_course_state_chars
+            )
+            or "- No course state found.",
+            "",
+            "## Open loops",
+            apply_char_limit(
+                store.read_text(rollups["open_loops"]), lim.ingest_open_loops_chars
+            )
+            or "- No open loops found.",
+            "",
+            "## Misconceptions to watch",
+        ]
+    )
+    parts.extend(
+        [f"- {m}" for m in snapshot.top_misconceptions[:5]]
+        if snapshot.top_misconceptions
+        else ["- None listed yet."]
+    )
+
+    compact_pages = [
+        ("class_state", "Class state"),
+        ("taught_so_far", "Taught so far"),
+        ("planning_brief", "Planning brief"),
+        ("teaching_patterns", "Teaching patterns"),
+    ]
+    any_compact = False
+    parts.extend(["", "## Compact class memory"])
+    for key, label in compact_pages:
+        text = store.read_text(mem_paths[key]).strip() if key in mem_paths else ""
+        if not text:
+            continue
+        any_compact = True
+        parts.extend([f"### {label}", _mem.clamp_memory_page(key, text).rstrip()])
+    if not any_compact:
+        parts.append("- No compact class memory pages found yet.")
+
+    planned = [e for e in store.get_timeline(class_id).entries if e.has_plan][:1]
+    if planned:
+        for entry in planned:
+            try:
+                detail = store.get_lesson_detail(class_id, entry.date)
+            except KeyError:
+                continue
+            if detail.lesson_plan_markdown:
+                parts.extend(
+                    [
+                        "",
+                        f"## Most recent saved plan ({entry.date})",
+                        apply_char_limit(
+                            detail.lesson_plan_markdown, lim.ingest_saved_plan_chars
+                        ),
+                    ]
+                )
+                break
+
+    parts.extend(
+        [
+            "",
+            "## Wiki logging conventions",
+            apply_char_limit(
+                store.read_text(store.root / "AGENTS.md"),
+                lim.ingest_logging_conventions_chars,
+            )
+            or "- No logging conventions found.",
+        ]
+    )
+    return "\n".join(parts)
 
 
 def build_plan_context(store, class_id: str) -> str:

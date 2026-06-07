@@ -37,6 +37,12 @@ class SseFinal(BaseModel):
     artifact_markdown: str
     ready: bool
     completeness: CompletenessChecklist | None = None
+    # Plan mode only: runtime context-manager state surfaced to the client.
+    phase: str | None = None
+    last_change_summary: str | None = None
+    session_state: dict | None = None
+    lesson_planning_state: dict | None = None
+    memory_candidates: list[dict] | None = None
 
 
 class SseError(BaseModel):

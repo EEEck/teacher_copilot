@@ -292,6 +292,17 @@ Good prompts are contractual. They define:
 - sparse-memory behavior
 - output shape
 
+Good tool definitions are also contractual. OpenAI's function-calling guidance
+is very practical here: tool names, descriptions, parameters, and schemas tell
+the model what the tool does and when it should use it. If the model keeps
+choosing the wrong tool, do not immediately add more prompt trigger phrases.
+First ask whether the tool would pass the "intern test":
+
+> Could a competent human use this tool correctly with only the name,
+> description, parameters, and output shape?
+
+If not, improve the tool interface.
+
 For planning:
 
 ```text
@@ -323,6 +334,41 @@ Do not invent patterns from sparse data.
 Return warnings when evidence is thin.
 Backend code writes only allowed memory paths.
 ```
+
+### Tool-Selection Lesson From The FCKW Trace
+
+In the FCKW lesson-planning run, the teacher later asked for a "5 min review
+session of the last 4 lectures" and wanted the plan to incorporate what students
+had found confusing.
+
+The first instinct was to add a hardcoded prompt rule:
+
+```text
+Browse when the teacher asks for "last N" or "recent N" lessons.
+```
+
+That worked, but it was the wrong direction. It does not scale because every
+teacher phrasing would become another brittle trigger.
+
+The better fix was:
+
+- describe the agent's job as evidence-grounded planning
+- say tools are chosen by information need, not keyword matching
+- improve `list_lessons` so it clearly means "map the class lesson sequence"
+- improve `read_lesson_range` so it clearly means "read evidence across several
+  lessons for review, planning, tests, or recurring confusions"
+- keep traces so we can inspect whether the tool choice actually improved
+
+After moving behavior into tool descriptions, the agent selected
+`read_lesson_range` immediately for the multi-lesson request and produced a
+clean teacher-facing artifact without debug evidence blocks.
+
+The pattern:
+
+> Prompt describes the job and evidence standard. Tools describe capabilities.
+> Backend validates scope and persistence. Traces reveal failures.
+
+This is a better agent architecture than a growing list of phrase triggers.
 
 ## Retrieval Patterns
 
@@ -385,6 +431,17 @@ OpenAI Agents SDK tracing and local CLI traces are useful for debugging tool
 choices, context packs, and final outputs. Traces can contain sensitive class
 memory, so local `runs/*.jsonl` files should be treated as disposable debug
 artifacts.
+
+The useful trace shape for KlassenPilot is:
+
+```text
+wiki/source file -> builder function -> compacted/rendered section -> prompt
+tool call input -> raw output -> raw_ref -> evidence brief -> next prompt
+```
+
+The local plan trace endpoint now exposes this through `prompt_assembly` and
+per-turn `prompt_assembly` events. This makes it much easier to debug agent
+behavior than looking only at the final answer.
 
 ## Anti-Patterns
 
@@ -455,6 +512,5 @@ Local references:
 
 Historical note:
 
-The deleted file `implementation_plans/teacher_copilot_agent_best_practices_english.md`
-was a long research memo. Its practical lessons have been condensed here and in
-`agent_architecture.md`.
+An older long-form teacher-copilot best-practices memo has been deleted. Its
+practical lessons have been condensed here and in `agent_architecture.md`.

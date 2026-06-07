@@ -43,6 +43,9 @@ def test_plan_full_flow(client: TestClient):
     save_body = save.json()
     assert save_body["plan_path"]
     assert save_body["lesson_date"] == "2026-10-05"
+    assert save_body["session_state"]
+    assert save_body["lesson_planning_state"]
+    assert save_body["memory_candidates"]
 
 
 def test_plan_chat_unknown_session_returns_typed_404(client: TestClient):

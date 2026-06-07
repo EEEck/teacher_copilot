@@ -8,18 +8,25 @@ Start with [`AGENTS.md`](AGENTS.md) when changing agent behavior or onboarding a
 new coding agent. It points to the current behavior contracts, design plans, wiki
 schema rules, and the local AutoSci reference repo.
 
-Current design and implementation notes live in [`implementation_plans/`](implementation_plans/):
+Current durable product and agent docs live in [`docs/`](docs/). The
+[`implementation_plans/`](implementation_plans/) folder is for the backlog and
+concrete implementation plans only.
 
-- [`product_vision.md`](implementation_plans/product_vision.md) - current product
+- [`product_vision.md`](docs/product_vision.md) - current product
   vision, product scope, and teacher-facing copilot behavior.
 - [`product_backlog.md`](implementation_plans/product_backlog.md) - v1.1-v1.3 product
   backlog (proactive copilot / suggested tasks in v1.3).
-- [`agent_architecture.md`](implementation_plans/agent_architecture.md) - agent
+- [`agent_architecture.md`](docs/agent_architecture.md) - agent
   architecture, memory/retrieval learnings, and implementation map.
-- [`agent_contracts.md`](implementation_plans/agent_contracts.md) - reviewable
+- [`agent_contracts.md`](docs/agent_contracts.md) - reviewable
   read/write/tool/output contracts for the teacher agents.
-- [`agent_learning_guide.md`](implementation_plans/agent_learning_guide.md) -
+- [`memory_hierarchy.md`](docs/memory_hierarchy.md) - file-by-file
+  memory scope, loading behavior, and update rules.
+- [`agent_learning_guide.md`](docs/agent_learning_guide.md) -
   optional learning guide for agent concepts, reference repos, and best practices.
+
+For the common FCKW lesson-planning debug motion, use the plan trace bundle
+scripts documented in [`backend/README.md#plan-trace-bundle`](backend/README.md#plan-trace-bundle).
 
 ## Architecture
 
@@ -225,11 +232,13 @@ Get-Content .env | ForEach-Object {
 The current developer file stack is:
 
 - [`AGENTS.md`](AGENTS.md) - repo onboarding and agent/developer guardrails
-- [`implementation_plans/product_vision.md`](implementation_plans/product_vision.md) - product scope
+- [`docs/product_vision.md`](docs/product_vision.md) - product scope
 - [`implementation_plans/product_backlog.md`](implementation_plans/product_backlog.md) - roadmap
-- [`implementation_plans/agent_architecture.md`](implementation_plans/agent_architecture.md) - agent architecture and learnings
-- [`implementation_plans/agent_contracts.md`](implementation_plans/agent_contracts.md) - behavior contracts
-- [`implementation_plans/agent_learning_guide.md`](implementation_plans/agent_learning_guide.md) - optional agent learning/reference notes
+- [`docs/agent_architecture.md`](docs/agent_architecture.md) - agent architecture and learnings
+- [`docs/agent_contracts.md`](docs/agent_contracts.md) - behavior contracts
+- [`docs/memory_hierarchy.md`](docs/memory_hierarchy.md) - memory scope, loading behavior, and update rules
+- [`docs/context_management.md`](docs/context_management.md) - prompt assembly and context limits
+- [`docs/agent_learning_guide.md`](docs/agent_learning_guide.md) - optional agent learning/reference notes
 - [`backend/teacher_wiki/AGENTS.md`](backend/teacher_wiki/AGENTS.md) - wiki schema and workflow rules
 
 ## Testing

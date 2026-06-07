@@ -18,11 +18,19 @@ from app.schemas.api import (
     PlanLessonRequest,
     PlanSession,
     PlanSessionStatus,
+    PlanTraceResponse,
     SavePlanRequest,
     SavePlanResponse,
 )
 from app.services.artifact_session_service import ArtifactSession, ArtifactSessionService
 from app.teacher_agent.agents import AgentRunner
+from app.teacher_agent.planning_state import (
+    planning_api_payload,
+    render_briefs,
+    render_lesson_planning_state,
+    render_session_state,
+)
+from app.teacher_agent.prompt_trace import build_plan_chat_prompt_trace
 from app.teacher_agent.wiki_store import WikiStore
 
 MODE = "plan"
@@ -63,10 +71,16 @@ class PlanService:
         attachments: list[ChatAttachment] | None = None,
     ) -> PlanChatResponse:
         result = await self.core.chat(session_id, message, plan_markdown, attachments)
+        planning = result.planning or {}
         return PlanChatResponse(
             reply=result.reply,
             plan_markdown=result.markdown,
             ready_to_save=result.ready,
+            phase=planning.get("phase"),
+            last_change_summary=planning.get("last_change_summary", ""),
+            session_state=planning.get("session_state"),
+            lesson_planning_state=planning.get("lesson_planning_state"),
+            memory_candidates=planning.get("memory_candidates", []),
         )
 
     async def chat_stream(
@@ -86,6 +100,46 @@ class PlanService:
         assert isinstance(draft, PlanDraft)
         return draft
 
+    def trace(self, class_id: str, session_id: str) -> PlanTraceResponse:
+        session = self.core.get_session(session_id)
+        if session.class_id != class_id:
+            raise KeyError("Session class mismatch")
+        runtime = session.planning
+        runtime_payload = planning_api_payload(runtime) if runtime else {}
+        prompt_stack = {
+            "class_slice": self.wiki.build_plan_context_slim(class_id),
+            "teacher_profile": self.wiki.read_user_profile(),
+            "copilot_profile": self.wiki.read_copilot_profile(class_id),
+            "session_state": render_session_state(runtime.session_state)
+            if runtime
+            else "",
+            "lesson_planning_state": render_lesson_planning_state(
+                runtime.lesson_planning_state
+            )
+            if runtime
+            else "",
+            "current_lessonplan_md": session.partial_markdown,
+            "evidence_briefs": render_briefs(runtime.evidence_briefs) if runtime else "",
+        }
+        return PlanTraceResponse(
+            class_id=class_id,
+            session_id=session_id,
+            status=session.status,
+            prompt_stack=prompt_stack,
+            prompt_assembly=build_plan_chat_prompt_trace(
+                self.wiki,
+                class_id,
+                messages=session.messages,
+                current_plan=session.partial_markdown,
+                runtime=runtime,
+            ),
+            runtime=runtime_payload,
+            messages=session.messages,
+            artifact_markdown=session.partial_markdown,
+            event_trace=session.debug_events,
+            raw_evidence=dict(runtime.raw_store) if runtime else {},
+        )
+
     def save(self, class_id: str, req: SavePlanRequest) -> SavePlanResponse:
         session = self.core.get_session(req.session_id)
         if session.class_id != class_id:
@@ -97,10 +151,19 @@ class PlanService:
         title = self.wiki._extract_title(req.plan_markdown) or "Lesson plan"
         path = self.wiki.save_lesson_plan(class_id, lesson_date, req.plan_markdown)
         self.core.set_status(req.session_id, PlanSessionStatus.saved.value)
+        candidates = (
+            [c.model_dump() for c in session.planning.memory_candidates]
+            if session.planning
+            else []
+        )
+        planning = planning_api_payload(session.planning) if session.planning else {}
         return SavePlanResponse(
             lesson_date=lesson_date,
             title=title,
             plan_path=path,
+            session_state=planning.get("session_state"),
+            lesson_planning_state=planning.get("lesson_planning_state"),
+            memory_candidates=candidates,
         )
 
     async def generate(self, class_id: str, req: PlanLessonRequest) -> LessonPlan:

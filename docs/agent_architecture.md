@@ -1,0 +1,225 @@
+# Agent Architecture And Learnings
+
+## Purpose
+
+This is the current architecture and learning note for the KlassenPilot teacher
+copilot. It explains how the agent should behave, how memory is organized, and
+which lessons from AutoSci, Hermes, Honcho-style memory, and current agent
+practice are relevant to this product.
+
+Product scope lives in `product_vision.md`. Feature sequencing lives in
+`../implementation_plans/product_backlog.md`. Reviewable behavior contracts live
+in `agent_contracts.md`. The detailed file-by-file memory hierarchy lives in
+`memory_hierarchy.md`.
+
+## Core Operating Model
+
+KlassenPilot should use one visible teacher copilot with clear workflow
+boundaries, not a broad multi-agent graph.
+
+- Planning is read-only with respect to the wiki.
+- Memory update can draft lesson memory, but durable wiki writes happen only
+  through teacher-approved commit or explicit revise actions.
+- The model receives small class-scoped context packs, then browses only when
+  the teacher request needs older or broader evidence.
+- The backend owns class scope, allowed paths, write validation, and persistence.
+- The agent should cite or name the class memory it uses.
+
+This keeps teacher trust high: no silent writes, no invented class history, and
+no opaque memory claims.
+
+## Memory Architecture
+
+The product uses tiered class memory.
+
+1. **Canonical wiki memory**
+   Approved lesson records, saved plans, roll-ups, subject guides, open loops,
+   misconceptions, and pseudonymous student observations.
+
+2. **Compact class memory**
+   Derived, size-budgeted pages under `wiki/classes/{class_id}/memory/`:
+   `taught_so_far.md`, `planning_brief.md`, `teaching_patterns.md`,
+   `copilot_profile.md`, `class_state.md`, and `session_summaries.md`. Each page
+   has a hard char budget in `MEMORY_PAGE_BUDGETS`, enforced at write AND inject
+   time via `clamp_memory_page` (Hermes-style: small, high-signal, replace not
+   append).
+
+3. **Workflow context packs**
+   Read-only packs for base class chat, lesson planning, ingest, and review.
+   These are rebuilt from the wiki and compact memory rather than stored as
+   separate durable state. The planning chat uses `build_plan_context_slim`: a
+   single deduped slice with class identity, recent misconceptions/lessons,
+   bounded subject guide, class state, planning brief, and teaching patterns
+   (each component clamped to budget) instead of the
+   stacked, duplicated `build_plan_context` pack — so there is no blunt
+   end-of-pack truncation. The legacy `_CHAT_CONTEXT_CHARS = 14_000` clip caused
+   random tail loss and is removed. The ingest chat now mirrors this with
+   `build_ingest_context_slim`, a single deduped logging-oriented slice instead
+   of index + base + ingest + embedded query-pack stacking. Limits are
+   centralized in `app/context_limits.py` (see
+   `context_management.md`).
+
+4. **Runtime session memory (lesson planning)**
+   `PlanRuntime` (in `planning_state.py`): backend-owned `SessionState`,
+   `LessonPlanningState`, compact `EvidenceBrief`s with a raw-output store
+   behind `raw_ref` (progressive exposure via `get_raw_evidence`), and
+   accumulated `MemoryCandidate`s. The model proposes `state_patch` updates;
+   backend code validates and applies them. Runtime state is persisted on the
+   session and re-injected compactly each turn so the verbatim window can be
+   trimmed (`plan_history_turns`) without losing decisions/constraints.
+
+5. **Profiles (three clearly-scoped files)**
+   - `user.md` (`wiki/teacher_profile.md`, GLOBAL): teacher communication style,
+     stable preferences, default lesson structure.
+   - `teaching_patterns.md` (class + subject): how this class learns and which
+     approaches work/fail (the class learning profile).
+   - `copilot.md` (`copilot_profile.md`, class): copilot working agreement only.
+   Durable writes go through teacher-approved memory endpoints
+   (refresh/propose/apply), never silently from chat.
+   Lesson-plan save surfaces the current runtime state and accumulated memory
+   candidates so the UI can call the profile-proposal skill after the plan is
+   saved, then present suggested `user.md` / `copilot.md` updates for approval.
+
+The wiki remains the source of truth. Compact memory is derived and rebuildable.
+Profiles should be small, stable, correctly scoped, and source-backed where
+possible.
+
+## Retrieval Architecture
+
+The Karpathy-style wiki is the readable map; deterministic retrieval tools are
+the compass.
+
+For larger wiki memory, the agent should not rely on a flat dump of pages or an
+opaque vector top-k result. It should:
+
+- start from compact class context
+- use `search_memory` as a deterministic pathfinder for broad topic requests
+- return source-bearing ranked results with `path`, `kind`, `title`, `snippet`,
+  `score`, `matched_terms`, and `source`
+- drill into specific lessons or memory pages when snippets are not enough
+- synthesize only after selected evidence is loaded
+
+AutoSci's useful pattern is deterministic, purpose-specific retrieval:
+weighted corpus fields, stable scoring, source paths, evidence packets, and
+small compiled context packs. We should borrow that discipline, not the full
+research graph or multi-agent orchestration.
+
+## Tool Architecture
+
+The planning agent should choose tools from clear capability descriptions, not
+from brittle keyword triggers in the system prompt.
+
+OpenAI's function-calling guidance treats tool names, descriptions, parameter
+descriptions, and output shapes as part of the model interface. The practical
+standard for KlassenPilot is the "intern test": a human should be able to choose
+the right tool using only the tool schema and the agent job description.
+
+Design rules:
+
+- Keep the planning tool surface small and obvious. Six focused read tools is
+  acceptable; a large surface should be grouped into namespaces or higher-level
+  tools.
+- Put capability semantics in tool docstrings and output shapes. Example:
+  `list_lessons` is the sequence-map tool; `read_lesson_range` is the
+  multi-lesson evidence tool; `search_memory` is the broad topic pathfinder.
+- Keep the prompt policy at the workflow/evidence level: browse when the task
+  needs source-backed class evidence not explicit in the compact slice; choose
+  tools by information need, not by hardcoded phrases.
+- Use backend code for what the backend already knows: class id, selected wiki
+  root, allowed paths, current artifact, raw evidence refs, and persistence.
+- Prefer a higher-level tool when a teacher task naturally implies a repeated
+  sequence of low-level calls. A future `retrieve_lesson_history(topic, count,
+  purpose)` would be better than repeatedly asking the model to coordinate
+  `list_lessons` plus several `read_lesson` calls.
+
+This is the lesson from the FCKW trace review: after moving behavior from a
+hardcoded "last N lessons" prompt rule into clearer tool descriptions, the
+model selected `read_lesson_range` earlier and produced cleaner teacher-facing
+output.
+
+## Workflow Context
+
+The agent should use purpose-specific context packages.
+
+- `base_class_context`: subject, class configuration, current unit, curriculum
+  direction, core misconceptions, open loops, recent timeline, compact profile.
+- `plan_context`: base context plus last taught lessons, recent saved plans,
+  taught-so-far summary, teaching patterns, planning preferences.
+- `ingest_context`: previous lesson, student roster excerpt, course state, open
+  loops, misconception watchlist, compact class memory, and logging conventions;
+  each source appears once in the live prompt.
+- `review_context`: compact sequence, recurring misconceptions, unresolved
+  issues, and relevant lesson range.
+
+The teacher should not have to restate class state in each chat. The model
+should receive enough context to start well and use tools for the long tail.
+
+## Best-Practice Learnings
+
+- Keep active context small and high-signal.
+- Prefer just-in-time retrieval over loading the whole wiki.
+- Separate short-term conversation state from long-term class memory.
+- Keep memory writes deterministic, bounded, and auditable.
+- Let LLM synthesis propose state/memory updates; let backend code validate,
+  merge, version, and persist only allowed paths.
+- Treat explicit teacher corrections as high-priority memory.
+- Prefer stable reusable facts over raw session logs.
+- Keep student-specific sensitive details out of broad profile memory.
+- Use source-bearing retrieval so the teacher can audit the plan.
+- Add embeddings or vector search only after deterministic wiki retrieval shows
+  measurable limits.
+- Treat tool descriptions as product surface. Improve tool names, descriptions,
+  parameter meanings, and structured outputs before adding brittle prompt
+  triggers.
+- Trace prompt assembly and tool calls during development. The useful debug
+  view is source -> function -> compacted text -> prompt/tool context, not only
+  final output quality.
+- Keep teacher-facing artifacts clean. Evidence briefs and raw refs belong in
+  runtime state / trace diagnostics; lesson plans should cite sources naturally
+  rather than include debug evidence blocks.
+
+## Deliberate Non-Goals
+
+- Full AutoSci graph or edge schema.
+- Multi-agent review pipeline.
+- External Honcho service as the default memory layer.
+- Vector database as the default retrieval path.
+- General web search as default class-memory retrieval. A future trusted-source
+  search tool can support special topics, resources, news, quizzes, or essays,
+  but it should stay separate from class wiki memory.
+- Autonomous wiki writes.
+- Raw-source fallback as normal planning behavior.
+- Grading automation without teacher review.
+
+## Implementation Map
+
+- Agent prompts: `backend/app/teacher_agent/prompts.py`
+- Agent tools: `backend/app/teacher_agent/tools.py`
+- Agent runner: `backend/app/teacher_agent/agents.py`
+- Structured outputs: `backend/app/teacher_agent/models.py`
+- Planning runtime context manager: `backend/app/teacher_agent/planning_state.py`
+- Plan-session trace bundle: `GET /api/classes/{id}/plan/sessions/{session_id}/trace`
+- Prompt assembly diagnostics: `backend/app/teacher_agent/prompt_trace.py`
+- Wiki facade: `backend/app/teacher_agent/wiki/store.py`
+- Wiki retrieval: `backend/app/teacher_agent/wiki/search.py`
+- Context packs (incl. `build_plan_context_slim` / `build_ingest_context_slim`): `backend/app/teacher_agent/wiki/context_packs.py`
+- Compact memory + budgets/clamp + bounded profile writers: `backend/app/teacher_agent/wiki/memory.py`
+- Memory refresh/propose/apply endpoints: `backend/app/api/routes.py`
+- Wiki schema rules: `backend/teacher_wiki/AGENTS.md`
+
+## Testing Expectations
+
+Agent and memory tests should stay offline and deterministic.
+
+Use focused backend tests when changing agent memory or retrieval:
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests\test_wiki_tools.py tests\test_wiki_search.py tests\test_api_plan.py tests\test_prompts.py tests\test_api_stream.py tests\test_wiki_context_packs.py tests\test_memory_compaction.py tests\test_plan_context_manager.py tests\test_memory_skills.py
+```
+
+From repo root, use:
+
+```powershell
+.\scripts\test.ps1
+```

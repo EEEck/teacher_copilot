@@ -1,8 +1,9 @@
-# KlassenPilot Agent Guide
+﻿# KlassenPilot Agent Guide
 
 Read this first when working on the repo as an AI agent or developer. It is the
-short context map for the project; detailed behavior contracts live in
-`implementation_plans/`.
+short context map for the project. Durable product/agent docs live in `docs/`.
+`implementation_plans/` is reserved for the backlog and concrete implementation
+plans.
 
 ## Project Purpose
 
@@ -20,18 +21,22 @@ between raw lesson notes and future planning.
 
 ## What To Read First
 
-1. `README.md` — how to run the app and overall architecture.
-2. `implementation_plans/product_vision.md` — current product vision, scope,
+1. `README.md` - how to run the app and overall architecture.
+2. `docs/product_vision.md` - current product vision, scope,
    and teacher-facing copilot behavior.
-3. `implementation_plans/product_backlog.md` — versioned feature direction.
-4. `implementation_plans/agent_architecture.md` — agent architecture,
+3. `implementation_plans/product_backlog.md` - versioned feature direction.
+4. `docs/agent_architecture.md` - agent architecture,
    memory/retrieval learnings, and implementation map.
-5. `implementation_plans/agent_contracts.md` — current read/write/tool/output
+5. `docs/agent_contracts.md` - current read/write/tool/output
    contracts for the teacher agents.
-6. `backend/teacher_wiki/AGENTS.md` — wiki schema and wiki-specific workflow
+6. `docs/memory_hierarchy.md` - file-by-file memory scope,
+   loading behavior, and update rules.
+7. `docs/context_management.md` - prompt assembly, context
+   limits, and why blunt 14k caps were removed.
+8. `backend/teacher_wiki/AGENTS.md` - wiki schema and wiki-specific workflow
    rules when touching memory behavior.
 
-Optional learning/reference: `implementation_plans/agent_learning_guide.md`.
+Optional learning/reference: `docs/agent_learning_guide.md`.
 It is an educational note, not a behavior contract.
 
 ## Current Boundaries
@@ -54,28 +59,44 @@ It is an educational note, not a behavior contract.
 - Agent definitions: `backend/app/teacher_agent/agent.py`
 - Agent runner / OpenAI Agents SDK loop: `backend/app/teacher_agent/agents.py`
 - Structured agent outputs: `backend/app/teacher_agent/models.py`
+- Context limit policy (central tunables): `backend/app/context_limits.py` +
+  `backend/app/config.py`
+- Lesson-planning runtime context manager (session/lesson state, evidence
+  briefs, memory candidates, renderers): `backend/app/teacher_agent/planning_state.py`
 - API schemas: `backend/app/schemas/api.py`
 - Wiki store facade: `backend/app/teacher_agent/wiki/store.py`
 - Wiki package internals: `backend/app/teacher_agent/wiki/`
 - Seed/dev wiki: `backend/teacher_wiki/`
+- Memory hierarchy and update rules: `docs/memory_hierarchy.md`
 - Backend tests: `backend/tests/`
 - Frontend app: `frontend/`
 
 ## Agent Contracts
 
-Treat `implementation_plans/agent_contracts.md` as the reviewable behavior
+Treat `docs/agent_contracts.md` as the reviewable behavior
 contract. If agent behavior changes, update that file in the same change as the
 code or explain why it does not apply.
 
 Important current contracts:
 
-- Lesson planning starts from the base context pack.
+- Lesson planning starts from a slim, deduped class slice plus backend-owned
+ runtime state (`PlanRuntime`) updated by model-proposed `state_patch`, not a
+ replayed transcript or a blunt 14k clip.
+- Memory update chat starts from a slim, deduped ingest slice, not stacked
+ index/base/query-pack context.
 - The planner browses class memory only when the teacher request exceeds that
-  base pack.
+ base slice; tool outputs are captured behind a `raw_ref` and only compact
+ evidence briefs are re-injected (use `get_raw_evidence` for raw on demand).
 - Date-range or assessment requests should use range-aware tools.
 - Generated plans should cite or name the class memory they use.
 - Sparse memory must be reported honestly; ask at most one targeted question.
 - Direct wiki writes are explicit actions, never hidden side effects of chat.
+ Durable profile/state writes go only through the teacher-approved
+ `POST /classes/{id}/memory/apply` (proposals via `/memory/refresh` and
+ `/memory/profile/propose`).
+- Memory scope is split: global `user.md` (teacher), class `teaching_patterns.md`
+ (how the class learns), class `copilot.md` (copilot working agreement); each
+ page is size-budgeted.
 
 ## AutoSci Reference
 
