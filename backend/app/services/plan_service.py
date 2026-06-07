@@ -104,7 +104,7 @@ class PlanService:
         session = self.core.get_session(session_id)
         if session.class_id != class_id:
             raise KeyError("Session class mismatch")
-        runtime = session.planning
+        runtime = session.runtime
         runtime_payload = planning_api_payload(runtime) if runtime else {}
         prompt_stack = {
             "class_slice": self.wiki.build_plan_context_slim(class_id),
@@ -152,11 +152,11 @@ class PlanService:
         path = self.wiki.save_lesson_plan(class_id, lesson_date, req.plan_markdown)
         self.core.set_status(req.session_id, PlanSessionStatus.saved.value)
         candidates = (
-            [c.model_dump() for c in session.planning.memory_candidates]
-            if session.planning
+            [c.model_dump() for c in session.runtime.memory_candidates]
+            if session.runtime
             else []
         )
-        planning = planning_api_payload(session.planning) if session.planning else {}
+        planning = planning_api_payload(session.runtime) if session.runtime else {}
         return SavePlanResponse(
             lesson_date=lesson_date,
             title=title,
