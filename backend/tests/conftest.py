@@ -98,7 +98,6 @@ READY_PLAN = """# Lesson Plan — Stub Plan
 - Watch for the usual misconception.
 """
 
-
 class StubAgentRunner:
     """Deterministic stand-in for AgentRunner — no network calls."""
 
