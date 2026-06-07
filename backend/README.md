@@ -59,6 +59,9 @@ Prerequisites:
 
 - Backend is running on `http://localhost:8010`.
 - `backend/.env` contains `OPENAI_API_KEY`.
+- The plan trace endpoint is enabled. It is enabled by default in development
+  and disabled by default when `APP_ENV=production`; set
+  `PLAN_TRACE_ENABLED=true` to override for a local production-mode debug run.
 - The target class exists in `backend/teacher_wiki/`.
 
 PowerShell from repo root:

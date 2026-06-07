@@ -541,6 +541,8 @@ def plan_trace(
     plan_svc: PlanService = Depends(get_plan_service),
 ) -> PlanTraceResponse:
     """Return a deterministic debug bundle for a plan session."""
+    if not get_settings().is_plan_trace_enabled():
+        raise HTTPException(status_code=404, detail="Plan trace endpoint is disabled")
     try:
         return plan_svc.trace(class_id, session_id)
     except KeyError as e:

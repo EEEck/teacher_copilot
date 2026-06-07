@@ -6,6 +6,7 @@ import json
 
 from fastapi.testclient import TestClient
 
+from app.config import get_settings
 from tests.conftest import CLASS_ID
 
 
@@ -100,3 +101,22 @@ def test_plan_chat_stream_fckw_redox_uses_memory_pathfinder(client: TestClient):
     assert "tool_call" in event_types
     assert "tool_result" in event_types
     assert "final" in event_types
+
+
+def test_plan_trace_disabled_by_default_in_production(
+    client: TestClient, monkeypatch
+):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("PLAN_TRACE_ENABLED", raising=False)
+    get_settings.cache_clear()
+    try:
+        start = client.post(f"/api/classes/{CLASS_ID}/plan/sessions")
+        session_id = start.json()["session_id"]
+
+        trace = client.get(
+            f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/trace"
+        )
+        assert trace.status_code == 404
+        assert trace.json()["error"]["message"] == "Plan trace endpoint is disabled"
+    finally:
+        get_settings.cache_clear()

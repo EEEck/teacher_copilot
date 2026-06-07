@@ -63,9 +63,17 @@ class Settings(BaseSettings):
     wiki_root: Path = Path(__file__).resolve().parent.parent / "teacher_wiki"
     cors_origins: list[str] = ["http://localhost:3000"]
     app_env: Literal["development", "production"] = "development"
+    # Debug endpoint exposing prompt assemblies, session messages, and raw tool
+    # evidence. Default: enabled outside production, disabled in production.
+    plan_trace_enabled: bool | None = None
     log_level: str = "INFO"
     api_host: str = "0.0.0.0"
     api_port: int = 8010
+
+    def is_plan_trace_enabled(self) -> bool:
+        if self.plan_trace_enabled is not None:
+            return self.plan_trace_enabled
+        return self.app_env != "production"
 
 
 @lru_cache
