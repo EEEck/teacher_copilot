@@ -21,6 +21,18 @@ Health: `GET http://127.0.0.1:8010/api/health` — includes `openai_configured` 
 
 Scripts or REPL code that construct `AgentRunner` without importing `app.main` must call `configure_openai_from_settings(get_settings())` first, or chat will fail with missing-key errors.
 
+## Agent runtime settings
+
+The default chat model is `OPENAI_CHAT_MODEL=gpt-5.4-mini` with
+`OPENAI_REASONING_EFFORT=medium`. Keep this for test-user runs where answer
+quality matters and the teacher should see visible reasoning/progress.
+
+Complex lesson-planning turns can browse wiki memory, reason over evidence, and
+stream a full artifact. The default `AGENT_TIMEOUT_SECONDS=240` gives those
+turns enough room before the backend emits a timeout SSE event. For faster local
+smoke checks, lower `OPENAI_REASONING_EFFORT` or `AGENT_TIMEOUT_SECONDS` in
+`backend/.env`.
+
 ## Chat sessions (prototype)
 
 Ingest and plan sessions are stored **in memory** (`ArtifactSessionService`). Restarting uvicorn clears server-side session state. The frontend recreates a session and restores the draft markdown when the API returns “unknown session”; chat history in the tab is not restored.

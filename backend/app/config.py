@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     openai_chat_model: str = "gpt-5.4-mini"
     openai_fast_model: str = "gpt-4o-mini"
     openai_reasoning_effort: ReasoningEffort = "medium"
-    agent_timeout_seconds: float = 90.0
+    agent_timeout_seconds: float = 240.0
     agent_max_turns: int = 16
 
     # --- Context limits (see app/context_limits.py + context_management.md) ---
