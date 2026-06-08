@@ -6,7 +6,7 @@ prompt trace diagnostics.
 
 ## Files
 
-- `agent.py` - OpenAI Agents SDK agent definitions and prompt assembly.
+- `agent.py` - OpenAI Agents SDK agent definitions.
 - `agents.py` - `AgentRunner`: async run/stream loops, model settings,
   turn-limit handling, and high-level agent methods used by services.
 - `prompts.py` - system prompts and policy blocks.
@@ -14,7 +14,8 @@ prompt trace diagnostics.
 - `tools.py` - class-scoped wiki read tools for agent use.
 - `planning_state.py` - backend-owned planning runtime state, state patches,
   evidence briefs, raw evidence refs, and memory candidates.
-- `prompt_trace.py` - diagnostic prompt assembly snapshots for plan sessions.
+- `prompt_assembly.py` - shared live-call and diagnostic prompt/context assembly.
+- `prompt_trace.py` - compatibility wrapper for plan-session prompt diagnostics.
 - `stream_events.py` - internal SSE event models and SDK event translation.
 - `wiki/` - markdown wiki implementation modules.
 - `wiki_store.py` - compatibility/facade import path for `WikiStore`.
@@ -39,6 +40,11 @@ prompt trace diagnostics.
   first, then use the same assembly for local debug bundles and live model
   calls. Future one-shot helper agents should adopt the same pattern when the
   v1.2 debug generalization is implemented.
+- New teacher-facing workflows should define their memory layers up front:
+  profile context via `build_profiles_assembly` when teacher/class preferences
+  matter, a task-specific compact context pack from the wiki memory hierarchy,
+  detailed canonical evidence through tools, runtime/session state as a
+  separate injected layer, and trace metadata for every rendered section.
 - If agent behavior changes, update `../../../docs/agent_contracts.md`.
 
 ## Related Docs

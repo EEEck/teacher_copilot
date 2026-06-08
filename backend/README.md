@@ -51,9 +51,9 @@ Requires `OPENAI_API_KEY` in `backend/.env`. Not run in CI (live model calls).
 ## Plan trace bundle
 
 Use this when debugging lesson-planning behavior, prompt assembly, tool calls, or
-context selection. It runs the default two-turn FCKW/CFC planning scenario
+context selection. It runs the default three-turn FCKW/CFC planning scenario
 against the local FastAPI backend and writes a complete run bundle under
-`backend/runs/{timestamp}-fckw-plan-2turn/`.
+`backend/runs/{timestamp}-fckw-plan-3turn/`.
 
 Prerequisites:
 
@@ -100,15 +100,22 @@ To test a custom prompt while keeping the same debug bundle format:
   --prompt2-file ".\tmp\prompt2.txt"
 ```
 
+The three default teacher turns are:
+
+1. Full 45-minute FCKW/redox lesson plan (structure, homework, misconception note).
+2. Add a 5-minute review of the last four lectures using class confusion from wiki.
+3. Final refinement: 2-minute active-recall recap; agent should move to `finalize`.
+
 The bundle includes:
 
-- `00-run-meta.json` - run metadata and the exact two prompts.
-- `03-turn1-sse.txt`, `05-turn2-sse.txt` - raw streamed events.
-- `06-trace-after-turn2.json` - final trace with prompt assemblies, tool calls,
-  evidence, and artifact state.
-- `07-final-lessonplan.md` - final teacher-facing plan.
-- `08-tool-calls-and-results.md` - readable tool call/result report.
+- `00-run-meta.json` - run metadata and the exact three prompts.
+- `02-trace-before-first-message.json` - prompt stack before any chat.
+- `NN-turnX-sse.txt` - raw streamed events per turn.
+- `NN-trace-after-turnX.json` - trace after each teacher prompt.
+- `NN-final-lessonplan.md` - final teacher-facing plan artifact.
+- `NN-tool-calls-and-results.md` - readable tool call/result report.
 - `prompt-*-sections.md` - section-by-section view of what the model saw.
+- `snapshot-*` - exact prompt stack before/after each turn.
 - `raw-evidence/` - full captured tool outputs by `raw_ref`.
 
 Recommended debugging flow:

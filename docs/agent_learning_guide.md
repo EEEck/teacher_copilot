@@ -258,6 +258,38 @@ Current retrieval behavior:
 - return path, kind, title, snippet, score, matched terms, and source
 - read lesson or memory pages for evidence before final synthesis
 
+## Context Loading Pattern
+
+KlassenPilot follows the same broad pattern as modern memory-oriented agents
+such as Hermes, but keeps it local and workflow-specific:
+
+1. **Profile layer**: inject small stable teacher/class preferences when they
+   matter for the teacher-facing task. In lesson planning this is
+   `teacher_profile.md` plus class `copilot_profile.md`, loaded through
+   `build_profiles_assembly`.
+2. **Task context layer**: build a compact workflow-specific context pack from
+   the memory hierarchy. Lesson planning uses `build_plan_context_slim`, which
+   includes subject guidance, `taught_so_far.md`, `planning_brief.md`,
+   `teaching_patterns.md`, and `class_state.md` when present.
+3. **Evidence layer**: do not dump full canonical wiki pages into the base
+   prompt. Use tools such as `search_memory`, `list_lessons`,
+   `read_lesson_range`, and `read_memory_page` when the teacher request needs
+   exact details or older history.
+4. **Runtime layer**: inject short-lived session state separately from durable
+   memory. For planning this is `PlanRuntime`: phase, decisions, artifact
+   state, evidence briefs, raw refs, and memory candidates.
+5. **Trace layer**: expose the assembled context with source path, builder
+   function, included flag, character count, and rendered text so humans and AI
+   agents can debug what the model actually saw.
+
+The point is not to load everything. The point is to load all small, stable,
+high-signal context before the real task turn, then retrieve detailed evidence
+only when the request calls for it.
+
+For future teacher-facing workflows, define this explicitly before writing the
+prompt: profile layer, task context pack, evidence tools, runtime state, and
+trace shape. Avoid generic context dumps.
+
 ## Teacher Copilot Design Rules
 
 For this product, the agent should:

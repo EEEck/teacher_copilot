@@ -188,9 +188,10 @@ cd backend
 python -m pytest tests/test_live_api_plan_trace.py
 ```
 
-This test calls the running backend and may use real OpenAI credits. It verifies
-the FCKW/redox prompt uses wiki retrieval tools, produces a usable 45-minute
-plan, and exposes a high-signal trace bundle.
+This test calls the running backend and may use real OpenAI credits. It runs the
+default three-turn FCKW scenario (initial plan, review-of-last-lectures, final
+recap tweak) and verifies wiki retrieval tools, phase transitions through
+`finalize`, a usable 45-minute plan, and a high-signal trace bundle.
 
 ## Anti-patterns (do not reintroduce)
 

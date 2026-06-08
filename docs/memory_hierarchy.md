@@ -36,9 +36,9 @@ Examples:
 
 Loaded where:
 
-- Lesson-planning chat via `agent._profiles_slice`.
-- Plan trace exposes it as `prompt_stack.teacher_profile` and in
-  `prompt_assembly` under `Profiles`.
+- Real lesson-planning chat calls (`plan_chat`) via
+  `build_profiles_assembly`.
+- Plan trace exposes it in `prompt_assembly` under `Profiles`.
 - Profile proposal skill reads it to avoid duplicate suggestions.
 
 Not loaded where:
@@ -160,12 +160,9 @@ Loaded where today:
 
 - Available through `search_memory`.
 - Included in legacy `build_plan_context`.
+- Current live planning chat via `build_plan_context_slim`.
 - Included in ingest slim context.
 - Used by review/query packs.
-
-Not loaded in current live planning base slice:
-
-- `build_plan_context_slim` currently does not include it directly.
 
 Good update source:
 
@@ -241,10 +238,9 @@ Examples:
 
 Loaded where:
 
-- Lesson-planning chat via `agent._profiles_slice`, separate from the compact
-  class slice.
-- Plan trace exposes it as `prompt_stack.copilot_profile` and in
-  `prompt_assembly`.
+- Real lesson-planning chat calls (`plan_chat`) via
+  `build_profiles_assembly`, separate from the compact class slice.
+- Plan trace exposes it in `prompt_assembly` under `Profiles`.
 
 Updated by:
 
@@ -298,7 +294,7 @@ Good update source:
 
 ### 5. Runtime Session Memory
 
-Location: backend RAM on `ArtifactSession.planning` (`PlanRuntime`)
+Location: backend RAM on `ArtifactSession.runtime` (`PlanRuntime`)
 
 Files: none by default.
 
@@ -332,7 +328,16 @@ Durability:
 
 ## What Planning Chat Loads Today
 
-Current live plan chat loads:
+There are two model-call stages in a planning session:
+
+- `plan_opening`: lazy greeting before the teacher's first planning request.
+  This intentionally loads only the slim class slice, so it can summarize the
+  class without injecting teacher/copilot profile memory into a greeting-only
+  call.
+- `plan_chat`: the real planning/drafting turn after the teacher sends a
+  request. This is the stage that loads the full planning prompt stack below.
+
+Current live `plan_chat` loads before the first draft turn:
 
 1. `PLAN_CHAT_SYSTEM`
 2. `PLAN_SKILL`
@@ -343,6 +348,7 @@ Current live plan chat loads:
    - recent lesson titles
    - bounded subject guide (`wiki/subjects/{subject}.md`)
    - `class_state.md` if present
+   - `taught_so_far.md`
    - `planning_brief.md`
    - `teaching_patterns.md`
 5. profile slice:
@@ -357,13 +363,15 @@ Current live plan chat loads:
 
 Current live plan chat does **not** directly load:
 
-- full `taught_so_far.md`
 - `session_summaries.md`
 - full `open_loops.md`
 - full `students.md`
 - last two full lesson notes
 
 Those are fetched through tools when the teacher request needs them.
+
+In a trace bundle, inspect `prompt-02-plan_chat-sections.md` for the first real
+planning turn. `prompt-01-plan_opening-sections.md` is intentionally slimmer.
 
 ## What Should Be Proposed After A Planning Chat
 

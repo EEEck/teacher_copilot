@@ -244,6 +244,8 @@ def test_build_plan_context_slim_dedup_and_budget(wiki: WikiStore):
     assert len(slim) < 9000
     # Misconceptions header appears once (no 4x duplication).
     assert slim.count("## Top misconceptions") == 1
+    assert "## Taught so far" in slim
+    assert "Reaction Writing Basics" in slim
 
 
 def test_build_plan_context_slim_clamps_oversized_pages(wiki: WikiStore):

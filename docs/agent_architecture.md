@@ -199,7 +199,8 @@ should receive enough context to start well and use tools for the long tail.
 - Structured outputs: `backend/app/teacher_agent/models.py`
 - Planning runtime context manager: `backend/app/teacher_agent/planning_state.py`
 - Plan-session trace bundle: `GET /api/classes/{id}/plan/sessions/{session_id}/trace`
-- Prompt assembly diagnostics: `backend/app/teacher_agent/prompt_trace.py`
+- Prompt assembly source of truth: `backend/app/teacher_agent/prompt_assembly.py`
+- Prompt trace compatibility wrapper: `backend/app/teacher_agent/prompt_trace.py`
 - Wiki facade: `backend/app/teacher_agent/wiki/store.py`
 - Wiki retrieval: `backend/app/teacher_agent/wiki/search.py`
 - Context packs (incl. `build_plan_context_slim` / `build_ingest_context_slim`): `backend/app/teacher_agent/wiki/context_packs.py`

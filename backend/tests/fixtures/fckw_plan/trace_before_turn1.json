@@ -1,0 +1,257 @@
+{
+  "class_id": "chemie_9b_2026_27",
+  "session_id": "0f7b7b57-2301-45ec-8858-f29ee5929269",
+  "status": "chatting",
+  "prompt_stack": {
+    "class_slice": "# Class memory (compact) - Chemie 9b — 2026/27 (chemie_9b_2026_27)\nSubject: chemie | Current unit: Reaction writing, balancing equations, oxidation numbers, and redox with ion follow-up.\nLast committed lesson: 2026-06-01 | Open loops: 21\n\n## Top misconceptions\n- Students treated chloride, oxide, and phosphate as special cases instead of ordinary ions.\n- Some still mixed up ion charge with oxidation number.\n- A few students described the metal displacement examples as memorized facts instead of electron transfer.\n- Some did not yet connect metals activity to the redox vocabulary.\n- Several students still thought oxidation always required oxygen.\n\n## Recent lessons\n- 2026-05-29 — Lesson Results - 2026-05-29 - Anions and Oxidation State Review\n- 2026-05-25 — Lesson Results - 2026-05-25 - Redox Reactions with Metals\n- 2026-05-21 — Lesson Results - 2026-05-21 - Introduction to Redox\n\n## Subject guide: chemie\n# Chemie — Subject Notes\n\n## Common lesson patterns\n- Board introduction → guided examples → pair practice → worksheet\n- Safety reminder before any lab/demo\n\n## Typical misconceptions (Gymnasium Chemie)\n- Confusing oxidation number with ionic charge\n- Thinking oxidation always requires oxygen\n\n## Question templates\n- \"What happens to electrons in this reaction?\"\n- \"Which species is oxidized / reduced?\"\n\n## Taught so far\n# Taught So Far\n\n> Class: chemie_9b_2026_27\n\n- Started with reaction writing, transitioning from word prompts to balancing with coefficients.\n- Focused on conservation of mass and atom-count checks as primary balancing strategies.\n- Introduced oxidation numbers and redox concepts through electron transfer and metal displacement.\n- Recent lessons reviewed common anions and their relation to ion charge and oxidation numbers.\n\n- **Last Lessons:**  \n  - 2026-05-29: Anions and Oxidation State Review  \n  - 2026-05-25: Redox Reactions with Metals  \n  - 2026-05-21: Introduction to Redox  \n  - 2026-05-14: Oxidation Numbers  \n  - 2026-05-07: Conservation of Mass and Coefficients  \n  - 2026-04-30: Balancing Chemical Equations  \n  - 2026-04-24: Reaction Writing Basics\n\n## Planning brief\n# Planning Brief\n\n> Class: chemie_9b_2026_27\n\n- **Current Misconception Focus:** Distinguish ion charge from oxidation number.  \n- **Next Step:** Mixed ion practice with chloride, oxide, and phosphate to enhance understanding.  \n- **Plans for Diagnostics:** Short warm-ups to assess comprehension of charge and oxidation-state justifications.  \n- **Remaining Open Loops:** Anion comparison, review of oxidation-number rules, and clarity on redox language.\n\n## Teaching patterns\n# Teaching Patterns\n\n> Class: chemie_9b_2026_27\n> Class + subject teaching style: how THIS class learns and which approaches work or fail for it.\n\n## Class Learning Profile\n- Students thrive on concrete examples and need visual supports before grasping abstract symbolic rules.\n- Regular scaffolding is essential to differentiate ion charge from oxidation number.\n\n## What Worked Well  \n- Concrete examples effectively aided understanding of balancing and redox concepts.  \n- Peer checking minimized errors in distinguishing coefficients from subscripts during balancing activities.  \n- Real-world applications, like metal displacement, clarified the concept of electron transfer.  \n\n## What Didn't Work Well  \n- Some students overly simplified complex examples, missing the underlying principles connected to oxidation states.  \n- Transitioning from distinguishing ion charge to oxidation number was sometimes unclear without explicit contrasts and comparisons.",
+    "teacher_profile": "# Teacher Profile\n\n> Global, cross-class teacher profile (user.md): communication style, stable preferences, default lesson structure. Agent-maintained, bounded.\n\n## Lesson Style\n- Prefers concise 45-minute lesson plans.\n- Lesson structure: Einstieg (warmup), main practice, short reflection.\n- Uses pair exercises after board introduction.\n\n## Communication\n- Feedback and planning language: English for this prototype.\n- Utilizes durable wiki notes for operational clarity and student reference.\n",
+    "copilot_profile": "# Class Copilot Profile\n\n> Class: chemie_9b_2026_27\n> Copilot working agreement for this class: planning patterns to apply, avoid-rules, repeated corrections, agent-behavior preferences. (Global teacher preferences live in user.md; how this class learns lives in teaching_patterns.md.)\n\n## Planning Patterns That Worked\n- Quick diagnostic assessments reveal misconceptions early; use them to target support within the lesson.\n- Mixed examples paired with peer checking improve accuracy and foster collaboration.\n",
+    "session_state": "## Session state\n- phase: requirements_discussion",
+    "lesson_planning_state": "## Lesson planning state",
+    "current_lessonplan_md": "# Lesson Plan — Next lesson\n\n> Duration: 45 min | Target date: 2026-06-07\n\n## Learning goals\n\n\n## Lesson flow\n\n- **Opening** (5 min):\n\n- **Main teaching** (25 min):\n\n- **Practice** (10 min):\n\n- **Close** (5 min):\n\n## Warmup\n\n\n## Practice tasks\n\n-\n\n## Homework\n\n\n## Teacher notes\n\n",
+    "evidence_briefs": "## Evidence briefs\n- None yet."
+  },
+  "prompt_assembly": {
+    "stage": "plan_chat",
+    "model_call": "KlassenPilot Plan Chat",
+    "instruction_chars": 9703,
+    "user_input_chars": 39,
+    "instructions": "You are KlassenPilot, helping a teacher plan their next lesson in English.\n\nActive skill: lesson_planning. Phases: requirements_discussion (collect topic, class, duration, goal, materials; ask at most one high-value question; draft an initial plan as soon as enough is known) -> lesson_refinement (refine the current plan_markdown directly; propose decisions and superseded choices in state_patch) -> finalize (use only when the teacher's intent clearly indicates the plan is accepted/finished after any requested final tweak). A structurally complete/saveable artifact can still remain in lesson_refinement while the conversation is being revised.\n\nEach turn you must:\n1. Reply conversationally — summarize what class memory you are using, ask at most ONE clarifying question when needed.\n2. Update plan_markdown — refine the current lesson plan below; always return the full updated markdown.\n3. Maintain working state — return state_patch only for what changed this turn (phase, goals, decisions, constraints, accepted/rejected elements, etc.) plus a one-line last_change_summary. Do not treat the LLM output as the source of truth: the backend validates and applies the patch to PlanRuntime. Add new_evidence_briefs for any tool/search/material results you used (each with its raw_ref), and memory_candidates for durable facts worth saving later (proposed only — never written now).\n\nUse this markdown structure for plan_markdown:\n# Lesson Plan — {{title}}\n\n> Duration: 45 min\n\n## Learning goals\n## Lesson flow\n## Warmup\n## Practice tasks\n## Homework\n## Teacher notes\n\nOptional when relevant: ## Addresses open loops, ## Addresses misconceptions\n\nRules:\n- Ground the plan in class memory; cite past lessons or rollups when you use them.\n- Merge chat and uploaded materials into plan_markdown; preserve manual edits from the current draft.\n- Be practical and specific to this class.\n- Treat phase as conversation state, not the save-button state: stay in lesson_refinement while the teacher is still revising, even if the artifact is structurally ready to save. Set phase=finalize only when the teacher's intent clearly indicates the plan is accepted/finished after any requested final tweak. Infer that intent from the whole message and conversation; do not keyword-match a trigger list.\n- When the plan is complete enough to save, you may tell the teacher they can click \"Ready to save plan\"; do not treat that alone as a reason to set phase=finalize.\n- Never write wiki files directly.\n\n<memory_policy>\nPrecedence when sources conflict:\n1) The teacher's latest message wins.\n2) Then backend-owned runtime state for this lesson.\n3) Then the compact class memory (class state, planning brief, teaching patterns, misconceptions).\n4) Teacher/copilot profiles are advisory defaults, not hard rules.\nIf a profile or memory conflicts with the teacher's current request, follow the request and ask at most one clarifying question. Use memory only when relevant; do not repeat it back verbatim.\nCarry forward unchanged state fields; only edit what changed this turn.\n</memory_policy>\n\n# Class memory (compact) - Chemie 9b — 2026/27 (chemie_9b_2026_27)\nSubject: chemie | Current unit: Reaction writing, balancing equations, oxidation numbers, and redox with ion follow-up.\nLast committed lesson: 2026-06-01 | Open loops: 21\n\n## Top misconceptions\n- Students treated chloride, oxide, and phosphate as special cases instead of ordinary ions.\n- Some still mixed up ion charge with oxidation number.\n- A few students described the metal displacement examples as memorized facts instead of electron transfer.\n- Some did not yet connect metals activity to the redox vocabulary.\n- Several students still thought oxidation always required oxygen.\n\n## Recent lessons\n- 2026-05-29 — Lesson Results - 2026-05-29 - Anions and Oxidation State Review\n- 2026-05-25 — Lesson Results - 2026-05-25 - Redox Reactions with Metals\n- 2026-05-21 — Lesson Results - 2026-05-21 - Introduction to Redox\n\n## Subject guide: chemie\n# Chemie — Subject Notes\n\n## Common lesson patterns\n- Board introduction → guided examples → pair practice → worksheet\n- Safety reminder before any lab/demo\n\n## Typical misconceptions (Gymnasium Chemie)\n- Confusing oxidation number with ionic charge\n- Thinking oxidation always requires oxygen\n\n## Question templates\n- \"What happens to electrons in this reaction?\"\n- \"Which species is oxidized / reduced?\"\n\n## Taught so far\n# Taught So Far\n\n> Class: chemie_9b_2026_27\n\n- Started with reaction writing, transitioning from word prompts to balancing with coefficients.\n- Focused on conservation of mass and atom-count checks as primary balancing strategies.\n- Introduced oxidation numbers and redox concepts through electron transfer and metal displacement.\n- Recent lessons reviewed common anions and their relation to ion charge and oxidation numbers.\n\n- **Last Lessons:**  \n  - 2026-05-29: Anions and Oxidation State Review  \n  - 2026-05-25: Redox Reactions with Metals  \n  - 2026-05-21: Introduction to Redox  \n  - 2026-05-14: Oxidation Numbers  \n  - 2026-05-07: Conservation of Mass and Coefficients  \n  - 2026-04-30: Balancing Chemical Equations  \n  - 2026-04-24: Reaction Writing Basics\n\n## Planning brief\n# Planning Brief\n\n> Class: chemie_9b_2026_27\n\n- **Current Misconception Focus:** Distinguish ion charge from oxidation number.  \n- **Next Step:** Mixed ion practice with chloride, oxide, and phosphate to enhance understanding.  \n- **Plans for Diagnostics:** Short warm-ups to assess comprehension of charge and oxidation-state justifications.  \n- **Remaining Open Loops:** Anion comparison, review of oxidation-number rules, and clarity on redox language.\n\n## Teaching patterns\n# Teaching Patterns\n\n> Class: chemie_9b_2026_27\n> Class + subject teaching style: how THIS class learns and which approaches work or fail for it.\n\n## Class Learning Profile\n- Students thrive on concrete examples and need visual supports before grasping abstract symbolic rules.\n- Regular scaffolding is essential to differentiate ion charge from oxidation number.\n\n## What Worked Well  \n- Concrete examples effectively aided understanding of balancing and redox concepts.  \n- Peer checking minimized errors in distinguishing coefficients from subscripts during balancing activities.  \n- Real-world applications, like metal displacement, clarified the concept of electron transfer.  \n\n## What Didn't Work Well  \n- Some students overly simplified complex examples, missing the underlying principles connected to oxidation states.  \n- Transitioning from distinguishing ion charge to oxidation number was sometimes unclear without explicit contrasts and comparisons.\n\n## Teacher and copilot profile\n### Teacher (user.md)\n# Teacher Profile\n\n> Global, cross-class teacher profile (user.md): communication style, stable preferences, default lesson structure. Agent-maintained, bounded.\n\n## Lesson Style\n- Prefers concise 45-minute lesson plans.\n- Lesson structure: Einstieg (warmup), main practice, short reflection.\n- Uses pair exercises after board introduction.\n\n## Communication\n- Feedback and planning language: English for this prototype.\n- Utilizes durable wiki notes for operational clarity and student reference.\n\n### Copilot working agreement (copilot.md)\n# Class Copilot Profile\n\n> Class: chemie_9b_2026_27\n> Copilot working agreement for this class: planning patterns to apply, avoid-rules, repeated corrections, agent-behavior preferences. (Global teacher preferences live in user.md; how this class learns lives in teaching_patterns.md.)\n\n## Planning Patterns That Worked\n- Quick diagnostic assessments reveal misconceptions early; use them to target support within the lesson.\n- Mixed examples paired with peer checking improve accuracy and foster collaboration.\n\n## Session state\n- phase: requirements_discussion\n\n## Lesson planning state\n\n## Current lesson plan (artifact to refine)\n# Lesson Plan — Next lesson\n\n> Duration: 45 min | Target date: 2026-06-07\n\n## Learning goals\n\n\n## Lesson flow\n\n- **Opening** (5 min):\n\n- **Main teaching** (25 min):\n\n- **Practice** (10 min):\n\n- **Close** (5 min):\n\n## Warmup\n\n\n## Practice tasks\n\n-\n\n## Homework\n\n\n## Teacher notes\n\n## Evidence briefs\n- None yet.\n\nWiki browsing tools are available for class-scoped lesson planning.\n- Use the compact class slice first for orientation: current unit, recent lesson titles, misconception priorities, planning brief, and teaching patterns.\n- Browse when the teacher's request depends on evidence that is not already explicit in the compact slice: multi-lesson history, older topics, date ranges, assessment/review coverage, exact prior lesson details, or source-backed claims about what students found confusing.\n- Choose tools by information need, not keyword matching:\n  - use list_lessons to map a lesson sequence before deciding what to read;\n  - use read_lesson_range when multiple lessons need evidence-level detail;\n  - use read_lesson when one known date needs detail;\n  - use search_memory as the broad topic/pathfinder tool;\n  - use read_memory_page when a search result or compact memory page needs exact wording.\n- Tool outputs are tagged with a raw_ref and recorded as evidence. Summarize each useful result into new_evidence_briefs (with its raw_ref) instead of pasting the raw output into plan_markdown. Call get_raw_evidence(raw_ref) only when you need exact wording, provenance, a contradiction check, or disambiguation.\n- Cite used lessons or memory pages inline in plan_markdown, for example \"based on the 2026-05-29 lesson notes\".\n- If memory is sparse or missing for the requested range, say what you found, ask at most one targeted question, and avoid unsupported claims.\n- Never write wiki files directly.\n",
+    "user_input": "Recent conversation (most recent last):",
+    "sections": [
+      {
+        "name": "Plan chat system template",
+        "function": "build_plan_chat_agent",
+        "source": "prompts.PLAN_CHAT_SYSTEM",
+        "included": true,
+        "chars": 2128,
+        "text": "You are KlassenPilot, helping a teacher plan their next lesson in English.\n\n{skill}\n\nEach turn you must:\n1. Reply conversationally — summarize what class memory you are using, ask at most ONE clarifying question when needed.\n2. Update plan_markdown — refine the current lesson plan below; always return the full updated markdown.\n3. Maintain working state — return state_patch only for what changed this turn (phase, goals, decisions, constraints, accepted/rejected elements, etc.) plus a one-line last_change_summary. Do not treat the LLM output as the source of truth: the backend validates and applies the patch to PlanRuntime. Add new_evidence_briefs for any tool/search/material results you used (each with its raw_ref), and memory_candidates for durable facts worth saving later (proposed only — never written now).\n\nUse this markdown structure for plan_markdown:\n# Lesson Plan — {{title}}\n\n> Duration: 45 min\n\n## Learning goals\n## Lesson flow\n## Warmup\n## Practice tasks\n## Homework\n## Teacher notes\n\nOptional when relevant: ## Addresses open loops, ## Addresses misconceptions\n\nRules:\n- Ground the plan in class memory; cite past lessons or rollups when you use them.\n- Merge chat and uploaded materials into plan_markdown; preserve manual edits from the current draft.\n- Be practical and specific to this class.\n- Treat phase as conversation state, not the save-button state: stay in lesson_refinement while the teacher is still revising, even if the artifact is structurally ready to save. Set phase=finalize only when the teacher's intent clearly indicates the plan is accepted/finished after any requested final tweak. Infer that intent from the whole message and conversation; do not keyword-match a trigger list.\n- When the plan is complete enough to save, you may tell the teacher they can click \"Ready to save plan\"; do not treat that alone as a reason to set phase=finalize.\n- Never write wiki files directly.\n\n{memory_policy}\n\n{class_slice}\n\n## Teacher and copilot profile\n{profiles}\n\n{session_state}\n\n{lesson_state}\n\n## Current lesson plan (artifact to refine)\n{current_plan}\n\n{evidence}\n\n{wiki_tools_policy}\n"
+      },
+      {
+        "name": "Active skill",
+        "function": "build_plan_chat_agent",
+        "source": "prompts.PLAN_SKILL",
+        "included": true,
+        "chars": 572,
+        "text": "Active skill: lesson_planning. Phases: requirements_discussion (collect topic, class, duration, goal, materials; ask at most one high-value question; draft an initial plan as soon as enough is known) -> lesson_refinement (refine the current plan_markdown directly; propose decisions and superseded choices in state_patch) -> finalize (use only when the teacher's intent clearly indicates the plan is accepted/finished after any requested final tweak). A structurally complete/saveable artifact can still remain in lesson_refinement while the conversation is being revised."
+      },
+      {
+        "name": "Memory policy",
+        "function": "build_plan_chat_agent",
+        "source": "prompts.PLAN_MEMORY_POLICY",
+        "included": true,
+        "chars": 587,
+        "text": "<memory_policy>\nPrecedence when sources conflict:\n1) The teacher's latest message wins.\n2) Then backend-owned runtime state for this lesson.\n3) Then the compact class memory (class state, planning brief, teaching patterns, misconceptions).\n4) Teacher/copilot profiles are advisory defaults, not hard rules.\nIf a profile or memory conflicts with the teacher's current request, follow the request and ask at most one clarifying question. Use memory only when relevant; do not repeat it back verbatim.\nCarry forward unchanged state fields; only edit what changed this turn.\n</memory_policy>"
+      },
+      {
+        "name": "Class slice",
+        "function": "wiki.build_plan_context_slim",
+        "source": "compact class wiki memory",
+        "included": true,
+        "chars": 3567,
+        "text": "# Class memory (compact) - Chemie 9b — 2026/27 (chemie_9b_2026_27)\nSubject: chemie | Current unit: Reaction writing, balancing equations, oxidation numbers, and redox with ion follow-up.\nLast committed lesson: 2026-06-01 | Open loops: 21\n\n## Top misconceptions\n- Students treated chloride, oxide, and phosphate as special cases instead of ordinary ions.\n- Some still mixed up ion charge with oxidation number.\n- A few students described the metal displacement examples as memorized facts instead of electron transfer.\n- Some did not yet connect metals activity to the redox vocabulary.\n- Several students still thought oxidation always required oxygen.\n\n## Recent lessons\n- 2026-05-29 — Lesson Results - 2026-05-29 - Anions and Oxidation State Review\n- 2026-05-25 — Lesson Results - 2026-05-25 - Redox Reactions with Metals\n- 2026-05-21 — Lesson Results - 2026-05-21 - Introduction to Redox\n\n## Subject guide: chemie\n# Chemie — Subject Notes\n\n## Common lesson patterns\n- Board introduction → guided examples → pair practice → worksheet\n- Safety reminder before any lab/demo\n\n## Typical misconceptions (Gymnasium Chemie)\n- Confusing oxidation number with ionic charge\n- Thinking oxidation always requires oxygen\n\n## Question templates\n- \"What happens to electrons in this reaction?\"\n- \"Which species is oxidized / reduced?\"\n\n## Taught so far\n# Taught So Far\n\n> Class: chemie_9b_2026_27\n\n- Started with reaction writing, transitioning from word prompts to balancing with coefficients.\n- Focused on conservation of mass and atom-count checks as primary balancing strategies.\n- Introduced oxidation numbers and redox concepts through electron transfer and metal displacement.\n- Recent lessons reviewed common anions and their relation to ion charge and oxidation numbers.\n\n- **Last Lessons:**  \n  - 2026-05-29: Anions and Oxidation State Review  \n  - 2026-05-25: Redox Reactions with Metals  \n  - 2026-05-21: Introduction to Redox  \n  - 2026-05-14: Oxidation Numbers  \n  - 2026-05-07: Conservation of Mass and Coefficients  \n  - 2026-04-30: Balancing Chemical Equations  \n  - 2026-04-24: Reaction Writing Basics\n\n## Planning brief\n# Planning Brief\n\n> Class: chemie_9b_2026_27\n\n- **Current Misconception Focus:** Distinguish ion charge from oxidation number.  \n- **Next Step:** Mixed ion practice with chloride, oxide, and phosphate to enhance understanding.  \n- **Plans for Diagnostics:** Short warm-ups to assess comprehension of charge and oxidation-state justifications.  \n- **Remaining Open Loops:** Anion comparison, review of oxidation-number rules, and clarity on redox language.\n\n## Teaching patterns\n# Teaching Patterns\n\n> Class: chemie_9b_2026_27\n> Class + subject teaching style: how THIS class learns and which approaches work or fail for it.\n\n## Class Learning Profile\n- Students thrive on concrete examples and need visual supports before grasping abstract symbolic rules.\n- Regular scaffolding is essential to differentiate ion charge from oxidation number.\n\n## What Worked Well  \n- Concrete examples effectively aided understanding of balancing and redox concepts.  \n- Peer checking minimized errors in distinguishing coefficients from subscripts during balancing activities.  \n- Real-world applications, like metal displacement, clarified the concept of electron transfer.  \n\n## What Didn't Work Well  \n- Some students overly simplified complex examples, missing the underlying principles connected to oxidation states.  \n- Transitioning from distinguishing ion charge to oxidation number was sometimes unclear without explicit contrasts and comparisons."
+      },
+      {
+        "name": "Profiles",
+        "function": "build_profiles_assembly",
+        "source": "wiki/teacher_profile.md + class copilot_profile.md",
+        "included": true,
+        "chars": 1075,
+        "text": "### Teacher (user.md)\n# Teacher Profile\n\n> Global, cross-class teacher profile (user.md): communication style, stable preferences, default lesson structure. Agent-maintained, bounded.\n\n## Lesson Style\n- Prefers concise 45-minute lesson plans.\n- Lesson structure: Einstieg (warmup), main practice, short reflection.\n- Uses pair exercises after board introduction.\n\n## Communication\n- Feedback and planning language: English for this prototype.\n- Utilizes durable wiki notes for operational clarity and student reference.\n\n### Copilot working agreement (copilot.md)\n# Class Copilot Profile\n\n> Class: chemie_9b_2026_27\n> Copilot working agreement for this class: planning patterns to apply, avoid-rules, repeated corrections, agent-behavior preferences. (Global teacher preferences live in user.md; how this class learns lives in teaching_patterns.md.)\n\n## Planning Patterns That Worked\n- Quick diagnostic assessments reveal misconceptions early; use them to target support within the lesson.\n- Mixed examples paired with peer checking improve accuracy and foster collaboration."
+      },
+      {
+        "name": "Session state",
+        "function": "render_session_state",
+        "source": "PlanRuntime.session_state",
+        "included": true,
+        "chars": 49,
+        "text": "## Session state\n- phase: requirements_discussion"
+      },
+      {
+        "name": "Lesson planning state",
+        "function": "render_lesson_planning_state",
+        "source": "PlanRuntime.lesson_planning_state",
+        "included": true,
+        "chars": 24,
+        "text": "## Lesson planning state"
+      },
+      {
+        "name": "Current lesson artifact",
+        "function": "build_plan_chat_agent",
+        "source": "ArtifactSession.partial_markdown",
+        "included": true,
+        "chars": 278,
+        "text": "# Lesson Plan — Next lesson\n\n> Duration: 45 min | Target date: 2026-06-07\n\n## Learning goals\n\n\n## Lesson flow\n\n- **Opening** (5 min):\n\n- **Main teaching** (25 min):\n\n- **Practice** (10 min):\n\n- **Close** (5 min):\n\n## Warmup\n\n\n## Practice tasks\n\n-\n\n## Homework\n\n\n## Teacher notes"
+      },
+      {
+        "name": "Evidence briefs",
+        "function": "render_briefs",
+        "source": "PlanRuntime.evidence_briefs",
+        "included": true,
+        "chars": 30,
+        "text": "## Evidence briefs\n- None yet."
+      },
+      {
+        "name": "Wiki tools policy",
+        "function": "build_plan_chat_agent",
+        "source": "prompts.PLAN_WIKI_TOOLS_POLICY",
+        "included": true,
+        "chars": 1510,
+        "text": "Wiki browsing tools are available for class-scoped lesson planning.\n- Use the compact class slice first for orientation: current unit, recent lesson titles, misconception priorities, planning brief, and teaching patterns.\n- Browse when the teacher's request depends on evidence that is not already explicit in the compact slice: multi-lesson history, older topics, date ranges, assessment/review coverage, exact prior lesson details, or source-backed claims about what students found confusing.\n- Choose tools by information need, not keyword matching:\n  - use list_lessons to map a lesson sequence before deciding what to read;\n  - use read_lesson_range when multiple lessons need evidence-level detail;\n  - use read_lesson when one known date needs detail;\n  - use search_memory as the broad topic/pathfinder tool;\n  - use read_memory_page when a search result or compact memory page needs exact wording.\n- Tool outputs are tagged with a raw_ref and recorded as evidence. Summarize each useful result into new_evidence_briefs (with its raw_ref) instead of pasting the raw output into plan_markdown. Call get_raw_evidence(raw_ref) only when you need exact wording, provenance, a contradiction check, or disambiguation.\n- Cite used lessons or memory pages inline in plan_markdown, for example \"based on the 2026-05-29 lesson notes\".\n- If memory is sparse or missing for the requested range, say what you found, ask at most one targeted question, and avoid unsupported claims.\n- Never write wiki files directly."
+      },
+      {
+        "name": "User input",
+        "function": "AgentRunner._build_plan_user_input",
+        "source": "ArtifactSession.messages + attachments",
+        "included": true,
+        "chars": 39,
+        "text": "Recent conversation (most recent last):"
+      }
+    ],
+    "nested": {
+      "class_slice": {
+        "function": "build_plan_context_slim",
+        "chars": 3567,
+        "text": "# Class memory (compact) - Chemie 9b — 2026/27 (chemie_9b_2026_27)\nSubject: chemie | Current unit: Reaction writing, balancing equations, oxidation numbers, and redox with ion follow-up.\nLast committed lesson: 2026-06-01 | Open loops: 21\n\n## Top misconceptions\n- Students treated chloride, oxide, and phosphate as special cases instead of ordinary ions.\n- Some still mixed up ion charge with oxidation number.\n- A few students described the metal displacement examples as memorized facts instead of electron transfer.\n- Some did not yet connect metals activity to the redox vocabulary.\n- Several students still thought oxidation always required oxygen.\n\n## Recent lessons\n- 2026-05-29 — Lesson Results - 2026-05-29 - Anions and Oxidation State Review\n- 2026-05-25 — Lesson Results - 2026-05-25 - Redox Reactions with Metals\n- 2026-05-21 — Lesson Results - 2026-05-21 - Introduction to Redox\n\n## Subject guide: chemie\n# Chemie — Subject Notes\n\n## Common lesson patterns\n- Board introduction → guided examples → pair practice → worksheet\n- Safety reminder before any lab/demo\n\n## Typical misconceptions (Gymnasium Chemie)\n- Confusing oxidation number with ionic charge\n- Thinking oxidation always requires oxygen\n\n## Question templates\n- \"What happens to electrons in this reaction?\"\n- \"Which species is oxidized / reduced?\"\n\n## Taught so far\n# Taught So Far\n\n> Class: chemie_9b_2026_27\n\n- Started with reaction writing, transitioning from word prompts to balancing with coefficients.\n- Focused on conservation of mass and atom-count checks as primary balancing strategies.\n- Introduced oxidation numbers and redox concepts through electron transfer and metal displacement.\n- Recent lessons reviewed common anions and their relation to ion charge and oxidation numbers.\n\n- **Last Lessons:**  \n  - 2026-05-29: Anions and Oxidation State Review  \n  - 2026-05-25: Redox Reactions with Metals  \n  - 2026-05-21: Introduction to Redox  \n  - 2026-05-14: Oxidation Numbers  \n  - 2026-05-07: Conservation of Mass and Coefficients  \n  - 2026-04-30: Balancing Chemical Equations  \n  - 2026-04-24: Reaction Writing Basics\n\n## Planning brief\n# Planning Brief\n\n> Class: chemie_9b_2026_27\n\n- **Current Misconception Focus:** Distinguish ion charge from oxidation number.  \n- **Next Step:** Mixed ion practice with chloride, oxide, and phosphate to enhance understanding.  \n- **Plans for Diagnostics:** Short warm-ups to assess comprehension of charge and oxidation-state justifications.  \n- **Remaining Open Loops:** Anion comparison, review of oxidation-number rules, and clarity on redox language.\n\n## Teaching patterns\n# Teaching Patterns\n\n> Class: chemie_9b_2026_27\n> Class + subject teaching style: how THIS class learns and which approaches work or fail for it.\n\n## Class Learning Profile\n- Students thrive on concrete examples and need visual supports before grasping abstract symbolic rules.\n- Regular scaffolding is essential to differentiate ion charge from oxidation number.\n\n## What Worked Well  \n- Concrete examples effectively aided understanding of balancing and redox concepts.  \n- Peer checking minimized errors in distinguishing coefficients from subscripts during balancing activities.  \n- Real-world applications, like metal displacement, clarified the concept of electron transfer.  \n\n## What Didn't Work Well  \n- Some students overly simplified complex examples, missing the underlying principles connected to oxidation states.  \n- Transitioning from distinguishing ion charge to oxidation number was sometimes unclear without explicit contrasts and comparisons.",
+        "sections": [
+          {
+            "name": "Class identity snapshot",
+            "function": "build_plan_context_slim",
+            "source": "get_snapshot() + get_class()",
+            "included": true,
+            "chars": 237,
+            "text": "# Class memory (compact) - Chemie 9b — 2026/27 (chemie_9b_2026_27)\nSubject: chemie | Current unit: Reaction writing, balancing equations, oxidation numbers, and redox with ion follow-up.\nLast committed lesson: 2026-06-01 | Open loops: 21"
+          },
+          {
+            "name": "Top misconceptions",
+            "function": "build_plan_context_slim",
+            "source": "snapshot.top_misconceptions",
+            "included": true,
+            "chars": 414,
+            "text": "\n## Top misconceptions\n- Students treated chloride, oxide, and phosphate as special cases instead of ordinary ions.\n- Some still mixed up ion charge with oxidation number.\n- A few students described the metal displacement examples as memorized facts instead of electron transfer.\n- Some did not yet connect metals activity to the redox vocabulary.\n- Several students still thought oxidation always required oxygen."
+          },
+          {
+            "name": "Recent lessons",
+            "function": "build_plan_context_slim",
+            "source": "snapshot.recent_lessons",
+            "included": true,
+            "chars": 237,
+            "text": "\n## Recent lessons\n- 2026-05-29 — Lesson Results - 2026-05-29 - Anions and Oxidation State Review\n- 2026-05-25 — Lesson Results - 2026-05-25 - Redox Reactions with Metals\n- 2026-05-21 — Lesson Results - 2026-05-21 - Introduction to Redox"
+          },
+          {
+            "name": "Subject guide",
+            "function": "build_plan_context_slim",
+            "source": "wiki/subjects/chemie.md",
+            "included": true,
+            "chars": 431,
+            "text": "\n## Subject guide: chemie\n# Chemie — Subject Notes\n\n## Common lesson patterns\n- Board introduction → guided examples → pair practice → worksheet\n- Safety reminder before any lab/demo\n\n## Typical misconceptions (Gymnasium Chemie)\n- Confusing oxidation number with ionic charge\n- Thinking oxidation always requires oxygen\n\n## Question templates\n- \"What happens to electrons in this reaction?\"\n- \"Which species is oxidized / reduced?\""
+          },
+          {
+            "name": "Class state",
+            "function": "build_plan_context_slim",
+            "source": "wiki/classes/chemie_9b_2026_27/memory/class_state.md",
+            "included": false,
+            "chars": 0,
+            "text": ""
+          },
+          {
+            "name": "Taught so far",
+            "function": "build_plan_context_slim",
+            "source": "wiki/classes/chemie_9b_2026_27/memory/taught_so_far.md",
+            "included": true,
+            "chars": 784,
+            "text": "\n## Taught so far\n# Taught So Far\n\n> Class: chemie_9b_2026_27\n\n- Started with reaction writing, transitioning from word prompts to balancing with coefficients.\n- Focused on conservation of mass and atom-count checks as primary balancing strategies.\n- Introduced oxidation numbers and redox concepts through electron transfer and metal displacement.\n- Recent lessons reviewed common anions and their relation to ion charge and oxidation numbers.\n\n- **Last Lessons:**  \n  - 2026-05-29: Anions and Oxidation State Review  \n  - 2026-05-25: Redox Reactions with Metals  \n  - 2026-05-21: Introduction to Redox  \n  - 2026-05-14: Oxidation Numbers  \n  - 2026-05-07: Conservation of Mass and Coefficients  \n  - 2026-04-30: Balancing Chemical Equations  \n  - 2026-04-24: Reaction Writing Basics"
+          },
+          {
+            "name": "Planning brief",
+            "function": "build_plan_context_slim",
+            "source": "wiki/classes/chemie_9b_2026_27/memory/planning_brief.md",
+            "included": true,
+            "chars": 474,
+            "text": "\n## Planning brief\n# Planning Brief\n\n> Class: chemie_9b_2026_27\n\n- **Current Misconception Focus:** Distinguish ion charge from oxidation number.  \n- **Next Step:** Mixed ion practice with chloride, oxide, and phosphate to enhance understanding.  \n- **Plans for Diagnostics:** Short warm-ups to assess comprehension of charge and oxidation-state justifications.  \n- **Remaining Open Loops:** Anion comparison, review of oxidation-number rules, and clarity on redox language."
+          },
+          {
+            "name": "Teaching patterns",
+            "function": "build_plan_context_slim",
+            "source": "wiki/classes/chemie_9b_2026_27/memory/teaching_patterns.md",
+            "included": true,
+            "chars": 984,
+            "text": "\n## Teaching patterns\n# Teaching Patterns\n\n> Class: chemie_9b_2026_27\n> Class + subject teaching style: how THIS class learns and which approaches work or fail for it.\n\n## Class Learning Profile\n- Students thrive on concrete examples and need visual supports before grasping abstract symbolic rules.\n- Regular scaffolding is essential to differentiate ion charge from oxidation number.\n\n## What Worked Well  \n- Concrete examples effectively aided understanding of balancing and redox concepts.  \n- Peer checking minimized errors in distinguishing coefficients from subscripts during balancing activities.  \n- Real-world applications, like metal displacement, clarified the concept of electron transfer.  \n\n## What Didn't Work Well  \n- Some students overly simplified complex examples, missing the underlying principles connected to oxidation states.  \n- Transitioning from distinguishing ion charge to oxidation number was sometimes unclear without explicit contrasts and comparisons."
+          }
+        ]
+      },
+      "profiles": {
+        "function": "build_profiles_assembly",
+        "chars": 1075,
+        "text": "### Teacher (user.md)\n# Teacher Profile\n\n> Global, cross-class teacher profile (user.md): communication style, stable preferences, default lesson structure. Agent-maintained, bounded.\n\n## Lesson Style\n- Prefers concise 45-minute lesson plans.\n- Lesson structure: Einstieg (warmup), main practice, short reflection.\n- Uses pair exercises after board introduction.\n\n## Communication\n- Feedback and planning language: English for this prototype.\n- Utilizes durable wiki notes for operational clarity and student reference.\n\n### Copilot working agreement (copilot.md)\n# Class Copilot Profile\n\n> Class: chemie_9b_2026_27\n> Copilot working agreement for this class: planning patterns to apply, avoid-rules, repeated corrections, agent-behavior preferences. (Global teacher preferences live in user.md; how this class learns lives in teaching_patterns.md.)\n\n## Planning Patterns That Worked\n- Quick diagnostic assessments reveal misconceptions early; use them to target support within the lesson.\n- Mixed examples paired with peer checking improve accuracy and foster collaboration.",
+        "sections": [
+          {
+            "name": "Teacher profile",
+            "function": "wiki.read_user_profile",
+            "source": "wiki/teacher_profile.md",
+            "included": true,
+            "chars": 497,
+            "text": "# Teacher Profile\n\n> Global, cross-class teacher profile (user.md): communication style, stable preferences, default lesson structure. Agent-maintained, bounded.\n\n## Lesson Style\n- Prefers concise 45-minute lesson plans.\n- Lesson structure: Einstieg (warmup), main practice, short reflection.\n- Uses pair exercises after board introduction.\n\n## Communication\n- Feedback and planning language: English for this prototype.\n- Utilizes durable wiki notes for operational clarity and student reference."
+          },
+          {
+            "name": "Class copilot profile",
+            "function": "wiki.read_copilot_profile",
+            "source": "wiki/classes/chemie_9b_2026_27/memory/copilot_profile.md",
+            "included": true,
+            "chars": 511,
+            "text": "# Class Copilot Profile\n\n> Class: chemie_9b_2026_27\n> Copilot working agreement for this class: planning patterns to apply, avoid-rules, repeated corrections, agent-behavior preferences. (Global teacher preferences live in user.md; how this class learns lives in teaching_patterns.md.)\n\n## Planning Patterns That Worked\n- Quick diagnostic assessments reveal misconceptions early; use them to target support within the lesson.\n- Mixed examples paired with peer checking improve accuracy and foster collaboration."
+          }
+        ]
+      },
+      "user_input": {
+        "function": "AgentRunner._build_plan_user_input",
+        "chars": 39,
+        "text": "Recent conversation (most recent last):",
+        "sections": [
+          {
+            "name": "Recent conversation window",
+            "function": "AgentRunner._build_plan_user_input",
+            "source": "last 8 user turns",
+            "included": true,
+            "chars": 39,
+            "text": "Recent conversation (most recent last):"
+          }
+        ]
+      }
+    }
+  },
+  "runtime": {
+    "phase": "requirements_discussion",
+    "last_change_summary": "",
+    "plan_version": 0,
+    "session_state": {
+      "active_task": "lesson_planning",
+      "phase": "requirements_discussion",
+      "session_goal": "Create a usable lesson plan with the teacher.",
+      "teacher_goal": "",
+      "milestones": [],
+      "decisions": [],
+      "open_questions": [],
+      "superseded": [],
+      "agent_next_step": ""
+    },
+    "lesson_planning_state": {
+      "lesson_topic": "",
+      "lesson_goal": "",
+      "success_criteria": [],
+      "target_class": "",
+      "duration_minutes": 0,
+      "teacher_preferences_for_this_lesson": [],
+      "constraints": [],
+      "materials_used": [],
+      "class_context_used": [],
+      "accepted_plan_elements": [],
+      "needs_revision": []
+    },
+    "memory_candidates": []
+  },
+  "messages": [],
+  "artifact_markdown": "# Lesson Plan — Next lesson\n\n> Duration: 45 min | Target date: 2026-06-07\n\n## Learning goals\n\n\n## Lesson flow\n\n- **Opening** (5 min):\n\n- **Main teaching** (25 min):\n\n- **Practice** (10 min):\n\n- **Close** (5 min):\n\n## Warmup\n\n\n## Practice tasks\n\n-\n\n## Homework\n\n\n## Teacher notes\n\n",
+  "event_trace": [],
+  "raw_evidence": {}
+}

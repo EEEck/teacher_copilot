@@ -97,6 +97,12 @@ Important current contracts:
 - Memory scope is split: global `user.md` (teacher), class `teaching_patterns.md`
  (how the class learns), class `copilot.md` (copilot working agreement); each
  page is size-budgeted.
+- New teacher-facing workflows should follow the same context-loading pattern:
+  load the profile layer (`teacher_profile.md` + class `copilot_profile.md`)
+  when teacher/class preferences matter; build a task-specific compact context
+  pack from the memory hierarchy; expose detailed canonical wiki evidence
+  through tools; keep runtime/session state separate from durable memory; and
+  trace each injected section with source/function/size metadata.
 
 ## AutoSci Reference
 

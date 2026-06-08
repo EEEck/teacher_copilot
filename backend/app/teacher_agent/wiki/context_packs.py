@@ -337,6 +337,7 @@ def build_plan_context_slim_trace(store, class_id: str) -> dict:
         )
     for key, label in (
         ("class_state", "Class state"),
+        ("taught_so_far", "Taught so far"),
         ("planning_brief", "Planning brief"),
         ("teaching_patterns", "Teaching patterns"),
     ):

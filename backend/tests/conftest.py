@@ -115,6 +115,8 @@ class StubAgentRunner:
         messages: list[ChatMessage],
         plan_md: str,
         partial_plan: str,
+        *,
+        phase: str = "lesson_refinement",
     ) -> None:
         """Simulate the model emitting structured state for one plan turn."""
         latest = messages[-1].content if messages else ""
@@ -139,7 +141,7 @@ class StubAgentRunner:
             planning,
             state_patch=StatePatch(
                 session_state=SessionStatePatch(
-                    phase="lesson_refinement",
+                    phase=phase,
                     teacher_goal=latest[:80],
                     decisions=[
                         "Use a 45-minute Einstieg/practice/reflection structure."
@@ -152,7 +154,7 @@ class StubAgentRunner:
                 ),
             ),
             session_state=SessionState(
-                phase="lesson_refinement",
+                phase=phase,
                 teacher_goal=latest[:80],
                 decisions=["Use a 45-minute Einstieg/practice/reflection structure."],
             ),
@@ -173,7 +175,7 @@ class StubAgentRunner:
             last_change_summary="Updated plan draft.",
             plan_changed=plan_md.strip() != (partial_plan or "").strip(),
         )
-        planning.session_state.phase = "lesson_refinement"
+        planning.session_state.phase = phase
 
     async def plan_chat(
         self,
@@ -328,6 +330,43 @@ class StubAgentRunner:
         planning: PlanRuntime | None = None,
     ) -> AsyncIterator:
         latest = messages[-1].content.lower() if messages else ""
+
+        if "very happy" in latest or ("refinement" in latest and "recall" in latest):
+            plan = (partial_plan or READY_PLAN).rstrip()
+            if "2 min" not in plan.lower() and "2-minute" not in plan.lower():
+                plan += "\n\n## Active recall\n- 2-minute student recall of key learning.\n"
+            if planning is not None:
+                self._emit_plan_state(
+                    planning, messages, plan, partial_plan, phase="finalize"
+                )
+            yield self._plan_final(
+                "Added a short active-recall close.", plan, planning
+            )
+            return
+
+        if "last 4 lectures" in latest or ("review" in latest and "lectures" in latest):
+            yield SseToolCall(
+                name="read_lesson_range",
+                args='{"start_date":"2026-05-21","end_date":"2026-05-29","max_lessons":4}',
+                call_id="call-review",
+            )
+            yield SseToolResult(
+                name="read_lesson_range",
+                output="raw_ref: read_lesson_range_stub\nPrior lessons show confusion on ion charge vs oxidation number.",
+            )
+            plan = (partial_plan or READY_PLAN).rstrip()
+            plan += (
+                "\n\n## Review of recent lessons (5 min)\n"
+                "- Recap what the class confused in the last four lectures, "
+                "especially ion charge vs oxidation number.\n"
+            )
+            if planning is not None:
+                self._emit_plan_state(planning, messages, plan, partial_plan)
+            yield self._plan_final(
+                "Added a review block grounded in recent lesson confusion.", plan, planning
+            )
+            return
+
         if "fckw" in latest or "redox" in latest:
             yield SseToolCall(
                 name="search_memory",
@@ -343,7 +382,19 @@ class StubAgentRunner:
                 args='{"start_date":"2026-05-21","end_date":"2026-05-29","topic":"redox"}',
                 call_id="call-2",
             )
-            plan = READY_PLAN + "\n## Sources\n- Based on the 2026-05-25 redox lesson notes.\n"
+            plan = (
+                "# Lesson Plan — FCKW Redox\n\n"
+                "> Duration: 45 min\n\n"
+                "## Learning goals\n- Apply redox to FCKW/CFC compounds.\n\n"
+                "## Lesson flow\n- 5 min recap, 15 min FCKW structure, 10 min Montreal Protocol, "
+                "10 min practice, 5 min exit ticket.\n\n"
+                "## Warmup\n- Redox recap.\n\n"
+                "## Practice tasks\n- Differentiated worksheet.\n\n"
+                "## Homework\n- Two exam-style questions.\n\n"
+                "## Teacher notes\n- No real CFCs in the lab; demo alternatives only. "
+                "Address oxidation number vs charge.\n"
+                "## Sources\n- Based on the 2026-05-25 redox lesson notes.\n"
+            )
             if planning is not None:
                 self._emit_plan_state(planning, messages, plan, partial_plan)
             yield self._plan_final(
