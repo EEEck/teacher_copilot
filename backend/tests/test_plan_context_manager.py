@@ -8,12 +8,17 @@ All offline against the stub agent + a tmp copy of the seed wiki.
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from app.schemas.api import ChatMessage
-from app.teacher_agent.agents import _trim_to_last_user_turns
+from app.teacher_agent.agents import (
+    AgentRunner,
+    _strip_plan_debug_sections,
+    _trim_to_last_user_turns,
+)
 from app.context_limits import get_context_limits
 from app.teacher_agent.planning_state import (
     EvidenceBrief,
@@ -197,6 +202,37 @@ def test_trim_to_last_user_turns_keeps_window():
 def test_trim_to_last_user_turns_handles_short_history():
     msgs = [_msg("user", "only")]
     assert _trim_to_last_user_turns(msgs, 8) == msgs
+
+
+def test_strip_plan_debug_sections_removes_evidence_briefs():
+    plan = """# Lesson Plan
+
+## Learning goals
+- Goal
+
+## Evidence briefs
+- None yet.
+
+## Homework
+- Practice
+"""
+    cleaned = _strip_plan_debug_sections(plan)
+    assert "## Evidence briefs" not in cleaned
+    assert "## Learning goals" in cleaned
+    assert "## Homework" in cleaned
+
+
+def test_runner_readiness_does_not_parse_assistant_reply_text():
+    source = "\n".join(
+        [
+            inspect.getsource(AgentRunner.plan_chat),
+            inspect.getsource(AgentRunner.plan_chat_stream),
+            inspect.getsource(AgentRunner.ingest_chat),
+            inspect.getsource(AgentRunner.ingest_chat_stream),
+        ]
+    ).lower()
+    assert "ready to save" not in source
+    assert "reply.lower" not in source
 
 
 # --- slim/deduped class slice under budget ----------------------------------

@@ -47,6 +47,7 @@ Primary source: [`README.md`](../README.md) â€œv1.2 (planned)â€.
 | **Lean production images** | Next.js `standalone`, multi-stage slim Dockerfiles (non-dev CMD). |
 | **`compose.prod.yaml`** | Production profile without bind mounts. |
 | **Session persistence (optional)** | SQLite or similar when multi-worker or durable server-side chat history is needed. |
+| **Generalized agent debug assemblies** | Extend the artifact prompt-assembly/debug pattern to one-shot/helper agents (`compile_diary`, `plan_lesson`, `lint_wiki`, memory compact, profile proposal, future grader/resource tools). Each agent call should expose a reusable assembly object with workflow name, instructions/user input, context sections, source paths, output type, and safe debug summaries. Add SDK trace metadata/custom-span summaries for class id, workflow, session/job id, and section sizes; keep full prompt/context text only in local debug bundles behind `PLAN_TRACE_ENABLED`. |
 | **Typed index / search improvements** | If deterministic wiki retrieval reaches measurable limits ([`docs/agent_architecture.md`](../docs/agent_architecture.md)). |
 | **Trusted online source search (optional)** | Add a bounded web-search/read tool for Wikipedia, PhET, official curriculum/news, and other approved sources; keep class wiki retrieval as the default memory path. |
 

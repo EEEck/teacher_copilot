@@ -31,7 +31,7 @@ $env:Path = "${env:ProgramFiles}\nodejs;$env:Path"
 - `run_plan_trace_bundle.py`
 - `run_plan_trace_bundle.ps1`
 
-These call the local API, run the default two-turn FCKW/CFC planning debug
+These call the local API, run the default three-turn FCKW/CFC planning debug
 scenario, and write a trace bundle under `backend/runs/`.
 
 The API trace endpoint is enabled by default in development and disabled by

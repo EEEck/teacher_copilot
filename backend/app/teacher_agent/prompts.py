@@ -85,7 +85,10 @@ PLAN_SKILL = (
     "ask at most one high-value question; draft an initial plan as soon as enough is known) "
     "-> lesson_refinement (refine the current plan_markdown directly; propose decisions and "
     "superseded choices in state_patch) "
-    "-> finalize (plan ready to save; make sure memory_candidates capture durable facts)."
+    "-> finalize (use only when the teacher's intent clearly indicates the plan is "
+    "accepted/finished after any requested final tweak). A structurally "
+    "complete/saveable artifact can still remain in lesson_refinement while the "
+    "conversation is being revised."
 )
 
 
@@ -162,7 +165,8 @@ Rules:
 - Ground the plan in class memory; cite past lessons or rollups when you use them.
 - Merge chat and uploaded materials into plan_markdown; preserve manual edits from the current draft.
 - Be practical and specific to this class.
-- When the plan is complete enough to save, tell the teacher they can click "Ready to save plan".
+- Treat phase as conversation state, not the save-button state: stay in lesson_refinement while the teacher is still revising, even if the artifact is structurally ready to save. Set phase=finalize only when the teacher's intent clearly indicates the plan is accepted/finished after any requested final tweak. Infer that intent from the whole message and conversation; do not keyword-match a trigger list.
+- When the plan is complete enough to save, you may tell the teacher they can click "Ready to save plan"; do not treat that alone as a reason to set phase=finalize.
 - Never write wiki files directly.
 
 {memory_policy}

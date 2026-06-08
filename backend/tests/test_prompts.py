@@ -14,6 +14,7 @@ from app.teacher_agent.prompts import (
     CHAT_WIKI_TOOLS_POLICY,
     INGEST_SYSTEM,
     PLAN_CHAT_SYSTEM,
+    PLAN_SKILL,
     PLAN_WIKI_TOOLS_POLICY,
     PLAN_OPENING_SYSTEM,
     apply_prompt,
@@ -68,3 +69,16 @@ def test_plan_policy_uses_information_need_not_keyword_triggers():
     assert "source-backed claims" in policy
     assert "list_lessons" in policy
     assert "read_lesson_range" in policy
+
+
+def test_plan_phase_finalize_uses_semantic_teacher_intent_not_keyword_triggers():
+    skill = PLAN_SKILL.lower()
+    chat_system = PLAN_CHAT_SYSTEM.lower()
+
+    assert "intent clearly indicates" in skill
+    assert "accepted/finished" in skill
+    assert "phase as conversation state" in chat_system
+    assert "stay in lesson_refinement" in chat_system
+    assert "intent clearly indicates" in chat_system
+    assert "do not keyword-match a trigger list" in chat_system
+    assert "do not treat that alone as a reason to set phase=finalize" in chat_system

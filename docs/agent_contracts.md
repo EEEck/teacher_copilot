@@ -70,6 +70,12 @@ Runtime context manager:
 - State patch validation: the backend accepts only known fields, ignores invalid
   phases, appends/dedupes list updates, and never lets an empty model field wipe
   accumulated runtime state.
+- `phase` is conversation/workflow state, not the save-button state. Keep the
+  phase in `lesson_refinement` while the teacher is still revising, even if the
+  artifact is structurally complete enough to save. Use `finalize` only when
+  the teacher's intent clearly indicates the plan is accepted/finished after any
+  requested final tweak. The model should infer that intent from the whole
+  message and conversation, not from a keyword trigger list.
 - `memory_candidates` are proposed only during chat and surfaced at save; they
   are never written from a planning turn (durable writes are a separate
   teacher-approved action — see Memory Review/Apply Contract).
@@ -116,6 +122,12 @@ Output contract:
 - Return a conversational `reply`.
 - Return updated `plan_markdown`.
 - Preserve manual edits from the current draft when possible.
+- `ready_to_save` is deterministic backend saveability, currently based on the
+  markdown artifact passing structural checks. It is not inferred from assistant
+  wording and does not mean the teacher is done.
+- A saveable draft may be `ready_to_save` while the session remains in
+  `lesson_refinement`. The UI save action is separate from the model's workflow
+  phase.
 - Use lightweight inline citations or source mentions, such as "based on the
   2026-05-29 lesson notes."
 - Do not include debug-only evidence sections such as `## Evidence briefs` in

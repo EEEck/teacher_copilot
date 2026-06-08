@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import AsyncIterator
 from typing import Any, Optional
@@ -35,6 +36,10 @@ from app.teacher_agent.models import (
     ProfileProposalOutput,
 )
 from app.context_limits import apply_char_limit, get_context_limits
+from app.teacher_agent.prompt_assembly import (
+    build_plan_user_input_assembly,
+    trim_to_last_user_turns,
+)
 from app.teacher_agent.planning_state import (
     PlanRuntime,
     merge_turn_into_runtime,
@@ -52,6 +57,16 @@ _TURN_LIMIT_REPLY = (
     "Your draft is unchanged — try a shorter message or one topic at a time."
 )
 
+_DEBUG_PLAN_SECTION_RE = re.compile(
+    r"\n## Evidence briefs\b.*?(?=\n## |\Z)",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
+
+def _strip_plan_debug_sections(plan_md: str) -> str:
+    """Remove runtime/debug sections if the model copies them into plan_markdown."""
+    return _DEBUG_PLAN_SECTION_RE.sub("", plan_md or "").rstrip() + "\n"
+
 
 def _trim_to_last_user_turns(
     messages: list[ChatMessage], n: int
@@ -62,17 +77,7 @@ def _trim_to_last_user_turns(
     safe; this preserves recent conversational nuance without re-sending the
     whole transcript each turn.
     """
-    if n <= 0 or not messages:
-        return list(messages)
-    seen_users = 0
-    start = 0
-    for i in range(len(messages) - 1, -1, -1):
-        if messages[i].role == "user":
-            seen_users += 1
-            if seen_users >= n:
-                start = i
-                break
-    return messages[start:]
+    return trim_to_last_user_turns(messages, n)
 
 
 def _is_turn_limit_error(exc: BaseException) -> bool:
@@ -188,16 +193,9 @@ class AgentRunner:
         The current draft and durable context live in the agent instructions
         (built from persisted state), so they are not duplicated here.
         """
-        trimmed = _trim_to_last_user_turns(messages, self.plan_history_turns)
-        parts: list[str] = []
-        if attachments:
-            parts.append(
-                f"Uploaded materials this turn:\n{self._format_attachments(attachments)}\n"
-            )
-        parts.append("Recent conversation (most recent last):")
-        for m in trimmed:
-            parts.append(f"{m.role}: {m.content}")
-        return "\n".join(parts)
+        return build_plan_user_input_assembly(
+            messages, attachments, history_turns=self.plan_history_turns
+        )["text"]
 
     def _merge_plan_turn(
         self, runtime: PlanRuntime, parsed: PlanTurnOutput, *, plan_changed: bool
@@ -329,7 +327,7 @@ class AgentRunner:
         reply = parsed.reply
         diary_md = parsed.diary_markdown.strip() or current_draft
         checklist = self.wiki.checklist_from_diary(diary_md)
-        ready = self.wiki.is_diary_complete(diary_md) or "ready to save" in reply.lower()
+        ready = self.wiki.is_diary_complete(diary_md)
         yield SseFinal(
             reply=reply,
             artifact_markdown=diary_md,
@@ -373,8 +371,10 @@ class AgentRunner:
             )
             return
         reply = parsed.reply
-        plan_md = parsed.plan_markdown.strip() or current_draft
-        ready = self.wiki.is_plan_ready(plan_md) or "ready to save" in reply.lower()
+        plan_md = _strip_plan_debug_sections(
+            parsed.plan_markdown.strip() or current_draft
+        )
+        ready = self.wiki.is_plan_ready(plan_md)
         self._merge_plan_turn(
             runtime, parsed, plan_changed=plan_md.strip() != current_draft.strip()
         )
@@ -435,8 +435,10 @@ class AgentRunner:
         if not isinstance(parsed, PlanTurnOutput):
             return "I had trouble processing that — could you try again?", current_draft, False
         reply = parsed.reply
-        plan_md = parsed.plan_markdown.strip() or current_draft
-        ready = self.wiki.is_plan_ready(plan_md) or "ready to save" in reply.lower()
+        plan_md = _strip_plan_debug_sections(
+            parsed.plan_markdown.strip() or current_draft
+        )
+        ready = self.wiki.is_plan_ready(plan_md)
         self._merge_plan_turn(
             runtime, parsed, plan_changed=plan_md.strip() != current_draft.strip()
         )
@@ -481,7 +483,7 @@ class AgentRunner:
         reply = parsed.reply
         diary_md = parsed.diary_markdown.strip() or current_draft
         checklist = self.wiki.checklist_from_diary(diary_md)
-        ready = self.wiki.is_diary_complete(diary_md) or "ready to save" in reply.lower()
+        ready = self.wiki.is_diary_complete(diary_md)
         return reply, diary_md, checklist, ready
 
     async def compile_diary(self, class_id: str, messages: list[ChatMessage]) -> str:

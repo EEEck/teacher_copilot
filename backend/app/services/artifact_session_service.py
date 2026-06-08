@@ -13,6 +13,7 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
+from app.config import get_settings
 from app.schemas.api import ChatAttachment, ChatMessage, CompletenessChecklist
 from app.teacher_agent.stream_events import (
     SseError,
@@ -101,6 +102,8 @@ class ArtifactSessionService:
         attachments: list[ChatAttachment] | None = None,
     ) -> None:
         spec = self.specs[session.mode]
+        if not get_settings().is_plan_trace_enabled():
+            return
         if not spec.prompt_trace:
             return
         payload = spec.prompt_trace(

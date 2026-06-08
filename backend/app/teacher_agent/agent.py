@@ -14,30 +14,21 @@ from app.teacher_agent.models import (
     PlanTurnOutput,
     ProfileProposalOutput,
 )
-from app.teacher_agent.planning_state import (
-    PlanRuntime,
-    render_briefs,
-    render_lesson_planning_state,
-    render_session_state,
-)
+from app.teacher_agent.planning_state import PlanRuntime
+from app.teacher_agent.prompt_assembly import build_plan_chat_prompt_assembly
 from app.teacher_agent.prompts import (
     COMPILE_SYSTEM,
     INGEST_WIKI_TOOLS_POLICY,
     INGEST_SYSTEM,
     LINT_SYSTEM,
     MEMORY_COMPACT_SYSTEM,
-    PLAN_CHAT_SYSTEM,
-    PLAN_MEMORY_POLICY,
     PROFILE_PROPOSAL_SYSTEM,
-    PLAN_SKILL,
-    PLAN_WIKI_TOOLS_POLICY,
     PLAN_OPENING_SYSTEM,
     PLAN_SYSTEM,
     apply_prompt,
 )
 from app.context_limits import apply_char_limit, get_context_limits
 from app.teacher_agent.tools import WikiToolContext, create_chat_wiki_tools, create_wiki_tools
-from app.teacher_agent.wiki import memory as wiki_memory
 
 
 def chat_model_settings(reasoning_effort: str) -> ModelSettings | None:
@@ -77,25 +68,6 @@ def build_ingest_agent(
     )
 
 
-def _profiles_slice(wiki, class_id: str) -> str:
-    user_md = wiki.read_user_profile().strip()
-    copilot_md = wiki.read_copilot_profile(class_id).strip()
-    user_block = (
-        wiki_memory.clamp_memory_page("user", user_md).rstrip()
-        if user_md
-        else "- No teacher profile yet."
-    )
-    copilot_block = (
-        wiki_memory.clamp_memory_page("copilot_profile", copilot_md).rstrip()
-        if copilot_md
-        else "- No copilot profile yet."
-    )
-    return (
-        f"### Teacher (user.md)\n{user_block}\n\n"
-        f"### Copilot working agreement (copilot.md)\n{copilot_block}"
-    )
-
-
 def build_plan_chat_agent(
     ctx: WikiToolContext,
     current_plan: str,
@@ -107,24 +79,15 @@ def build_plan_chat_agent(
     wiki = ctx.wiki
     class_id = ctx.class_id
     rt = planning or PlanRuntime()
-    instructions = apply_prompt(
-        PLAN_CHAT_SYSTEM,
-        skill=PLAN_SKILL,
-        memory_policy=PLAN_MEMORY_POLICY,
-        class_slice=wiki.build_plan_context_slim(class_id),
-        profiles=_profiles_slice(wiki, class_id),
-        session_state=render_session_state(rt.session_state),
-        lesson_state=render_lesson_planning_state(rt.lesson_planning_state),
-        current_plan=apply_char_limit(
-            (current_plan or "").strip(), get_context_limits().plan_current_chars
-        )
-        or "- (empty draft)",
-        evidence=render_briefs(rt.evidence_briefs),
-        wiki_tools_policy=PLAN_WIKI_TOOLS_POLICY,
+    assembly = build_plan_chat_prompt_assembly(
+        wiki,
+        class_id,
+        messages=[],
+        current_plan=current_plan,
+        runtime=rt,
+        attachments=[],
     )
-    instructions = apply_char_limit(
-        instructions, get_context_limits().plan_instructions_backstop
-    )
+    instructions = assembly["instructions"]
     settings = chat_model_settings(reasoning_effort)
     return Agent(
         name="KlassenPilot Plan Chat",

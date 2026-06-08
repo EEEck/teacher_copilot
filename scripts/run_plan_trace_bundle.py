@@ -1,6 +1,6 @@
 """Create a complete lesson-planning trace bundle for debugging.
 
-This script calls the local KlassenPilot API, runs the default two-turn FCKW
+This script calls the local KlassenPilot API, runs the default three-turn FCKW
 planning scenario, and writes a timestamped folder containing:
 
 - session start response
@@ -33,6 +33,9 @@ Add differentiated practice and homework (2 questions). Teacher notes: no real C
 """
 
 DEFAULT_PROMPT_2 = """Can we also add a 5 min review session of the last 4 lectures? I would like to consider what the class confused the last few sessions and incorporate key findings to make the introduction of FCKW simpler for them to digest.
+"""
+
+DEFAULT_PROMPT_3 = """I am very happy with it. Maybe as a last refinement, let's add only a 2 min recap together with students actively recalling the key learning.
 """
 
 
@@ -179,6 +182,7 @@ def _write_readme(
     run_dir: pathlib.Path,
     session: dict[str, Any],
     class_id: str,
+    prompts: list[str],
     assemblies: list[dict[str, Any]],
     trace: dict[str, Any],
 ) -> None:
@@ -194,11 +198,9 @@ def _write_readme(
         "- `00-run-meta.json`: prompt inputs and run metadata",
         "- `01-session-start.json`: API session start response",
         "- `02-trace-before-first-message.json`: exact trace before any chat",
-        "- `03-turn1-sse.txt`: raw SSE stream for turn 1",
-        "- `04-trace-after-turn1.json`: trace after first teacher prompt",
-        "- `05-turn2-sse.txt`: raw SSE stream for turn 2",
-        "- `06-trace-after-turn2.json`: final full trace",
-        "- `07-final-lessonplan.md`: final teacher-facing plan artifact",
+        "- `NN-turnX-sse.txt`: raw SSE stream for each turn",
+        "- `NN-trace-after-turnX.json`: trace after each teacher prompt",
+        "- `NN-final-lessonplan.md`: final teacher-facing plan artifact",
         "- `prompt-XX-*-instructions.txt`: exact model instructions for each model call",
         "- `prompt-XX-*-user-input.txt`: exact user input for each model call",
         "- `prompt-XX-*-sections.md`: readable section-by-section context",
@@ -242,7 +244,8 @@ def _write_readme(
             "- Before first message: no conversation yet; trace shows default plan-chat stack and empty artifact template.",
             "- Lazy opening call: compact class slice only plus opening instructions.",
             "- First planning call: compact class slice, teacher/copilot profiles, empty runtime state, empty plan artifact, no evidence briefs, opening assistant message, and teacher prompt.",
-            "- Second planning call: same compact class slice plus updated runtime state, current full lesson artifact, compact evidence briefs, full recent conversation window, and raw evidence refs available via tool.",
+            "- Later planning calls: same compact class slice plus updated runtime state, current full lesson artifact, compact evidence briefs, full recent conversation window, and raw evidence refs available via tool.",
+            f"- This bundle ran {len(prompts)} teacher turns.",
             "",
             "## Quick Quality Notes",
             "- Use `prompt-*-sections.md` to inspect exact context, not legacy flat context previews.",
@@ -253,10 +256,16 @@ def _write_readme(
 
 
 def run(args: argparse.Namespace) -> pathlib.Path:
-    prompt1 = _read_prompt(args.prompt1_file, DEFAULT_PROMPT_1)
-    prompt2 = _read_prompt(args.prompt2_file, DEFAULT_PROMPT_2)
-    run_name = args.run_name or f"{_now_stamp()}-fckw-plan-2turn"
-    run_dir = pathlib.Path(args.output_root) / run_name
+    prompts = [
+        _read_prompt(args.prompt1_file, DEFAULT_PROMPT_1),
+        _read_prompt(args.prompt2_file, DEFAULT_PROMPT_2),
+        _read_prompt(args.prompt3_file, DEFAULT_PROMPT_3),
+    ]
+    run_name = args.run_name or f"{_now_stamp()}-fckw-plan-3turn"
+    output_root = pathlib.Path(args.output_root)
+    if not output_root.is_absolute():
+        output_root = pathlib.Path(__file__).resolve().parents[1] / output_root
+    run_dir = output_root / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
 
     base = f"{args.api_base.rstrip('/')}/api/classes/{args.class_id}/plan/sessions"
@@ -271,7 +280,7 @@ def run(args: argparse.Namespace) -> pathlib.Path:
             "api_base": args.api_base,
             "class_id": args.class_id,
             "session_id": session_id,
-            "prompts": [prompt1, prompt2],
+            "prompts": prompts,
         },
     )
     _write_json(run_dir / "01-session-start.json", session)
@@ -280,32 +289,37 @@ def run(args: argparse.Namespace) -> pathlib.Path:
     _write_json(run_dir / "02-trace-before-first-message.json", trace0)
     _write_assembly(run_dir / "snapshot-00-before-first-message", trace0["prompt_assembly"], "Snapshot 00 - Before First Message")
 
-    turn1 = _request_text("POST", f"{base}/{session_id}/chat/stream", {"message": prompt1})
-    _write_text(run_dir / "03-turn1-sse.txt", turn1)
-    trace1 = _request_json("GET", f"{base}/{session_id}/trace")
-    _write_json(run_dir / "04-trace-after-turn1.json", trace1)
-    _write_assembly(run_dir / "snapshot-01-after-turn1-next-prompt", trace1["prompt_assembly"], "Snapshot 01 - After Turn 1 Next Prompt")
+    final_trace = trace0
+    file_idx = 3
+    for turn_idx, prompt in enumerate(prompts, start=1):
+        turn = _request_text("POST", f"{base}/{session_id}/chat/stream", {"message": prompt})
+        _write_text(run_dir / f"{file_idx:02d}-turn{turn_idx}-sse.txt", turn)
+        file_idx += 1
+        final_trace = _request_json("GET", f"{base}/{session_id}/trace")
+        _write_json(run_dir / f"{file_idx:02d}-trace-after-turn{turn_idx}.json", final_trace)
+        _write_assembly(
+            run_dir / f"snapshot-{turn_idx:02d}-after-turn{turn_idx}-next-prompt",
+            final_trace["prompt_assembly"],
+            f"Snapshot {turn_idx:02d} - After Turn {turn_idx} Next Prompt",
+        )
+        file_idx += 1
 
-    turn2 = _request_text("POST", f"{base}/{session_id}/chat/stream", {"message": prompt2})
-    _write_text(run_dir / "05-turn2-sse.txt", turn2)
-    trace2 = _request_json("GET", f"{base}/{session_id}/trace")
-    _write_json(run_dir / "06-trace-after-turn2.json", trace2)
-    _write_assembly(run_dir / "snapshot-02-after-turn2-next-prompt", trace2["prompt_assembly"], "Snapshot 02 - After Turn 2 Next Prompt")
-    _write_text(run_dir / "07-final-lessonplan.md", trace2.get("artifact_markdown", ""))
+    _write_text(run_dir / f"{file_idx:02d}-final-lessonplan.md", final_trace.get("artifact_markdown", ""))
+    file_idx += 1
 
-    assemblies = [e for e in trace2.get("event_trace", []) if e.get("type") == "prompt_assembly"]
+    assemblies = [e for e in final_trace.get("event_trace", []) if e.get("type") == "prompt_assembly"]
     for idx, assembly in enumerate(assemblies, start=1):
         n = f"{idx:02d}"
         stage = assembly.get("stage", "prompt")
         _write_assembly(run_dir / f"prompt-{n}-{stage}", assembly, f"Prompt {n} - {stage}")
 
-    _write_text(run_dir / "08-tool-calls-and-results.md", _tool_report(trace2))
+    _write_text(run_dir / f"{file_idx:02d}-tool-calls-and-results.md", _tool_report(final_trace))
     raw_dir = run_dir / "raw-evidence"
     raw_dir.mkdir(exist_ok=True)
-    for key, value in trace2.get("raw_evidence", {}).items():
+    for key, value in final_trace.get("raw_evidence", {}).items():
         _write_text(raw_dir / f"{key}.txt", str(value))
 
-    _write_readme(run_dir, session, args.class_id, assemblies, trace2)
+    _write_readme(run_dir, session, args.class_id, prompts, assemblies, final_trace)
     return run_dir
 
 
@@ -317,9 +331,11 @@ def main() -> None:
     parser.add_argument("--run-name", default="")
     parser.add_argument("--prompt1-file", default="")
     parser.add_argument("--prompt2-file", default="")
+    parser.add_argument("--prompt3-file", default="")
     args = parser.parse_args()
     run_dir = run(args)
-    trace = json.loads((run_dir / "06-trace-after-turn2.json").read_text(encoding="utf-8"))
+    trace_files = sorted(run_dir.glob("*-trace-after-turn*.json"))
+    trace = json.loads(trace_files[-1].read_text(encoding="utf-8"))
     prompt_calls = len([e for e in trace.get("event_trace", []) if e.get("type") == "prompt_assembly"])
     tool_calls = len([e for e in trace.get("event_trace", []) if e.get("type") == "tool_call"])
     raw_evidence = len(trace.get("raw_evidence", {}))

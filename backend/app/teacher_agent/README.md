@@ -35,6 +35,10 @@ prompt trace diagnostics.
   compact evidence briefs.
 - Prompt trace output is diagnostic and may contain sensitive local session
   data; keep it gated at the API boundary.
+- Artifact workflows should build prompt/context through shared assembly helpers
+  first, then use the same assembly for local debug bundles and live model
+  calls. Future one-shot helper agents should adopt the same pattern when the
+  v1.2 debug generalization is implemented.
 - If agent behavior changes, update `../../../docs/agent_contracts.md`.
 
 ## Related Docs
