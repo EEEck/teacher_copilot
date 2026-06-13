@@ -15,7 +15,10 @@ def test_ingest_full_flow(client: TestClient):
 
     start = client.post(f"{base}/sessions")
     assert start.status_code == 200, start.text
-    session_id = start.json()["session_id"]
+    start_body = start.json()
+    session_id = start_body["session_id"]
+    assert start_body["memory_state"]["phase"] == "identify_target"
+    assert start_body["memory_state"]["target"]["target_confirmed"] is False
 
     chat = client.post(
         f"{base}/sessions/{session_id}/chat",
@@ -26,10 +29,15 @@ def test_ingest_full_flow(client: TestClient):
     assert chat_body["reply"]
     assert chat_body["diary_markdown"]
     assert chat_body["ready_to_propose"] is True
+    assert chat_body["last_change_summary"] == "Updated lesson results."
+    assert chat_body["memory_state"]["target"]["lesson_date"] == "2026-10-01"
+    assert chat_body["memory_state"]["target"]["target_confirmed"] is True
 
     propose = client.post(f"{base}/sessions/{session_id}/propose")
     assert propose.status_code == 200, propose.text
-    proposals = propose.json()["wiki_proposals"]
+    propose_body = propose.json()
+    assert propose_body["memory_state"]["intent"] == "log_new_results"
+    proposals = propose_body["wiki_proposals"]
     assert len(proposals) > 0
 
     approved = [

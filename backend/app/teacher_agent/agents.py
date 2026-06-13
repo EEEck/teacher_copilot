@@ -37,8 +37,14 @@ from app.teacher_agent.models import (
 )
 from app.context_limits import apply_char_limit, get_context_limits
 from app.teacher_agent.prompt_assembly import (
+    build_ingest_user_input_assembly,
     build_plan_user_input_assembly,
     trim_to_last_user_turns,
+)
+from app.teacher_agent.memory_update_state import (
+    MemoryRuntime,
+    memory_api_payload,
+    merge_memory_turn,
 )
 from app.teacher_agent.planning_state import (
     PlanRuntime,
@@ -148,9 +154,14 @@ class AgentRunner:
         return self.client
 
     def _wiki_ctx(
-        self, class_id: str, planning: PlanRuntime | None = None
+        self,
+        class_id: str,
+        planning: PlanRuntime | None = None,
+        memory: MemoryRuntime | None = None,
     ) -> WikiToolContext:
-        return WikiToolContext(wiki=self.wiki, class_id=class_id, planning=planning)
+        return WikiToolContext(
+            wiki=self.wiki, class_id=class_id, planning=planning, memory=memory
+        )
 
     def _format_attachments(self, attachments: list[ChatAttachment]) -> str:
         if not attachments:
@@ -227,6 +238,36 @@ class AgentRunner:
             memory_candidates=payload["memory_candidates"],
         )
 
+    def _merge_memory_turn(
+        self, runtime: MemoryRuntime, parsed: IngestTurnOutput, *, diary_changed: bool
+    ) -> None:
+        merge_memory_turn(
+            runtime,
+            state_patch=parsed.state_patch,
+            new_evidence_briefs=parsed.new_evidence_briefs,
+            last_change_summary=parsed.last_change_summary,
+            unsupported_intent_reason=parsed.unsupported_intent_reason,
+            diary_changed=diary_changed,
+        )
+
+    def _memory_final_event(
+        self,
+        reply: str,
+        diary_md: str,
+        ready: bool,
+        checklist: CompletenessChecklist,
+        runtime: MemoryRuntime,
+    ) -> SseFinal:
+        payload = memory_api_payload(runtime)
+        return SseFinal(
+            reply=reply,
+            artifact_markdown=diary_md,
+            ready=ready,
+            completeness=checklist,
+            last_change_summary=payload["last_change_summary"],
+            memory_state=payload,
+        )
+
     async def _run_structured(self, agent, user_input: str):
         """Run an agent to completion, async + bounded by a wall-clock timeout.
 
@@ -293,20 +334,23 @@ class AgentRunner:
         messages: list[ChatMessage],
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
+        memory: MemoryRuntime | None = None,
     ) -> AsyncIterator[SseEvent]:
+        runtime = memory or MemoryRuntime()
         context = self.wiki.build_ingest_context_slim(class_id)
         sections = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
         agent = build_ingest_agent(
-            self._wiki_ctx(class_id),
+            self._wiki_ctx(class_id, memory=runtime),
             sections,
             context,
             self.chat_model,
+            memory=runtime,
             reasoning_effort=self.reasoning_effort,
         )
         current_draft = partial_diary.strip() or self.wiki.empty_diary_template()
-        user_input = self._build_user_input(
-            messages, "Current diary draft (update each turn)", current_draft, attachments
-        )
+        user_input = build_ingest_user_input_assembly(
+            messages, current_draft, attachments
+        )["text"]
         result_holder: dict[str, Any] = {}
         async for event in self._yield_stream_events(agent, user_input, result_holder):
             if isinstance(event, SseError):
@@ -328,12 +372,12 @@ class AgentRunner:
         diary_md = parsed.diary_markdown.strip() or current_draft
         checklist = self.wiki.checklist_from_diary(diary_md)
         ready = self.wiki.is_diary_complete(diary_md)
-        yield SseFinal(
-            reply=reply,
-            artifact_markdown=diary_md,
-            ready=ready,
-            completeness=checklist,
+        self._merge_memory_turn(
+            runtime,
+            parsed,
+            diary_changed=diary_md.strip() != current_draft.strip(),
         )
+        yield self._memory_final_event(reply, diary_md, ready, checklist, runtime)
 
     async def plan_chat_stream(
         self,
@@ -450,20 +494,23 @@ class AgentRunner:
         messages: list[ChatMessage],
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
+        memory: MemoryRuntime | None = None,
     ) -> tuple[str, str, CompletenessChecklist, bool]:
+        runtime = memory or MemoryRuntime()
         context = self.wiki.build_ingest_context_slim(class_id)
         sections = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
         agent = build_ingest_agent(
-            self._wiki_ctx(class_id),
+            self._wiki_ctx(class_id, memory=runtime),
             sections,
             context,
             self.chat_model,
+            memory=runtime,
             reasoning_effort=self.reasoning_effort,
         )
         current_draft = partial_diary.strip() or self.wiki.empty_diary_template()
-        user_input = self._build_user_input(
-            messages, "Current diary draft (update each turn)", current_draft, attachments
-        )
+        user_input = build_ingest_user_input_assembly(
+            messages, current_draft, attachments
+        )["text"]
         try:
             parsed = await self._run_structured(agent, user_input)
         except AgentTurnLimitError as exc:
@@ -484,6 +531,11 @@ class AgentRunner:
         diary_md = parsed.diary_markdown.strip() or current_draft
         checklist = self.wiki.checklist_from_diary(diary_md)
         ready = self.wiki.is_diary_complete(diary_md)
+        self._merge_memory_turn(
+            runtime,
+            parsed,
+            diary_changed=diary_md.strip() != current_draft.strip(),
+        )
         return reply, diary_md, checklist, ready
 
     async def compile_diary(self, class_id: str, messages: list[ChatMessage]) -> str:

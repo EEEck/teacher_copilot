@@ -55,6 +55,7 @@ export type SseEvent =
       session_state?: Record<string, unknown> | null;
       lesson_planning_state?: Record<string, unknown> | null;
       memory_candidates?: MemoryCandidate[] | null;
+      memory_state?: Record<string, unknown> | null;
     }
   | { type: "error"; message: string; code?: string | null };
 
@@ -78,6 +79,7 @@ export type StreamChatFinal = {
   phase?: string | null;
   lastChangeSummary?: string | null;
   memoryCandidates?: MemoryCandidate[];
+  memoryState?: Record<string, unknown> | null;
 };
 
 export function parseSseChunk(buffer: string): { events: SseEvent[]; rest: string } {
@@ -208,6 +210,7 @@ export async function consumeArtifactChatStream(
         phase: event.phase ?? null,
         lastChangeSummary: event.last_change_summary ?? null,
         memoryCandidates: event.memory_candidates ?? undefined,
+        memoryState: event.memory_state ?? null,
       };
       break;
     }

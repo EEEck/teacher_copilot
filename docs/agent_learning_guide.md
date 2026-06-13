@@ -9,7 +9,8 @@ and reading current agent memory/context guidance.
 
 Use this as a self-contained study note when growing as an AI software engineer.
 The shorter implementation source of truth is `agent_architecture.md`; the
-behavior contract is `agent_contracts.md`.
+behavior contract is `agent_contracts.md`. For repo-specific OpenAI Agents SDK
+review notes, see `agent_sdk_practices_review.md`.
 
 ## The Core Mental Model
 
@@ -522,9 +523,11 @@ Public references:
 - Anthropic, "Effective context engineering for AI agents":
   https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
 - OpenAI Agents SDK docs:
-  https://openai.github.io/openai-agents-python/agents/
-- OpenAI Agents SDK guardrails:
-  https://openai.github.io/openai-agents-python/guardrails/
+  https://developers.openai.com/api/docs/guides/agents
+- OpenAI Agents SDK guardrails and human review:
+  https://developers.openai.com/api/docs/guides/agents/guardrails-approvals
+- OpenAI Agents SDK running agents:
+  https://developers.openai.com/api/docs/guides/agents/running-agents
 - LlamaIndex agent memory docs:
   https://developers.llamaindex.ai/python/framework/module_guides/deploying/agents/memory/
 - Honcho docs:

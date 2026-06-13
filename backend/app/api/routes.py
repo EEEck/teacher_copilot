@@ -24,6 +24,7 @@ from app.schemas.api import (
     MemoryCompactRequest,
     MemoryCompactResponse,
     MemoryProposalResponse,
+    MemoryTraceResponse,
     PlanChatRequest,
     PlanChatResponse,
     PlanDraft,
@@ -418,6 +419,24 @@ def ingest_draft(
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
+@router.get(
+    "/classes/{class_id}/ingest/sessions/{session_id}/trace",
+    response_model=MemoryTraceResponse,
+)
+def ingest_trace(
+    class_id: str,
+    session_id: str,
+    ingest: IngestService = Depends(get_ingest_service),
+) -> MemoryTraceResponse:
+    """Return a deterministic debug bundle for an update-memory session."""
+    if not get_settings().is_agent_trace_enabled():
+        raise HTTPException(status_code=404, detail="Memory trace endpoint is disabled")
+    try:
+        return ingest.trace(class_id, session_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
 @router.post(
     "/classes/{class_id}/ingest/commit",
     response_model=CommitIngestResponse,
@@ -541,7 +560,7 @@ def plan_trace(
     plan_svc: PlanService = Depends(get_plan_service),
 ) -> PlanTraceResponse:
     """Return a deterministic debug bundle for a plan session."""
-    if not get_settings().is_plan_trace_enabled():
+    if not get_settings().is_agent_trace_enabled():
         raise HTTPException(status_code=404, detail="Plan trace endpoint is disabled")
     try:
         return plan_svc.trace(class_id, session_id)

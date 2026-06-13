@@ -22,6 +22,31 @@ For file-by-file memory scope and update rules, see `memory_hierarchy.md`.
 - Ask at most one targeted question when blocked.
 - Never silently mutate wiki files from a planning turn.
 
+## Agents SDK Integration Contract
+
+KlassenPilot uses the OpenAI Agents SDK as a code-first orchestration layer, but
+the product contract stays backend-owned and teacher-reviewable.
+
+- One SDK run is one application-level chat turn. The backend prepares the
+  prompt, calls `Runner.run` or `Runner.run_streamed`, then validates the
+  structured output before mutating session state.
+- Agent definitions should stay focused: a workflow gets another agent only when
+  it needs a materially different tool surface, output schema, model, or
+  approval policy.
+- `output_type` Pydantic models are contractual. Route behavior through typed
+  fields and backend merge rules rather than parsing assistant prose.
+- Use application-owned runtime/session state for lesson planning unless the
+  session strategy is deliberately migrated. Do not mix local transcript replay
+  with SDK sessions or previous-response continuation in the same conversation
+  without a migration plan.
+- Chat tools must remain read-only unless a new contract explicitly adds SDK
+  human-review interruptions for side effects.
+- If side-effecting tools are added inside an agent run, they need tool-local
+  validation and human approval before execution.
+- Local trace bundles remain the primary developer diagnostic surface. SDK
+  traces should be correlated with `class_id`, `session_id`, workflow mode, and
+  artifact version before they become a primary review tool.
+
 ## Lesson Planning Contract
 
 Purpose:
@@ -153,26 +178,51 @@ Tool-interface contract:
 
 Purpose:
 
-- Help the teacher turn a lesson conversation into structured lesson results.
+- Help the teacher turn a free-form update-memory conversation into structured
+  lesson results.
+- Support three MVP intents in one agent: log a new lesson, add missing results
+  for a planned/older lesson, and correct existing lesson observations.
 - Preserve the teacher's intent and avoid inventing events that were not stated.
 
 Reads:
 
 - Slim ingest context slice from `build_ingest_context_slim(class_id)`.
 - Compact class memory from `wiki/classes/{class_id}/memory/*.md` when present.
-- Class-scoped memory only for continuity when needed.
+- Class-scoped lesson/memory evidence through update-memory tools.
 - Uploaded teacher materials supplied in the current turn.
 
 Writes:
 
-- Only `diary_markdown` in the structured model output during chat.
+- Only `diary_markdown` and backend-owned `MemoryRuntime` state during chat.
 - Wiki updates happen only after teacher approval through the commit flow.
 - Commit/revise may update student pages, `students.md`, and the other class
   roll-ups for the affected lesson.
 
+Runtime context manager:
+
+- The chat is driven by backend-owned `MemoryRuntime` persisted on
+  `ArtifactSession.runtime`.
+- The model returns `state_patch`, `new_evidence_briefs`,
+  `last_change_summary`, and optional `unsupported_intent_reason` as part of
+  `IngestTurnOutput`. The backend validates and merges the patch; missing fields
+  mean "no change".
+- Runtime state tracks target/date identification (`target`), conversation
+  phase (`identify_target`, `collect_results`, `review_draft`, `unsupported`),
+  lesson-result categories, compact evidence briefs, raw evidence refs, and a
+  diary version counter.
+- Runtime state is returned to clients as `memory_state` on ingest session/chat,
+  draft/propose responses, and streamed final events. It is diagnostic/workflow
+  state, not durable memory.
+
 Allowed behavior:
 
 - Ask at most one clarifying question when important diary sections are missing.
+- The general **Update memory** entry point starts free-agent target discovery.
+  A future timeline/detail button may start the same agent with a date hint, but
+  the backend still validates the target through the same runtime state.
+- The agent may draft from strong evidence before final confirmation, but it
+  should keep target confidence explicit in `state_patch` and conversationally
+  confirm ambiguous dates/lessons with the teacher.
 - Use pseudonymous student IDs only.
 - Do not infer sensitive facts beyond what the teacher said.
 - Never write wiki files directly from the chat turn.
@@ -180,6 +230,28 @@ Allowed behavior:
   (previous lesson, roster excerpt, course state, open loops, misconceptions,
   compact memory, logging conventions). Do not stack index + base context +
   ingest query pack into the chat prompt.
+- If the teacher asks for a future memory task outside lesson-results
+  logging/correction, set `unsupported_intent_reason` and explain the supported
+  scope briefly.
+
+Allowed tools:
+
+- `list_memory_targets(start_date?, end_date?, topic?, status?, max_results?)`
+- `read_memory_target(lesson_date)`
+- `search_memory(query, max_results?)`
+- `read_memory_page(path)`
+- `get_raw_evidence(raw_ref)`
+
+Browsing policy:
+
+- Use the compact ingest pack first for normal same-day logging.
+- Use `list_memory_targets` when the target is vague ("today", "last class",
+  "the planned lesson", "that acids lesson") or when the teacher wants to fill
+  older missing results.
+- Use `read_memory_target` before correcting an existing lesson or filling
+  results for a planned lesson.
+- Capture and summarize useful tool results into `new_evidence_briefs`; fetch
+  raw refs only for exact wording, provenance, or contradiction checks.
 
 ## Tool Result Contract
 

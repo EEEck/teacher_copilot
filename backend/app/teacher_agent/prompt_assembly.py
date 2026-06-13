@@ -10,6 +10,10 @@ from __future__ import annotations
 
 from app.context_limits import apply_char_limit, get_context_limits
 from app.schemas.api import ChatAttachment, ChatMessage
+from app.teacher_agent.memory_update_state import (
+    MemoryRuntime,
+    render_memory_runtime,
+)
 from app.teacher_agent.planning_state import (
     PlanRuntime,
     render_briefs,
@@ -17,6 +21,8 @@ from app.teacher_agent.planning_state import (
     render_session_state,
 )
 from app.teacher_agent.prompts import (
+    INGEST_SYSTEM,
+    INGEST_WIKI_TOOLS_POLICY,
     PLAN_CHAT_SYSTEM,
     PLAN_MEMORY_POLICY,
     PLAN_OPENING_SYSTEM,
@@ -24,6 +30,7 @@ from app.teacher_agent.prompts import (
     PLAN_WIKI_TOOLS_POLICY,
     apply_prompt,
 )
+from app.teacher_agent.wiki_store import DIARY_SECTION_HEADINGS
 from app.teacher_agent.wiki import memory as wiki_memory
 
 
@@ -113,6 +120,147 @@ def build_plan_user_input_assembly(
         "chars": len(rendered),
         "text": rendered,
         "sections": sections,
+    }
+
+
+def build_ingest_user_input_assembly(
+    messages: list[ChatMessage],
+    current_draft: str,
+    attachments: list[ChatAttachment] | None = None,
+) -> dict:
+    lim = get_context_limits()
+    parts = [
+        "Current diary draft (update each turn):\n"
+        f"{apply_char_limit(current_draft, lim.ingest_draft_chars)}\n"
+    ]
+    sections = [
+        _section(
+            name="Current diary draft",
+            function="AgentRunner._build_user_input",
+            source="ArtifactSession.partial_markdown",
+            text=parts[0],
+        )
+    ]
+    if attachments:
+        text = f"Uploaded materials this turn:\n{_format_attachments(attachments)}\n"
+        parts.append(text)
+        sections.append(
+            _section(
+                name="Uploaded materials",
+                function="AgentRunner._build_user_input",
+                source="ChatRequest.attachments",
+                text=text,
+            )
+        )
+    convo_lines = ["Recent conversation (most recent last):"]
+    for m in messages:
+        convo_lines.append(f"{m.role}: {m.content}")
+    convo = "\n".join(convo_lines)
+    parts.append(convo)
+    sections.append(
+        _section(
+            name="Conversation window",
+            function="AgentRunner._build_user_input",
+            source="ArtifactSession.messages",
+            text=convo,
+        )
+    )
+    rendered = "\n".join(parts)
+    return {
+        "function": "AgentRunner._build_user_input",
+        "chars": len(rendered),
+        "text": rendered,
+        "sections": sections,
+    }
+
+
+def build_ingest_chat_prompt_assembly(
+    wiki,
+    class_id: str,
+    *,
+    messages: list[ChatMessage],
+    current_diary: str,
+    runtime: MemoryRuntime | None,
+    attachments: list[ChatAttachment] | None = None,
+) -> dict:
+    rt = runtime or MemoryRuntime()
+    lim = get_context_limits()
+    sections_text = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
+    ingest_context = apply_char_limit(
+        wiki.build_ingest_context_slim(class_id), lim.ingest_context_backstop
+    )
+    memory_runtime = render_memory_runtime(rt)
+    user_input = build_ingest_user_input_assembly(
+        messages, current_diary, attachments
+    )
+    instructions = apply_prompt(
+        INGEST_SYSTEM,
+        sections=sections_text,
+        context=ingest_context,
+        memory_runtime=memory_runtime,
+        wiki_tools_policy=INGEST_WIKI_TOOLS_POLICY,
+    )
+    return {
+        "stage": "ingest_chat",
+        "model_call": "KlassenPilot Ingest",
+        "instruction_chars": len(instructions),
+        "user_input_chars": len(user_input["text"]),
+        "instructions": instructions,
+        "user_input": user_input["text"],
+        "sections": [
+            _section(
+                name="Ingest system template",
+                function="build_ingest_agent",
+                source="prompts.INGEST_SYSTEM",
+                text=INGEST_SYSTEM,
+            ),
+            _section(
+                name="Required diary sections",
+                function="build_ingest_agent",
+                source="wiki_store.DIARY_SECTION_HEADINGS",
+                text=sections_text,
+            ),
+            _section(
+                name="Ingest class context",
+                function="wiki.build_ingest_context_slim",
+                source="compact class wiki memory + recent lesson context",
+                text=ingest_context,
+            ),
+            _section(
+                name="Memory runtime",
+                function="render_memory_runtime",
+                source="MemoryRuntime",
+                text=memory_runtime,
+            ),
+            _section(
+                name="Update-memory tools policy",
+                function="build_ingest_agent",
+                source="prompts.INGEST_WIKI_TOOLS_POLICY",
+                text=INGEST_WIKI_TOOLS_POLICY,
+            ),
+            _section(
+                name="User input",
+                function="AgentRunner._build_user_input",
+                source="ArtifactSession.messages + current diary + attachments",
+                text=user_input["text"],
+            ),
+        ],
+        "nested": {
+            "user_input": user_input,
+            "ingest_context": {
+                "function": "wiki.build_ingest_context_slim",
+                "chars": len(ingest_context),
+                "text": ingest_context,
+                "sections": [
+                    _section(
+                        name="Ingest context",
+                        function="wiki.build_ingest_context_slim",
+                        source="compact class wiki memory + recent lesson context",
+                        text=ingest_context,
+                    )
+                ],
+            },
+        },
     }
 
 

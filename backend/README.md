@@ -71,9 +71,10 @@ Prerequisites:
 
 - Backend is running on `http://localhost:8010`.
 - `backend/.env` contains `OPENAI_API_KEY`.
-- The plan trace endpoint is enabled. It is enabled by default in development
+- The agent trace endpoint is enabled. It is enabled by default in development
   and disabled by default when `APP_ENV=production`; set
-  `PLAN_TRACE_ENABLED=true` to override for a local production-mode debug run.
+  `AGENT_TRACE_ENABLED=true` to override for a local production-mode debug run.
+  `PLAN_TRACE_ENABLED=true` remains supported as a backward-compatible alias.
 - The target class exists in `backend/teacher_wiki/`.
 
 PowerShell from repo root:
@@ -138,6 +139,35 @@ Recommended debugging flow:
 3. Inspect `08-tool-calls-and-results.md` to verify browsing behavior.
 4. Inspect `07-final-lessonplan.md` to compare the final artifact against the
    evidence and prompt instructions.
+
+## Update Memory trace bundle
+
+Use this when debugging Update Memory target selection, prompt assembly, tool
+calls, runtime state, or lesson-results diary output. It runs the default
+three-turn `2026-05-29` lesson-results scenario against the local FastAPI
+backend and writes a bundle under `backend/runs/{timestamp}-memory-update-3turn/`.
+
+PowerShell from repo root:
+
+```powershell
+.\scripts\run_memory_update_trace_bundle.ps1
+```
+
+Python from repo root:
+
+```powershell
+.\backend\.venv\Scripts\python .\scripts\run_memory_update_trace_bundle.py
+```
+
+The bundle includes raw SSE per turn, trace JSON after each turn, exact prompt
+instructions and user input, section-by-section context, tool call/result
+report, `raw-evidence/`, and the final `NN-final-diary.md`.
+
+The default turns:
+
+1. Log lesson results for `2026-05-29`, including named student observations.
+2. Add participation details and update the `2026-05-25` open-loop status.
+3. Ask the agent to make the lesson results ready to save memory.
 
 ## Wiki memory
 

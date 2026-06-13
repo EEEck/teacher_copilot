@@ -14,6 +14,7 @@ from app.teacher_agent.models import (
     PlanTurnOutput,
     ProfileProposalOutput,
 )
+from app.teacher_agent.memory_update_state import MemoryRuntime, render_memory_runtime
 from app.teacher_agent.planning_state import PlanRuntime
 from app.teacher_agent.prompt_assembly import build_plan_chat_prompt_assembly
 from app.teacher_agent.prompts import (
@@ -28,7 +29,12 @@ from app.teacher_agent.prompts import (
     apply_prompt,
 )
 from app.context_limits import apply_char_limit, get_context_limits
-from app.teacher_agent.tools import WikiToolContext, create_chat_wiki_tools, create_wiki_tools
+from app.teacher_agent.tools import (
+    WikiToolContext,
+    create_chat_wiki_tools,
+    create_memory_update_tools,
+    create_wiki_tools,
+)
 
 
 def chat_model_settings(reasoning_effort: str) -> ModelSettings | None:
@@ -48,13 +54,16 @@ def build_ingest_agent(
     context: str,
     model: str,
     *,
+    memory: MemoryRuntime | None = None,
     reasoning_effort: str = "medium",
 ) -> Agent:
     lim = get_context_limits()
+    rt = memory or MemoryRuntime()
     instructions = apply_prompt(
         INGEST_SYSTEM,
         sections=sections,
         context=apply_char_limit(context, lim.ingest_context_backstop),
+        memory_runtime=render_memory_runtime(rt),
         wiki_tools_policy=INGEST_WIKI_TOOLS_POLICY,
     )
     settings = chat_model_settings(reasoning_effort)
@@ -63,7 +72,7 @@ def build_ingest_agent(
         instructions=instructions,
         model=model,
         **({"model_settings": settings} if settings else {}),
-        tools=create_wiki_tools(ctx),
+        tools=create_memory_update_tools(ctx),
         output_type=IngestTurnOutput,
     )
 

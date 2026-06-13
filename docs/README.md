@@ -8,6 +8,8 @@ follow the local README closest to the code you are changing.
 - `product_vision.md` - current product scope and teacher-facing behavior.
 - `agent_contracts.md` - reviewable read/write/tool/output contracts.
 - `agent_architecture.md` - agent architecture and retrieval/memory lessons.
+- `agent_sdk_practices_review.md` - repo-specific OpenAI Agents SDK review and
+  upgrade guidance.
 - `memory_hierarchy.md` - file-by-file memory scope and update rules.
 - `context_management.md` - prompt assembly and context-limit policy.
 - `agent_learning_guide.md` - optional learning/reference notes.
@@ -40,4 +42,7 @@ plans only.
   change.
 - Memory scope or loading changes should update `memory_hierarchy.md` and/or
   `context_management.md`.
+- Agents SDK integration changes should update `agent_sdk_practices_review.md`
+  when they change orchestration, session strategy, guardrails, approvals,
+  tracing, or eval expectations.
 - Implementation plans belong in `../implementation_plans/`, not here.

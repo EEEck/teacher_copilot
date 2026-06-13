@@ -73,6 +73,7 @@ export type IngestSession = {
   status: string;
   messages: ChatMessage[];
   completeness: CompletenessChecklist;
+  memory_state?: Record<string, unknown> | null;
 };
 export type WikiUpdateProposal = {
   wiki_path: string;
@@ -93,6 +94,7 @@ export type IngestDraft = {
   diary_markdown: string;
   wiki_proposals: WikiUpdateProposal[];
   completeness: CompletenessChecklist;
+  memory_state?: Record<string, unknown> | null;
 };
 export type ApprovedWikiUpdate = {
   wiki_path: string;
@@ -105,6 +107,8 @@ export type ChatResponse = {
   diary_markdown: string;
   completeness: CompletenessChecklist;
   ready_to_propose: boolean;
+  last_change_summary?: string;
+  memory_state?: Record<string, unknown> | null;
 };
 export type PlanSession = {
   session_id: string;

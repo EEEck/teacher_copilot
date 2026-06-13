@@ -20,8 +20,10 @@ from app.schemas.api import (
     PlanDraft,
 )
 
+from app.teacher_agent.memory_update_state import MemoryRuntime, memory_api_payload
 from app.teacher_agent.planning_state import PlanRuntime, planning_api_payload
 from app.teacher_agent.prompt_trace import (
+    build_ingest_chat_prompt_trace,
     build_plan_chat_prompt_trace,
     build_plan_opening_prompt_trace,
 )
@@ -56,6 +58,9 @@ class TurnResult:
     # Plan mode only: compact runtime state (phase, session/lesson state,
     # memory candidates) for the API response. None for other modes.
     planning: Optional[dict] = None
+    # Ingest/update-memory mode only: target/date identification and
+    # lesson-results collection state.
+    memory: Optional[dict] = None
 
 
 # Commit strategies (the spec picks one; future artifact types reuse them).
@@ -120,12 +125,39 @@ async def _ingest_run_turn(
     messages: list[ChatMessage],
     partial: str,
     attachments: list[ChatAttachment],
-    planning: Optional["PlanRuntime"] = None,
+    planning: Optional[Any] = None,
 ) -> TurnResult:
+    memory = planning if isinstance(planning, MemoryRuntime) else None
     reply, md, checklist, ready = await agents.ingest_chat(
-        class_id, messages, partial, attachments=attachments
+        class_id, messages, partial, attachments=attachments, memory=memory
     )
-    return TurnResult(reply=reply, markdown=md, ready=ready, completeness=checklist)
+    payload = memory_api_payload(memory) if memory is not None else None
+    return TurnResult(
+        reply=reply,
+        markdown=md,
+        ready=ready,
+        completeness=checklist,
+        memory=payload,
+    )
+
+
+def _ingest_prompt_trace(
+    wiki: "WikiStore",
+    class_id: str,
+    messages: list[ChatMessage],
+    current_markdown: str,
+    runtime: Any,
+    attachments: list[ChatAttachment],
+    stage: str,
+) -> dict:
+    return build_ingest_chat_prompt_trace(
+        wiki,
+        class_id,
+        messages=messages,
+        current_diary=current_markdown,
+        runtime=runtime if isinstance(runtime, MemoryRuntime) else None,
+        attachments=attachments,
+    )
 
 
 # --- plan (lesson plan) ----------------------------------------------------
@@ -200,6 +232,8 @@ INGEST_SPEC = ArtifactSpec(
     build_draft=_ingest_build_draft,
     run_turn=_ingest_run_turn,
     opening=None,
+    runtime_factory=MemoryRuntime,
+    prompt_trace=_ingest_prompt_trace,
 )
 
 PLAN_SPEC = ArtifactSpec(

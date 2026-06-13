@@ -186,6 +186,7 @@ class IngestSession(BaseModel):
     status: IngestSessionStatus
     messages: list[ChatMessage] = Field(default_factory=list)
     completeness: CompletenessChecklist = Field(default_factory=lambda: CompletenessChecklist(items=[]))
+    memory_state: Optional[dict] = None
 
 
 class WikiUpdateProposal(BaseModel):
@@ -199,6 +200,7 @@ class IngestDraft(BaseModel):
     diary_markdown: str
     wiki_proposals: list[WikiUpdateProposal]
     completeness: CompletenessChecklist
+    memory_state: Optional[dict] = None
 
 
 class ApprovedWikiUpdate(BaseModel):
@@ -242,6 +244,8 @@ class ChatResponse(BaseModel):
     diary_markdown: str
     completeness: CompletenessChecklist
     ready_to_propose: bool = False
+    last_change_summary: str = ""
+    memory_state: Optional[dict] = None
 
 
 class UpdateDraftRequest(BaseModel):
@@ -305,8 +309,8 @@ class SavePlanResponse(BaseModel):
     memory_candidates: list[dict] = Field(default_factory=list)
 
 
-class PlanTraceResponse(BaseModel):
-    """Debug/review bundle for one lesson-planning session."""
+class AgentTraceResponse(BaseModel):
+    """Debug/review bundle for one artifact-agent session."""
 
     class_id: str
     session_id: str
@@ -318,6 +322,14 @@ class PlanTraceResponse(BaseModel):
     artifact_markdown: str = ""
     event_trace: list[dict] = Field(default_factory=list)
     raw_evidence: dict = Field(default_factory=dict)
+
+
+class PlanTraceResponse(AgentTraceResponse):
+    """Debug/review bundle for one lesson-planning session."""
+
+
+class MemoryTraceResponse(AgentTraceResponse):
+    """Debug/review bundle for one update-memory session."""
 
 
 class PlanLessonRequest(BaseModel):

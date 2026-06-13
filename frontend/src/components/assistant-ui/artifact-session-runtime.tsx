@@ -26,6 +26,8 @@ export type ArtifactChatResult = {
   artifactMarkdown: string;
   completeness?: CompletenessChecklist | null;
   readyToSave?: boolean;
+  lastChangeSummary?: string | null;
+  memoryState?: Record<string, unknown> | null;
 };
 
 export type ArtifactSessionConfig = {

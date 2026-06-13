@@ -7,6 +7,10 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from app.schemas.api import LessonFlowPhase
+from app.teacher_agent.memory_update_state import (
+    MemoryEvidenceBrief,
+    MemoryStatePatch,
+)
 from app.teacher_agent.planning_state import (
     EvidenceBrief,
     LessonPlanningState,
@@ -23,6 +27,24 @@ class CompileOutput(BaseModel):
 class IngestTurnOutput(BaseModel):
     reply: str = Field(description="Conversational reply to the teacher")
     diary_markdown: str = Field(description="Updated full lesson results markdown with all sections")
+    last_change_summary: str = Field(
+        default="", description="One-line summary of what changed in the lesson-results draft"
+    )
+    state_patch: MemoryStatePatch = Field(
+        default_factory=MemoryStatePatch,
+        description=(
+            "Preferred runtime-state update contract for Update Memory. "
+            "Backend validates and applies this patch; missing fields mean no change."
+        ),
+    )
+    new_evidence_briefs: list[MemoryEvidenceBrief] = Field(
+        default_factory=list,
+        description="Compact briefs for lesson/memory evidence used to identify or update the target",
+    )
+    unsupported_intent_reason: str = Field(
+        default="",
+        description="Set only when the teacher asks for an update-memory task outside the MVP scope.",
+    )
 
 
 class PlanTurnOutput(BaseModel):

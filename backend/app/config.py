@@ -63,17 +63,24 @@ class Settings(BaseSettings):
     wiki_root: Path = Path(__file__).resolve().parent.parent / "teacher_wiki"
     cors_origins: list[str] = ["http://localhost:3000"]
     app_env: Literal["development", "production"] = "development"
-    # Debug endpoint exposing prompt assemblies, session messages, and raw tool
+    # Debug endpoints exposing prompt assemblies, session messages, and raw tool
     # evidence. Default: enabled outside production, disabled in production.
+    agent_trace_enabled: bool | None = None
+    # Backward-compatible alias for existing local setups/docs.
     plan_trace_enabled: bool | None = None
     log_level: str = "INFO"
     api_host: str = "0.0.0.0"
     api_port: int = 8010
 
-    def is_plan_trace_enabled(self) -> bool:
+    def is_agent_trace_enabled(self) -> bool:
+        if self.agent_trace_enabled is not None:
+            return self.agent_trace_enabled
         if self.plan_trace_enabled is not None:
             return self.plan_trace_enabled
         return self.app_env != "production"
+
+    def is_plan_trace_enabled(self) -> bool:
+        return self.is_agent_trace_enabled()
 
 
 @lru_cache

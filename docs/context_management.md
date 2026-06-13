@@ -1,7 +1,8 @@
 # Context Management
 
 How KlassenPilot assembles agent prompts, why we removed blunt character caps,
-and where to tune limits.
+how this maps to the OpenAI Agents SDK conversation strategies, and where to
+tune limits.
 
 ## The bug we fixed
 
@@ -44,9 +45,33 @@ still hurt tool accuracy and coherence.
 
 References:
 
+- [OpenAI Agents SDK: running agents](https://developers.openai.com/api/docs/guides/agents/running-agents)
+- [OpenAI Agents SDK: agent definitions](https://developers.openai.com/api/docs/guides/agents/define-agents)
 - [OpenAI session memory & trimming](https://github.com/openai/openai-cookbook/blob/main/examples/agents_sdk/session_memory.ipynb)
 - [OpenAI compaction at workflow boundaries](https://developers.openai.com/cookbook/examples/agents_sdk/building_reliable_agents_memory_compaction)
 - [OpenAI context personalization (structured state)](https://developers.openai.com/cookbook/examples/agents_sdk/context_personalization)
+
+## SDK Conversation Strategy
+
+OpenAI's Agents SDK supports multiple continuation strategies: application-owned
+history/state, SDK sessions, OpenAI conversation IDs, or response-to-response
+continuation. The practical rule is to choose one strategy per conversation.
+
+KlassenPilot currently chooses application-owned state:
+
+- `ArtifactSessionService` stores the chat messages, artifact markdown, status,
+  debug events, and mode-specific runtime object.
+- `PlanRuntime` stores lesson-planning working state, evidence briefs, raw refs,
+  and memory candidates.
+- The model sees only the compact rendered state, current artifact, evidence
+  briefs, and recent conversation window.
+
+This is the right strategy for the MVP because the backend must own teacher
+approval boundaries, wiki scope, artifact drafts, and trace assembly. If the app
+later needs multi-worker or restart-resilient sessions, migrate deliberately:
+persist `ArtifactSession` / `PlanRuntime` in app storage first, and only adopt
+SDK sessions if they replace the local replay strategy rather than duplicating
+it.
 
 ## KlassenPilot strategy (by workflow)
 
@@ -178,6 +203,12 @@ API trace endpoint.
 Trace event logs intentionally exclude per-token reasoning deltas. A real FCKW
 planning run showed that reasoning-token spam can fill the trace cap and hide
 the tool behavior we actually need to inspect.
+
+The SDK also emits built-in traces for model calls, tool calls, guardrails, and
+handoffs. Use those for live run inspection once they are correlated with local
+`class_id`, `session_id`, workflow mode, and artifact version. Keep the local
+trace endpoint because it exposes KlassenPilot-specific prompt assembly,
+evidence refs, and artifact state in one bundle.
 
 For live agent-behavior regression checks, use the opt-in API test:
 

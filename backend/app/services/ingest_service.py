@@ -19,9 +19,16 @@ from app.schemas.api import (
     IngestDraft,
     IngestSession,
     IngestSessionStatus,
+    MemoryTraceResponse,
 )
 from app.services.artifact_session_service import ArtifactSession, ArtifactSessionService
 from app.teacher_agent.agents import AgentRunner
+from app.teacher_agent.memory_update_state import (
+    MemoryRuntime,
+    memory_api_payload,
+    render_memory_runtime,
+)
+from app.teacher_agent.prompt_trace import build_ingest_chat_prompt_trace
 from app.teacher_agent.wiki_store import WikiStore
 
 MODE = "ingest"
@@ -34,12 +41,18 @@ class IngestService:
         self.core = ArtifactSessionService(wiki, agents)
 
     def _to_model(self, s: ArtifactSession) -> IngestSession:
+        memory_state = (
+            memory_api_payload(s.runtime)
+            if isinstance(s.runtime, MemoryRuntime)
+            else None
+        )
         return IngestSession(
             session_id=s.session_id,
             class_id=s.class_id,
             status=IngestSessionStatus(s.status),
             messages=s.messages,
             completeness=s.completeness or CompletenessChecklist(items=[]),
+            memory_state=memory_state,
         )
 
     async def start_session(self, class_id: str) -> IngestSession:
@@ -63,6 +76,8 @@ class IngestService:
             diary_markdown=result.markdown,
             completeness=completeness,
             ready_to_propose=result.ready,
+            last_change_summary=(result.memory or {}).get("last_change_summary", ""),
+            memory_state=result.memory,
         )
 
     async def chat_stream(
@@ -80,6 +95,9 @@ class IngestService:
     def update_draft(self, session_id: str, diary_markdown: str) -> IngestDraft:
         draft = self.core.update_draft(session_id, diary_markdown)
         assert isinstance(draft, IngestDraft)
+        session = self.core.get_session(session_id)
+        if isinstance(session.runtime, MemoryRuntime):
+            draft.memory_state = memory_api_payload(session.runtime)
         return draft
 
     async def propose(self, session_id: str) -> IngestDraft:
@@ -90,12 +108,49 @@ class IngestService:
         draft = self.core.update_draft(session_id, diary_md)
         self.core.set_status(session_id, IngestSessionStatus.reviewing.value)
         assert isinstance(draft, IngestDraft)
+        if isinstance(session.runtime, MemoryRuntime):
+            draft.memory_state = memory_api_payload(session.runtime)
         return draft
 
     def get_draft(self, session_id: str) -> IngestDraft:
         draft = self.core.get_draft(session_id)
         assert isinstance(draft, IngestDraft)
+        session = self.core.get_session(session_id)
+        if isinstance(session.runtime, MemoryRuntime):
+            draft.memory_state = memory_api_payload(session.runtime)
         return draft
+
+    def trace(self, class_id: str, session_id: str) -> MemoryTraceResponse:
+        session = self.core.get_session(session_id)
+        if session.class_id != class_id:
+            raise KeyError("Session class mismatch")
+        runtime = session.runtime if isinstance(session.runtime, MemoryRuntime) else None
+        runtime_payload = memory_api_payload(runtime) if runtime else {}
+        prompt_stack = {
+            "ingest_context": self.wiki.build_ingest_context_slim(class_id),
+            "memory_runtime": render_memory_runtime(runtime)
+            if runtime
+            else "",
+            "current_diary_markdown": session.partial_markdown,
+        }
+        return MemoryTraceResponse(
+            class_id=class_id,
+            session_id=session_id,
+            status=session.status,
+            prompt_stack=prompt_stack,
+            prompt_assembly=build_ingest_chat_prompt_trace(
+                self.wiki,
+                class_id,
+                messages=session.messages,
+                current_diary=session.partial_markdown,
+                runtime=runtime,
+            ),
+            runtime=runtime_payload,
+            messages=session.messages,
+            artifact_markdown=session.partial_markdown,
+            event_trace=session.debug_events,
+            raw_evidence=dict(runtime.raw_store) if runtime else {},
+        )
 
     def commit(self, req: CommitIngestRequest) -> CommitIngestResponse:
         session = self.core.get_session(req.session_id)

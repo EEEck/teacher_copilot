@@ -27,6 +27,9 @@ not call OpenAI or mutate the repo wiki.
   three-turn FCKW scenario. Skipped unless `RUN_LIVE_API_TESTS=1`.
 - `eval/test_fckw_plan_contract.py` - offline FCKW trace contract scorer
   (startup context, per-turn tools, phase, artifact patterns).
+- `eval/test_memory_update_contract.py` - offline Update Memory trace contract
+  for target selection, tool calls, runtime state, pseudonymized diary output,
+  and trace hygiene.
 - `eval/plan_trace_scorer.py` - shared scorer used by contract + live tests.
 - `eval/fckw_contract.py` - declarative expectations aligned with
   `docs/memory_hierarchy.md`.

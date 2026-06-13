@@ -27,6 +27,16 @@ from app.schemas.api import (
     LessonPlan,
 )
 from app.teacher_agent.models import MemoryCompactOutput
+from app.teacher_agent.memory_update_state import (
+    LessonResultPatch,
+    MemoryEvidenceBrief,
+    MemoryRuntime,
+    MemorySessionPatch,
+    MemoryStatePatch,
+    MemoryTargetPatch,
+    memory_api_payload,
+    merge_memory_turn,
+)
 from app.teacher_agent.planning_state import (
     EvidenceBrief,
     LessonPlanningState,
@@ -71,6 +81,39 @@ COMPLETE_DIARY = """# Lesson Results — 2026-10-01 — Stub Lesson
 
 ## Homework & follow-ups
 - Homework: Sheet 3
+"""
+
+MEMORY_UPDATE_DIARY = """# Lesson Results — 2026-05-29 — Anions and Oxidation State Review
+
+## What was covered
+- Reviewed common anions and their charges.
+- Separated ion charge from oxidation number.
+- Reviewed metal displacement from 2026-05-25; the class should now have that concept.
+- Not fully covered: connecting chloride, oxide, and phosphate back to the redox sequence.
+
+## Student participation
+- Students were engaged, but confusion surfaced too late.
+- Interruptions were mainly connected to poor lesson organization rather than only student behavior.
+- Matt did well and helped other students.
+
+## What went well
+- Students understood common anions quickly.
+- The common-anion concept was explained clearly.
+
+## What didn't go well
+- The lesson went into a phosphate rabbit hole and confused students.
+- The class did not signal confusion early enough.
+- There was no time for the other open-loop items from 2026-05-25.
+
+## Student observations
+- S-001: Strong understanding of phosphate redox states; doing very well.
+- S-002: Frequently interrupted and was not following.
+- S-003: Participated well, but some contributions were incorrect.
+- S-004: Did well and supported other students.
+
+## Homework & follow-ups
+- Homework mainly focused on common anions.
+- Follow up by explicitly connecting chloride, oxide, and phosphate to the redox sequence.
 """
 
 READY_PLAN = """# Lesson Plan — Stub Plan
@@ -177,6 +220,104 @@ class StubAgentRunner:
         )
         planning.session_state.phase = phase
 
+    def _emit_memory_state(
+        self,
+        memory: MemoryRuntime,
+        messages: list[ChatMessage],
+    ) -> None:
+        """Simulate the model emitting structured update-memory state."""
+        latest = messages[-1].content if messages else ""
+        scenario_0529 = any(
+            "2026-05-29" in m.content or "open loops from 5-25" in m.content.lower()
+            for m in messages
+        )
+        if scenario_0529:
+            covered = [
+                "Reviewed common anions and their charges.",
+                "Separated ion charge from oxidation number.",
+                "Reviewed metal displacement from 2026-05-25.",
+            ]
+            participation = [
+                "Students were engaged, but confusion surfaced too late.",
+                "Matt did well and helped other students.",
+            ]
+            went_well = ["Common anions were understood quickly."]
+            did_not_go_well = [
+                "Phosphate discussion confused students.",
+                "Poor lesson organization contributed to interruptions.",
+            ]
+            observations = [
+                "S-001 understood phosphate redox states well.",
+                "S-002 interrupted and was not following.",
+                "S-003 participated well but not always correctly.",
+                "S-004 helped other students.",
+            ]
+            followups = [
+                "Common anions homework assigned.",
+                "Connect chloride, oxide, and phosphate back to the redox sequence.",
+            ]
+            lesson_date = "2026-05-29"
+            lesson_title = "Anions and Oxidation State Review"
+            target_kind = "taught_lesson"
+            intent = "correct_existing_results"
+        else:
+            covered = ["Topic A"]
+            participation = ["Active discussion"]
+            went_well = []
+            did_not_go_well = []
+            observations = []
+            followups = []
+            lesson_date = "2026-10-01"
+            lesson_title = "Stub Lesson"
+            target_kind = "new_lesson"
+            intent = "log_new_results"
+        merge_memory_turn(
+            memory,
+            state_patch=MemoryStatePatch(
+                target=MemoryTargetPatch(
+                    intent=intent,
+                    lesson_date=lesson_date,
+                    lesson_title=lesson_title,
+                    target_kind=target_kind,
+                    target_confirmed=True,
+                    source="teacher_explicit",
+                    confidence="high",
+                    needs_confirmation=False,
+                ),
+                session_state=MemorySessionPatch(
+                    phase="review_draft",
+                    teacher_goal=latest[:80],
+                    decisions=[f"Update lesson results for {lesson_date}."],
+                ),
+                lesson_result_state=LessonResultPatch(
+                    covered=covered,
+                    participation=participation,
+                    went_well=went_well,
+                    did_not_go_well=did_not_go_well,
+                    student_observations=observations,
+                    homework_followups=followups,
+                    draft_confidence="high",
+                ),
+            ),
+            new_evidence_briefs=[
+                MemoryEvidenceBrief(
+                    type="tool_call",
+                    purpose=f"Read existing lesson target for {lesson_date}",
+                    brief=[f"Target lesson identified as {lesson_date}."],
+                    source_refs=[
+                        f"wiki/classes/{CLASS_ID}/lessons/{lesson_date}/lesson_results.md"
+                    ],
+                    raw_ref="read_memory_target_stub" if scenario_0529 else "",
+                    confidence="high",
+                )
+            ]
+            if scenario_0529
+            else [],
+            last_change_summary="Updated lesson results.",
+            unsupported_intent_reason="",
+            diary_changed=True,
+        )
+
     async def plan_chat(
         self,
         class_id: str,
@@ -195,9 +336,17 @@ class StubAgentRunner:
         messages: list[ChatMessage],
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
+        memory: MemoryRuntime | None = None,
     ) -> tuple[str, str, CompletenessChecklist, bool]:
-        checklist = self.wiki.checklist_from_diary(COMPLETE_DIARY)
-        return "Logged the lesson.", COMPLETE_DIARY, checklist, True
+        scenario_0529 = any(
+            "2026-05-29" in m.content or "open loops from 5-25" in m.content.lower()
+            for m in messages
+        )
+        diary = MEMORY_UPDATE_DIARY if scenario_0529 else COMPLETE_DIARY
+        checklist = self.wiki.checklist_from_diary(diary)
+        if memory is not None:
+            self._emit_memory_state(memory, messages)
+        return "Logged the lesson.", diary, checklist, True
 
     async def compile_diary(self, class_id: str, messages: list[ChatMessage]) -> str:
         return COMPLETE_DIARY
@@ -292,14 +441,73 @@ class StubAgentRunner:
         messages: list[ChatMessage],
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
+        memory: MemoryRuntime | None = None,
     ) -> AsyncIterator:
         yield SseReasoningDelta(text="Reviewing class memory…")
-        checklist = self.wiki.checklist_from_diary(COMPLETE_DIARY)
+        latest = messages[-1].content.lower() if messages else ""
+        scenario_0529 = any(
+            "2026-05-29" in m.content or "open loops from 5-25" in m.content.lower()
+            for m in messages
+        )
+        diary = MEMORY_UPDATE_DIARY if scenario_0529 else COMPLETE_DIARY
+        if scenario_0529 and (
+            "2026-05-29" in latest or "lesson results" in latest
+        ):
+            yield SseToolCall(
+                name="list_memory_targets",
+                args='{"start_date":"2026-05-29","end_date":"2026-05-29","max_results":5}',
+                call_id="memory-targets-1",
+            )
+            target_payload = (
+                '[{"date":"2026-05-29","title":"Anions and Oxidation State Review",'
+                '"status":"taught"}]'
+            )
+            if memory is not None:
+                memory.raw_store["list_memory_targets_stub"] = target_payload
+            yield SseToolResult(
+                name="list_memory_targets",
+                output=f"raw_ref: list_memory_targets_stub\n{target_payload}",
+                call_id="memory-targets-1",
+            )
+            yield SseToolCall(
+                name="read_memory_target",
+                args='{"lesson_date":"2026-05-29"}',
+                call_id="memory-target-1",
+            )
+            target_detail = MEMORY_UPDATE_DIARY[:1200]
+            if memory is not None:
+                memory.raw_store["read_memory_target_stub"] = target_detail
+            yield SseToolResult(
+                name="read_memory_target",
+                output=f"raw_ref: read_memory_target_stub\n{target_detail}",
+                call_id="memory-target-1",
+            )
+        elif scenario_0529 and "open loops from 5-25" in latest:
+            yield SseToolCall(
+                name="read_memory_target",
+                args='{"lesson_date":"2026-05-25"}',
+                call_id="memory-target-2",
+            )
+            open_loop_detail = "2026-05-25 open loops: metal displacement; other redox sequence items."
+            if memory is not None:
+                memory.raw_store["read_memory_target_0525_stub"] = open_loop_detail
+            yield SseToolResult(
+                name="read_memory_target",
+                output=f"raw_ref: read_memory_target_0525_stub\n{open_loop_detail}",
+                call_id="memory-target-2",
+            )
+        checklist = self.wiki.checklist_from_diary(diary)
+        if memory is not None:
+            self._emit_memory_state(memory, messages)
         yield SseFinal(
             reply="Logged the lesson.",
-            artifact_markdown=COMPLETE_DIARY,
+            artifact_markdown=diary,
             ready=True,
             completeness=checklist,
+            last_change_summary=(
+                memory.last_change_summary if memory is not None else None
+            ),
+            memory_state=memory_api_payload(memory) if memory is not None else None,
         )
 
     def _plan_final(

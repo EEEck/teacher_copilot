@@ -36,6 +36,8 @@ def test_ingest_chat_stream(client: TestClient):
     assert len(final) == 1
     assert final[0]["reply"]
     assert final[0]["artifact_markdown"]
+    assert final[0]["last_change_summary"] == "Updated lesson results."
+    assert final[0]["memory_state"]["target"]["lesson_date"] == "2026-10-01"
 
 
 def test_plan_chat_stream(client: TestClient):

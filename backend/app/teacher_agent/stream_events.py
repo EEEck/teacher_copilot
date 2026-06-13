@@ -43,6 +43,9 @@ class SseFinal(BaseModel):
     session_state: dict | None = None
     lesson_planning_state: dict | None = None
     memory_candidates: list[dict] | None = None
+    # Ingest/update-memory mode only: target/date identification and
+    # lesson-results collection state.
+    memory_state: dict | None = None
 
 
 class SseError(BaseModel):

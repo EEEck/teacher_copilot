@@ -1,6 +1,6 @@
 # Scripts
 
-Utility scripts for local development, testing, Docker, and plan-trace bundles.
+Utility scripts for local development, testing, Docker, and trace bundles.
 
 ## Development
 
@@ -34,8 +34,19 @@ $env:Path = "${env:ProgramFiles}\nodejs;$env:Path"
 These call the local API, run the default three-turn FCKW/CFC planning debug
 scenario, and write a trace bundle under `backend/runs/`.
 
-The API trace endpoint is enabled by default in development and disabled by
-default in production. Set `PLAN_TRACE_ENABLED=true` for local production-mode
-debug runs.
+The API trace endpoints are enabled by default in development and disabled by
+default in production. Set `AGENT_TRACE_ENABLED=true` for local production-mode
+debug runs. `PLAN_TRACE_ENABLED=true` remains supported as a backward-compatible
+alias.
 
 Generated outputs under `runs/` and `backend/runs/` are ignored by Git.
+
+## Update Memory Trace Bundle
+
+- `run_memory_update_trace_bundle.py`
+- `run_memory_update_trace_bundle.ps1`
+
+These call the local API, run the default three-turn lesson-results update
+debug scenario for `2026-05-29`, and write a trace bundle under `backend/runs/`.
+The bundle includes prompt assembly, streamed tool calls/results, memory runtime
+state, raw evidence refs, and the final diary markdown.

@@ -10,7 +10,8 @@ practice are relevant to this product.
 Product scope lives in `product_vision.md`. Feature sequencing lives in
 `../implementation_plans/product_backlog.md`. Reviewable behavior contracts live
 in `agent_contracts.md`. The detailed file-by-file memory hierarchy lives in
-`memory_hierarchy.md`.
+`memory_hierarchy.md`. The repo-specific OpenAI Agents SDK review lives in
+`agent_sdk_practices_review.md`.
 
 ## Core Operating Model
 
@@ -27,6 +28,31 @@ boundaries, not a broad multi-agent graph.
 
 This keeps teacher trust high: no silent writes, no invented class history, and
 no opaque memory claims.
+
+## Agents SDK Fit
+
+KlassenPilot uses the OpenAI Agents SDK where it is useful: model/tool looping,
+streaming, function tools, and structured outputs. The application still owns
+teacher/class scope, prompt assembly, runtime state, artifact persistence, and
+approval flows.
+
+This is an intentional SDK integration style:
+
+- `Agent` definitions live in `backend/app/teacher_agent/agent.py`.
+- `AgentRunner` uses async `Runner.run` / `Runner.run_streamed` in
+  `backend/app/teacher_agent/agents.py`; FastAPI request handlers must not use a
+  blocking run loop.
+- `@function_tool` wiki tools are read-only during chat and receive class scope
+  from backend-created context.
+- Structured `output_type` models are the model/backend contract; backend code
+  validates and merges state instead of trusting prose.
+- Human approval for durable memory remains an API workflow, not a hidden
+  side-effecting chat tool.
+
+Prefer the current single-copilot shape until there is a concrete reason to add
+handoffs, SDK sessions, sandbox execution, or side-effecting tools with SDK
+approval interruptions. See `agent_sdk_practices_review.md` for the current
+review and upgrade guidance.
 
 ## Memory Architecture
 
@@ -59,7 +85,7 @@ The product uses tiered class memory.
    centralized in `app/context_limits.py` (see
    `context_management.md`).
 
-4. **Runtime session memory (lesson planning)**
+4. **Runtime session memory (lesson planning and update memory)**
    `PlanRuntime` (in `planning_state.py`): backend-owned `SessionState`,
    `LessonPlanningState`, compact `EvidenceBrief`s with a raw-output store
    behind `raw_ref` (progressive exposure via `get_raw_evidence`), and
@@ -67,6 +93,13 @@ The product uses tiered class memory.
    backend code validates and applies them. Runtime state is persisted on the
    session and re-injected compactly each turn so the verbatim window can be
    trimmed (`plan_history_turns`) without losing decisions/constraints.
+
+   `MemoryRuntime` (in `memory_update_state.py`) applies the same pattern to
+   Update Memory: target/date identification, intent, phase, lesson-result
+   category progress, compact evidence briefs, and raw refs live on the session
+   until the teacher approves the normal memory commit. This keeps the workflow
+   free-agent from the teacher's perspective while preserving backend-owned
+   validation and no hidden wiki writes.
 
 5. **Profiles (three clearly-scoped files)**
    - `user.md` (`wiki/teacher_profile.md`, GLOBAL): teacher communication style,
@@ -119,6 +152,10 @@ Design rules:
 - Keep the planning tool surface small and obvious. Six focused read tools is
   acceptable; a large surface should be grouped into namespaces or higher-level
   tools.
+- Keep the update-memory tool surface equally purpose-specific. It uses
+  `list_memory_targets` for date/lesson discovery, `read_memory_target` for one
+  planned or taught lesson, and the shared memory search/page/raw-evidence
+  pattern for continuity.
 - Put capability semantics in tool docstrings and output shapes. Example:
   `list_lessons` is the sequence-map tool; `read_lesson_range` is the
   multi-lesson evidence tool; `search_memory` is the broad topic pathfinder.
@@ -177,11 +214,16 @@ should receive enough context to start well and use tools for the long tail.
 - Keep teacher-facing artifacts clean. Evidence briefs and raw refs belong in
   runtime state / trace diagnostics; lesson plans should cite sources naturally
   rather than include debug evidence blocks.
+- Use SDK features only at the boundary they improve: sessions for persistent
+  conversation state, guardrails for automatic validation, human review for
+  side-effecting tool calls, and traces/evals for behavior inspection. Do not
+  add them just because they exist.
 
 ## Deliberate Non-Goals
 
 - Full AutoSci graph or edge schema.
 - Multi-agent review pipeline.
+- Agents SDK handoffs or sandbox agents for normal lesson planning.
 - External Honcho service as the default memory layer.
 - Vector database as the default retrieval path.
 - General web search as default class-memory retrieval. A future trusted-source
@@ -198,6 +240,7 @@ should receive enough context to start well and use tools for the long tail.
 - Agent runner: `backend/app/teacher_agent/agents.py`
 - Structured outputs: `backend/app/teacher_agent/models.py`
 - Planning runtime context manager: `backend/app/teacher_agent/planning_state.py`
+- Update-memory runtime context manager: `backend/app/teacher_agent/memory_update_state.py`
 - Plan-session trace bundle: `GET /api/classes/{id}/plan/sessions/{session_id}/trace`
 - Prompt assembly source of truth: `backend/app/teacher_agent/prompt_assembly.py`
 - Prompt trace compatibility wrapper: `backend/app/teacher_agent/prompt_trace.py`

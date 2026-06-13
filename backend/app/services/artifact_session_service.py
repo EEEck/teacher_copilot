@@ -102,7 +102,7 @@ class ArtifactSessionService:
         attachments: list[ChatAttachment] | None = None,
     ) -> None:
         spec = self.specs[session.mode]
-        if not get_settings().is_plan_trace_enabled():
+        if not get_settings().is_agent_trace_enabled():
             return
         if not spec.prompt_trace:
             return
@@ -133,7 +133,8 @@ class ArtifactSessionService:
 
         await self._ensure_lazy_opening(session)
         session.messages.append(ChatMessage(role="user", content=message))
-        self._record_prompt_assembly(session, "plan_chat", attachments or [])
+        stage = "plan_chat" if session.mode == "plan" else f"{session.mode}_chat"
+        self._record_prompt_assembly(session, stage, attachments or [])
         result = await spec.run_turn(
             self.agents,
             session.class_id,
@@ -179,6 +180,7 @@ class ArtifactSessionService:
                 "phase": event.phase,
                 "last_change_summary": event.last_change_summary,
                 "memory_candidates": event.memory_candidates or [],
+                "memory_state": event.memory_state or {},
             }
         else:
             payload = event.model_dump()
@@ -199,7 +201,8 @@ class ArtifactSessionService:
             session.partial_markdown = markdown
         await self._ensure_lazy_opening(session)
         session.messages.append(ChatMessage(role="user", content=message))
-        self._record_prompt_assembly(session, "plan_chat", attachments or [])
+        stage = "plan_chat" if session.mode == "plan" else f"{session.mode}_chat"
+        self._record_prompt_assembly(session, stage, attachments or [])
 
         if session.mode == "ingest":
             stream = self.agents.ingest_chat_stream(
@@ -207,6 +210,7 @@ class ArtifactSessionService:
                 session.messages,
                 session.partial_markdown,
                 attachments=attachments or [],
+                memory=session.runtime,
             )
         else:
             stream = self.agents.plan_chat_stream(
@@ -226,6 +230,7 @@ class ArtifactSessionService:
                         markdown=event.artifact_markdown,
                         ready=event.ready,
                         completeness=event.completeness,
+                        memory=event.memory_state,
                     ),
                 )
             yield sse_encode(event)

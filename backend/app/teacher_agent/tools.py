@@ -9,6 +9,7 @@ from typing import Optional
 
 from agents import function_tool
 
+from app.teacher_agent.memory_update_state import MemoryRuntime
 from app.teacher_agent.planning_state import PlanRuntime
 from app.teacher_agent.wiki_store import WikiStore
 
@@ -21,9 +22,12 @@ class WikiToolContext:
     # raw_ref so the model can summarize them into compact evidence briefs and
     # fetch the raw later via get_raw_evidence (progressive exposure).
     planning: Optional[PlanRuntime] = None
+    # Update-memory chat uses the same progressive exposure pattern for target
+    # discovery and lesson evidence, but keeps state separate from planning.
+    memory: Optional[MemoryRuntime] = None
 
 
-def _capture(planning: Optional[PlanRuntime], kind: str, payload: str) -> str:
+def _capture(planning: Optional[PlanRuntime | MemoryRuntime], kind: str, payload: str) -> str:
     """Stash a raw tool output under a raw_ref and prefix the ref for the model."""
     if planning is None:
         return payload
@@ -31,7 +35,7 @@ def _capture(planning: Optional[PlanRuntime], kind: str, payload: str) -> str:
     return f"raw_ref: {raw_ref}\n{payload}"
 
 
-def lookup_raw_evidence(planning: Optional[PlanRuntime], raw_ref: str) -> str:
+def lookup_raw_evidence(planning: Optional[PlanRuntime | MemoryRuntime], raw_ref: str) -> str:
     """Return the captured raw output for a raw_ref (progressive exposure)."""
     if planning is None:
         return "Error: no evidence store for this session."
@@ -234,6 +238,82 @@ def create_wiki_tools(ctx: WikiToolContext) -> list:
         get_lesson_detail,
         search_wiki,
         find_in_memory,
+    ]
+
+
+def create_memory_update_tools(ctx: WikiToolContext) -> list:
+    """Class-scoped read tools for the update-memory chat."""
+    wiki = ctx.wiki
+    class_id = ctx.class_id
+
+    @function_tool
+    def list_memory_targets(
+        start_date: date | None = None,
+        end_date: date | None = None,
+        topic: str = "",
+        status: str = "",
+        max_results: int = 12,
+    ) -> str:
+        """Find candidate lessons that might be updated.
+
+        Use this when the teacher says "today", "last class", gives a vague
+        date, mentions an older missing class, or wants to correct prior notes.
+        status may be empty, "planned", or "taught".
+        """
+        payload = _list_lessons_payload(
+            wiki, class_id, start_date, end_date, topic, max_results
+        )
+        wanted = status.strip().lower()
+        if wanted in {"planned", "taught"}:
+            payload["lessons"] = [
+                lesson
+                for lesson in payload.get("lessons", [])
+                if lesson.get("status") == wanted
+            ]
+        return _capture(ctx.memory, "list_memory_targets", json.dumps(payload, indent=2))
+
+    @function_tool
+    def read_memory_target(lesson_date: date) -> str:
+        """Read one candidate lesson target by date.
+
+        Returns existing lesson results when present, the saved lesson plan when
+        present, rollup excerpts, and source paths. Use before correcting an
+        existing lesson or filling results for a planned lesson.
+        """
+        try:
+            payload = _lesson_detail_payload(wiki, class_id, lesson_date.isoformat())
+            return _capture(ctx.memory, "read_memory_target", json.dumps(payload, indent=2))
+        except KeyError as e:
+            return f"Error: {e}"
+
+    @function_tool
+    def search_memory(query: str, max_results: int = 8) -> str:
+        """Find relevant class wiki pages for a topic, student ID, or misconception."""
+        limit = max(1, min(max_results or 8, 20))
+        hits = wiki.find_in_memory(class_id, query, max_results=limit)
+        return _capture(ctx.memory, "memory_search", json.dumps(hits, indent=2))
+
+    @function_tool
+    def read_memory_page(path: str) -> str:
+        """Read exact wording from one class wiki page returned by search/list tools."""
+        if not wiki.is_class_memory_path(class_id, path):
+            return f"Error: path must be under wiki/classes/{class_id}/"
+        try:
+            return _capture(ctx.memory, "read_memory_page", wiki.read_wiki_page(path))
+        except ValueError as e:
+            return f"Error: {e}"
+
+    @function_tool
+    def get_raw_evidence(raw_ref: str) -> str:
+        """Fetch full raw output for a captured update-memory evidence raw_ref."""
+        return lookup_raw_evidence(ctx.memory, raw_ref)
+
+    return [
+        list_memory_targets,
+        read_memory_target,
+        search_memory,
+        read_memory_page,
+        get_raw_evidence,
     ]
 
 

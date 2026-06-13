@@ -294,25 +294,26 @@ Good update source:
 
 ### 5. Runtime Session Memory
 
-Location: backend RAM on `ArtifactSession.runtime` (`PlanRuntime`)
+Location: backend RAM on `ArtifactSession.runtime` (`PlanRuntime` or
+`MemoryRuntime`)
 
 Files: none by default.
 
 Purpose:
 
-- short-term working memory for a planning session
-- `SessionState`
-- `LessonPlanningState`
-- `EvidenceBrief`s
-- raw tool outputs behind `raw_ref`
-- `MemoryCandidate`s
-- current artifact version
+- short-term working memory for an active artifact session
+- Planning: `SessionState`, `LessonPlanningState`, `EvidenceBrief`s, raw tool
+  outputs behind `raw_ref`, `MemoryCandidate`s, and current plan version.
+- Update Memory: `MemoryTargetState`, `MemorySessionState`,
+  `LessonResultState`, `MemoryEvidenceBrief`s, raw tool outputs behind
+  `raw_ref`, and current diary version.
 
 Loaded where:
 
-- Every plan-chat model call after session start.
-- Trace endpoint as `runtime`, `prompt_stack`, `prompt_assembly`, and
+- Every plan-chat and update-memory chat model call after session start.
+- Planning trace endpoint as `runtime`, `prompt_stack`, `prompt_assembly`, and
   `raw_evidence`.
+- Update-memory session/chat/draft/propose responses as `memory_state`.
 
 Updated by:
 
@@ -323,8 +324,10 @@ Updated by:
 Durability:
 
 - in-memory only for the active session
-- useful memory candidates may be proposed after save and written only through
-  teacher-approved memory apply
+- useful planning memory candidates may be proposed after save and written only
+  through teacher-approved memory apply
+- update-memory runtime state is discarded with the session after the normal
+  teacher-approved commit/revise path writes canonical lesson memory
 
 ## What Planning Chat Loads Today
 
