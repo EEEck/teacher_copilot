@@ -24,15 +24,18 @@ lesson results, while keeping all durable wiki writes teacher-approved.
 - Capture tool outputs behind raw refs and summarize useful evidence into
   runtime briefs.
 
-## Phase 3 - Hinted Entry Points
+## Phase 3 - Hinted Entry Points (done)
 
 - Keep the top **Update memory** action as free-agent discovery.
 - Add timeline/detail entry points that start the same agent with a date/intent
   hint, then skip most target discovery when confidence is high.
 - Recommended first hint: planned-only timeline lesson -> `update_missing_results`
   with `lesson_date`, saved plan loaded, target still visible to the teacher.
+- Implemented via optional `POST /classes/{id}/ingest/sessions` start hints.
+  Timeline/detail links pass `lesson_date`, `lesson_title`, `intent`,
+  `target_kind`, and `source=timeline_hint`.
 
-## Phase 4 - Review/Correction UX
+## Phase 4 - Review/Correction UX (done)
 
 - For existing taught lessons, support correction/revise flow with existing
   results loaded before editing.
@@ -40,6 +43,9 @@ lesson results, while keeping all durable wiki writes teacher-approved.
   turning the experience into a wizard.
 - Keep unsupported future memory tasks conversational: explain current scope and
   set `unsupported_intent_reason`.
+- Implemented by loading existing lesson results for taught-lesson correction
+  hints, rendering the memory target/status strip, and keeping the existing
+  review/approve commit path unchanged.
 
 ## Phase 5 - Trace/Eval Hardening
 

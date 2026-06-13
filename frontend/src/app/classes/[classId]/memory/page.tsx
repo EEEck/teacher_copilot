@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { IngestThread } from "@/components/assistant-ui/ingest-thread";
 import {
@@ -19,7 +19,12 @@ import {
 } from "@/components/klassenpilot/review";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { client, uniqueWikiProposals, type WikiUpdateProposal } from "@/lib/api";
+import {
+  client,
+  uniqueWikiProposals,
+  type IngestStartHint,
+  type WikiUpdateProposal,
+} from "@/lib/api";
 
 type CommitResult = {
   lesson_date: string;
@@ -42,6 +47,44 @@ function ReadyToSaveButton({ onReady, loading }: { onReady: () => void; loading:
         </p>
       )}
     </div>
+  );
+}
+
+function textFromRecord(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function boolFromRecord(value: unknown): boolean {
+  return typeof value === "boolean" ? value : false;
+}
+
+function MemoryTargetStatus() {
+  const { memoryState, lastChangeSummary } = useArtifactSession();
+  if (!memoryState) return null;
+  const target = memoryState.target;
+  const targetRecord = target && typeof target === "object" ? (target as Record<string, unknown>) : {};
+  const phase = textFromRecord(memoryState.phase);
+  const intent = textFromRecord(memoryState.intent);
+  const date = textFromRecord(targetRecord.lesson_date);
+  const title = textFromRecord(targetRecord.lesson_title);
+  const confirmed = boolFromRecord(targetRecord.target_confirmed);
+
+  return (
+    <Card className="border-border bg-muted/40">
+      <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-1 p-3 text-xs">
+        <span className="font-medium text-foreground">
+          {date ? `Target: ${date}${title ? ` · ${title}` : ""}` : "Target: not selected"}
+        </span>
+        {intent && <span className="text-muted-foreground">Intent: {intent}</span>}
+        {phase && <span className="text-muted-foreground">Phase: {phase}</span>}
+        <span className={confirmed ? "text-primary" : "text-muted-foreground"}>
+          {confirmed ? "Confirmed" : "Needs confirmation"}
+        </span>
+        {lastChangeSummary && (
+          <span className="basis-full text-muted-foreground">{lastChangeSummary}</span>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -160,6 +203,7 @@ function MemoryWorkspace({
 
   return (
     <div className="space-y-8">
+      <MemoryTargetStatus />
       <ArtifactSessionWorkspace
         thread={<IngestThread />}
         draftPanel={draftPanel}
@@ -249,13 +293,30 @@ function MemoryWorkspace({
   );
 }
 
-export default function MemoryPage() {
+function MemoryPageContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const classId = params.classId as string;
+  const startHint = useMemo<IngestStartHint | undefined>(() => {
+    const lessonDate = searchParams.get("lessonDate") ?? "";
+    if (!lessonDate) return undefined;
+    const intent = searchParams.get("intent") ?? "";
+    const targetKind = searchParams.get("targetKind") ?? "";
+    return {
+      lesson_date: lessonDate,
+      lesson_title: searchParams.get("lessonTitle") ?? undefined,
+      intent: intent === "correct_existing_results" ? intent : "update_missing_results",
+      target_kind:
+        targetKind === "taught_lesson" || targetKind === "new_lesson"
+          ? targetKind
+          : "planned_lesson",
+      source: "timeline_hint",
+    };
+  }, [searchParams]);
 
   const bootstrap = useCallback(
     async (opts?: { preserveMarkdown?: string }) => {
-      const session = await client.startIngestSession(classId);
+      const session = await client.startIngestSession(classId, startHint);
       let draft = await client.ingestGetDraft(classId, session.session_id);
       if (opts?.preserveMarkdown) {
         draft = await client.ingestUpdateDraft(
@@ -268,9 +329,10 @@ export default function MemoryPage() {
         sessionId: session.session_id,
         initialMarkdown: draft.diary_markdown,
         initialCompleteness: draft.completeness,
+        initialMemoryState: draft.memory_state ?? session.memory_state ?? null,
       };
     },
-    [classId],
+    [classId, startHint],
   );
 
   return (
@@ -278,11 +340,23 @@ export default function MemoryPage() {
       mode="ingest"
       classId={classId}
       title="Update memory"
-      description="Chat through the lesson, edit the diary on the right, then save when ready."
+      description={
+        startHint?.lesson_date
+          ? `Updating memory for ${startHint.lesson_date}`
+          : "Chat through the lesson, edit the diary on the right, then save when ready."
+      }
       bootstrap={bootstrap}
       renderBody={({ onError }: ArtifactSessionBodyProps) => (
         <MemoryWorkspace classId={classId} onError={onError} />
       )}
     />
+  );
+}
+
+export default function MemoryPage() {
+  return (
+    <Suspense fallback={<p className="text-muted-foreground">Loading memory...</p>}>
+      <MemoryPageContent />
+    </Suspense>
   );
 }

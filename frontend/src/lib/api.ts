@@ -67,6 +67,13 @@ export type CompletenessItem = {
 };
 export type CompletenessChecklist = { items: CompletenessItem[] };
 export type ChatMessage = { role: string; content: string };
+export type IngestStartHint = {
+  lesson_date?: string;
+  lesson_title?: string;
+  intent?: "log_new_results" | "update_missing_results" | "correct_existing_results";
+  target_kind?: "new_lesson" | "planned_lesson" | "taught_lesson";
+  source?: "teacher_explicit" | "timeline_hint" | "agent_inferred";
+};
 export type IngestSession = {
   session_id: string;
   class_id: string;
@@ -327,8 +334,11 @@ export const client = {
       method: "PATCH",
       body: JSON.stringify({ diary_markdown: diaryMarkdown }),
     }),
-  startIngestSession: (classId: string) =>
-    api<IngestSession>(`/api/classes/${classId}/ingest/sessions`, { method: "POST" }),
+  startIngestSession: (classId: string, hint?: IngestStartHint) =>
+    api<IngestSession>(`/api/classes/${classId}/ingest/sessions`, {
+      method: "POST",
+      body: hint ? JSON.stringify(hint) : undefined,
+    }),
   ingestChat: (
     classId: string,
     sessionId: string,

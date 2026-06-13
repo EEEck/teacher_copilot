@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -83,6 +84,11 @@ export default function LessonDetailPage() {
   }
 
   const isPlanned = !detail.primary_markdown.trim();
+  const memoryHref = `/classes/${classId}/memory?lessonDate=${encodeURIComponent(
+    detail.date,
+  )}&intent=${isPlanned ? "update_missing_results" : "correct_existing_results"}&targetKind=${
+    isPlanned ? "planned_lesson" : "taught_lesson"
+  }&lessonTitle=${encodeURIComponent(detail.title)}`;
 
   return (
     <div className="space-y-6">
@@ -107,12 +113,21 @@ export default function LessonDetailPage() {
       {detail.lesson_plan_markdown && (
         <Card variant={isPlanned ? "highlight" : "default"}>
           <CardHeader>
-            <CardTitle className="text-base">Lesson plan</CardTitle>
-            {isPlanned && (
-              <p className="text-sm text-muted-foreground">
-                Saved plan for this date. After you teach it, log what happened via Update memory.
-              </p>
-            )}
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Lesson plan</CardTitle>
+                {isPlanned && (
+                  <p className="text-sm text-muted-foreground">
+                    Saved plan for this date. After you teach it, log what happened via Update memory.
+                  </p>
+                )}
+              </div>
+              {isPlanned && (
+                <Button asChild size="sm">
+                  <Link href={memoryHref}>Add lesson results</Link>
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <MarkdownPreview markdown={detail.lesson_plan_markdown} />
@@ -136,6 +151,9 @@ export default function LessonDetailPage() {
             />
             <Button className="mt-4" onClick={save} disabled={saving}>
               {saving ? "Saving…" : "Save changes"}
+            </Button>
+            <Button asChild className="ml-2 mt-4" variant="outline">
+              <Link href={memoryHref}>Correct with agent</Link>
             </Button>
           </CardContent>
         </Card>

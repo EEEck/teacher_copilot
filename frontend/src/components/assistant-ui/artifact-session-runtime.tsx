@@ -35,6 +35,7 @@ export type ArtifactSessionConfig = {
   sessionId: string;
   initialMarkdown: string;
   initialCompleteness?: CompletenessChecklist | null;
+  initialMemoryState?: Record<string, unknown> | null;
   chatStream: (args: {
     message: string;
     currentMarkdown: string;
@@ -76,6 +77,8 @@ type ArtifactSessionContextValue = {
   setArtifactMarkdown: (value: string, source?: "manual" | "agent") => void;
   completeness: CompletenessChecklist | null;
   readyToSave: boolean;
+  lastChangeSummary: string | null;
+  memoryState: Record<string, unknown> | null;
   isUpdating: boolean;
   syncStatus: "idle" | "saving" | "error";
   undo: () => void;
@@ -113,6 +116,7 @@ export function ArtifactSessionRuntimeProvider({
     sessionId,
     initialMarkdown,
     initialCompleteness = null,
+    initialMemoryState = null,
     chatStream,
     patchDraft,
     getSessionId: configGetSessionId,
@@ -135,6 +139,10 @@ export function ArtifactSessionRuntimeProvider({
   });
   const [completeness, setCompleteness] = useState<CompletenessChecklist | null>(initialCompleteness);
   const [readyToSave, setReadyToSave] = useState(false);
+  const [lastChangeSummary, setLastChangeSummary] = useState<string | null>(null);
+  const [memoryState, setMemoryState] = useState<Record<string, unknown> | null>(
+    initialMemoryState,
+  );
   const [isUpdating, setIsUpdating] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "error">("idle");
 
@@ -178,12 +186,22 @@ export function ArtifactSessionRuntimeProvider({
   }, []);
 
   const applyMeta = useCallback(
-    (checklist: CompletenessChecklist | null | undefined, ready: boolean | undefined) => {
+    (
+      checklist: CompletenessChecklist | null | undefined,
+      ready: boolean | undefined,
+      result?: Pick<ArtifactChatResult, "lastChangeSummary" | "memoryState">,
+    ) => {
       if (checklist) {
         setCompleteness(checklist);
         onCompletenessChange?.(checklist);
       }
       if (ready !== undefined) setReadyToSave(ready);
+      if (result?.lastChangeSummary !== undefined) {
+        setLastChangeSummary(result.lastChangeSummary ?? null);
+      }
+      if (result?.memoryState !== undefined) {
+        setMemoryState(result.memoryState ?? null);
+      }
     },
     [onCompletenessChange],
   );
@@ -236,7 +254,7 @@ export function ArtifactSessionRuntimeProvider({
             finalResult = chunk.result;
             pushMarkdown(chunk.result.artifactMarkdown, "agent");
             lastSyncedRef.current = chunk.result.artifactMarkdown;
-            applyMeta(chunk.result.completeness ?? null, chunk.result.readyToSave);
+            applyMeta(chunk.result.completeness ?? null, chunk.result.readyToSave, chunk.result);
             const content = chunk.content;
             yield {
               content:
@@ -296,6 +314,8 @@ export function ArtifactSessionRuntimeProvider({
       setArtifactMarkdown,
       completeness,
       readyToSave,
+      lastChangeSummary,
+      memoryState,
       isUpdating,
       syncStatus,
       undo,
@@ -311,6 +331,8 @@ export function ArtifactSessionRuntimeProvider({
       setArtifactMarkdown,
       completeness,
       readyToSave,
+      lastChangeSummary,
+      memoryState,
       isUpdating,
       syncStatus,
       undo,

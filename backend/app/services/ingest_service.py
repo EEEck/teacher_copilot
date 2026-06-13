@@ -18,13 +18,19 @@ from app.schemas.api import (
     CompletenessChecklist,
     IngestDraft,
     IngestSession,
+    IngestSessionStartRequest,
     IngestSessionStatus,
     MemoryTraceResponse,
 )
 from app.services.artifact_session_service import ArtifactSession, ArtifactSessionService
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.memory_update_state import (
+    LessonResultPatch,
     MemoryRuntime,
+    MemorySessionPatch,
+    MemoryStatePatch,
+    MemoryTargetPatch,
+    apply_memory_state_patch,
     memory_api_payload,
     render_memory_runtime,
 )
@@ -55,8 +61,101 @@ class IngestService:
             memory_state=memory_state,
         )
 
-    async def start_session(self, class_id: str) -> IngestSession:
+    def _title_template(self, lesson_date: str, title: str) -> str:
+        md = self.wiki.empty_diary_template(lesson_date)
+        clean_title = " ".join((title or "").split())
+        if clean_title:
+            md = md.replace(
+                f"# Lesson Results — {lesson_date} — ",
+                f"# Lesson Results — {lesson_date} — {clean_title}",
+                1,
+            )
+        return md
+
+    def _apply_start_hint(
+        self, session: ArtifactSession, hint: IngestSessionStartRequest
+    ) -> None:
+        if not isinstance(session.runtime, MemoryRuntime):
+            return
+        lesson_date = (hint.lesson_date or "").strip()
+        if not lesson_date:
+            return
+
+        title = hint.lesson_title.strip()
+        has_plan = False
+        has_results = False
+        try:
+            detail = self.wiki.get_lesson_detail(session.class_id, lesson_date)
+            title = title or detail.title
+            has_plan = bool(detail.lesson_plan_markdown)
+            has_results = bool(detail.diary_markdown.strip())
+            if has_results and hint.intent == "correct_existing_results":
+                session.partial_markdown = detail.diary_markdown
+            else:
+                session.partial_markdown = self._title_template(lesson_date, title)
+        except KeyError:
+            session.partial_markdown = self._title_template(lesson_date, title)
+
+        target_kind = hint.target_kind.strip()
+        if not target_kind:
+            if has_results:
+                target_kind = "taught_lesson"
+            elif has_plan:
+                target_kind = "planned_lesson"
+            else:
+                target_kind = "new_lesson"
+        intent = hint.intent.strip()
+        if not intent:
+            intent = (
+                "correct_existing_results"
+                if target_kind == "taught_lesson"
+                else "update_missing_results"
+                if target_kind == "planned_lesson"
+                else "log_new_results"
+            )
+        apply_memory_state_patch(
+            session.runtime,
+            MemoryStatePatch(
+                target=MemoryTargetPatch(
+                    intent=intent,
+                    lesson_date=lesson_date,
+                    lesson_title=title,
+                    target_kind=target_kind,
+                    target_confirmed=True,
+                    source=hint.source or "teacher_explicit",
+                    confidence="high",
+                    plan_loaded=has_plan,
+                    existing_results_loaded=has_results,
+                    needs_confirmation=False,
+                ),
+                session_state=MemorySessionPatch(
+                    phase="collect_results",
+                    teacher_goal=(
+                        f"Update lesson results for {lesson_date}"
+                        + (f" ({title})" if title else "")
+                    ),
+                    decisions=[f"Use {lesson_date} as the update-memory target."],
+                ),
+                lesson_result_state=LessonResultPatch(
+                    missing_categories=[
+                        item.label
+                        for item in self.wiki.checklist_from_diary(
+                            session.partial_markdown
+                        ).items
+                        if item.required and not item.complete
+                    ],
+                    draft_confidence="medium" if has_results else "low",
+                ),
+            ),
+        )
+        session.completeness = self.wiki.checklist_from_diary(session.partial_markdown)
+
+    async def start_session(
+        self, class_id: str, hint: IngestSessionStartRequest | None = None
+    ) -> IngestSession:
         session = await self.core.start_session(MODE, class_id)
+        if hint is not None:
+            self._apply_start_hint(session, hint)
         return self._to_model(session)
 
     def get_session(self, session_id: str) -> ArtifactSession:

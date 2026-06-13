@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
@@ -139,17 +140,13 @@ function LessonTimelineCard({
           entry.status === "planned" ? "border-2 border-primary bg-background" : "bg-primary",
         )}
       />
-      <Link
-        href={`/classes/${classId}/lessons/${entry.date}`}
-        className="block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      <Card
+        className={cn(
+          "transition hover:border-primary/30 hover:shadow-sm",
+          highlighted && "border-primary/50 ring-1 ring-primary/20",
+        )}
       >
-        <Card
-          className={cn(
-            "transition hover:border-primary/30 hover:shadow-sm",
-            highlighted && "border-primary/50 ring-1 ring-primary/20",
-          )}
-        >
-          <CardContent className="p-4">
+        <CardContent className="p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <time className="text-xs text-muted-foreground" dateTime={entry.date}>
@@ -186,10 +183,26 @@ function LessonTimelineCard({
                 ))}
               </ul>
             )}
-            <p className="mt-2 text-xs text-primary">View details →</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button asChild size="sm" variant={entry.status === "planned" ? "default" : "outline"}>
+                <Link
+                  href={`/classes/${classId}/memory?lessonDate=${encodeURIComponent(
+                    entry.date,
+                  )}&intent=${
+                    entry.status === "planned" ? "update_missing_results" : "correct_existing_results"
+                  }&targetKind=${
+                    entry.status === "planned" ? "planned_lesson" : "taught_lesson"
+                  }&lessonTitle=${encodeURIComponent(entry.title)}`}
+                >
+                  {entry.status === "planned" ? "Add results" : "Correct with agent"}
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="ghost">
+                <Link href={`/classes/${classId}/lessons/${entry.date}`}>View details</Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
-      </Link>
     </li>
   );
 }

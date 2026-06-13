@@ -17,6 +17,7 @@ from app.schemas.api import (
     HealthResponse,
     IngestDraft,
     IngestSession,
+    IngestSessionStartRequest,
     LessonDetail,
     LessonPlan,
     MemoryApplyRequest,
@@ -297,6 +298,7 @@ def apply_memory(
 @router.post("/classes/{class_id}/ingest/sessions", response_model=IngestSession)
 async def start_ingest_session(
     class_id: str,
+    body: IngestSessionStartRequest | None = None,
     ingest: IngestService = Depends(get_ingest_service),
     wiki: WikiStore = Depends(get_wiki),
 ) -> IngestSession:
@@ -304,7 +306,7 @@ async def start_ingest_session(
         wiki.get_class(class_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    return await ingest.start_session(class_id)
+    return await ingest.start_session(class_id, body)
 
 
 @router.post(

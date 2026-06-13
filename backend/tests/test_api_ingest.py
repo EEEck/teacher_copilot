@@ -58,6 +58,51 @@ def test_ingest_full_flow(client: TestClient):
     assert commit_body["log_entry_id"]
 
 
+def test_ingest_start_accepts_empty_body(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/ingest"
+
+    start = client.post(f"{base}/sessions", json=None)
+    assert start.status_code == 200, start.text
+    body = start.json()
+    assert body["memory_state"]["phase"] == "identify_target"
+    assert body["memory_state"]["target"]["target_confirmed"] is False
+
+
+def test_ingest_start_hint_loads_existing_lesson_results(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/ingest"
+
+    start = client.post(
+        f"{base}/sessions",
+        json={
+            "lesson_date": "2026-05-29",
+            "intent": "correct_existing_results",
+            "target_kind": "taught_lesson",
+            "source": "timeline_hint",
+        },
+    )
+    assert start.status_code == 200, start.text
+    body = start.json()
+    session_id = body["session_id"]
+    memory = body["memory_state"]
+
+    assert memory["phase"] == "collect_results"
+    assert memory["intent"] == "correct_existing_results"
+    assert memory["target"]["lesson_date"] == "2026-05-29"
+    assert memory["target"]["target_kind"] == "taught_lesson"
+    assert memory["target"]["target_confirmed"] is True
+    assert memory["target"]["source"] == "timeline_hint"
+    assert memory["target"]["plan_loaded"] is True
+    assert memory["target"]["existing_results_loaded"] is True
+
+    draft = client.get(f"{base}/sessions/{session_id}/draft")
+    assert draft.status_code == 200, draft.text
+    draft_body = draft.json()
+    assert "Lesson Results" in draft_body["diary_markdown"]
+    assert "2026-05-29" in draft_body["diary_markdown"]
+    assert "Anions and Oxidation State Review" in draft_body["diary_markdown"]
+    assert draft_body["memory_state"]["target"]["lesson_date"] == "2026-05-29"
+
+
 def test_ingest_commit_skips_unapproved_wiki_paths(client: TestClient):
     """Phase 5 trust: unchecked proposals must not be written via the HTTP commit path."""
     base = f"/api/classes/{CLASS_ID}/ingest"

@@ -217,9 +217,15 @@ Runtime context manager:
 Allowed behavior:
 
 - Ask at most one clarifying question when important diary sections are missing.
-- The general **Update memory** entry point starts free-agent target discovery.
-  A future timeline/detail button may start the same agent with a date hint, but
-  the backend still validates the target through the same runtime state.
+- The general **Update memory** entry point starts free-agent target discovery
+  in `identify_target`.
+- Timeline/detail buttons may start the same ingest session endpoint with a
+  structured hint (`lesson_date`, `lesson_title`, `intent`, `target_kind`,
+  `source`). When the hint points to a known planned or taught lesson, the
+  backend seeds `MemoryRuntime.target`, marks high-confidence targets confirmed,
+  loads the saved plan and/or existing results, and moves to `collect_results`.
+  The target remains visible in `memory_state`; this is a fast path through the
+  same agent contract, not a separate wizard or write path.
 - The agent may draft from strong evidence before final confirmation, but it
   should keep target confidence explicit in `state_patch` and conversationally
   confirm ambiguous dates/lessons with the teacher.

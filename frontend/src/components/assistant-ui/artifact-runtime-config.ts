@@ -38,6 +38,7 @@ export function createArtifactRuntimeConfig(args: {
   onSessionLost?: (preserveMarkdown: string) => Promise<void>;
   initialMarkdown: string;
   initialCompleteness?: CompletenessChecklist | null;
+  initialMemoryState?: Record<string, unknown> | null;
   onCompletenessChange?: (checklist: CompletenessChecklist) => void;
 }): ArtifactSessionConfig {
   const {
@@ -48,6 +49,7 @@ export function createArtifactRuntimeConfig(args: {
     onSessionLost,
     initialMarkdown,
     initialCompleteness = null,
+    initialMemoryState = null,
     onCompletenessChange,
   } = args;
 
@@ -119,6 +121,7 @@ export function createArtifactRuntimeConfig(args: {
       sessionId,
       initialMarkdown,
       initialCompleteness,
+      initialMemoryState,
       onCompletenessChange,
       chatStream,
       patchDraft: async (markdown: string) => {

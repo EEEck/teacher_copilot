@@ -19,6 +19,7 @@ export type ArtifactBootstrap = {
   sessionId: string;
   initialMarkdown: string;
   initialCompleteness?: CompletenessChecklist | null;
+  initialMemoryState?: Record<string, unknown> | null;
   openingMessage?: string;
 };
 
@@ -107,6 +108,7 @@ export function ArtifactSessionPage({
             onSessionLost,
             initialMarkdown: data.initialMarkdown,
             initialCompleteness: data.initialCompleteness ?? null,
+            initialMemoryState: data.initialMemoryState ?? null,
           })
         : null,
     [mode, classId, data, onSessionLost],

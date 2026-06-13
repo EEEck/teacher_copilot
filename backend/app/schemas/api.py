@@ -169,6 +169,14 @@ class IngestSessionStatus(str, Enum):
     committed = "committed"
 
 
+class IngestSessionStartRequest(BaseModel):
+    lesson_date: Optional[str] = None
+    lesson_title: str = ""
+    intent: str = ""  # update_missing_results | correct_existing_results | log_new_results
+    target_kind: str = ""  # planned_lesson | taught_lesson | new_lesson
+    source: str = "teacher_explicit"  # teacher_explicit | timeline_hint | agent_inferred
+
+
 class CompletenessItem(BaseModel):
     field: str
     label: str
