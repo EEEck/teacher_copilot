@@ -31,6 +31,15 @@ export function streamPartsToRunContent(
   }) as ChatModelRunResult["content"];
 }
 
+export type MemoryCandidate = {
+  target: string;
+  candidate_update: string;
+  evidence?: string;
+  source?: string;
+  confidence?: string;
+  requires_teacher_approval?: boolean;
+};
+
 export type SseEvent =
   | { type: "reasoning_delta"; text: string }
   | { type: "tool_call"; name: string; args?: string; call_id?: string | null }
@@ -41,6 +50,11 @@ export type SseEvent =
       artifact_markdown: string;
       ready: boolean;
       completeness?: CompletenessChecklist | null;
+      phase?: string | null;
+      last_change_summary?: string | null;
+      session_state?: Record<string, unknown> | null;
+      lesson_planning_state?: Record<string, unknown> | null;
+      memory_candidates?: MemoryCandidate[] | null;
     }
   | { type: "error"; message: string; code?: string | null };
 
@@ -61,6 +75,9 @@ export type StreamChatFinal = {
   artifactMarkdown: string;
   readyToSave?: boolean;
   completeness?: CompletenessChecklist | null;
+  phase?: string | null;
+  lastChangeSummary?: string | null;
+  memoryCandidates?: MemoryCandidate[];
 };
 
 export function parseSseChunk(buffer: string): { events: SseEvent[]; rest: string } {
@@ -188,6 +205,9 @@ export async function consumeArtifactChatStream(
         artifactMarkdown: event.artifact_markdown,
         readyToSave: event.ready,
         completeness: event.completeness ?? null,
+        phase: event.phase ?? null,
+        lastChangeSummary: event.last_change_summary ?? null,
+        memoryCandidates: event.memory_candidates ?? undefined,
       };
       break;
     }

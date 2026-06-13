@@ -15,10 +15,36 @@ import {
   fromPlanSave,
   MarkdownLineDiff,
 } from "@/components/klassenpilot/review";
+import { ProposedMemoryUpdates } from "@/components/klassenpilot/proposed-memory-updates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { client } from "@/lib/api";
+import { client, type MemoryCandidate, type ProfileCandidate } from "@/lib/api";
+
+function profileCandidateToMemoryCandidate(c: ProfileCandidate): MemoryCandidate {
+  return {
+    target: c.target,
+    section: c.section,
+    candidate_update: c.content,
+    evidence: c.evidence,
+    source: c.basis,
+    basis: c.basis,
+    confidence: c.confidence,
+    requires_teacher_approval: true,
+  };
+}
+
+function dedupeMemoryCandidates(candidates: MemoryCandidate[]): MemoryCandidate[] {
+  const seen = new Set<string>();
+  const out: MemoryCandidate[] = [];
+  for (const c of candidates) {
+    const key = `${c.target}::${c.section ?? ""}::${c.candidate_update.trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
 
 function PlanSaveFooter({
   classId,
@@ -128,6 +154,35 @@ function PlanWorkspace({
   const [beforePlan, setBeforePlan] = useState("");
   const [approved, setApproved] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [proposedMemory, setProposedMemory] = useState<MemoryCandidate[] | null>(null);
+  const [applyingMemory, setApplyingMemory] = useState(false);
+
+  const goToLesson = useCallback(() => {
+    router.push(`/classes/${classId}/lessons/${encodeURIComponent(lessonDate.trim())}`);
+  }, [router, classId, lessonDate]);
+
+  const applyMemory = useCallback(
+    async (approved: MemoryCandidate[]) => {
+      setApplyingMemory(true);
+      onError(null);
+      try {
+        await client.memoryApply(
+          classId,
+          approved.map((c) => ({
+            target: c.target,
+            section: c.section,
+            content: c.candidate_update,
+          })),
+        );
+        goToLesson();
+      } catch (e) {
+        onError(e instanceof Error ? e.message : "Could not apply memory updates");
+      } finally {
+        setApplyingMemory(false);
+      }
+    },
+    [classId, onError, goToLesson],
+  );
 
   const fileItem = useMemo(() => {
     if (!inReview || !lessonDate.trim()) return null;
@@ -139,16 +194,42 @@ function PlanWorkspace({
     setLoading(true);
     onError(null);
     try {
-      await runWithSessionRecovery((sessionId) =>
+      const res = await runWithSessionRecovery((sessionId) =>
         client.planSave(classId, sessionId, lessonDate.trim(), artifactMarkdown),
       );
-      router.push(`/classes/${classId}/lessons/${encodeURIComponent(lessonDate.trim())}`);
+      let candidates = res?.memory_candidates ?? [];
+      try {
+        const profile = await client.memoryProfilePropose(
+          classId,
+          artifactMarkdown,
+          res?.session_state,
+          res?.lesson_planning_state,
+          res?.memory_candidates ?? [],
+        );
+        candidates = dedupeMemoryCandidates([
+          ...candidates,
+          ...profile.candidates.map(profileCandidateToMemoryCandidate),
+        ]);
+      } catch (e) {
+        if (candidates.length) {
+          onError(
+            e instanceof Error
+              ? `Plan saved. Profile proposal failed: ${e.message}`
+              : "Plan saved. Profile proposal failed.",
+          );
+        }
+      }
+      if (candidates.length) {
+        setProposedMemory(candidates);
+      } else {
+        goToLesson();
+      }
     } catch (e) {
       onError(e instanceof Error ? e.message : "Save failed");
     } finally {
       setLoading(false);
     }
-  }, [approved, lessonDate, classId, artifactMarkdown, onError, router, runWithSessionRecovery]);
+  }, [approved, lessonDate, classId, artifactMarkdown, onError, goToLesson, runWithSessionRecovery]);
 
   useEffect(() => {
     if (!inReview || !lessonDate.trim()) return;
@@ -166,6 +247,23 @@ function PlanWorkspace({
       cancelled = true;
     };
   }, [inReview, classId, lessonDate]);
+
+  if (proposedMemory) {
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 p-4">
+        <p className="text-sm text-muted-foreground">
+          Lesson plan saved for {lessonDate.trim()}.
+        </p>
+        <ProposedMemoryUpdates
+          candidates={proposedMemory}
+          onApply={applyMemory}
+          applying={applyingMemory}
+          onContinue={goToLesson}
+          continueLabel="Skip and continue"
+        />
+      </div>
+    );
+  }
 
   return (
     <ArtifactSessionWorkspace

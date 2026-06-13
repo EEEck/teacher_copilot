@@ -10,7 +10,7 @@ not "fork pages, services, providers, and threads".
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 
 from app.schemas.api import (
     ChatAttachment,
@@ -20,11 +20,29 @@ from app.schemas.api import (
     PlanDraft,
 )
 
+from app.teacher_agent.planning_state import PlanRuntime, planning_api_payload
+from app.teacher_agent.prompt_trace import (
+    build_plan_chat_prompt_trace,
+    build_plan_opening_prompt_trace,
+)
 from app.teacher_agent.wiki_store import dedupe_wiki_proposals
 
 if TYPE_CHECKING:  # avoid import cycles; these are only used for typing
     from app.teacher_agent.agents import AgentRunner
     from app.teacher_agent.wiki_store import WikiStore
+
+PromptTraceHook = Callable[
+    [
+        "WikiStore",
+        str,
+        list[ChatMessage],
+        str,
+        Any,
+        list[ChatAttachment],
+        str,
+    ],
+    dict,
+]
 
 
 @dataclass(frozen=True)
@@ -35,6 +53,9 @@ class TurnResult:
     markdown: str
     ready: bool
     completeness: Optional[CompletenessChecklist] = None
+    # Plan mode only: compact runtime state (phase, session/lesson state,
+    # memory candidates) for the API response. None for other modes.
+    planning: Optional[dict] = None
 
 
 # Commit strategies (the spec picks one; future artifact types reuse them).
@@ -53,11 +74,20 @@ class ArtifactSpec:
     completeness_of: Callable[["WikiStore", str], Optional[CompletenessChecklist]]
     build_draft: Callable[["WikiStore", str, str], object]
     run_turn: Callable[
-        ["AgentRunner", str, list[ChatMessage], str, list[ChatAttachment]],
+        [
+            "AgentRunner",
+            str,
+            list[ChatMessage],
+            str,
+            list[ChatAttachment],
+            Any,
+        ],
         Awaitable[TurnResult],
     ]
     opening: Optional[Callable[["AgentRunner", str], Awaitable[str]]] = None
     lazy_opening: Optional[Callable[["AgentRunner", str], Awaitable[str]]] = None
+    runtime_factory: Optional[Callable[[], Any]] = None
+    prompt_trace: Optional[PromptTraceHook] = None
 
 
 # --- ingest (lesson diary) -------------------------------------------------
@@ -90,6 +120,7 @@ async def _ingest_run_turn(
     messages: list[ChatMessage],
     partial: str,
     attachments: list[ChatAttachment],
+    planning: Optional["PlanRuntime"] = None,
 ) -> TurnResult:
     reply, md, checklist, ready = await agents.ingest_chat(
         class_id, messages, partial, attachments=attachments
@@ -122,15 +153,40 @@ async def _plan_run_turn(
     messages: list[ChatMessage],
     partial: str,
     attachments: list[ChatAttachment],
+    planning: Optional[PlanRuntime] = None,
 ) -> TurnResult:
     reply, md, ready = await agents.plan_chat(
-        class_id, messages, partial, attachments=attachments
+        class_id, messages, partial, attachments=attachments, planning=planning
     )
-    return TurnResult(reply=reply, markdown=md, ready=ready, completeness=None)
+    payload = planning_api_payload(planning) if planning is not None else None
+    return TurnResult(
+        reply=reply, markdown=md, ready=ready, completeness=None, planning=payload
+    )
 
 
 async def _plan_opening(agents: "AgentRunner", class_id: str) -> str:
     return await agents.plan_opening(class_id)
+
+
+def _plan_prompt_trace(
+    wiki: "WikiStore",
+    class_id: str,
+    messages: list[ChatMessage],
+    current_markdown: str,
+    runtime: Any,
+    attachments: list[ChatAttachment],
+    stage: str,
+) -> dict:
+    if stage == "plan_opening":
+        return build_plan_opening_prompt_trace(wiki, class_id)
+    return build_plan_chat_prompt_trace(
+        wiki,
+        class_id,
+        messages=messages,
+        current_plan=current_markdown,
+        runtime=runtime if isinstance(runtime, PlanRuntime) else None,
+        attachments=attachments,
+    )
 
 
 INGEST_SPEC = ArtifactSpec(
@@ -158,6 +214,8 @@ PLAN_SPEC = ArtifactSpec(
     run_turn=_plan_run_turn,
     opening=None,
     lazy_opening=_plan_opening,
+    runtime_factory=PlanRuntime,
+    prompt_trace=_plan_prompt_trace,
 )
 
 

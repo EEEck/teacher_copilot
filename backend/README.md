@@ -21,11 +21,131 @@ Health: `GET http://127.0.0.1:8010/api/health` — includes `openai_configured` 
 
 Scripts or REPL code that construct `AgentRunner` without importing `app.main` must call `configure_openai_from_settings(get_settings())` first, or chat will fail with missing-key errors.
 
+## Agent runtime settings
+
+The default chat model is `OPENAI_CHAT_MODEL=gpt-5.4-mini` with
+`OPENAI_REASONING_EFFORT=medium`. Keep this for test-user runs where answer
+quality matters and the teacher should see visible reasoning/progress.
+
+Complex lesson-planning turns can browse wiki memory, reason over evidence, and
+stream a full artifact. The default `AGENT_TIMEOUT_SECONDS=240` gives those
+turns enough room before the backend emits a timeout SSE event. For faster local
+smoke checks, lower `OPENAI_REASONING_EFFORT` or `AGENT_TIMEOUT_SECONDS` in
+`backend/.env`.
+
 ## Chat sessions (prototype)
 
 Ingest and plan sessions are stored **in memory** (`ArtifactSessionService`). Restarting uvicorn clears server-side session state. The frontend recreates a session and restores the draft markdown when the API returns “unknown session”; chat history in the tab is not restored.
 
-**SQLite is not required for the prototype.** Session persistence is deferred until multi-worker deploys or durable server-side history are needed. See [`docs/REFACTOR_STATUS.md`](../docs/REFACTOR_STATUS.md) for refactor completion scope.
+**SQLite is not required for the prototype.** Session persistence is deferred until multi-worker deploys or durable server-side history are needed. Current product direction lives in [`product_backlog.md`](../implementation_plans/product_backlog.md).
+
+## Agent debug CLI
+
+Interactive multi-turn chat against the real `AgentRunner` (no FastAPI). Shows reasoning, wiki tool calls, and **full** tool results (not capped like browser SSE).
+
+```bash
+cd backend
+.venv\Scripts\activate
+python -m app.cli chat --mode ingest --class chemie_9b_2026_27
+```
+
+Useful flags:
+
+- `--show-context` — print the ingest/plan memory pack at startup
+- `--trace runs/debug.jsonl` — append compact JSONL (session, user messages, context pack if `--show-context`, tool calls/results, finals; no per-token reasoning unless `--trace-reasoning`)
+- `--message "We covered redox today"` — one turn, then exit
+- `--tool-limit 2000` — cap tool output size (default: unlimited in CLI)
+
+REPL commands: `/context`, `/draft`, `/tools`, `/propose` (ingest only), `/help`, `/quit`.
+
+Requires `OPENAI_API_KEY` in `backend/.env`. Not run in CI (live model calls).
+
+## Plan trace bundle
+
+Use this when debugging lesson-planning behavior, prompt assembly, tool calls, or
+context selection. It runs the default three-turn FCKW/CFC planning scenario
+against the local FastAPI backend and writes a complete run bundle under
+`backend/runs/{timestamp}-fckw-plan-3turn/`.
+
+Prerequisites:
+
+- Backend is running on `http://localhost:8010`.
+- `backend/.env` contains `OPENAI_API_KEY`.
+- The plan trace endpoint is enabled. It is enabled by default in development
+  and disabled by default when `APP_ENV=production`; set
+  `PLAN_TRACE_ENABLED=true` to override for a local production-mode debug run.
+- The target class exists in `backend/teacher_wiki/`.
+
+PowerShell from repo root:
+
+```powershell
+.\scripts\run_plan_trace_bundle.ps1
+```
+
+Python from repo root:
+
+```powershell
+.\backend\.venv\Scripts\python .\scripts\run_plan_trace_bundle.py
+```
+
+Useful overrides:
+
+```powershell
+.\scripts\run_plan_trace_bundle.ps1 `
+  -ApiBase "http://localhost:8010" `
+  -ClassId "chemie_9b_2026_27" `
+  -OutputRoot "backend/runs" `
+  -RunName "manual-fckw-debug"
+
+.\backend\.venv\Scripts\python .\scripts\run_plan_trace_bundle.py `
+  --api-base "http://localhost:8010" `
+  --class-id "chemie_9b_2026_27" `
+  --output-root "backend/runs" `
+  --run-name "manual-fckw-debug"
+```
+
+To test a custom prompt while keeping the same debug bundle format:
+
+```powershell
+.\backend\.venv\Scripts\python .\scripts\run_plan_trace_bundle.py `
+  --prompt1-file ".\tmp\prompt1.txt" `
+  --prompt2-file ".\tmp\prompt2.txt"
+```
+
+The three default teacher turns are:
+
+1. Full 45-minute FCKW/redox lesson plan (structure, homework, misconception note).
+2. Add a 5-minute review of the last four lectures using class confusion from wiki.
+3. Final refinement: 2-minute active-recall recap; agent should move to `finalize`.
+
+The bundle includes:
+
+- `00-run-meta.json` - run metadata and the exact three prompts.
+- `02-trace-before-first-message.json` - prompt stack before any chat.
+- `NN-turnX-sse.txt` - raw streamed events per turn.
+- `NN-trace-after-turnX.json` - trace after each teacher prompt.
+- `NN-final-lessonplan.md` - final teacher-facing plan artifact.
+- `NN-tool-calls-and-results.md` - readable tool call/result report.
+- `prompt-*-sections.md` - section-by-section view of what the model saw.
+- `snapshot-*` - exact prompt stack before/after each turn.
+- `raw-evidence/` - full captured tool outputs by `raw_ref`.
+
+Recommended debugging flow:
+
+1. Open the run folder `README.md`.
+2. Inspect `prompt-02-plan_chat-sections.md` or the latest
+   `prompt-*-sections.md` to see exact prompt context.
+3. Inspect `08-tool-calls-and-results.md` to verify browsing behavior.
+4. Inspect `07-final-lessonplan.md` to compare the final artifact against the
+   evidence and prompt instructions.
+
+## Wiki memory
+
+The class wiki now includes compact memory pages under `wiki/classes/{class_id}/memory/`:
+`taught_so_far.md`, `planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and `session_summaries.md`.
+
+Planning and ingest context packs are derived from those pages plus the current lesson artifacts.
+`search_memory` is the deterministic pathfinder; use `read_memory_page` or `read_lesson_range` when the snippet is not enough.
 
 ## Tests
 

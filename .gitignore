@@ -1,5 +1,7 @@
 #Project specific
 ref_repos
+literature/*.pdf
+literature/**/*.pdf
 # Python
 backend/.env
 backend/.venv/
@@ -19,6 +21,10 @@ Thumbs.db
 
 # Dev scripts
 scripts/.logs/
+
+# Local trace/run artifacts
+/runs/
+/backend/runs/
 
 # Secrets
 .env

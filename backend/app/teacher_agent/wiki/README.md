@@ -9,13 +9,14 @@ Deterministic markdown wiki for KlassenPilot: compile lesson diaries, human-in-t
 | `constants.py` | Class registry, section headings, log/index regexes, `dedupe_wiki_proposals` |
 | `parsing.py` | Pure diary/lesson/log markdown parsers (no I/O) |
 | `paths_io.py` | Paths, read/write, `resolve_path`, `read_wiki_page` |
-| `search.py` | `find_in_memory` (index-first), `list_class_pages` |
+| `search.py` | Deterministic class relevance corpus, BM25-style `find_in_memory`, `list_class_pages` |
 | `registry.py` | Class list and metadata |
 | `read_api.py` | Timeline, snapshot, lesson detail, revise |
 | `diary.py` | Diary completeness checklist |
 | `rollups.py` | Roll-up compile helpers (course state, students, timeline) |
 | `commit.py` | `compile_from_diary`, `commit_ingest`, lesson plans |
-| `context_packs.py` | Agent prompt context bundles |
+| `memory.py` | Compact class memory pages, local copilot profile helpers, compaction commits |
+| `context_packs.py` | Agent prompt context bundles and read-only workflow query packs |
 | `indexing.py` | `log.md`, `index.md` rebuild |
 | `store.py` | `WikiStore` facade delegating to modules |
 

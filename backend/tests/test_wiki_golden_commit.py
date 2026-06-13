@@ -58,7 +58,7 @@ def test_compile_proposal_paths_stable_on_seed():
     suffixes = {p.rsplit("/", 1)[-1] for p in paths}
     assert "lesson_results.md" in suffixes
     assert "timeline.md" in suffixes
-    assert "student_notes.md" in suffixes
+    assert "students.md" in suffixes
     assert "course_state.md" in suffixes
     assert any(s.startswith("S-") and s.endswith(".md") for s in suffixes)
     assert any(p.startswith("raw/classes/") for p in paths)

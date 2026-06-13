@@ -1,0 +1,43 @@
+# KlassenPilot Docs
+
+This is the mini wiki for the repo. Start here when you need orientation, then
+follow the local README closest to the code you are changing.
+
+## Product And Agent Contracts
+
+- `product_vision.md` - current product scope and teacher-facing behavior.
+- `agent_contracts.md` - reviewable read/write/tool/output contracts.
+- `agent_architecture.md` - agent architecture and retrieval/memory lessons.
+- `memory_hierarchy.md` - file-by-file memory scope and update rules.
+- `context_management.md` - prompt assembly and context-limit policy.
+- `agent_learning_guide.md` - optional learning/reference notes.
+
+Use `../implementation_plans/` for the backlog and concrete implementation
+plans only.
+
+## Codebase Map
+
+- `../README.md` - run the full app and understand the product workflow.
+- `../AGENTS.md` - repo-level guardrails for AI agents and developers.
+- `../backend/README.md` - backend setup, debug CLI, and plan trace bundle.
+- `../backend/app/README.md` - backend package map and request flow.
+- `../backend/app/api/README.md` - FastAPI route groups and API boundaries.
+- `../backend/app/schemas/README.md` - API schema conventions.
+- `../backend/app/services/README.md` - service layer and artifact sessions.
+- `../backend/app/teacher_agent/README.md` - agent prompts, tools, models, and runtime state.
+- `../backend/app/teacher_agent/wiki/README.md` - wiki facade internals.
+- `../backend/tests/README.md` - deterministic test structure and fixtures.
+- `../frontend/README.md` - frontend setup and folder map.
+- `../frontend/src/README.md` - Next.js app, components, and frontend API flow.
+- `../frontend/src/app/README.md` - App Router page map.
+- `../frontend/src/components/README.md` - frontend component layers.
+- `../frontend/src/lib/README.md` - frontend API/parser/utilities map.
+- `../scripts/README.md` - dev, test, Docker, and trace scripts.
+
+## Working Rules
+
+- Product behavior changes should update `agent_contracts.md` when contracts
+  change.
+- Memory scope or loading changes should update `memory_hierarchy.md` and/or
+  `context_management.md`.
+- Implementation plans belong in `../implementation_plans/`, not here.

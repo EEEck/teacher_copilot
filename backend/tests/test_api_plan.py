@@ -43,6 +43,9 @@ def test_plan_full_flow(client: TestClient):
     save_body = save.json()
     assert save_body["plan_path"]
     assert save_body["lesson_date"] == "2026-10-05"
+    assert save_body["session_state"]
+    assert save_body["lesson_planning_state"]
+    assert save_body["memory_candidates"]
 
 
 def test_plan_chat_unknown_session_returns_typed_404(client: TestClient):
@@ -54,3 +57,22 @@ def test_plan_chat_unknown_session_returns_typed_404(client: TestClient):
     body = res.json()
     assert body["error"]["type"] == "http_error"
     assert "Unknown session" in body["error"]["message"]
+
+
+def test_plan_save_rejects_invalid_lesson_date(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/plan"
+    start = client.post(f"{base}/sessions")
+    assert start.status_code == 200, start.text
+    session_id = start.json()["session_id"]
+
+    save = client.post(
+        f"{base}/save",
+        json={
+            "session_id": session_id,
+            "lesson_date": "../bad",
+            "plan_markdown": "# Lesson Plan\n\n## Learning goals\n\n## Lesson flow\n\n## Warmup\n",
+        },
+    )
+
+    assert save.status_code == 422
+    assert "lesson_date must be YYYY-MM-DD" in save.text

@@ -29,6 +29,71 @@ class WikiLintResponse(BaseModel):
     report_markdown: str
 
 
+class MemoryCompactRequest(BaseModel):
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+
+class MemoryCompactResponse(BaseModel):
+    class_id: str
+    applied_wiki_paths: list[str]
+    log_entry_id: str
+    source_paths: list[str] = Field(default_factory=list)
+    stale_report: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class MemoryProposalResponse(BaseModel):
+    """Proposed (uncommitted) derived memory pages — teacher reviews before apply."""
+
+    class_id: str
+    pages: dict = Field(default_factory=dict)
+    source_paths: list[str] = Field(default_factory=list)
+    stale_report: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ProfileProposalRequest(BaseModel):
+    """Inputs from a finished planning session used to propose profile updates."""
+
+    final_lesson_markdown: str = ""
+    session_state: Optional[dict] = None
+    lesson_planning_state: Optional[dict] = None
+    memory_candidates: list[dict] = Field(default_factory=list)
+
+
+class ProfileCandidate(BaseModel):
+    target: str  # user.md | copilot.md
+    section: str = "General"
+    content: str
+    basis: str = "inferred"  # explicit | inferred
+    confidence: str = "low"
+    evidence: str = ""
+
+
+class ProfileProposalResponse(BaseModel):
+    class_id: str
+    candidates: list[ProfileCandidate] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class MemoryApplyItem(BaseModel):
+    target: str  # user.md | copilot.md | class_state.md
+    section: str = "General"
+    content: str
+
+
+class MemoryApplyRequest(BaseModel):
+    items: list[MemoryApplyItem] = Field(default_factory=list)
+
+
+class MemoryApplyResponse(BaseModel):
+    class_id: str
+    applied_wiki_paths: list[str] = Field(default_factory=list)
+    skipped: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class TimelineEntry(BaseModel):
     date: str
     title: str
@@ -211,6 +276,12 @@ class PlanChatResponse(BaseModel):
     reply: str
     plan_markdown: str
     ready_to_save: bool = False
+    # Runtime context-manager state (lesson-planning chat).
+    phase: Optional[str] = None
+    last_change_summary: str = ""
+    session_state: Optional[dict] = None
+    lesson_planning_state: Optional[dict] = None
+    memory_candidates: list[dict] = Field(default_factory=list)
 
 
 class UpdatePlanDraftRequest(BaseModel):
@@ -227,6 +298,26 @@ class SavePlanResponse(BaseModel):
     lesson_date: str
     title: str
     plan_path: str
+    session_state: Optional[dict] = None
+    lesson_planning_state: Optional[dict] = None
+    # Proposed durable-memory updates from the session (proposed only; never
+    # written here — durable writes are a separate teacher-approved action).
+    memory_candidates: list[dict] = Field(default_factory=list)
+
+
+class PlanTraceResponse(BaseModel):
+    """Debug/review bundle for one lesson-planning session."""
+
+    class_id: str
+    session_id: str
+    status: str
+    prompt_stack: dict = Field(default_factory=dict)
+    prompt_assembly: dict = Field(default_factory=dict)
+    runtime: dict = Field(default_factory=dict)
+    messages: list[ChatMessage] = Field(default_factory=list)
+    artifact_markdown: str = ""
+    event_trace: list[dict] = Field(default_factory=list)
+    raw_evidence: dict = Field(default_factory=dict)
 
 
 class PlanLessonRequest(BaseModel):

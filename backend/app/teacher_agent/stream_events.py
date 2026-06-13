@@ -37,6 +37,12 @@ class SseFinal(BaseModel):
     artifact_markdown: str
     ready: bool
     completeness: CompletenessChecklist | None = None
+    # Plan mode only: runtime context-manager state surfaced to the client.
+    phase: str | None = None
+    last_change_summary: str | None = None
+    session_state: dict | None = None
+    lesson_planning_state: dict | None = None
+    memory_candidates: list[dict] | None = None
 
 
 class SseError(BaseModel):
@@ -48,9 +54,9 @@ class SseError(BaseModel):
 SseEvent = SseReasoningDelta | SseToolCall | SseToolResult | SseFinal | SseError
 
 
-def _truncate(value: Any, limit: int = _SSE_TRUNCATE) -> str:
+def _truncate(value: Any, limit: int | None = _SSE_TRUNCATE) -> str:
     text = value if isinstance(value, str) else json.dumps(value, default=str)
-    if len(text) <= limit:
+    if limit is None or len(text) <= limit:
         return text
     return text[:limit] + "…"
 
@@ -86,7 +92,7 @@ def _tool_name_from_item(item: Any) -> str:
     return str(getattr(raw, "name", None) or getattr(raw, "type", None) or "tool")
 
 
-def _tool_args_from_item(item: Any) -> str:
+def _tool_args_from_item(item: Any, *, limit: int | None = _SSE_TRUNCATE) -> str:
     raw = getattr(item, "raw_item", None)
     if raw is None:
         return ""
@@ -96,7 +102,7 @@ def _tool_args_from_item(item: Any) -> str:
         args = getattr(raw, "arguments", None)
     if args is None:
         return ""
-    return _truncate(args)
+    return _truncate(args, limit)
 
 
 def _tool_call_id_from_item(item: Any) -> str | None:
@@ -112,7 +118,12 @@ def _tool_call_id_from_item(item: Any) -> str | None:
     return str(cid) if cid is not None else None
 
 
-def translate_sdk_event(event: Any) -> list[SseEvent]:
+def translate_sdk_event(
+    event: Any,
+    *,
+    tool_output_limit: int | None = _SSE_TRUNCATE,
+    tool_args_limit: int | None = _SSE_TRUNCATE,
+) -> list[SseEvent]:
     """Map one Agents SDK StreamEvent to zero or more SSE payloads."""
     event_type = getattr(event, "type", None)
 
@@ -136,7 +147,7 @@ def translate_sdk_event(event: Any) -> list[SseEvent]:
         return [
             SseToolCall(
                 name=_tool_name_from_item(item),
-                args=_tool_args_from_item(item),
+                args=_tool_args_from_item(item, limit=tool_args_limit),
                 call_id=_tool_call_id_from_item(item),
             )
         ]
@@ -146,7 +157,7 @@ def translate_sdk_event(event: Any) -> list[SseEvent]:
         return [
             SseToolResult(
                 name=_tool_name_from_item(item),
-                output=_truncate(output),
+                output=_truncate(output, tool_output_limit),
                 call_id=_tool_call_id_from_item(item),
             )
         ]

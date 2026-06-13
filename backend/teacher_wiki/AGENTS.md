@@ -1,10 +1,50 @@
-# KlassenPilot AGENTS.md — LLM Wiki Schema
+﻿# KlassenPilot AGENTS.md â€” LLM Wiki Schema
+
+This file is the wiki-specific schema and workflow contract for
+`backend/teacher_wiki/`. For full repo onboarding and agent development context,
+read [`../../AGENTS.md`](../../AGENTS.md) first. For current behavior contracts,
+read [`../../docs/agent_contracts.md`](../../docs/agent_contracts.md).
 
 ## Three layers
 
-1. **Raw** — `raw/classes/{class_id}/{YYYY-MM-DD}-{slug}.md` — immutable approved diaries. Never edit after commit.
-2. **Curated wiki** — `wiki/classes/{class_id}/` — structured pages maintained by the agent (with teacher HITL on ingest).
-3. **Navigation** — `index.md` (catalog), `log.md` (append-only changelog).
+1. **Raw** â€” `raw/classes/{class_id}/{YYYY-MM-DD}-{slug}.md` â€” immutable approved diaries. Never edit after commit.
+2. **Curated wiki** â€” `wiki/classes/{class_id}/` â€” structured pages maintained by the agent (with teacher HITL on ingest).
+3. **Navigation** â€” `index.md` (catalog), `log.md` (append-only changelog).
+
+## Memory pages and scope
+
+Compact, size-budgeted derived pages back the copilot's working memory. Keep
+each scope clean (no cross-contamination); dedupe and replace stale facts.
+
+- `wiki/teacher_profile.md` (**user.md**, GLOBAL, one per teacher) â€” communication
+  style, stable preferences, default lesson structure. Agent-maintained, bounded.
+- `wiki/subjects/{subject}.md` (subject guide) - subject-wide teaching guidance,
+  common misconceptions, safety reminders, and reusable question patterns. Do
+  not store class-specific observations here.
+- `memory/teaching_patterns.md` (class + subject) â€” how THIS class learns and
+  which teaching approaches work/fail (holds the class learning profile).
+- `memory/copilot_profile.md` (**copilot.md**, class) â€” copilot working agreement
+  only: planning patterns, avoid-rules, repeated corrections, agent behavior.
+- `memory/class_state.md` (class) â€” derived current-state snapshot.
+- `memory/taught_so_far.md`, `memory/planning_brief.md`, `memory/session_summaries.md`.
+
+Durable writes to these pages are teacher-approved only (via the memory
+refresh/propose/apply endpoints); planning and ingest chat never write them.
+
+### Memory update routing
+
+During chat, collect possible durable updates as candidates only. The LLM may
+propose, but backend code validates scope and writes only after teacher approval.
+
+- Global teacher preference -> `wiki/teacher_profile.md`.
+- Subject-wide chemistry guidance -> `wiki/subjects/chemie.md` (manual/update
+  workflow only; do not infer from one class).
+- Class learning pattern -> `memory/teaching_patterns.md`.
+- Copilot behavior rule for this class -> `memory/copilot_profile.md`.
+- Current class state / likely next move -> `memory/class_state.md`.
+- Year-to-date taught sequence -> `memory/taught_so_far.md`.
+- Lesson facts -> `lessons/{YYYY-MM-DD}/lesson_results.md` through ingest HITL.
+- Student-specific facts -> `students/S-###.md`, pseudonymous only.
 
 ## Directory layout
 
@@ -14,7 +54,14 @@ wiki/classes/{class_id}/
   course_state.md
   misconceptions.md
   open_loops.md
-  student_notes.md      # index only: ## S-### + link to students/S-###.md
+  memory/
+    taught_so_far.md
+    planning_brief.md
+    teaching_patterns.md   # class+subject teaching style (how this class learns)
+    copilot_profile.md     # class copilot working agreement (copilot.md)
+    class_state.md         # derived current-state snapshot
+    session_summaries.md
+  students.md           # class student index / roster
   timeline.md           # chronological narrative with links to lessons
   students/S-###.md     # entity pages (compounding observations)
   lessons/{YYYY-MM-DD}/
@@ -28,7 +75,7 @@ wiki/classes/{class_id}/
 2. Student participation
 3. What went well
 4. What didn't go well
-5. Student observations (pseudonyms `S-###` only — never real names)
+5. Student observations (pseudonyms `S-###` only â€” never real names)
 6. Homework & follow-ups
 
 ## Linking
@@ -42,29 +89,29 @@ wiki/classes/{class_id}/
 ### Ingest
 
 1. Read `index.md` first, then relevant class pages via tools.
-2. Chat → update diary draft → `compile_from_diary` proposes wiki diffs.
-3. Teacher approves per file in UI → `commit_ingest` writes **only** approved paths (plus log/index rebuild).
-4. Unchecked files (e.g. a student entity page) are not written — there is no bypass after commit.
+2. Chat â†’ update diary draft â†’ `compile_from_diary` proposes wiki diffs.
+3. Teacher approves per file in UI â†’ `commit_ingest` writes **only** approved paths (plus log/index rebuild).
+4. Unchecked files (e.g. a student entity page) are not written â€” there is no bypass after commit.
 
 ### Lesson revise (not ingest HITL)
 
 1. Teacher submits an updated diary for an existing lesson date via the revise API.
-2. The system re-writes lesson results, roll-ups, students, timeline, and raw in one deterministic pass (no per-file approval UI).
+2. The system re-writes lesson results, roll-ups, students index, students, timeline, and raw in one deterministic pass (no per-file approval UI).
 3. Prefer ingest + checkboxes for new lessons; use revise only to fix an already-committed lesson.
 
 ### Query / plan
 
-1. Read `index.md` → open 2–5 relevant pages (roll-ups, lessons, students).
+1. Read `index.md` -> open 2-5 relevant pages (roll-ups, compact memory, lessons, students).
 2. Synthesize with citations to wiki paths.
 3. Do not write wiki files unless teacher saves via HITL commit or explicit revise API.
 
 ### Lint
 
 1. Read-only scan: orphans, missing `students/S-###` for IDs mentioned in lessons, stale contradictions, broken links.
-2. Output a markdown report; optional proposals only — no auto-commit.
+2. Output a markdown report; optional proposals only â€” no auto-commit.
 
 ## Rules
 
 - **Never** write curated wiki on ingest without teacher approval (`commit_ingest` per-file checkboxes). Lesson revise is an explicit teacher action that re-applies all derived files for that date.
-- Student IDs: `S-001` … `S-999` only.
+- Student IDs: `S-001` â€¦ `S-999` only.
 - Do not infer sensitive facts beyond what the teacher said.

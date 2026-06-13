@@ -13,11 +13,20 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
+from app.config import get_settings
 from app.schemas.api import ChatAttachment, ChatMessage, CompletenessChecklist
-from app.teacher_agent.stream_events import SseError, SseEvent, SseFinal, sse_encode
+from app.teacher_agent.stream_events import (
+    SseError,
+    SseEvent,
+    SseFinal,
+    SseReasoningDelta,
+    sse_encode,
+)
 from app.services.artifact_spec import ArtifactSpec, TurnResult, default_specs
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.wiki_store import WikiStore
+
+_TRACE_EVENT_CAP = 200
 
 
 @dataclass
@@ -30,6 +39,10 @@ class ArtifactSession:
     partial_markdown: str = ""
     completeness: CompletenessChecklist | None = None
     opening_message: str = ""
+    # Optional mode-specific runtime state. Plan mode uses this for structured
+    # planning state, evidence briefs, raw refs, and memory candidates.
+    runtime: object | None = None
+    debug_events: list[dict] = field(default_factory=list)
 
 
 class ArtifactSessionService:
@@ -62,6 +75,7 @@ class ArtifactSessionService:
             partial_markdown=spec.empty_template(self.wiki),
             completeness=spec.completeness_of(self.wiki, spec.empty_template(self.wiki)),
             opening_message=opening,
+            runtime=spec.runtime_factory() if spec.runtime_factory else None,
         )
         self.sessions[session_id] = session
         return session
@@ -75,9 +89,35 @@ class ArtifactSessionService:
         spec = self.specs[session.mode]
         if not spec.lazy_opening or session.messages:
             return
+        if spec.prompt_trace:
+            self._record_prompt_assembly(session, "plan_opening")
         opening = await spec.lazy_opening(self.agents, session.class_id)
         session.opening_message = opening
         session.messages.append(ChatMessage(role="assistant", content=opening))
+
+    def _record_prompt_assembly(
+        self,
+        session: ArtifactSession,
+        stage: str,
+        attachments: list[ChatAttachment] | None = None,
+    ) -> None:
+        spec = self.specs[session.mode]
+        if not get_settings().is_plan_trace_enabled():
+            return
+        if not spec.prompt_trace:
+            return
+        payload = spec.prompt_trace(
+            self.wiki,
+            session.class_id,
+            session.messages,
+            session.partial_markdown,
+            session.runtime,
+            attachments or [],
+            stage,
+        )
+        session.debug_events.append({"type": "prompt_assembly", **payload})
+        if len(session.debug_events) > _TRACE_EVENT_CAP:
+            session.debug_events = session.debug_events[-_TRACE_EVENT_CAP:]
 
     async def chat(
         self,
@@ -93,12 +133,14 @@ class ArtifactSessionService:
 
         await self._ensure_lazy_opening(session)
         session.messages.append(ChatMessage(role="user", content=message))
+        self._record_prompt_assembly(session, "plan_chat", attachments or [])
         result = await spec.run_turn(
             self.agents,
             session.class_id,
             session.messages,
             session.partial_markdown,
             attachments or [],
+            session.runtime,
         )
         session.messages.append(ChatMessage(role="assistant", content=result.reply))
         session.partial_markdown = result.markdown
@@ -123,6 +165,27 @@ class ArtifactSessionService:
         if result.ready:
             session.status = spec.ready_status
 
+    def _record_debug_event(self, session: ArtifactSession, event: SseEvent) -> None:
+        if isinstance(event, SseReasoningDelta):
+            return
+        if isinstance(event, SseError):
+            payload = event.model_dump()
+        elif isinstance(event, SseFinal):
+            payload = {
+                "type": event.type,
+                "reply": event.reply,
+                "ready": event.ready,
+                "artifact_chars": len(event.artifact_markdown or ""),
+                "phase": event.phase,
+                "last_change_summary": event.last_change_summary,
+                "memory_candidates": event.memory_candidates or [],
+            }
+        else:
+            payload = event.model_dump()
+        session.debug_events.append(payload)
+        if len(session.debug_events) > _TRACE_EVENT_CAP:
+            session.debug_events = session.debug_events[-_TRACE_EVENT_CAP:]
+
     async def chat_stream(
         self,
         session_id: str,
@@ -136,18 +199,25 @@ class ArtifactSessionService:
             session.partial_markdown = markdown
         await self._ensure_lazy_opening(session)
         session.messages.append(ChatMessage(role="user", content=message))
+        self._record_prompt_assembly(session, "plan_chat", attachments or [])
 
-        stream_fn = (
-            self.agents.ingest_chat_stream
-            if session.mode == "ingest"
-            else self.agents.plan_chat_stream
-        )
-        async for event in stream_fn(
-            session.class_id,
-            session.messages,
-            session.partial_markdown,
-            attachments=attachments or [],
-        ):
+        if session.mode == "ingest":
+            stream = self.agents.ingest_chat_stream(
+                session.class_id,
+                session.messages,
+                session.partial_markdown,
+                attachments=attachments or [],
+            )
+        else:
+            stream = self.agents.plan_chat_stream(
+                session.class_id,
+                session.messages,
+                session.partial_markdown,
+                attachments=attachments or [],
+                planning=session.runtime,
+            )
+        async for event in stream:
+            self._record_debug_event(session, event)
             if isinstance(event, SseFinal):
                 self._apply_turn_result(
                     session,

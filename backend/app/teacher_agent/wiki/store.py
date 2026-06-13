@@ -21,6 +21,7 @@ from . import (
     context_packs,
     diary,
     indexing,
+    memory,
     parsing,
     paths_io,
     read_api,
@@ -70,7 +71,7 @@ class WikiStore:
     def resolve_path(self, relative_path):
         return paths_io.resolve_path(self, relative_path)
 
-    def read_wiki_page(self, relative_path, max_chars):
+    def read_wiki_page(self, relative_path, max_chars=12000):
         return paths_io.read_wiki_page(self, relative_path, max_chars)
 
     def read_wiki_index(self, class_id):
@@ -79,10 +80,13 @@ class WikiStore:
     def list_class_pages(self, class_id, kind=None):
         return search.list_class_pages(self, class_id, kind)
 
-    def find_in_memory(self, class_id, query, max_results):
+    def find_in_memory(self, class_id, query, max_results=5):
         return search.find_in_memory(self, class_id, query, max_results)
 
-    def search_wiki(self, class_id, query, max_results):
+    def build_class_relevance_corpus(self, class_id):
+        return search.build_class_relevance_corpus(self, class_id)
+
+    def search_wiki(self, class_id, query, max_results=15):
         return search.search_wiki(self, class_id, query, max_results)
 
     def is_class_memory_path(self, class_id, relative_path):
@@ -124,11 +128,68 @@ class WikiStore:
     def save_lesson_plan(self, class_id, lesson_date, content):
         return commit.save_lesson_plan(self, class_id, lesson_date, content)
 
+    def memory_dir(self, class_id):
+        return memory.memory_dir(self, class_id)
+
+    def memory_paths(self, class_id):
+        return memory.memory_paths(self, class_id)
+
+    def compact_memory_excerpts(self, class_id, max_chars=1600):
+        return memory.compact_memory_excerpts(self, class_id, max_chars)
+
+    def read_copilot_profile(self, class_id):
+        return memory.read_copilot_profile(self, class_id)
+
+    def read_user_profile(self):
+        return memory.read_user_profile(self)
+
+    def add_profile_conclusion(self, class_id, section, content, *, source_path=None):
+        return memory.add_profile_conclusion(
+            self, class_id, section, content, source_path=source_path
+        )
+
+    def add_user_profile_conclusion(self, section, content):
+        return memory.add_user_profile_conclusion(self, section, content)
+
+    def search_personal_memory(self, class_id, query, max_results=5):
+        return memory.search_personal_memory(self, class_id, query, max_results)
+
+    def build_memory_compaction_source_packet(self, class_id, start_date=None, end_date=None):
+        return memory.build_memory_compaction_source_packet(
+            self, class_id, start_date, end_date
+        )
+
+    def commit_memory_compaction(self, class_id, pages, *, source_paths=None):
+        return memory.commit_memory_compaction(
+            self, class_id, pages, source_paths=source_paths
+        )
+
     def build_plan_context(self, class_id):
         return context_packs.build_plan_context(self, class_id)
 
+    def build_plan_context_slim(self, class_id):
+        return context_packs.build_plan_context_slim(self, class_id)
+
+    def build_plan_context_slim_trace(self, class_id):
+        return context_packs.build_plan_context_slim_trace(self, class_id)
+
     def build_ingest_context(self, class_id):
         return context_packs.build_ingest_context(self, class_id)
+
+    def build_ingest_context_slim(self, class_id):
+        return context_packs.build_ingest_context_slim(self, class_id)
+
+    def build_context_package(self, class_id, mode):
+        return context_packs.build_context_package(self, class_id, mode)
+
+    def build_planning_query_pack(self, class_id):
+        return context_packs.build_planning_query_pack(self, class_id)
+
+    def build_ingest_query_pack(self, class_id):
+        return context_packs.build_ingest_query_pack(self, class_id)
+
+    def build_review_query_pack(self, class_id):
+        return context_packs.build_review_query_pack(self, class_id)
 
     def empty_plan_template(self, lesson_date=None):
         return context_packs.empty_plan_template(self, lesson_date)
@@ -162,8 +223,8 @@ class WikiStore:
     def _upsert_student_entity(self, class_id, student_id, lesson_date, bullets):
         return rollups._upsert_student_entity(self, class_id, student_id, lesson_date, bullets)
 
-    def _rebuild_student_notes_index(self, class_id, previews):
-        return rollups._rebuild_student_notes_index(self, class_id, previews)
+    def _rebuild_students_index(self, class_id, previews):
+        return rollups._rebuild_students_index(self, class_id, previews)
 
     def _compile_timeline_entry(self, class_id, lesson_date, title, diary_md):
         return rollups._compile_timeline_entry(self, class_id, lesson_date, title, diary_md)

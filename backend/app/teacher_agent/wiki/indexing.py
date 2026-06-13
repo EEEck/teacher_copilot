@@ -103,6 +103,18 @@ def rebuild_index(store, class_id: Optional[str] = None) -> None:
         tl = store.timeline_path(cid)
         if tl.exists():
             lines.append(f"- [Lesson timeline]({store.rel_wiki(tl)})")
+        memory_pages = []
+        try:
+            memory_pages = [
+                path for path in store.memory_paths(cid).values() if path.exists()
+            ]
+        except KeyError:
+            memory_pages = []
+        if memory_pages:
+            lines.extend(["", "### Compact memory"])
+            for path in memory_pages:
+                title = parsing.extract_title(store.read_text(path)) or path.stem
+                lines.append(f"- [{title}]({store.rel_wiki(path)})")
         lines.extend(["", "### Lessons", ""])
         if timeline.entries:
             lines.append("| Date | Title | Summary | Plan | Path |")

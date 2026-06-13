@@ -76,7 +76,7 @@ def _compile_rollups(
     new_misc = store._append_bullets(misc, parsing.lines_to_bullets(didnt), lesson_date)
     results.append(("misconceptions", new_misc, "Add problems from this lesson."))
 
-    # student_notes: built in _compile_students_and_timeline (with lesson previews)
+    # students: built in _compile_students_and_timeline (with lesson previews)
 
     # open_loops
     loops = store.read_text(paths["open_loops"])
@@ -100,6 +100,15 @@ def _upsert_course_state(
         f"## Next planned focus\n- {next_focus or 'See open loops'}\n\n"
         f"## Overall status\n- Updated {lesson_date}\n"
     )
+
+def _student_display_name(text: str, fallback: str) -> str:
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("# "):
+            name = line.lstrip("# ").strip()
+            if name:
+                return name
+    return fallback
 
 def _append_bullets(store, existing: str, new_bullets: list[str], lesson_date: str) -> str:
     if not new_bullets:
@@ -163,14 +172,16 @@ def _upsert_student_entity(
     store.write_text(path, "\n".join(lines))
     return path
 
-def _rebuild_student_notes_index(
+def _rebuild_students_index(
     store, class_id: str, previews: Optional[dict[str, str]] = None
 ) -> str:
     lines = [
-        "# Student Notes",
+        "# Students",
         "",
-        "> Index of student entity pages. Details live in `students/S-###.md`.",
+        "> Class roster and student index. Details live in `students/S-###.md`.",
         "",
+        "| ID | Name | Note | Page |",
+        "|---|---|---|---|",
     ]
     previews = previews or {}
     sdir = store.students_dir(class_id)
@@ -181,18 +192,14 @@ def _rebuild_student_notes_index(
         text = previews.get(sid) or store.read_text(store.student_path(class_id, sid))
         if not text.strip():
             continue
-        p = store.student_path(class_id, sid)
-        one_liner = ""
+        name = _student_display_name(text, sid)
+        note = ""
         for ln in text.splitlines():
             if ln.strip().startswith("- "):
-                one_liner = ln.strip().lstrip("- ")[:120]
+                note = ln.strip().lstrip("- ")[:120]
                 break
         rel = f"students/{sid}.md"
-        lines.append(f"## {sid}")
-        if one_liner:
-            lines.append(f"- {one_liner}")
-        lines.append(f"- Page: [{sid}]({rel})")
-        lines.append("")
+        lines.append(f"| {sid} | {name} | {note} | [students/{sid}.md]({rel}) |")
     return "\n".join(lines).rstrip() + "\n"
 
 def _compile_timeline_entry(
@@ -278,7 +285,7 @@ def _compile_students_and_timeline(
                 )
             )
 
-    notes_path = store.roll_up_paths(class_id)["student_notes"]
+    students_path = store.roll_up_paths(class_id)["students"]
     previews: dict[str, str] = {}
     for sid, bullets in by_student.items():
         path = store.student_path(class_id, sid)
@@ -295,12 +302,12 @@ def _compile_students_and_timeline(
                     + "\n"
                 )
             previews[sid] = content
-    index_content = store._rebuild_student_notes_index(class_id, previews=previews)
+    index_content = store._rebuild_students_index(class_id, previews=previews)
     outputs.append(
         (
-            notes_path,
+            students_path,
             index_content,
-            "Rebuild student index linking to entity pages.",
+            "Rebuild class student index linking to entity pages.",
         )
     )
 
@@ -332,11 +339,11 @@ def _finalize_lesson_writes(
         if rel not in applied:
             applied.append(rel)
 
-    notes_path = store.roll_up_paths(class_id)["student_notes"]
-    store.write_text(notes_path, store._rebuild_student_notes_index(class_id))
-    rel_notes = store.rel_wiki(notes_path)
-    if rel_notes not in applied:
-        applied.append(rel_notes)
+    students_path = store.roll_up_paths(class_id)["students"]
+    store.write_text(students_path, store._rebuild_students_index(class_id))
+    rel_students = store.rel_wiki(students_path)
+    if rel_students not in applied:
+        applied.append(rel_students)
 
     timeline_path = store.timeline_path(class_id)
     store.write_text(

@@ -9,29 +9,49 @@
 
 ### Roll-ups
 - [Course state](wiki/classes/chemie_9b_2026_27/course_state.md)
-- [Student notes](wiki/classes/chemie_9b_2026_27/student_notes.md)
+- [Students](wiki/classes/chemie_9b_2026_27/students.md)
 - [Misconceptions](wiki/classes/chemie_9b_2026_27/misconceptions.md)
 - [Open loops](wiki/classes/chemie_9b_2026_27/open_loops.md)
 - [Lesson timeline](wiki/classes/chemie_9b_2026_27/timeline.md)
+
+### Compact memory
+- [Taught So Far](wiki/classes/chemie_9b_2026_27/memory/taught_so_far.md)
+- [Planning Brief](wiki/classes/chemie_9b_2026_27/memory/planning_brief.md)
+- [Teaching Patterns](wiki/classes/chemie_9b_2026_27/memory/teaching_patterns.md)
+- [Class Copilot Profile](wiki/classes/chemie_9b_2026_27/memory/copilot_profile.md)
+- [Session Summaries](wiki/classes/chemie_9b_2026_27/memory/session_summaries.md)
 
 ### Lessons
 
 | Date | Title | Summary | Plan | Path |
 |------|-------|---------|------|------|
-| 2026-09-21 | Introduction to Redox | Covered: Oxidation and reduction, electron transfer · - Mixed — front rows enga… | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-09-21/lesson_results.md |
-| 2026-09-14 | Atoms and electron shells recap | Covered: Electron shells and valence electrons recap · - Generally attentive; f… | no | wiki/classes/chemie_9b_2026_27/lessons/2026-09-14/lesson_results.md |
-| 2026-07-02 | Lesson Plan — Next lesson |  | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-07-02/lesson_results.md |
-| 2026-05-29 | Redox Reactions with Metals | Students were generally engaged. Alex, Sven, and Matt performed well. Kathy and… | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-05-29/lesson_results.md |
-| 2026-05-25 | Redox Chemistry | Covered: Redox reactions basics (specifics needed) · - S-014 and S-027 performe… | no | wiki/classes/chemie_9b_2026_27/lessons/2026-05-25/lesson_results.md |
+| 2026-05-29 | Lesson Results - 2026-05-29 - Anions and Oxidation State Review | Covered: Reviewed chloride, oxide, and phosphate as common anions. · - The clas… | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-05-29/lesson_results.md |
+| 2026-05-25 | Lesson Results - 2026-05-25 - Redox Reactions with Metals | Covered: Explored metal displacement as a redox example. · - Most students were… | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-05-25/lesson_results.md |
+| 2026-05-21 | Lesson Results - 2026-05-21 - Introduction to Redox | Covered: Introduced oxidation and reduction as electron transfer. · - The class… | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-05-21/lesson_results.md |
+| 2026-05-14 | Lesson Results - 2026-05-14 - Oxidation Numbers | Covered: Assigned oxidation numbers in simple compounds and ions. · - The class… | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-05-14/lesson_results.md |
+| 2026-05-07 | Lesson Results - 2026-05-07 - Conservation of Mass and Coefficients | Covered: Revisited conservation of mass through atom counts. · - Most students … | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-05-07/lesson_results.md |
+| 2026-04-30 | Lesson Results - 2026-04-30 - Balancing Chemical Equations | Covered: Balanced simple equations by changing coefficients only. · - The class… | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-04-30/lesson_results.md |
+| 2026-04-24 | Lesson Results - 2026-04-24 - Reaction Writing Basics | Covered: Wrote skeleton equations from short word prompts. · - Most students co… | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-04-24/lesson_results.md |
 
 ### Students
 
-- [S-014](wiki/classes/chemie_9b_2026_27/students/S-014.md) — (specifics needed)
-- [S-021](wiki/classes/chemie_9b_2026_27/students/S-021.md) — **S-021 (Kathy)**: Confused about the material.
-- [S-027](wiki/classes/chemie_9b_2026_27/students/S-027.md) — (specifics needed)
-- [S-033](wiki/classes/chemie_9b_2026_27/students/S-033.md) — **S-033 (Joonho)**: Disruptive behavior noted.
+- [S-014](wiki/classes/chemie_9b_2026_27/students/S-014.md) — Fast with symbols and helped set up the first skeleton equa…
+- [S-021](wiki/classes/chemie_9b_2026_27/students/S-021.md) — Needed prompts for formula order and symbol placement.
+- [S-027](wiki/classes/chemie_9b_2026_27/students/S-027.md) — Improved after the second worked example and caught one sym…
+- [S-033](wiki/classes/chemie_9b_2026_27/students/S-033.md) — Better when the balancing example stayed concrete and visua…
+- [S-041](wiki/classes/chemie_9b_2026_27/students/S-041.md) — Quick to spot coefficient mistakes in the balancing example…
+- [S-042](wiki/classes/chemie_9b_2026_27/students/S-042.md) — Reliable on the atom-count checks and coefficient correctio…
+- [S-043](wiki/classes/chemie_9b_2026_27/students/S-043.md) — Very strong on formulas and skeleton equations.
+- [S-044](wiki/classes/chemie_9b_2026_27/students/S-044.md) — Careful and methodical with the atom table.
+- [S-045](wiki/classes/chemie_9b_2026_27/students/S-045.md) — Quick orally, but rushed the written skeleton equation.
+- [S-046](wiki/classes/chemie_9b_2026_27/students/S-046.md) — Strong in class discussion and precise with the rule exampl…
 
 ### Raw sources
 
-- [2026-05-25-redox-chemistry.md](raw/classes/chemie_9b_2026_27/2026-05-25-redox-chemistry.md)
-- [2026-05-29-redox-reactions-with-metals.md](raw/classes/chemie_9b_2026_27/2026-05-29-redox-reactions-with-metals.md)
+- [2026-04-24-reaction-writing-basics.md](raw/classes/chemie_9b_2026_27/2026-04-24-reaction-writing-basics.md)
+- [2026-04-30-balancing-chemical-equations.md](raw/classes/chemie_9b_2026_27/2026-04-30-balancing-chemical-equations.md)
+- [2026-05-07-conservation-of-mass-and-coefficients.md](raw/classes/chemie_9b_2026_27/2026-05-07-conservation-of-mass-and-coefficients.md)
+- [2026-05-14-oxidation-numbers.md](raw/classes/chemie_9b_2026_27/2026-05-14-oxidation-numbers.md)
+- [2026-05-21-introduction-to-redox.md](raw/classes/chemie_9b_2026_27/2026-05-21-introduction-to-redox.md)
+- [2026-05-25-redox-reactions-with-metals.md](raw/classes/chemie_9b_2026_27/2026-05-25-redox-reactions-with-metals.md)
+- [2026-05-29-anions-and-oxidation-state-review.md](raw/classes/chemie_9b_2026_27/2026-05-29-anions-and-oxidation-state-review.md)

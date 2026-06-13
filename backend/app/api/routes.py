@@ -19,11 +19,19 @@ from app.schemas.api import (
     IngestSession,
     LessonDetail,
     LessonPlan,
+    MemoryApplyRequest,
+    MemoryApplyResponse,
+    MemoryCompactRequest,
+    MemoryCompactResponse,
+    MemoryProposalResponse,
     PlanChatRequest,
     PlanChatResponse,
     PlanDraft,
     PlanLessonRequest,
     PlanSession,
+    PlanTraceResponse,
+    ProfileProposalRequest,
+    ProfileProposalResponse,
     ReviseLessonRequest,
     ReviseLessonResponse,
     SavePlanRequest,
@@ -34,6 +42,7 @@ from app.schemas.api import (
     WikiLintResponse,
 )
 from app.services.ingest_service import IngestService
+from app.services.memory_apply import apply_memory_items
 from app.services.plan_service import PlanService
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.wiki_store import WikiStore
@@ -141,6 +150,147 @@ async def lint_wiki(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@router.post("/classes/{class_id}/memory/compact", response_model=MemoryCompactResponse)
+async def compact_memory(
+    class_id: str,
+    body: MemoryCompactRequest | None = None,
+    agents: AgentRunner = Depends(get_agents),
+    wiki: WikiStore = Depends(get_wiki),
+) -> MemoryCompactResponse:
+    try:
+        req = body or MemoryCompactRequest()
+        wiki.get_class(class_id)
+        output, source_paths, warnings = await agents.compact_memory(
+            class_id,
+            start_date=req.start_date,
+            end_date=req.end_date,
+        )
+        pages = _compaction_pages(output)
+        applied, log_id = wiki.commit_memory_compaction(
+            class_id, pages, source_paths=source_paths
+        )
+        return MemoryCompactResponse(
+            class_id=class_id,
+            applied_wiki_paths=applied,
+            log_entry_id=log_id,
+            source_paths=source_paths,
+            stale_report=list(output.stale_report),
+            warnings=warnings,
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+def _compaction_pages(output) -> dict[str, str]:
+    pages = {
+        "taught_so_far": output.taught_so_far_markdown,
+        "planning_brief": output.planning_brief_markdown,
+        "teaching_patterns": output.teaching_patterns_markdown,
+        "copilot_profile": output.copilot_profile_markdown,
+    }
+    if output.class_state_markdown.strip():
+        pages["class_state"] = output.class_state_markdown
+    if output.session_summaries_markdown.strip():
+        pages["session_summaries"] = output.session_summaries_markdown
+    return pages
+
+
+@router.post(
+    "/classes/{class_id}/memory/refresh", response_model=MemoryProposalResponse
+)
+async def refresh_memory(
+    class_id: str,
+    body: MemoryCompactRequest | None = None,
+    agents: AgentRunner = Depends(get_agents),
+    wiki: WikiStore = Depends(get_wiki),
+) -> MemoryProposalResponse:
+    """Propose refreshed derived memory pages (incl. class_state) WITHOUT writing.
+
+    Teacher reviews the proposal, then commits via /memory/compact or /memory/apply.
+    """
+    try:
+        req = body or MemoryCompactRequest()
+        wiki.get_class(class_id)
+        output, source_paths, warnings = await agents.compact_memory(
+            class_id, start_date=req.start_date, end_date=req.end_date
+        )
+        return MemoryProposalResponse(
+            class_id=class_id,
+            pages=_compaction_pages(output),
+            source_paths=source_paths,
+            stale_report=list(output.stale_report),
+            warnings=warnings,
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@router.post(
+    "/classes/{class_id}/memory/profile/propose",
+    response_model=ProfileProposalResponse,
+)
+async def propose_profile(
+    class_id: str,
+    body: ProfileProposalRequest | None = None,
+    agents: AgentRunner = Depends(get_agents),
+    wiki: WikiStore = Depends(get_wiki),
+) -> ProfileProposalResponse:
+    """Propose user.md / copilot.md updates from a finished session (no writes)."""
+    try:
+        req = body or ProfileProposalRequest()
+        wiki.get_class(class_id)
+        out = await agents.propose_profile_updates(
+            class_id,
+            final_lesson_markdown=req.final_lesson_markdown,
+            session_state=req.session_state,
+            lesson_planning_state=req.lesson_planning_state,
+            memory_candidates=req.memory_candidates,
+        )
+        candidates = [
+            {
+                "target": c.target,
+                "section": c.section,
+                "content": c.content,
+                "basis": c.basis,
+                "confidence": c.confidence,
+                "evidence": c.evidence,
+            }
+            for c in (list(out.user_candidates) + list(out.copilot_candidates))
+            if c.content.strip()
+        ]
+        return ProfileProposalResponse(
+            class_id=class_id, candidates=candidates, warnings=list(out.warnings)
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@router.post("/classes/{class_id}/memory/apply", response_model=MemoryApplyResponse)
+def apply_memory(
+    class_id: str,
+    body: MemoryApplyRequest,
+    wiki: WikiStore = Depends(get_wiki),
+) -> MemoryApplyResponse:
+    """Write only teacher-approved memory items via the bounded helpers (HITL)."""
+    try:
+        wiki.get_class(class_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+    applied, skipped, warnings = apply_memory_items(wiki, class_id, body.items)
+    return MemoryApplyResponse(
+        class_id=class_id, applied_wiki_paths=applied, skipped=skipped, warnings=warnings
+    )
 
 
 @router.post("/classes/{class_id}/ingest/sessions", response_model=IngestSession)
@@ -381,6 +531,24 @@ def plan_draft(
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
+@router.get(
+    "/classes/{class_id}/plan/sessions/{session_id}/trace",
+    response_model=PlanTraceResponse,
+)
+def plan_trace(
+    class_id: str,
+    session_id: str,
+    plan_svc: PlanService = Depends(get_plan_service),
+) -> PlanTraceResponse:
+    """Return a deterministic debug bundle for a plan session."""
+    if not get_settings().is_plan_trace_enabled():
+        raise HTTPException(status_code=404, detail="Plan trace endpoint is disabled")
+    try:
+        return plan_svc.trace(class_id, session_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
 @router.patch(
     "/classes/{class_id}/plan/sessions/{session_id}/draft",
     response_model=PlanDraft,
@@ -412,6 +580,8 @@ def plan_save(
         return plan_svc.save(class_id, body)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
 
 @router.post("/classes/{class_id}/plan-lesson", response_model=LessonPlan)

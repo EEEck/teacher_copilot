@@ -6,20 +6,29 @@ from agents import Agent
 from agents.model_settings import ModelSettings
 from openai.types.shared import Reasoning
 
-from app.teacher_agent.models import CompileOutput, IngestTurnOutput, PlanOutput, PlanTurnOutput
+from app.teacher_agent.models import (
+    CompileOutput,
+    IngestTurnOutput,
+    MemoryCompactOutput,
+    PlanOutput,
+    PlanTurnOutput,
+    ProfileProposalOutput,
+)
+from app.teacher_agent.planning_state import PlanRuntime
+from app.teacher_agent.prompt_assembly import build_plan_chat_prompt_assembly
 from app.teacher_agent.prompts import (
-    CHAT_WIKI_TOOLS_POLICY,
     COMPILE_SYSTEM,
+    INGEST_WIKI_TOOLS_POLICY,
     INGEST_SYSTEM,
     LINT_SYSTEM,
-    PLAN_CHAT_SYSTEM,
+    MEMORY_COMPACT_SYSTEM,
+    PROFILE_PROPOSAL_SYSTEM,
     PLAN_OPENING_SYSTEM,
     PLAN_SYSTEM,
     apply_prompt,
 )
+from app.context_limits import apply_char_limit, get_context_limits
 from app.teacher_agent.tools import WikiToolContext, create_chat_wiki_tools, create_wiki_tools
-
-_CHAT_CONTEXT_CHARS = 14_000
 
 
 def chat_model_settings(reasoning_effort: str) -> ModelSettings | None:
@@ -41,11 +50,12 @@ def build_ingest_agent(
     *,
     reasoning_effort: str = "medium",
 ) -> Agent:
+    lim = get_context_limits()
     instructions = apply_prompt(
         INGEST_SYSTEM,
         sections=sections,
-        context=context[:_CHAT_CONTEXT_CHARS],
-        wiki_tools_policy=CHAT_WIKI_TOOLS_POLICY,
+        context=apply_char_limit(context, lim.ingest_context_backstop),
+        wiki_tools_policy=INGEST_WIKI_TOOLS_POLICY,
     )
     settings = chat_model_settings(reasoning_effort)
     return Agent(
@@ -60,19 +70,28 @@ def build_ingest_agent(
 
 def build_plan_chat_agent(
     ctx: WikiToolContext,
-    context: str,
+    current_plan: str,
     model: str,
     *,
+    planning: PlanRuntime | None = None,
     reasoning_effort: str = "medium",
 ) -> Agent:
+    wiki = ctx.wiki
+    class_id = ctx.class_id
+    rt = planning or PlanRuntime()
+    assembly = build_plan_chat_prompt_assembly(
+        wiki,
+        class_id,
+        messages=[],
+        current_plan=current_plan,
+        runtime=rt,
+        attachments=[],
+    )
+    instructions = assembly["instructions"]
     settings = chat_model_settings(reasoning_effort)
     return Agent(
         name="KlassenPilot Plan Chat",
-        instructions=apply_prompt(
-            PLAN_CHAT_SYSTEM,
-            context=context[:_CHAT_CONTEXT_CHARS],
-            wiki_tools_policy=CHAT_WIKI_TOOLS_POLICY,
-        ),
+        instructions=instructions,
         model=model,
         **({"model_settings": settings} if settings else {}),
         tools=create_chat_wiki_tools(ctx),
@@ -83,7 +102,10 @@ def build_plan_chat_agent(
 def build_plan_opening_agent(context: str, model: str) -> Agent:
     return Agent(
         name="KlassenPilot Plan Opening",
-        instructions=apply_prompt(PLAN_OPENING_SYSTEM, context=context[:12000]),
+        instructions=apply_prompt(
+            PLAN_OPENING_SYSTEM,
+            context=apply_char_limit(context, get_context_limits().plan_opening_context_chars),
+        ),
         model=model,
     )
 
@@ -110,7 +132,27 @@ def build_plan_lesson_agent(ctx: WikiToolContext, model: str) -> Agent:
 def build_lint_agent(ctx: WikiToolContext, context: str, model: str) -> Agent:
     return Agent(
         name="KlassenPilot Wiki Lint",
-        instructions=LINT_SYSTEM + f"\n\nClass: {ctx.class_id}\n\n{context[:4000]}",
+        instructions=LINT_SYSTEM
+        + f"\n\nClass: {ctx.class_id}\n\n"
+        + apply_char_limit(context, get_context_limits().lint_context_chars),
         model=model,
         tools=create_wiki_tools(ctx),
+    )
+
+
+def build_memory_compact_agent(model: str) -> Agent:
+    return Agent(
+        name="KlassenPilot Memory Compact",
+        instructions=MEMORY_COMPACT_SYSTEM,
+        model=model,
+        output_type=MemoryCompactOutput,
+    )
+
+
+def build_profile_proposal_agent(model: str) -> Agent:
+    return Agent(
+        name="KlassenPilot Profile Proposal",
+        instructions=PROFILE_PROPOSAL_SYSTEM,
+        model=model,
+        output_type=ProfileProposalOutput,
     )

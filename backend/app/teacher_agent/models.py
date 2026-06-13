@@ -7,6 +7,13 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from app.schemas.api import LessonFlowPhase
+from app.teacher_agent.planning_state import (
+    EvidenceBrief,
+    LessonPlanningState,
+    MemoryCandidate,
+    SessionState,
+    StatePatch,
+)
 
 
 class CompileOutput(BaseModel):
@@ -21,6 +28,28 @@ class IngestTurnOutput(BaseModel):
 class PlanTurnOutput(BaseModel):
     reply: str = Field(description="Conversational reply to the teacher")
     plan_markdown: str = Field(description="Updated full lesson plan markdown")
+    last_change_summary: str = Field(
+        default="", description="One-line summary of what changed in the plan this turn"
+    )
+    state_patch: StatePatch = Field(
+        default_factory=StatePatch,
+        description=(
+            "Preferred runtime-state update contract. Backend validates and applies "
+            "this patch to PlanRuntime; missing fields mean no change."
+        ),
+    )
+    # Compatibility fallback while older stubs/outputs are migrated. New prompts
+    # ask for state_patch, not full authoritative snapshots.
+    session_state: SessionState = Field(default_factory=SessionState)
+    lesson_planning_state: LessonPlanningState = Field(default_factory=LessonPlanningState)
+    new_evidence_briefs: list[EvidenceBrief] = Field(
+        default_factory=list,
+        description="Compact briefs for tool/search/material results used this turn",
+    )
+    memory_candidates: list[MemoryCandidate] = Field(
+        default_factory=list,
+        description="Durable-memory update candidates (proposed only; never written during chat)",
+    )
 
 
 class PlanOutput(BaseModel):
@@ -35,3 +64,52 @@ class PlanOutput(BaseModel):
     teacher_notes: str
     addresses_open_loops: list[str] = Field(default_factory=list)
     addresses_misconceptions: list[str] = Field(default_factory=list)
+
+
+class MemoryCompactOutput(BaseModel):
+    taught_so_far_markdown: str = Field(
+        description="Compact year-to-date content sequence for the class"
+    )
+    planning_brief_markdown: str = Field(
+        description="Planning-oriented summary of readiness, open loops, and misconception priorities"
+    )
+    teaching_patterns_markdown: str = Field(
+        description=(
+            "Durable class+subject teaching style: how THIS class learns and which "
+            "teaching approaches work or fail for it (absorbs the class learning profile)"
+        )
+    )
+    copilot_profile_markdown: str = Field(
+        description=(
+            "Copilot working agreement for this class only: planning patterns to apply, "
+            "avoid-rules, repeated teacher corrections, agent-behavior preferences"
+        )
+    )
+    class_state_markdown: str = Field(
+        default="",
+        description="Derived current-state snapshot for the class (compact)",
+    )
+    session_summaries_markdown: str = Field(
+        default="",
+        description="Optional compact summaries of prior workflow sessions",
+    )
+    stale_report: list[str] = Field(
+        default_factory=list,
+        description="Notes on stale or conflicting facts found while compacting",
+    )
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ProfileCandidateOut(BaseModel):
+    target: str = "copilot.md"  # user.md (global teacher) | copilot.md (class working agreement)
+    section: str = "General"
+    content: str = ""
+    basis: str = "inferred"  # explicit | inferred
+    confidence: str = "low"
+    evidence: str = ""
+
+
+class ProfileProposalOutput(BaseModel):
+    user_candidates: list[ProfileCandidateOut] = Field(default_factory=list)
+    copilot_candidates: list[ProfileCandidateOut] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
