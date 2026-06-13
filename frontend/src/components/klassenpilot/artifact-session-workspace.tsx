@@ -32,10 +32,10 @@ export function ArtifactSessionWorkspace({
     // Shared by memory + plan, so this fixes both.
     <ResizablePanelGroup
       orientation="horizontal"
-      className="h-[70vh] min-h-[32rem] rounded-lg border"
+      className="h-[70vh] min-h-[32rem] overflow-hidden rounded-lg border"
     >
-      <ResizablePanel defaultSize={58} minSize={40}>
-        <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+      <ResizablePanel defaultSize={58} minSize={40} className="min-h-0 overflow-hidden">
+        <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-4">
           <Card className="min-h-0 flex-1 overflow-hidden">
             <CardContent className="flex h-full min-h-0 flex-col p-0">
               {reviewDiff ? (
@@ -45,7 +45,9 @@ export function ArtifactSessionWorkspace({
               ) : null}
               <div
                 className={
-                  inReview ? "min-h-0 flex-1 overflow-hidden" : "flex h-full min-h-0 flex-col"
+                  inReview
+                    ? "min-h-0 flex-1 overflow-hidden"
+                    : "flex h-full min-h-0 flex-col overflow-hidden"
                 }
               >
                 {thread}
@@ -59,8 +61,8 @@ export function ArtifactSessionWorkspace({
         </div>
       </ResizablePanel>
       <ResizableHandle withHandle />
-      <ResizablePanel defaultSize={42} minSize={30}>
-        <div className="h-full min-h-0 p-4">{draftPanel}</div>
+      <ResizablePanel defaultSize={42} minSize={30} className="min-h-0 overflow-hidden">
+        <div className="flex h-full min-h-0 overflow-hidden p-4">{draftPanel}</div>
       </ResizablePanel>
     </ResizablePanelGroup>
   );

@@ -57,7 +57,7 @@ export function MarkdownEditorPanel({
       : (emptyPreviewFallback ?? "");
 
   return (
-    <div className={cn("flex h-full flex-col gap-2", className)}>
+    <div className={cn("flex h-full min-h-0 flex-col gap-2 overflow-hidden", className)}>
       <div className="flex shrink-0 items-center justify-between">
         <p className="text-sm font-medium">{label}</p>
         <div className="flex items-center gap-1">
@@ -117,7 +117,7 @@ export function MarkdownEditorPanel({
 
       {editable && viewMode === "edit" ? (
         <Textarea
-          className="min-h-0 flex-1 resize-none font-mono text-sm"
+          className="min-h-0 flex-1 resize-none overflow-y-auto [field-sizing:fixed] font-mono text-sm"
           value={markdown}
           onChange={(e) => onChange?.(e.target.value)}
           placeholder={placeholder}
