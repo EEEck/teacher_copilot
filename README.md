@@ -14,8 +14,10 @@ concrete implementation plans only.
 
 - [`product_vision.md`](docs/product_vision.md) - current product
   vision, product scope, and teacher-facing copilot behavior.
-- [`product_backlog.md`](implementation_plans/product_backlog.md) - v1.1-v1.3 product
-  backlog (proactive copilot / suggested tasks in v1.3).
+- [`pm_hub.md`](docs/pm_hub.md) - PM source of truth: north star, current product
+  state, gaps, roadmap themes, and prioritization.
+- [`product_backlog.md`](implementation_plans/product_backlog.md) - engineering-facing
+  roadmap with version themes and likely implementation touchpoints.
 - [`agent_architecture.md`](docs/agent_architecture.md) - agent
   architecture, memory/retrieval learnings, and implementation map.
 - [`agent_contracts.md`](docs/agent_contracts.md) - reviewable
@@ -237,6 +239,7 @@ Get-Content .env | ForEach-Object {
 The current developer file stack is:
 
 - [`AGENTS.md`](AGENTS.md) - repo onboarding and agent/developer guardrails
+- [`docs/pm_hub.md`](docs/pm_hub.md) - PM source of truth and roadmap themes
 - [`docs/product_vision.md`](docs/product_vision.md) - product scope
 - [`implementation_plans/product_backlog.md`](implementation_plans/product_backlog.md) - roadmap
 - [`docs/agent_architecture.md`](docs/agent_architecture.md) - agent architecture and learnings
@@ -270,13 +273,20 @@ Ingest/plan **session IDs and chat history** live in server RAM (`ArtifactSessio
 | Domain | `src/components/klassenpilot/` | Timeline, checklist, wiki cards |
 | Chat | `src/components/assistant-ui/` | Shared artifact session runtime â†’ FastAPI |
 
-## v1.1 (planned)
+## Roadmap
 
-- Test questions and exam generation
-- Chat-driven wiki personalization (`class_config.md` custom sections)
+Product strategy and prioritization live in [`docs/pm_hub.md`](docs/pm_hub.md).
+The engineering-facing roadmap lives in
+[`implementation_plans/product_backlog.md`](implementation_plans/product_backlog.md).
 
-## v1.2 (planned)
+Near-term themes:
 
-- **Docker Option B:** Caddy reverse proxy (single entry port, same-origin `/api`, SSE-friendly)
-- **Lean production images:** Next.js `standalone`, multi-stage slim Dockerfiles (non-dev CMD)
-- **`compose.prod.yaml`:** production profile without bind mounts
+- **v1.1:** make the core memory/planning loop trustworthy with evidence UI,
+  class-home briefing, plan review, assessment generation, and visible memory
+  suggestions.
+- **v1.2:** make onboarding and memory creation easy with a class wiki factory,
+  guided setup, material upload, and document-ingestion spike.
+- **v1.3:** expand knowledge safely with trusted search, source cards, resource
+  adaptation, and a narrow subject teaching-practice library.
+- **v1.4+:** proactive suggested tasks, voice/messaging capture, and broader
+  teaching logistics after the core workflow is validated.

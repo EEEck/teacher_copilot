@@ -8,5 +8,6 @@ This folder is intentionally narrow:
   UX; phase 5 tracks trace/eval hardening and future consolidation.
 - Concrete implementation plans for upcoming or active changes.
 
-Durable product docs, agent contracts, architecture notes, memory hierarchy, and
-learning/reference notes live in `../docs/`.
+PM strategy, north star, current product state, and roadmap themes live in
+`../docs/pm_hub.md`. Durable product docs, agent contracts, architecture notes,
+memory hierarchy, and learning/reference notes live in `../docs/`.

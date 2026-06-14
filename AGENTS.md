@@ -22,18 +22,21 @@ between raw lesson notes and future planning.
 ## What To Read First
 
 1. `README.md` - how to run the app and overall architecture.
-2. `docs/product_vision.md` - current product vision, scope,
+2. `docs/pm_hub.md` - PM source of truth: vision, north star,
+   current product state, gaps, roadmap themes, and prioritization.
+3. `docs/product_vision.md` - durable product vision, scope,
    and teacher-facing copilot behavior.
-3. `implementation_plans/product_backlog.md` - versioned feature direction.
-4. `docs/agent_architecture.md` - agent architecture,
+4. `implementation_plans/product_backlog.md` - engineering-facing
+   versioned roadmap and likely implementation touchpoints.
+5. `docs/agent_architecture.md` - agent architecture,
    memory/retrieval learnings, and implementation map.
-5. `docs/agent_contracts.md` - current read/write/tool/output
+6. `docs/agent_contracts.md` - current read/write/tool/output
    contracts for the teacher agents.
-6. `docs/memory_hierarchy.md` - file-by-file memory scope,
+7. `docs/memory_hierarchy.md` - file-by-file memory scope,
    loading behavior, and update rules.
-7. `docs/context_management.md` - prompt assembly, context
+8. `docs/context_management.md` - prompt assembly, context
    limits, and why blunt 14k caps were removed.
-8. `backend/teacher_wiki/AGENTS.md` - wiki schema and wiki-specific workflow
+9. `backend/teacher_wiki/AGENTS.md` - wiki schema and wiki-specific workflow
    rules when touching memory behavior.
 
 Optional learning/reference: `docs/agent_learning_guide.md`.
@@ -41,6 +44,9 @@ It is an educational note, not a behavior contract.
 
 ## Current Boundaries
 
+- Product direction should align with `docs/pm_hub.md`: save teacher time,
+  reduce work about work, preserve teacher trust, and avoid expanding surface
+  area before the core class-memory loop is valuable.
 - Planning chat is read-only with respect to the wiki. It may update
   `plan_markdown`, but it must not write wiki files directly.
 - Memory update chat may update `diary_markdown`, but curated wiki writes happen

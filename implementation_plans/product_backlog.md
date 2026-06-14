@@ -1,159 +1,275 @@
-﻿# KlassenPilot Product Backlog
+# KlassenPilot Product Roadmap
 
-Living backlog for post-MVP releases. **v1** is the current shipped prototype
-(see [`README.md`](../README.md) workflows).
+Engineering-facing roadmap for post-MVP work. Product strategy, current product
+state, north star, and prioritization principles live in
+[`docs/pm_hub.md`](../docs/pm_hub.md). Behavior contracts stay in
+[`docs/agent_contracts.md`](../docs/agent_contracts.md).
 
-Behavior contracts stay in [`docs/agent_contracts.md`](../docs/agent_contracts.md).
-This file is product direction only - not an implementation spec. Product
-vision and scope live in [`docs/product_vision.md`](../docs/product_vision.md).
+This file is not a detailed implementation spec. For each item, create a
+focused implementation plan before making broad changes.
 
----
+## Roadmap Rule
 
-## v1 (shipped)
-
-- Class landing â†’ class home with timeline and memory snapshot
-- **Update memory** â€” chat + diary draft â†’ teacher-approved wiki commit
-- **Create lesson plan** â€” chat + plan draft, read-only wiki during planning
-- Karpathy-style compiled wiki; unified `ArtifactSessionWorkspace` UI; compact class memory pages and deterministic wiki pathfinding
-- In-memory sessions (draft survives refresh; server chat history does not)
+Prioritize work that increases weekly teacher time saved while preserving
+teacher trust. Keep durable writes explicit and teacher-approved.
 
 ---
 
-## v1.1 â€” Teacher workflows
+## v1 - Shipped Prototype: Prove The Core Memory Loop
 
-Primary source: [`README.md`](../README.md) â€œv1.1 (planned)â€ plus refactor follow-ons.
+**Theme:** Teach -> update memory -> plan next lesson.
 
-| Item | Notes |
-|------|--------|
-| **Test / exam generation** | New `ArtifactSpec` (seams exist in `artifact_spec.py`). Generate tests from taught sequence, misconceptions, and assessment readiness. |
-| **Chat-driven wiki personalization** | Teacher edits `class_config.md` custom sections via memory chat; persisted through approved commit. Current implementation also includes compact class memory pages and deterministic query packs for planning and ingest. |
-| **Student report artifact** | Optional second artifact type using existing session/commit patterns. |
-| **Evidence / source panel (optional)** | Inline citations today; deferred API metadata for a UI source panel ([`docs/agent_contracts.md`](../docs/agent_contracts.md)). |
-| **Wiki health check / lint** | `LINT_SYSTEM` prompt exists; expose as a bounded operator action, not silent background mutation. |
-| **Lightweight plan review** | Post-generation sanity pass after browsing behavior is stable ([`docs/agent_architecture.md`](../docs/agent_architecture.md)). |
-| **Playwright E2E** | Deferred in refactor; add smoke paths for ingest commit and plan save. |
+**What it enables:** A teacher can log lessons into reviewed class memory and
+create the next lesson plan from that memory.
 
-**Not v1.1:** Postgres, multi-user accounts, Docling ingestion, grading.
+Shipped:
 
----
+- Class landing -> class home with timeline and memory snapshot.
+- **Update memory**: chat + diary draft -> teacher-approved wiki commit.
+- **Create lesson plan**: chat + plan draft -> save to a lesson date.
+- Timeline/detail shortcuts for adding results to planned lessons or correcting
+  taught lessons.
+- Karpathy-style compiled wiki with compact class memory pages.
+- Deterministic wiki pathfinding and class-scoped read tools.
+- Shared `ArtifactSessionWorkspace` UI for diary and plan artifacts.
+- In-memory sessions; draft can survive browser refresh through session
+  recovery, but backend restart loses server chat history.
 
-## v1.2 â€” Deploy and reliability
+Known PM gaps:
 
-Primary source: [`README.md`](../README.md) â€œv1.2 (planned)â€.
-
-| Item | Notes |
-|------|--------|
-| **Caddy reverse proxy (Docker Option B)** | Single entry port, same-origin `/api`, SSE-friendly. |
-| **Lean production images** | Next.js `standalone`, multi-stage slim Dockerfiles (non-dev CMD). |
-| **`compose.prod.yaml`** | Production profile without bind mounts. |
-| **Session persistence (optional)** | SQLite or similar when multi-worker or durable server-side chat history is needed. |
-| **Generalized agent debug assemblies** | Extend the artifact prompt-assembly/debug pattern to one-shot/helper agents (`compile_diary`, `plan_lesson`, `lint_wiki`, memory compact, profile proposal, future grader/resource tools). Each agent call should expose a reusable assembly object with workflow name, instructions/user input, context sections, source paths, output type, and safe debug summaries. Add SDK trace metadata/custom-span summaries for class id, workflow, session/job id, and section sizes; keep full prompt/context text only in local debug bundles behind `PLAN_TRACE_ENABLED`. |
-| **Typed index / search improvements** | If deterministic wiki retrieval reaches measurable limits ([`docs/agent_architecture.md`](../docs/agent_architecture.md)). |
-| **Trusted online source search (optional)** | Add a bounded web-search/read tool for Wikipedia, PhET, official curriculum/news, and other approved sources; keep class wiki retrieval as the default memory path. |
+- Class home is useful but not yet proactive.
+- Evidence is mostly embedded in agent output, not first-class UI metadata.
+- Wiki viewer is functional but not a teacher-friendly memory explorer.
+- Memory compaction/profile learning exists but is only partly productized.
 
 ---
 
-## v1.3 â€” Proactive copilot (memo)
+## v1.1 - Make The Core Loop Trustworthy
 
-**Goal:** Shift from â€œpick a workflowâ€ to â€œthe copilot already looked.â€ Inspired by
-**OpenClaw** (heartbeat/cron, startup brief, human-in-the-loop tool policy),
-**Hermes** (persistent memory, scheduled check-ins, goal-style multi-step work), and
-**Google Jules** (suggested tasks queue, plan-then-approve, check off â†’ next task).
+**Theme:** The teacher can trust, inspect, and reuse generated work faster.
 
-### Product feel (voice examples)
+**What it enables:** The current memory/planning loop becomes reliable enough
+for repeated weekly use and expands into one high-value adjacent workflow:
+assessment generation.
 
-On landing or class home, the teacher should see short, evidence-backed lines like:
+Primary items:
 
-- â€œI checked your last three lessons.â€
-- â€œI noticed this open loop from Tuesday.â€
-- â€œYour wiki has sparse memory for this class, so Iâ€™ll ask one question.â€
-- â€œI found a good PhET simulation and a Wikipedia explanation; here is how I would adapt them.â€
-- â€œAfter todayâ€™s update, I recommend updating timeline, misconceptions, and one student note. Here is the diff.â€
-- â€œI found two stale open loops; should I close them?â€
+| Item | Engineering notes |
+|---|---|
+| **Evidence/source panel** | Surface source metadata for class memory used in plans and memory updates. Start with class wiki sources and raw refs already captured by runtime state. |
+| **Class-home briefing v1** | Add a compact class brief: recent lessons, open loops, sparse areas, and likely next move. Read-only; no suggested-task persistence yet. |
+| **Plan quality review** | Lightweight post-generation sanity pass: duration, lesson phases, citations, open loops, misconceptions, and teacher constraints. |
+| **Test / exam generation** | New artifact workflow using `ArtifactSpec`; ground in taught sequence, misconceptions, and assessment readiness. Include answer key/rubric where useful. |
+| **Visible memory/profile suggestions** | Productize the existing profile-proposal/apply flow so the teacher sees "copilot learned this" suggestions after save. |
+| **Wiki health check / lint** | Expose `LINT_SYSTEM` as a bounded teacher/admin action. Report only; no silent mutation. |
+| **Playwright smoke tests** | Cover ingest commit, plan save, and source/review UI paths. |
+| **Session persistence decision** | Add SQLite/app-owned persistence only if real testing shows restart/session loss hurts usage. |
 
-UX pattern (Jules-like): a **small task stack** â€” complete or dismiss one suggestion,
-surface the next. Not a full project-management board.
+Non-goals:
 
-### Scope (high level)
+- Postgres or school SaaS accounts.
+- Voice/Telegram capture.
+- Docling ingestion.
+- Autonomous writes.
 
-1. **Briefing pass (read-only)** â€” On app/class entry, fast model + wiki tools compile a
-   `ClassBrief`: recent lessons, open loops, sparse areas, stale items, next calendar gap.
-   No writes; cache per class with TTL (OpenClaw â€œheartbeatâ€ idiom, teacher-scoped).
+Validation:
 
-2. **Honcho-style copilot memory (local, class-scoped)** â€” Add a bounded profile layer
-   alongside the wiki that answers: â€œWhat should the copilot know about how this teacher
-   and this class work?â€ Store compact teacher preferences, recurring goals,
-   communication style, class learning profile, planning patterns that worked, and
-   â€œavoid/watchâ€ rules. Prefer a local markdown implementation first
-   (`wiki/classes/{id}/memory/copilot_profile.md`) rather than integrating the external
-   Honcho service.
-
-3. **Suggested tasks API + UI** â€” Structured cards: `{ id, kind, title, rationale, evidence_paths, action_href, priority }`.
-   Kinds: `log_memory`, `plan_lesson`, `close_loop`, `review_commit`, `fill_gap`, `external_resource`.
-   Dismiss / done states stored locally or in lightweight backend store.
-
-4. **Resource suggestions (bounded)** â€” Optional trusted-source lookup for PhET,
-   Wikipedia, official sources, news, etc.; output is **adaptation notes + links**,
-   never auto-inserted into wiki.
-
-5. **Post-commit follow-ups** â€” After ingest approve, enqueue 1â€“3 concrete next tasks
-   (timeline, misconceptions, student note) with diff preview â€” extends current HITL commit UX.
-
-6. **Stale-loop hygiene** â€” Detect open loops older than N weeks; suggest close or
-   re-open in plan chat (teacher confirms).
-
-### Honcho-style memory notes
-
-Useful Hermes/Honcho concepts to adapt locally:
-
-- `profile`: a compact teacher/class/copilot profile injected into base context.
-- `conclusions`: small durable facts such as â€œpeer checking improves balancing accuracy
-  in this classâ€ or â€œteacher prefers concise 45-minute plans.â€
-- `search`: lookup over compact personal/class memory before falling back to broad wiki
-  browsing.
-- `context`: a small memory packet for plan/update workflows.
-- `reasoning`: occasional LLM synthesis over compact memory, used sparingly for questions
-  like â€œwhat has worked for this class before?â€
-
-Do not port Hermesâ€™ provider/plugin machinery initially. Keep the LLM synthesis separate
-from deterministic persistence: the model may propose profile updates, but backend code
-validates class scope, size limits, and allowed paths before writing.
-
-### Non-goals for v1.3
-
-- Always-on messaging gateway (WhatsApp/Telegram) â€” out of product scope.
-- Autonomous wiki writes â€” all mutations stay teacher-approved ([`AGENTS.md`](../AGENTS.md)).
-- AutoSci graph, multi-agent review, or broad agent infrastructure.
-- Hermes-style self-authored skills â€” prefer fixed task kinds + wiki evidence.
-- External Honcho dependency in the first pass â€” use the pattern locally before adding
-  another memory service.
-
-### Success criterion
-
-> A teacher opens the app, sees one accurate proactive sentence and one actionable
-> task grounded in their wiki, completes it in â‰¤2 clicks, and gets a sensible next
-> suggestion without starting a blank chat.
-
-### Likely touchpoints
-
-- Backend: briefing service, `GET /api/classes/{id}/brief`, `GET /api/classes/{id}/suggestions`
-- Backend memory: local class profile helpers, compact-memory package builder, and an
-  explicit compaction/update endpoint for `wiki/classes/{id}/memory/*.md`
-- Frontend: extend [`frontend/src/app/page.tsx`](../frontend/src/app/page.tsx) and/or
-  class home with `SuggestedTasks` component (reuse `Card`, checklist patterns)
-- Wiki reads first: timeline, open_loops, course_state, snapshot, search, compact memory pages, and query packs; no autonomous writes
+- A teacher can update memory and save a grounded next plan with less manual
+  source checking.
+- A generated assessment cites the taught sequence and common misconceptions.
+- The UI makes it clear what was used and what will be written.
 
 ---
 
-## Parking lot (unversioned)
+## v1.2 - Make Onboarding And Memory Creation Easy
 
-Deferred contracts and older PRD ideas to revisit after v1.3 if teacher demand
-is clear:
+**Theme:** Useful on day one.
 
-- Multiple classes polish, class calendar, lesson graph view
-- Docling ingestion (PDF/DOCX/PPTX)
-- Postgres + pgvector, object storage, user accounts
-- Long-running jobs, memory approval queue, skill proposals
-- Parent/admin communication drafts
-- Grading: rubrics, answer ingestion, teacher-reviewed suggestions
+**What it enables:** A new class can get a usable wiki, preferences, and source
+library without weeks of manual lesson logging.
 
+Primary items:
+
+| Item | Engineering notes |
+|---|---|
+| **Class wiki factory** | Guided class creation for subject, year, unit, curriculum direction, default lesson structure, and teacher preferences. |
+| **Wiki personalization workflow** | Teacher edits `class_config.md` custom sections and compact profile pages through approved flows. |
+| **Material upload library** | Store teacher-provided notes, prior plans, worksheets, and curriculum docs as source material with provenance. |
+| **Docling/PDF ingestion spike** | Evaluate Docling for PDF/DOCX/PPTX extraction. Preserve source pages/sections for citations. |
+| **Teacher-approved import to wiki** | Distinguish one-time planning context, source-library material, and durable class memory. |
+| **New-class sparse memory handling** | Make sparse memory explicit; ask one targeted setup question at a time. |
+
+Non-goals:
+
+- "All textbooks" as a default corpus before licensing/source constraints are
+  solved.
+- Vector database as the default retrieval path unless deterministic retrieval
+  shows measured limits.
+- Autonomous conversion of uploaded materials into durable wiki facts.
+
+Validation:
+
+- A teacher can create a class and get a useful first plan in under 15 minutes.
+- Uploaded material can be cited in a plan and reviewed separately from class
+  memory.
+
+---
+
+## v1.3 - Expand The Agent's Knowledge Safely
+
+**Theme:** Trusted external knowledge, not generic web browsing.
+
+**What it enables:** The copilot can enrich class-grounded plans with reputable
+resources and subject teaching practices while keeping sources inspectable.
+
+Primary items:
+
+| Item | Engineering notes |
+|---|---|
+| **Trusted search tool** | Bounded search/read over allowlisted sources: PhET, Wikipedia, official curriculum pages, reputable education sites, and approved news/source categories. |
+| **Resource adaptation workflow** | Return adaptation notes, links, risks, and classroom fit; never auto-insert external facts into wiki memory. |
+| **Source cards** | Show external source, class memory, and uploaded-material provenance in one evidence UI. |
+| **Subject teaching-practice library v1** | Start narrow with chemistry: common misconceptions, diagnostic questions, safe experiments, activity formats, and assessment templates. |
+| **Search/tool guardrails** | Keep class wiki retrieval as the default memory path; external search is task-specific. |
+
+Non-goals:
+
+- Broad open web browsing by default.
+- External source claims without citations.
+- Automatic wiki writes from trusted search.
+
+Validation:
+
+- Teacher can add a reputable resource to a plan and inspect why it was chosen.
+- The copilot distinguishes "class memory says" from "external source says."
+
+---
+
+## v1.4 - Become Proactive
+
+**Theme:** The copilot already looked.
+
+**What it enables:** The class home shifts from a dashboard to a small executive
+assistant surface with evidence-backed next actions.
+
+Primary items:
+
+| Item | Engineering notes |
+|---|---|
+| **Class brief service** | Read-only class brief on entry: recent lessons, open loops, stale items, sparse areas, and next calendar gap. Cache with TTL. |
+| **Suggested task API + UI** | Structured cards: `{ id, kind, title, rationale, evidence_paths, action_href, priority }`. Keep the stack small. |
+| **Post-commit follow-ups** | After memory save, suggest 1-3 concrete next actions: close loop, plan next lesson, review student note, update profile. |
+| **Stale-loop hygiene** | Detect old open loops and suggest close/reopen actions with teacher confirmation. |
+| **Local Honcho-style profile polish** | Continue using local markdown profile pages before considering an external memory service. |
+
+Task kinds:
+
+- `log_memory`
+- `plan_lesson`
+- `generate_assessment`
+- `close_loop`
+- `review_commit`
+- `fill_gap`
+- `external_resource`
+
+Non-goals:
+
+- Always-on messaging gateway.
+- Full AutoSci graph or broad multi-agent orchestration.
+- Autonomous writes.
+- Hermes-style self-authored skills.
+
+Validation:
+
+- A teacher opens a class, sees one accurate proactive sentence and one
+  actionable task, completes or dismisses it in two clicks, and gets a sensible
+  next suggestion.
+
+---
+
+## v1.5 - Add Low-Friction Capture
+
+**Theme:** Capture class memory in the moment.
+
+**What it enables:** Teachers can send a quick voice memo or chat message after
+class and have KlassenPilot draft memory updates or follow-ups for review.
+
+Primary items:
+
+| Item | Engineering notes |
+|---|---|
+| **Voice memo ingestion** | Transcribe teacher voice notes into draft lesson memory or admin notes. |
+| **Telegram or similar capture channel** | Treat messaging as an input/capture layer, not the primary product surface. |
+| **Transcript review** | Show transcript, inferred target lesson, and diary draft before proposing wiki writes. |
+| **Quick follow-up capture** | Extract reminders, open loops, and student observations into reviewable suggestions. |
+| **Security/privacy review** | Confirm storage, retention, and channel trust before real teacher use. |
+
+Non-goals:
+
+- Messaging as a replacement for the reviewed web workflow.
+- Automatic durable writes from voice.
+- Multi-user school deployment unless already validated.
+
+Validation:
+
+- A teacher can send a 60-second post-lesson memo and get a useful reviewed
+  memory draft with less effort than typing.
+
+---
+
+## v1.6 - Broaden Into Teaching Logistics
+
+**Theme:** Reduce more operational work around class teaching.
+
+**What it enables:** KlassenPilot becomes the operational home for class
+teaching work, not just memory and planning.
+
+Candidate workflows:
+
+- homework/follow-up tracking
+- assessment calendar
+- report-comment drafts
+- parent/admin communication drafts
+- class content organization
+- multi-week lesson sequence planning
+- recurring reminders and check-ins
+
+Non-goals until demand is proven:
+
+- grading automation without teacher review
+- real student names
+- school-admin platform workflows
+- broad always-on external messaging
+
+Validation:
+
+- Teachers use KlassenPilot for recurring weekly class operations beyond lesson
+  memory and planning.
+
+---
+
+## Cross-Cutting Platform Track
+
+These can land alongside product versions when needed, but should not displace
+teacher-value work without a concrete blocker.
+
+| Item | When to prioritize |
+|---|---|
+| **Caddy reverse proxy** | When deployment needs one entry port, same-origin `/api`, or simpler SSE handling. |
+| **Lean production images** | Before non-dev deployments. |
+| **`compose.prod.yaml`** | Before repeatable production-like installs. |
+| **SQLite/app session persistence** | When real users hit restart/history loss or multi-worker deploys. |
+| **Generalized trace assemblies** | Before adding several more artifact/helper agents. |
+| **Typed index/search improvements** | When deterministic retrieval has measured failures. |
+| **Postgres/object storage/accounts** | Only after multi-user or hosted deployment demand is clear. |
+
+---
+
+## Parking Lot
+
+- Multiple classes polish, class calendar, lesson graph view.
+- Long-running jobs and background queues.
+- Memory approval queue.
+- Private textbook/source integrations where licensing is solved.
+- Rubrics, answer ingestion, and teacher-reviewed grading suggestions.
+- School/team collaboration features.

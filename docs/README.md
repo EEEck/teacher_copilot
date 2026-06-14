@@ -5,6 +5,8 @@ follow the local README closest to the code you are changing.
 
 ## Product And Agent Contracts
 
+- `pm_hub.md` - PM source of truth: vision, north star, current product state,
+  gaps, roadmap themes, and prioritization.
 - `product_vision.md` - current product scope and teacher-facing behavior.
 - `agent_contracts.md` - reviewable read/write/tool/output contracts.
 - `agent_architecture.md` - agent architecture and retrieval/memory lessons.
@@ -43,6 +45,9 @@ plans only.
 
 - Product behavior changes should update `agent_contracts.md` when contracts
   change.
+- Product direction, roadmap, or prioritization changes should update
+  `pm_hub.md` and, when engineering sequencing changes,
+  `../implementation_plans/product_backlog.md`.
 - Memory scope or loading changes should update `memory_hierarchy.md` and/or
   `context_management.md`.
 - Agents SDK integration changes should update `agent_sdk_practices_review.md`
