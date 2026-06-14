@@ -8,6 +8,7 @@ ingest-specific propose/commit steps (the propose_review_commit strategy).
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from datetime import date
 
 from app.schemas.api import (
@@ -38,6 +39,26 @@ from app.teacher_agent.prompt_trace import build_ingest_chat_prompt_trace
 from app.teacher_agent.wiki_store import WikiStore
 
 MODE = "ingest"
+
+
+@dataclass(frozen=True)
+class IngestStartHintResolution:
+    lesson_date: str
+    lesson_title: str
+    intent: str
+    target_kind: str
+    source: str
+    found: bool
+    has_plan: bool
+    has_results: bool
+    draft_markdown: str
+    confidence: str
+    target_confirmed: bool
+    needs_confirmation: bool
+
+    @property
+    def phase(self) -> str:
+        return "collect_results" if self.target_confirmed else "identify_target"
 
 
 class IngestService:
@@ -72,31 +93,32 @@ class IngestService:
             )
         return md
 
-    def _apply_start_hint(
-        self, session: ArtifactSession, hint: IngestSessionStartRequest
-    ) -> None:
-        if not isinstance(session.runtime, MemoryRuntime):
-            return
+    def _resolve_start_hint(
+        self, class_id: str, hint: IngestSessionStartRequest
+    ) -> IngestStartHintResolution | None:
         lesson_date = (hint.lesson_date or "").strip()
         if not lesson_date:
-            return
+            return None
 
-        title = hint.lesson_title.strip()
+        title = " ".join(hint.lesson_title.split())
         has_plan = False
         has_results = False
+        found = False
+        draft_markdown = ""
         try:
-            detail = self.wiki.get_lesson_detail(session.class_id, lesson_date)
+            detail = self.wiki.get_lesson_detail(class_id, lesson_date)
+            found = True
             title = title or detail.title
             has_plan = bool(detail.lesson_plan_markdown)
             has_results = bool(detail.diary_markdown.strip())
             if has_results and hint.intent == "correct_existing_results":
-                session.partial_markdown = detail.diary_markdown
+                draft_markdown = detail.diary_markdown
             else:
-                session.partial_markdown = self._title_template(lesson_date, title)
+                draft_markdown = self._title_template(lesson_date, title)
         except KeyError:
-            session.partial_markdown = self._title_template(lesson_date, title)
+            draft_markdown = self._title_template(lesson_date, title)
 
-        target_kind = hint.target_kind.strip()
+        target_kind = hint.target_kind or ""
         if not target_kind:
             if has_results:
                 target_kind = "taught_lesson"
@@ -104,7 +126,7 @@ class IngestService:
                 target_kind = "planned_lesson"
             else:
                 target_kind = "new_lesson"
-        intent = hint.intent.strip()
+        intent = hint.intent or ""
         if not intent:
             intent = (
                 "correct_existing_results"
@@ -113,28 +135,72 @@ class IngestService:
                 if target_kind == "planned_lesson"
                 else "log_new_results"
             )
+
+        confirmed = found and (has_plan or has_results)
+        confidence = (
+            "high"
+            if confirmed
+            else "medium"
+            if hint.source == "teacher_explicit"
+            else "low"
+        )
+        return IngestStartHintResolution(
+            lesson_date=lesson_date,
+            lesson_title=title,
+            intent=intent,
+            target_kind=target_kind,
+            source=hint.source,
+            found=found,
+            has_plan=has_plan,
+            has_results=has_results,
+            draft_markdown=draft_markdown,
+            confidence=confidence,
+            target_confirmed=confirmed,
+            needs_confirmation=not confirmed,
+        )
+
+    def _apply_start_hint(
+        self, session: ArtifactSession, hint: IngestSessionStartRequest
+    ) -> None:
+        if not isinstance(session.runtime, MemoryRuntime):
+            return
+        resolved = self._resolve_start_hint(session.class_id, hint)
+        if resolved is None:
+            return
+        session.partial_markdown = resolved.draft_markdown
+        decisions = []
+        open_questions = []
+        if resolved.target_confirmed:
+            decisions.append(
+                f"Use {resolved.lesson_date} as the update-memory target."
+            )
+        else:
+            open_questions.append(
+                f"Confirm whether {resolved.lesson_date} is the lesson to update."
+            )
         apply_memory_state_patch(
             session.runtime,
             MemoryStatePatch(
                 target=MemoryTargetPatch(
-                    intent=intent,
-                    lesson_date=lesson_date,
-                    lesson_title=title,
-                    target_kind=target_kind,
-                    target_confirmed=True,
-                    source=hint.source or "teacher_explicit",
-                    confidence="high",
-                    plan_loaded=has_plan,
-                    existing_results_loaded=has_results,
-                    needs_confirmation=False,
+                    intent=resolved.intent,
+                    lesson_date=resolved.lesson_date,
+                    lesson_title=resolved.lesson_title,
+                    target_kind=resolved.target_kind,
+                    target_confirmed=resolved.target_confirmed,
+                    source=resolved.source,
+                    confidence=resolved.confidence,
+                    plan_loaded=resolved.has_plan,
+                    existing_results_loaded=resolved.has_results,
+                    needs_confirmation=resolved.needs_confirmation,
                 ),
                 session_state=MemorySessionPatch(
-                    phase="collect_results",
+                    phase=resolved.phase,
                     teacher_goal=(
-                        f"Update lesson results for {lesson_date}"
-                        + (f" ({title})" if title else "")
+                        f"Update lesson results for {resolved.lesson_date}"
+                        + (f" ({resolved.lesson_title})" if resolved.lesson_title else "")
                     ),
-                    decisions=[f"Use {lesson_date} as the update-memory target."],
+                    decisions=decisions,
+                    open_questions=open_questions,
                 ),
                 lesson_result_state=LessonResultPatch(
                     missing_categories=[
@@ -144,7 +210,7 @@ class IngestService:
                         ).items
                         if item.required and not item.complete
                     ],
-                    draft_confidence="medium" if has_results else "low",
+                    draft_confidence="medium" if resolved.has_results else "low",
                 ),
             ),
         )
@@ -254,9 +320,9 @@ class IngestService:
     def commit(self, req: CommitIngestRequest) -> CommitIngestResponse:
         session = self.core.get_session(req.session_id)
         lesson_date = (
-            self.wiki._extract_date_from_diary(req.diary_markdown) or date.today().isoformat()
+            self.wiki.extract_date_from_diary(req.diary_markdown) or date.today().isoformat()
         )
-        title = self.wiki._extract_title(req.diary_markdown) or "Lesson"
+        title = self.wiki.extract_title(req.diary_markdown) or "Lesson"
         raw_path, applied, log_id = self.wiki.commit_ingest(
             session.class_id,
             req.diary_markdown,

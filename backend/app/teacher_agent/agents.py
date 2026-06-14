@@ -7,6 +7,7 @@ import logging
 import re
 import time
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from agents import Runner
@@ -57,6 +58,14 @@ from app.teacher_agent.wiki_store import DIARY_SECTION_HEADINGS, WikiStore
 
 class AgentTurnLimitError(RuntimeError):
     """Agent used too many tool/reasoning steps in one turn."""
+
+
+@dataclass
+class _PreparedAgentTurn:
+    runtime: Any
+    current_draft: str
+    agent: Any
+    user_input: str
 
 _TURN_LIMIT_REPLY = (
     "I needed more steps than allowed to finish this turn. "
@@ -268,6 +277,88 @@ class AgentRunner:
             memory_state=payload,
         )
 
+    def _prepare_ingest_turn(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        partial_diary: str = "",
+        attachments: list[ChatAttachment] | None = None,
+        memory: MemoryRuntime | None = None,
+    ) -> _PreparedAgentTurn:
+        runtime = memory or MemoryRuntime()
+        context = self.wiki.build_ingest_context_slim(class_id)
+        sections = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
+        agent = build_ingest_agent(
+            self._wiki_ctx(class_id, memory=runtime),
+            sections,
+            context,
+            self.chat_model,
+            memory=runtime,
+            reasoning_effort=self.reasoning_effort,
+        )
+        current_draft = partial_diary.strip() or self.wiki.empty_diary_template()
+        user_input = build_ingest_user_input_assembly(
+            messages, current_draft, attachments
+        )["text"]
+        return _PreparedAgentTurn(runtime, current_draft, agent, user_input)
+
+    def _finalize_ingest_turn(
+        self,
+        parsed: Any,
+        current_draft: str,
+        runtime: MemoryRuntime,
+    ) -> tuple[str, str, CompletenessChecklist, bool] | None:
+        if not isinstance(parsed, IngestTurnOutput):
+            return None
+        reply = parsed.reply
+        diary_md = parsed.diary_markdown.strip() or current_draft
+        checklist = self.wiki.checklist_from_diary(diary_md)
+        ready = self.wiki.is_diary_complete(diary_md)
+        self._merge_memory_turn(
+            runtime,
+            parsed,
+            diary_changed=diary_md.strip() != current_draft.strip(),
+        )
+        return reply, diary_md, checklist, ready
+
+    def _prepare_plan_turn(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        partial_plan: str = "",
+        attachments: list[ChatAttachment] | None = None,
+        planning: PlanRuntime | None = None,
+    ) -> _PreparedAgentTurn:
+        runtime = planning or PlanRuntime()
+        current_draft = partial_plan.strip() or self.wiki.empty_plan_template()
+        agent = build_plan_chat_agent(
+            self._wiki_ctx(class_id, runtime),
+            current_draft,
+            self.chat_model,
+            planning=runtime,
+            reasoning_effort=self.reasoning_effort,
+        )
+        user_input = self._build_plan_user_input(messages, attachments)
+        return _PreparedAgentTurn(runtime, current_draft, agent, user_input)
+
+    def _finalize_plan_turn(
+        self,
+        parsed: Any,
+        current_draft: str,
+        runtime: PlanRuntime,
+    ) -> tuple[str, str, bool] | None:
+        if not isinstance(parsed, PlanTurnOutput):
+            return None
+        reply = parsed.reply
+        plan_md = _strip_plan_debug_sections(
+            parsed.plan_markdown.strip() or current_draft
+        )
+        ready = self.wiki.is_plan_ready(plan_md)
+        self._merge_plan_turn(
+            runtime, parsed, plan_changed=plan_md.strip() != current_draft.strip()
+        )
+        return reply, plan_md, ready
+
     async def _run_structured(self, agent, user_input: str):
         """Run an agent to completion, async + bounded by a wall-clock timeout.
 
@@ -336,23 +427,13 @@ class AgentRunner:
         attachments: list[ChatAttachment] | None = None,
         memory: MemoryRuntime | None = None,
     ) -> AsyncIterator[SseEvent]:
-        runtime = memory or MemoryRuntime()
-        context = self.wiki.build_ingest_context_slim(class_id)
-        sections = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
-        agent = build_ingest_agent(
-            self._wiki_ctx(class_id, memory=runtime),
-            sections,
-            context,
-            self.chat_model,
-            memory=runtime,
-            reasoning_effort=self.reasoning_effort,
+        turn = self._prepare_ingest_turn(
+            class_id, messages, partial_diary, attachments, memory
         )
-        current_draft = partial_diary.strip() or self.wiki.empty_diary_template()
-        user_input = build_ingest_user_input_assembly(
-            messages, current_draft, attachments
-        )["text"]
         result_holder: dict[str, Any] = {}
-        async for event in self._yield_stream_events(agent, user_input, result_holder):
+        async for event in self._yield_stream_events(
+            turn.agent, turn.user_input, result_holder
+        ):
             if isinstance(event, SseError):
                 yield event
                 return
@@ -361,23 +442,17 @@ class AgentRunner:
         out = result_holder.get("result")
         if out is None:
             return
-        parsed = out.final_output
-        if not isinstance(parsed, IngestTurnOutput):
+        finalized = self._finalize_ingest_turn(
+            out.final_output, turn.current_draft, turn.runtime
+        )
+        if finalized is None:
             yield SseError(
                 message="I had trouble processing that — could you try again?",
                 code="parse_error",
             )
             return
-        reply = parsed.reply
-        diary_md = parsed.diary_markdown.strip() or current_draft
-        checklist = self.wiki.checklist_from_diary(diary_md)
-        ready = self.wiki.is_diary_complete(diary_md)
-        self._merge_memory_turn(
-            runtime,
-            parsed,
-            diary_changed=diary_md.strip() != current_draft.strip(),
-        )
-        yield self._memory_final_event(reply, diary_md, ready, checklist, runtime)
+        reply, diary_md, checklist, ready = finalized
+        yield self._memory_final_event(reply, diary_md, ready, checklist, turn.runtime)
 
     async def plan_chat_stream(
         self,
@@ -387,18 +462,13 @@ class AgentRunner:
         attachments: list[ChatAttachment] | None = None,
         planning: PlanRuntime | None = None,
     ) -> AsyncIterator[SseEvent]:
-        runtime = planning or PlanRuntime()
-        current_draft = partial_plan.strip() or self.wiki.empty_plan_template()
-        agent = build_plan_chat_agent(
-            self._wiki_ctx(class_id, runtime),
-            current_draft,
-            self.chat_model,
-            planning=runtime,
-            reasoning_effort=self.reasoning_effort,
+        turn = self._prepare_plan_turn(
+            class_id, messages, partial_plan, attachments, planning
         )
-        user_input = self._build_plan_user_input(messages, attachments)
         result_holder: dict[str, Any] = {}
-        async for event in self._yield_stream_events(agent, user_input, result_holder):
+        async for event in self._yield_stream_events(
+            turn.agent, turn.user_input, result_holder
+        ):
             if isinstance(event, SseError):
                 yield event
                 return
@@ -407,22 +477,17 @@ class AgentRunner:
         out = result_holder.get("result")
         if out is None:
             return
-        parsed = out.final_output
-        if not isinstance(parsed, PlanTurnOutput):
+        finalized = self._finalize_plan_turn(
+            out.final_output, turn.current_draft, turn.runtime
+        )
+        if finalized is None:
             yield SseError(
                 message="I had trouble processing that — could you try again?",
                 code="parse_error",
             )
             return
-        reply = parsed.reply
-        plan_md = _strip_plan_debug_sections(
-            parsed.plan_markdown.strip() or current_draft
-        )
-        ready = self.wiki.is_plan_ready(plan_md)
-        self._merge_plan_turn(
-            runtime, parsed, plan_changed=plan_md.strip() != current_draft.strip()
-        )
-        yield self._plan_final_event(reply, plan_md, ready, runtime)
+        reply, plan_md, ready = finalized
+        yield self._plan_final_event(reply, plan_md, ready, turn.runtime)
 
     def _plan_opening_fallback(self, class_id: str) -> str:
         snap = self.wiki.get_snapshot(class_id)
@@ -462,20 +527,15 @@ class AgentRunner:
         attachments: list[ChatAttachment] | None = None,
         planning: PlanRuntime | None = None,
     ) -> tuple[str, str, bool]:
-        runtime = planning or PlanRuntime()
-        current_draft = partial_plan.strip() or self.wiki.empty_plan_template()
-        agent = build_plan_chat_agent(
-            self._wiki_ctx(class_id, runtime),
-            current_draft,
-            self.chat_model,
-            planning=runtime,
-            reasoning_effort=self.reasoning_effort,
+        turn = self._prepare_plan_turn(
+            class_id, messages, partial_plan, attachments, planning
         )
-        user_input = self._build_plan_user_input(messages, attachments)
+        current_draft = turn.current_draft
+        runtime = turn.runtime
         try:
-            parsed = await self._run_structured(agent, user_input)
+            parsed = await self._run_structured(turn.agent, turn.user_input)
         except AgentTurnLimitError as exc:
-            return str(exc), current_draft, False
+            return str(exc), turn.current_draft, False
         if not isinstance(parsed, PlanTurnOutput):
             return "I had trouble processing that — could you try again?", current_draft, False
         reply = parsed.reply
@@ -496,23 +556,13 @@ class AgentRunner:
         attachments: list[ChatAttachment] | None = None,
         memory: MemoryRuntime | None = None,
     ) -> tuple[str, str, CompletenessChecklist, bool]:
-        runtime = memory or MemoryRuntime()
-        context = self.wiki.build_ingest_context_slim(class_id)
-        sections = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
-        agent = build_ingest_agent(
-            self._wiki_ctx(class_id, memory=runtime),
-            sections,
-            context,
-            self.chat_model,
-            memory=runtime,
-            reasoning_effort=self.reasoning_effort,
+        turn = self._prepare_ingest_turn(
+            class_id, messages, partial_diary, attachments, memory
         )
-        current_draft = partial_diary.strip() or self.wiki.empty_diary_template()
-        user_input = build_ingest_user_input_assembly(
-            messages, current_draft, attachments
-        )["text"]
+        current_draft = turn.current_draft
+        runtime = turn.runtime
         try:
-            parsed = await self._run_structured(agent, user_input)
+            parsed = await self._run_structured(turn.agent, turn.user_input)
         except AgentTurnLimitError as exc:
             return (
                 str(exc),

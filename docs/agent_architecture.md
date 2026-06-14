@@ -101,9 +101,9 @@ The product uses tiered class memory.
    free-agent from the teacher's perspective while preserving backend-owned
    validation and no hidden wiki writes. Timeline/detail entry points can pass a
    structured date/intent hint into the same ingest session start call; the
-   backend seeds the target and draft from canonical lesson detail when
-   confidence is high, while the top-level Update Memory action still starts
-   in free-agent target discovery.
+   backend seeds the target and draft from canonical lesson detail when a
+   planned or taught lesson is found. Unknown hinted dates may seed a dated
+   draft, but remain unconfirmed and stay in target discovery.
 
 5. **Profiles (three clearly-scoped files)**
    - `user.md` (`wiki/teacher_profile.md`, GLOBAL): teacher communication style,

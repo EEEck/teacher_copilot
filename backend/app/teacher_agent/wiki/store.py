@@ -205,6 +205,12 @@ class WikiStore:
     def empty_diary_template(self, lesson_date=None):
         return context_packs.empty_diary_template(self, lesson_date)
 
+    def extract_title(self, text):
+        return parsing.extract_title(text)
+
+    def extract_date_from_diary(self, text):
+        return parsing.extract_date_from_diary(text)
+
     def _format_lesson_results(self, class_id, subject, diary_md, lesson_date, title):
         return rollups._format_lesson_results(self, class_id, subject, diary_md, lesson_date, title)
 

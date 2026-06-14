@@ -33,11 +33,18 @@ turns enough room before the backend emits a timeout SSE event. For faster local
 smoke checks, lower `OPENAI_REASONING_EFFORT` or `AGENT_TIMEOUT_SECONDS` in
 `backend/.env`.
 
-## Chat sessions (prototype)
+## Chat sessions and memory targets (prototype)
 
 Ingest and plan sessions are stored **in memory** (`ArtifactSessionService`). Restarting uvicorn clears server-side session state. The frontend recreates a session and restores the draft markdown when the API returns “unknown session”; chat history in the tab is not restored.
 
 **SQLite is not required for the prototype.** Session persistence is deferred until multi-worker deploys or durable server-side history are needed. Current product direction lives in [`product_backlog.md`](../implementation_plans/product_backlog.md).
+
+Update Memory starts in free-agent target discovery unless the frontend passes a
+typed start hint to `POST /api/classes/{id}/ingest/sessions`. Timeline/detail
+buttons pass `lesson_date`, `lesson_title`, `intent`, `target_kind`, and
+`source=timeline_hint`. The backend confirms the target only when canonical
+lesson detail exists; unknown hinted dates seed a draft but stay in
+`identify_target` with `needs_confirmation=true`.
 
 ## Agent debug CLI
 
@@ -168,6 +175,11 @@ The default turns:
 1. Log lesson results for `2026-05-29`, including named student observations.
 2. Add participation details and update the `2026-05-25` open-loop status.
 3. Ask the agent to make the lesson results ready to save memory.
+
+The plan and memory trace bundle scripts currently share a lot of behavior
+(start session, stream turns, fetch trace, write bundle files). If more
+artifact workflows are added, consolidate them into one scenario-driven trace
+runner before adding another near-copy script.
 
 ## Wiki memory
 

@@ -50,3 +50,10 @@ These call the local API, run the default three-turn lesson-results update
 debug scenario for `2026-05-29`, and write a trace bundle under `backend/runs/`.
 The bundle includes prompt assembly, streamed tool calls/results, memory runtime
 state, raw evidence refs, and the final diary markdown.
+
+## Trace Script Maintenance
+
+The plan and memory trace scripts intentionally have the same developer shape:
+start an artifact session, stream fixed teacher turns, fetch the trace endpoint,
+and write a run bundle. If another workflow needs this, create a shared
+scenario-driven runner instead of copying either script again.

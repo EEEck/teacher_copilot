@@ -224,6 +224,9 @@ Allowed behavior:
   `source`). When the hint points to a known planned or taught lesson, the
   backend seeds `MemoryRuntime.target`, marks high-confidence targets confirmed,
   loads the saved plan and/or existing results, and moves to `collect_results`.
+  If the hinted date is not found in canonical lesson detail, the backend may
+  seed a dated draft but must keep `target_confirmed=false`,
+  `needs_confirmation=true`, and the phase in `identify_target`.
   The target remains visible in `memory_state`; this is a fast path through the
   same agent contract, not a separate wizard or write path.
 - The agent may draft from strong evidence before final confirmation, but it

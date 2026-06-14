@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -169,12 +169,21 @@ class IngestSessionStatus(str, Enum):
     committed = "committed"
 
 
+IngestStartIntent = Literal[
+    "log_new_results",
+    "update_missing_results",
+    "correct_existing_results",
+]
+IngestStartTargetKind = Literal["new_lesson", "planned_lesson", "taught_lesson"]
+IngestStartSource = Literal["teacher_explicit", "timeline_hint", "agent_inferred"]
+
+
 class IngestSessionStartRequest(BaseModel):
     lesson_date: Optional[str] = None
     lesson_title: str = ""
-    intent: str = ""  # update_missing_results | correct_existing_results | log_new_results
-    target_kind: str = ""  # planned_lesson | taught_lesson | new_lesson
-    source: str = "teacher_explicit"  # teacher_explicit | timeline_hint | agent_inferred
+    intent: Optional[IngestStartIntent] = None
+    target_kind: Optional[IngestStartTargetKind] = None
+    source: IngestStartSource = "teacher_explicit"
 
 
 class CompletenessItem(BaseModel):

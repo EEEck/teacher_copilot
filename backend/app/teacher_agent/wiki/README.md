@@ -29,3 +29,11 @@ Deterministic markdown wiki for KlassenPilot: compile lesson diaries, human-in-t
 - **Dashboard** — uses REST (`get_timeline`, `get_snapshot`); does not require agent tools.
 
 Agents should read `index.md` first (via prompt context or tools), then open specific pages.
+
+## Facade Conventions
+
+Application services should call public `WikiStore` methods for cross-package
+operations. Keep private `_...` facade methods available for wiki package
+internals and compatibility, but do not add new service-layer calls to them.
+For example, services use `extract_title()` and `extract_date_from_diary()`
+instead of `_extract_title()` / `_extract_date_from_diary()`.

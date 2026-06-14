@@ -13,7 +13,8 @@ Routes should be thin adapters over services and wiki facades.
 ## Route Groups
 
 - Health/classes/timeline/wiki reads.
-- Ingest sessions: start, chat, stream, draft, propose, commit.
+- Ingest sessions: start, optional typed start hint, chat, stream, draft,
+  propose, commit.
 - Plan sessions: start, chat, stream, draft, save, trace.
 - Memory maintenance: compact, refresh, profile propose, apply.
 
@@ -23,6 +24,10 @@ Routes should be thin adapters over services and wiki facades.
   session data.
 - Convert expected `KeyError`/`ValueError` cases into HTTP errors near the
   route boundary.
+- Keep public request fields typed when they encode workflow state. For example,
+  `IngestSessionStartRequest` uses literal values for `intent`, `target_kind`,
+  and `source`; invalid hint values should fail validation instead of being
+  normalized later.
 - Do not add hidden writes to chat routes. Durable memory writes belong to
   explicit commit/apply endpoints.
 - Debug endpoints that expose prompts, raw tool output, or messages should be

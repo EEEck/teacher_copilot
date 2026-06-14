@@ -15,6 +15,16 @@ npm run dev
 The app expects `NEXT_PUBLIC_API_BASE_URL` in `.env.local` or falls back to the
 local backend URL used by the repo scripts.
 
+## Workflow Notes
+
+- The top-level **Update memory** action starts a generic free-agent session.
+- Lesson timeline and lesson-detail actions pass a typed start hint in the
+  memory URL (`lessonDate`, `lessonTitle`, `intent`, `targetKind`). The backend
+  decides whether that target is confirmed; unknown dates still require
+  confirmation.
+- The memory page displays the backend `memory_state` target/phase summary
+  above the shared artifact workspace.
+
 ## Folder Map
 
 - `src/app/` - Next.js App Router pages and route-specific UI.

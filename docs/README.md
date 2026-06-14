@@ -21,7 +21,8 @@ plans only.
 
 - `../README.md` - run the full app and understand the product workflow.
 - `../AGENTS.md` - repo-level guardrails for AI agents and developers.
-- `../backend/README.md` - backend setup, debug CLI, and plan trace bundle.
+- `../backend/README.md` - backend setup, debug CLI, and plan/update-memory
+  trace bundles.
 - `../backend/app/README.md` - backend package map and request flow.
 - `../backend/app/api/README.md` - FastAPI route groups and API boundaries.
 - `../backend/app/schemas/README.md` - API schema conventions.
@@ -35,6 +36,8 @@ plans only.
 - `../frontend/src/components/README.md` - frontend component layers.
 - `../frontend/src/lib/README.md` - frontend API/parser/utilities map.
 - `../scripts/README.md` - dev, test, Docker, and trace scripts.
+- `../implementation_plans/update_memory_free_agent_plan.md` - phase map for
+  the free-agent Update Memory rollout and remaining trace/eval hardening.
 
 ## Working Rules
 

@@ -18,8 +18,8 @@ thin HTTP routes, service adapters, agent runtime code, and wiki storage helpers
 - `schemas/` - Pydantic request/response models for the HTTP API.
 - `services/` - application workflow services for ingest, planning, memory
   apply, and generic artifact sessions.
-- `teacher_agent/` - prompts, tools, structured outputs, runner, planning
-  runtime state, streaming events, and prompt trace helpers.
+- `teacher_agent/` - prompts, tools, structured outputs, runner, planning and
+  update-memory runtime state, streaming events, and prompt trace helpers.
 - `teacher_agent/wiki/` - wiki pathing, parsing, search, context packs,
   compaction, rollups, and store facade internals.
 - `cli/` - local debug REPL and JSONL trace tooling.
@@ -34,6 +34,9 @@ thin HTTP routes, service adapters, agent runtime code, and wiki storage helpers
   wiki writes should remain explicit teacher-approved actions.
 - Agent modules should not write durable wiki memory directly from chat turns.
 - Wiki internals should stay class-scoped and path-safe.
+- Workflow-specific start hints, such as Update Memory lesson/date hints, should
+  be resolved in services before agent execution. Unknown targets must remain
+  unconfirmed runtime state rather than silently skipping discovery.
 
 ## Useful Next Reads
 

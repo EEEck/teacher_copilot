@@ -30,6 +30,8 @@ not call OpenAI or mutate the repo wiki.
 - `eval/test_memory_update_contract.py` - offline Update Memory trace contract
   for target selection, tool calls, runtime state, pseudonymized diary output,
   and trace hygiene.
+- `test_api_ingest.py` - ingest API, commit safety, and typed start-hint
+  behavior for taught/planned/unknown lesson targets.
 - `eval/plan_trace_scorer.py` - shared scorer used by contract + live tests.
 - `eval/fckw_contract.py` - declarative expectations aligned with
   `docs/memory_hierarchy.md`.
@@ -98,7 +100,7 @@ Focused agent/memory set:
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest tests\test_api_stream.py tests\test_plan_context_manager.py tests\test_wiki_context_packs.py tests\test_memory_skills.py
+.\.venv\Scripts\python -m pytest tests\test_api_ingest.py tests\test_api_stream.py tests\eval\test_memory_update_contract.py tests\test_api_plan.py
 ```
 
 ## Rules

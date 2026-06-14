@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from tests.conftest import CLASS_ID, COMPLETE_DIARY
+from tests.conftest import CLASS_ID, COMPLETE_DIARY, READY_PLAN
 
 
 def test_ingest_full_flow(client: TestClient):
@@ -101,6 +101,96 @@ def test_ingest_start_hint_loads_existing_lesson_results(client: TestClient):
     assert "2026-05-29" in draft_body["diary_markdown"]
     assert "Anions and Oxidation State Review" in draft_body["diary_markdown"]
     assert draft_body["memory_state"]["target"]["lesson_date"] == "2026-05-29"
+
+
+def test_ingest_start_hint_loads_known_planned_lesson(client: TestClient):
+    ingest_base = f"/api/classes/{CLASS_ID}/ingest"
+    plan_base = f"/api/classes/{CLASS_ID}/plan"
+    lesson_date = "2027-01-16"
+
+    plan_start = client.post(f"{plan_base}/sessions")
+    assert plan_start.status_code == 200, plan_start.text
+    save = client.post(
+        f"{plan_base}/save",
+        json={
+            "session_id": plan_start.json()["session_id"],
+            "lesson_date": lesson_date,
+            "plan_markdown": READY_PLAN,
+        },
+    )
+    assert save.status_code == 200, save.text
+
+    start = client.post(
+        f"{ingest_base}/sessions",
+        json={
+            "lesson_date": lesson_date,
+            "intent": "update_missing_results",
+            "target_kind": "planned_lesson",
+            "source": "timeline_hint",
+        },
+    )
+    assert start.status_code == 200, start.text
+    body = start.json()
+    memory = body["memory_state"]
+
+    assert memory["phase"] == "collect_results"
+    assert memory["intent"] == "update_missing_results"
+    assert memory["target"]["lesson_date"] == lesson_date
+    assert memory["target"]["target_kind"] == "planned_lesson"
+    assert memory["target"]["target_confirmed"] is True
+    assert memory["target"]["confidence"] == "high"
+    assert memory["target"]["plan_loaded"] is True
+    assert memory["target"]["existing_results_loaded"] is False
+
+    draft = client.get(f"{ingest_base}/sessions/{body['session_id']}/draft")
+    assert draft.status_code == 200, draft.text
+    assert lesson_date in draft.json()["diary_markdown"]
+    assert "Stub Plan" in draft.json()["diary_markdown"]
+
+
+def test_ingest_unknown_start_hint_needs_confirmation(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/ingest"
+
+    start = client.post(
+        f"{base}/sessions",
+        json={
+            "lesson_date": "2027-01-15",
+            "lesson_title": "Untracked lesson",
+            "intent": "update_missing_results",
+            "target_kind": "planned_lesson",
+            "source": "timeline_hint",
+        },
+    )
+    assert start.status_code == 200, start.text
+    memory = start.json()["memory_state"]
+
+    assert memory["phase"] == "identify_target"
+    assert memory["intent"] == "update_missing_results"
+    assert memory["target"]["lesson_date"] == "2027-01-15"
+    assert memory["target"]["lesson_title"] == "Untracked lesson"
+    assert memory["target"]["target_kind"] == "planned_lesson"
+    assert memory["target"]["target_confirmed"] is False
+    assert memory["target"]["confidence"] == "low"
+    assert memory["target"]["needs_confirmation"] is True
+    assert memory["target"]["plan_loaded"] is False
+    assert memory["target"]["existing_results_loaded"] is False
+    assert memory["session_state"]["open_questions"]
+
+
+def test_ingest_start_hint_rejects_invalid_enum_values(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/ingest"
+
+    start = client.post(
+        f"{base}/sessions",
+        json={
+            "lesson_date": "2026-05-29",
+            "intent": "rewrite_everything",
+            "target_kind": "lessonish",
+            "source": "timeline_hint",
+        },
+    )
+    assert start.status_code == 422
+    assert start.json()["error"]["type"] == "validation_error"
 
 
 def test_ingest_commit_skips_unapproved_wiki_paths(client: TestClient):

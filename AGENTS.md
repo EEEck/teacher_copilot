@@ -103,6 +103,10 @@ Important current contracts:
   pack from the memory hierarchy; expose detailed canonical wiki evidence
   through tools; keep runtime/session state separate from durable memory; and
   trace each injected section with source/function/size metadata.
+- Update Memory may start from a lesson timeline/detail hint, but that hint is
+  resolved by the backend runtime. Known planned/taught lessons can be confirmed
+  immediately; unknown hinted dates must stay unconfirmed and require target
+  confirmation before the normal teacher-approved commit flow.
 
 ## AutoSci Reference
 

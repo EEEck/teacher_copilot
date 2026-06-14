@@ -84,7 +84,9 @@ class notebook.
 - For planning, it loads recent lessons, compact memory, teaching patterns,
   open loops, and planning preferences.
 - For memory update, it loads the previous lesson, logging conventions, compact
-  memory, student index excerpt, and open loops.
+  memory, student index excerpt, and open loops. It may also start from a
+  timeline/detail lesson hint, but the backend-owned runtime still tracks
+  whether the date/lesson target is confirmed.
 - For broad topic requests, it uses deterministic `search_memory` as a
   pathfinder, then reads the relevant lesson or memory pages.
 - When it uses memory, it names or cites the source lesson/page.
@@ -104,6 +106,8 @@ store sensitive student-level conclusions in broad profile memory.
   fixture
 - Class-scoped markdown wiki memory
 - Update memory with teacher-approved commits
+- Timeline/detail shortcuts for adding or correcting lesson results without
+  turning Update Memory into a wizard
 - Create lesson plan with read-only wiki access
 - Compact memory compaction endpoint
 - Deterministic source-bearing wiki retrieval

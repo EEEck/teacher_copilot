@@ -148,7 +148,7 @@ class PlanService:
             lesson_date = date.fromisoformat(req.lesson_date).isoformat()
         except ValueError as exc:
             raise ValueError("lesson_date must be YYYY-MM-DD") from exc
-        title = self.wiki._extract_title(req.plan_markdown) or "Lesson plan"
+        title = self.wiki.extract_title(req.plan_markdown) or "Lesson plan"
         path = self.wiki.save_lesson_plan(class_id, lesson_date, req.plan_markdown)
         self.core.set_status(req.session_id, PlanSessionStatus.saved.value)
         candidates = (

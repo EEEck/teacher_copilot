@@ -25,8 +25,9 @@ concrete implementation plans only.
 - [`agent_learning_guide.md`](docs/agent_learning_guide.md) -
   optional learning guide for agent concepts, reference repos, and best practices.
 
-For the common FCKW lesson-planning debug motion, use the plan trace bundle
-scripts documented in [`backend/README.md#plan-trace-bundle`](backend/README.md#plan-trace-bundle).
+For common agent debug motions, use the trace bundle scripts documented in
+[`backend/README.md`](backend/README.md): FCKW lesson planning and the
+three-turn Update Memory lesson-results scenario.
 
 ## Architecture
 
@@ -167,6 +168,10 @@ Both backend and frontend use **hot reload** in dev â€” you usually do not 
 4. **Create lesson plan** â†’ chat + plan draft (same layout) â†’ save to a lesson date
 
 Both chat flows share the same UI shell (`ArtifactSessionWorkspace`: thread left, markdown draft right).
+Update Memory can start free-form from the class header, or from a lesson
+timeline/detail action with a typed date/intent hint. Known planned/taught
+lessons skip most target discovery; unknown hinted dates still require
+confirmation in the agent runtime before saving.
 
 ## Wiki layout
 

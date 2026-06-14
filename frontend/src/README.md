@@ -6,7 +6,8 @@ This folder contains the Next.js app and shared UI code.
 
 - `app/page.tsx` - landing/class selection.
 - `app/classes/[classId]/page.tsx` - class home.
-- `app/classes/[classId]/memory/page.tsx` - memory overview.
+- `app/classes/[classId]/memory/page.tsx` - update-memory artifact session;
+  accepts optional lesson/date query hints from timeline/detail actions.
 - `app/classes/[classId]/lessons/[lessonDate]/page.tsx` - lesson detail.
 - `app/classes/[classId]/plan/page.tsx` - create lesson plan workflow.
 - `app/classes/[classId]/wiki/view/page.tsx` - wiki file viewer.
@@ -32,5 +33,8 @@ This folder contains the Next.js app and shared UI code.
 - API shape changes should be reflected in `lib/api.ts` and backend
   `app/schemas/api.py`.
 - Keep assistant-ui integration reusable across ingest/plan workflows.
+- Keep typed memory hint construction in page/domain code, not low-level UI
+  primitives. The backend remains the source of truth for whether a hinted
+  lesson target is confirmed.
 - Keep product-specific behavior in `components/klassenpilot/`, not low-level
   `components/ui/`.

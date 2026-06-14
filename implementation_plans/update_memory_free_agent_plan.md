@@ -34,6 +34,9 @@ lesson results, while keeping all durable wiki writes teacher-approved.
 - Implemented via optional `POST /classes/{id}/ingest/sessions` start hints.
   Timeline/detail links pass `lesson_date`, `lesson_title`, `intent`,
   `target_kind`, and `source=timeline_hint`.
+- Start hints are typed and resolved backend-side. Known planned/taught lessons
+  become confirmed high-confidence targets; unknown hinted dates remain in
+  `identify_target` with `needs_confirmation=true`.
 
 ## Phase 4 - Review/Correction UX (done)
 
@@ -47,10 +50,14 @@ lesson results, while keeping all durable wiki writes teacher-approved.
   hints, rendering the memory target/status strip, and keeping the existing
   review/approve commit path unchanged.
 
-## Phase 5 - Trace/Eval Hardening
+## Phase 5 - Trace/Eval Hardening (partly done)
 
-- Add an update-memory trace bundle parallel to plan trace if debugging needs it.
-- Add eval/test cases for vague target, timeline hint, planned lesson results,
-  correction of older observations, and unsupported future memory intents.
+- Update-memory trace bundle exists in `scripts/run_memory_update_trace_bundle.py`.
+- Offline trace contract tests cover the default lesson-results scenario.
+- API tests cover taught lesson hints, planned lesson hints, unknown hinted
+  dates, and invalid hint values.
+- Remaining hardening: consolidate duplicated plan/memory trace bundle script
+  logic into a scenario-driven runner if more artifact workflows are added, and
+  add cases for vague target phrases and unsupported future memory intents.
 - Only then consider broader memory features such as memo generation or profile
   learning from update-memory sessions.
