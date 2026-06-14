@@ -44,26 +44,31 @@ STARTUP_CLASS_SLICE_SECTIONS: tuple[SectionExpectation, ...] = (
     SectionExpectation("Recent lessons", content_markers=("2026-05-25", "Redox")),
     SectionExpectation(
         "Subject guide",
+        aliases=("Subject guide: chemie",),
         content_markers=("Confusing oxidation number with ionic charge",),
         source_path="wiki/subjects/chemie.md",
     ),
     SectionExpectation(
         "Taught so far",
+        aliases=("Class memory: taught_so_far.md",),
         content_markers=("Reaction Writing Basics", "Redox Reactions with Metals"),
         source_path="memory/taught_so_far.md",
     ),
     SectionExpectation(
         "Planning brief",
+        aliases=("Class memory: planning_brief.md",),
         content_markers=("Distinguish ion charge from oxidation number",),
         source_path="memory/planning_brief.md",
     ),
     SectionExpectation(
         "Teaching patterns",
+        aliases=("Class memory: teaching_patterns.md",),
         content_markers=("Peer checking", "concrete examples"),
         source_path="memory/teaching_patterns.md",
     ),
     SectionExpectation(
         "Class state",
+        aliases=("Class memory: class_state.md",),
         required=False,
         source_path="memory/class_state.md",
     ),
@@ -78,7 +83,7 @@ STARTUP_PROFILE_SECTIONS: tuple[SectionExpectation, ...] = (
     ),
     SectionExpectation(
         "Class copilot profile",
-        aliases=("Copilot working agreement (copilot.md)",),
+        aliases=("Copilot working agreement (copilot.md)", "Class memory: copilot_profile.md"),
         source_path="memory/copilot_profile.md",
         content_markers=("Quick diagnostic assessments", "peer checking"),
     ),
@@ -88,8 +93,8 @@ STARTUP_PROMPT_SECTIONS: tuple[str, ...] = (
     "Plan chat system template",
     "Active skill",
     "Memory policy",
-    "Class slice",
-    "Profiles",
+    "Teacher layer",
+    "Active class core",
     "Session state",
     "Lesson planning state",
     "Current lesson artifact",
@@ -97,8 +102,13 @@ STARTUP_PROMPT_SECTIONS: tuple[str, ...] = (
     "Wiki tools policy",
 )
 
-# Per memory_hierarchy.md, session summaries stay tool-fetched at startup.
-TOOL_ONLY_AT_STARTUP: tuple[str, ...] = ("session_summaries.md",)
+# Canonical detail and broad roll-ups stay behind tools at startup.
+TOOL_ONLY_AT_STARTUP: tuple[str, ...] = (
+    "course_state.md",
+    "open_loops.md",
+    "students.md",
+    "lesson_results.md",
+)
 
 TURN_TOOL_EXPECTATIONS: tuple[TurnToolExpectation, ...] = (
     TurnToolExpectation(turn=1, tools_required=("search_memory",), tools_any_of=("read_lesson", "read_lesson_range")),

@@ -106,8 +106,12 @@ class PlanService:
             raise KeyError("Session class mismatch")
         runtime = session.runtime
         runtime_payload = planning_api_payload(runtime) if runtime else {}
+        teacher_context = self.wiki.build_teacher_context_trace()["text"]
+        active_class_core = self.wiki.build_active_class_core_context_trace(class_id)["text"]
         prompt_stack = {
-            "class_slice": self.wiki.build_plan_context_slim(class_id),
+            "teacher_context": teacher_context,
+            "active_class_core": active_class_core,
+            "class_slice": active_class_core,
             "teacher_profile": self.wiki.read_user_profile(),
             "copilot_profile": self.wiki.read_copilot_profile(class_id),
             "session_state": render_session_state(runtime.session_state)

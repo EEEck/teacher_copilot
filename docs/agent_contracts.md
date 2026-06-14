@@ -58,8 +58,10 @@ Purpose:
 
 Reads:
 
-- Slim planning context slice from `build_plan_context_slim(class_id)`.
-- Compact class memory from `wiki/classes/{class_id}/memory/*.md` when present.
+- Global teacher profile from `build_teacher_context_trace()`.
+- Active class core from `build_active_class_core_context_trace(class_id)`:
+  class identity, the subject guide selected by `wiki.get_class(class_id).subject`,
+  and all compact class memory under `wiki/classes/{class_id}/memory/*.md`.
 - Class-scoped lesson memory through planning tools.
 - Uploaded teacher materials supplied in the current turn.
 
@@ -79,12 +81,11 @@ Runtime context manager:
   The backend validates and applies the patch; missing fields mean "no change".
   Full `session_state` / `lesson_planning_state` fields are compatibility
   fallback only, not the preferred contract.
-- The per-turn prompt is a slim, deduped class slice (`build_plan_context_slim`)
-  + bounded `user.md`/`copilot.md` slice + rendered state + the current full
-  `lessonplan.md` + compact evidence briefs. There is no blunt 14k-char clip;
-  per-section budgets (`MEMORY_PAGE_BUDGETS`) bound construction size. All
-  tunables are centralized in `app/context_limits.py` / `config.py` — see
-  `context_management.md`.
+- The per-turn prompt is composed from one global Teacher Layer, one Active
+  Class Core, rendered state, the current full `lessonplan.md`, and compact
+  evidence briefs. There is no blunt 14k-char clip; per-section budgets
+  (`MEMORY_PAGE_BUDGETS`) bound construction size. All tunables are centralized
+  in `app/context_limits.py` / `config.py` — see `context_management.md`.
 - The verbatim conversation window is configurable (`plan_history_turns`,
   default 8). Trimming is safe because durable context lives in injected state.
   Emergency backstops default to **0** (disabled) for modern large-context models.
@@ -186,8 +187,11 @@ Purpose:
 
 Reads:
 
-- Slim ingest context slice from `build_ingest_context_slim(class_id)`.
-- Compact class memory from `wiki/classes/{class_id}/memory/*.md` when present.
+- Global teacher profile from `build_teacher_context_trace()`.
+- Active class core from `build_active_class_core_context_trace(class_id)`:
+  class identity, selected subject guide, and all compact class memory under
+  `wiki/classes/{class_id}/memory/*.md`.
+- Lightweight update-memory task context from `build_ingest_task_context_trace`.
 - Class-scoped lesson/memory evidence through update-memory tools.
 - Uploaded teacher materials supplied in the current turn.
 
@@ -242,10 +246,12 @@ Allowed behavior:
 - Use pseudonymous student IDs only.
 - Do not infer sensitive facts beyond what the teacher said.
 - Never write wiki files directly from the chat turn.
-- The live ingest prompt must include each high-signal source at most once
-  (previous lesson, roster excerpt, course state, open loops, misconceptions,
-  compact memory, logging conventions). Do not stack index + base context +
-  ingest query pack into the chat prompt.
+- The live ingest prompt must include the Teacher Layer and Active Class Core
+  exactly once, then add only lightweight task continuity such as previous
+  lesson excerpt, bounded roster excerpt, and most recent saved plan. Do not
+  stack index + base context + ingest query pack into the chat prompt. Do not
+  inject `teacher_wiki/AGENTS.md`, full roll-ups, full student files, or full
+  lesson files by default.
 - If the teacher asks for a future memory task outside lesson-results
   logging/correction, set `unsupported_intent_reason` and explain the supported
   scope briefly.
@@ -392,8 +398,8 @@ Allowed query packs:
 
 - `planning_query_pack`: recent taught sequence, misconception priorities,
   planning brief, teaching patterns, and open loops.
-- `ingest_query_pack`: previous lesson, student roster excerpt, logging
-  conventions, compact class memory, and open loops.
+- `ingest_query_pack`: previous lesson, student roster excerpt, compact class
+  memory, and open loops.
 - `review_query_pack`: taught-so-far sequence, recurring misconceptions, and
   unresolved issues for review or assessment synthesis.
 
@@ -426,6 +432,9 @@ Plan trace endpoint:
 - The bundle includes prompt stack sections, current `lessonplan.md`, compact
   runtime state, recent messages, captured streamed events, evidence briefs, and
   raw evidence refs.
+- The prompt stack exposes `teacher_context` and `active_class_core`; legacy
+  `class_slice`, `teacher_profile`, and `copilot_profile` fields may remain as
+  compatibility diagnostics.
 - The bundle also includes `prompt_assembly`: a source -> function -> rendered
   text breakdown of what was fed into the model, plus per-turn
   `prompt_assembly` events in `event_trace`.

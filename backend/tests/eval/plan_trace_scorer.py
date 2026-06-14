@@ -81,22 +81,40 @@ def _check_patterns(text: str, patterns: tuple[str, ...], label: str, failures: 
             failures.append(f"{label}: pattern did not match /{pattern}/")
 
 
+_TOP_SECTION_ALIASES: dict[str, tuple[str, ...]] = {
+    "Teacher layer": ("Profiles",),
+    "Active class core": ("Class slice",),
+}
+
+
+def _has_top_section(expected: str, available: set[str]) -> bool:
+    names = {_normalize_name(expected)}
+    names.update(_normalize_name(alias) for alias in _TOP_SECTION_ALIASES.get(expected, ()))
+    return bool(names & available)
+
+
 def score_startup_context(trace: dict[str, Any]) -> ScoreResult:
     """Verify memory hierarchy contributors are present before the first teacher turn."""
     failures: list[str] = []
     warnings: list[str] = []
     assembly = trace.get("prompt_assembly") or {}
     nested = assembly.get("nested") or {}
-    class_sections = (nested.get("class_slice") or {}).get("sections") or []
-    profile_sections = (nested.get("profiles") or {}).get("sections") or []
+    class_trace = nested.get("active_class_core") or nested.get("class_slice") or {}
+    teacher_trace = nested.get("teacher_context") or {}
+    old_profile_trace = nested.get("profiles") or {}
+    class_sections = class_trace.get("sections") or []
+    profile_sections = (teacher_trace.get("sections") or []) + (old_profile_trace.get("sections") or [])
     top_sections = assembly.get("sections") or []
 
     included_class = _section_names(class_sections, included_only=True)
     included_profiles = _section_names(profile_sections, included_only=True)
+    included_class_or_profile = _section_names(
+        [*class_sections, *profile_sections], included_only=True
+    )
     included_top = _section_names(top_sections, included_only=False)
 
     for expected in STARTUP_PROMPT_SECTIONS:
-        if _normalize_name(expected) not in included_top:
+        if not _has_top_section(expected, included_top):
             failures.append(f"prompt_assembly missing top-level section {expected!r}")
 
     for expectation in STARTUP_CLASS_SLICE_SECTIONS:
@@ -116,33 +134,35 @@ def score_startup_context(trace: dict[str, Any]) -> ScoreResult:
             _check_markers(str(sec.get("text", "")), expectation.content_markers, expectation.canonical_name, failures)
 
     for expectation in STARTUP_PROFILE_SECTIONS:
-        if not _match_section(expectation, included_profiles):
+        if not _match_section(expectation, included_class_or_profile):
             failures.append(f"profiles missing required section {expectation.canonical_name!r}")
             continue
-        sec = _find_section(profile_sections, expectation)
+        sec = _find_section([*profile_sections, *class_sections], expectation)
         if sec and not sec.get("included", True):
             failures.append(f"profiles section {expectation.canonical_name!r} exists but is not included")
         elif sec:
             _check_markers(str(sec.get("text", "")), expectation.content_markers, expectation.canonical_name, failures)
 
     stack = trace.get("prompt_stack") or {}
-    if not (stack.get("teacher_profile") or "").strip():
-        failures.append("prompt_stack.teacher_profile is empty")
-    if not (stack.get("copilot_profile") or "").strip():
-        failures.append("prompt_stack.copilot_profile is empty")
-    if not (stack.get("class_slice") or "").strip():
-        failures.append("prompt_stack.class_slice is empty")
+    teacher_text = stack.get("teacher_context") or stack.get("teacher_profile", "")
+    class_text = stack.get("active_class_core") or stack.get("class_slice", "")
+    copilot_text = stack.get("copilot_profile") or class_text
+    if not teacher_text.strip():
+        failures.append("prompt_stack.teacher_context is empty")
+    if not class_text.strip():
+        failures.append("prompt_stack.active_class_core is empty")
+    if not copilot_text.strip():
+        failures.append("copilot profile text is empty")
 
-    _check_markers(stack.get("teacher_profile", ""), ("Prefers concise 45-minute lesson plans",), "teacher_profile", failures)
-    _check_markers(stack.get("copilot_profile", ""), ("Quick diagnostic assessments",), "copilot_profile", failures)
+    _check_markers(teacher_text, ("Prefers concise 45-minute lesson plans",), "teacher_context", failures)
+    _check_markers(copilot_text, ("Quick diagnostic assessments",), "copilot_profile", failures)
     _check_markers(
-        stack.get("class_slice", ""),
+        class_text,
         ("Planning brief", "Teaching patterns", "Top misconceptions"),
-        "class_slice",
+        "active_class_core",
         failures,
     )
 
-    class_text = stack.get("class_slice", "")
     for tool_only in TOOL_ONLY_AT_STARTUP:
         if tool_only in class_text:
             warnings.append(
@@ -150,8 +170,10 @@ def score_startup_context(trace: dict[str, Any]) -> ScoreResult:
             )
 
     instructions = assembly.get("instructions") or ""
-    if "Teacher and copilot profile" not in instructions and "Teacher (user.md)" not in instructions:
-        failures.append("rendered instructions missing teacher/copilot profile block")
+    if "Teacher context (global)" not in instructions and "Teacher and copilot profile" not in instructions:
+        failures.append("rendered instructions missing teacher context block")
+    if "Active class core context" not in instructions and "Class memory (compact)" not in instructions:
+        failures.append("rendered instructions missing active class core block")
 
     return ScoreResult(passed=not failures, failures=failures, warnings=warnings)
 

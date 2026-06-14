@@ -36,15 +36,16 @@ Examples:
 
 Loaded where:
 
-- Real lesson-planning chat calls (`plan_chat`) via
-  `build_profiles_assembly`.
-- Plan trace exposes it in `prompt_assembly` under `Profiles`.
+- Real lesson-planning chat calls (`plan_chat`) and update-memory chat calls via
+  `build_teacher_context_trace`.
+- Plan and ingest traces expose it as the `Teacher layer`.
 - Profile proposal skill reads it to avoid duplicate suggestions.
 
 Not loaded where:
 
-- It is not part of `build_plan_context_slim`; it is injected separately as the
-  profile slice.
+- It is not part of active class memory. It is injected separately as the global
+  teacher layer so class switching can rebuild class context without duplicating
+  teacher preferences.
 
 Updated by:
 
@@ -77,7 +78,8 @@ Purpose:
 
 Loaded where today:
 
-- Current live lesson-planning chat via `build_plan_context_slim`.
+- Current live class-scoped chats through
+  `build_active_class_core_context_trace(class_id)`.
 - Legacy context builders (`build_base_class_context`, `build_plan_context`)
   include an excerpt.
 - Memory compaction source packet may include the subject guide.
@@ -86,6 +88,8 @@ Design implication:
 
 - Subject guidance is injected as a small bounded slice. It should stay
   subject-wide and reusable, not class-specific.
+- The selected subject comes from `wiki.get_class(class_id).subject`. The
+  prompt builder must not scan or load every subject guide.
 
 Updated by:
 
@@ -158,10 +162,9 @@ Purpose:
 
 Loaded where today:
 
+- Included in the active class core context.
 - Available through `search_memory`.
 - Included in legacy `build_plan_context`.
-- Current live planning chat via `build_plan_context_slim`.
-- Included in ingest slim context.
 - Used by review/query packs.
 
 Good update source:
@@ -179,8 +182,7 @@ Purpose:
 
 Loaded where:
 
-- Current live planning chat via `build_plan_context_slim`.
-- Ingest slim context.
+- Included in the active class core context.
 - Search and memory page tools.
 
 Good update source:
@@ -204,8 +206,7 @@ Examples:
 
 Loaded where:
 
-- Current live planning chat via `build_plan_context_slim`.
-- Ingest slim context.
+- Included in the active class core context.
 - Search and memory page tools.
 
 Do not put here:
@@ -238,9 +239,9 @@ Examples:
 
 Loaded where:
 
-- Real lesson-planning chat calls (`plan_chat`) via
-  `build_profiles_assembly`, separate from the compact class slice.
-- Plan trace exposes it in `prompt_assembly` under `Profiles`.
+- Included in the active class core context as
+  `Class memory: copilot_profile.md`.
+- Plan and ingest traces expose it under `Active class core`.
 
 Updated by:
 
@@ -265,8 +266,7 @@ Purpose:
 
 Loaded where:
 
-- `build_plan_context_slim` will load it if the file exists.
-- Ingest slim context will load it if the file exists.
+- Included in the active class core context if the file exists.
 
 Current observed state:
 
@@ -285,7 +285,8 @@ Purpose:
 
 Loaded where:
 
-- Not part of current live planning base slice.
+- Included in the active class core context if the file exists, with the same
+  compact memory page budget discipline as other `memory/*.md` files.
 - Available through search/personal memory style lookup if relevant.
 
 Good update source:
@@ -345,18 +346,15 @@ Current live `plan_chat` loads before the first draft turn:
 1. `PLAN_CHAT_SYSTEM`
 2. `PLAN_SKILL`
 3. `PLAN_MEMORY_POLICY`
-4. `build_plan_context_slim(class_id)`:
+4. `build_teacher_context_trace()`:
+   - `wiki/teacher_profile.md`
+5. `build_active_class_core_context_trace(class_id)`:
    - class identity snapshot
    - top misconceptions
    - recent lesson titles
-   - bounded subject guide (`wiki/subjects/{subject}.md`)
-   - `class_state.md` if present
-   - `taught_so_far.md`
-   - `planning_brief.md`
-   - `teaching_patterns.md`
-5. profile slice:
-   - `teacher_profile.md`
-   - `copilot_profile.md`
+   - bounded subject guide selected from `wiki.get_class(class_id).subject`
+   - all existing compact class memory files under
+     `wiki/classes/{class_id}/memory/*.md`
 6. rendered `SessionState`
 7. rendered `LessonPlanningState`
 8. current full `lessonplan.md`
@@ -364,9 +362,13 @@ Current live `plan_chat` loads before the first draft turn:
 10. tool policy
 11. recent conversation window
 
+Current live update-memory chat loads the same Teacher Layer and Active Class
+Core exactly once, then adds an Update Memory task context containing bounded
+continuity hints such as the previous lesson excerpt, student roster excerpt,
+and most recent saved plan.
+
 Current live plan chat does **not** directly load:
 
-- `session_summaries.md`
 - full `open_loops.md`
 - full `students.md`
 - last two full lesson notes

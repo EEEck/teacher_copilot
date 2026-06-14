@@ -264,19 +264,20 @@ Current retrieval behavior:
 KlassenPilot follows the same broad pattern as modern memory-oriented agents
 such as Hermes, but keeps it local and workflow-specific:
 
-1. **Profile layer**: inject small stable teacher/class preferences when they
-   matter for the teacher-facing task. In lesson planning this is
-   `teacher_profile.md` plus class `copilot_profile.md`, loaded through
-   `build_profiles_assembly`.
-2. **Task context layer**: build a compact workflow-specific context pack from
-   the memory hierarchy. Lesson planning uses `build_plan_context_slim`, which
-   includes subject guidance, `taught_so_far.md`, `planning_brief.md`,
-   `teaching_patterns.md`, and `class_state.md` when present.
-3. **Evidence layer**: do not dump full canonical wiki pages into the base
+1. **Teacher layer**: inject the global teacher profile through
+   `build_teacher_context_trace()`.
+2. **Active class core**: inject exactly one active class through
+   `build_active_class_core_context_trace(class_id)`. It includes class
+   identity, the selected subject guide, and all existing compact class memory
+   pages under `wiki/classes/{class_id}/memory/*.md`.
+3. **Task context layer**: add only workflow-specific runtime or continuity
+   context. Update Memory uses a small task layer for the previous lesson,
+   bounded roster excerpt, and most recent saved plan.
+4. **Evidence layer**: do not dump full canonical wiki pages into the base
    prompt. Use tools such as `search_memory`, `list_lessons`,
    `read_lesson_range`, and `read_memory_page` when the teacher request needs
    exact details or older history.
-4. **Runtime layer**: inject short-lived session state separately from durable
+5. **Runtime layer**: inject short-lived session state separately from durable
    memory. For planning this is `PlanRuntime`: phase, decisions, artifact
    state, evidence briefs, raw refs, and memory candidates.
 5. **Trace layer**: expose the assembled context with source path, builder

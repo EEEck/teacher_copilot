@@ -78,17 +78,20 @@ Rules:
 - If the teacher asks for a future memory feature outside lesson-results logging/correction, set unsupported_intent_reason briefly and explain what is supported now.
 - Never write wiki files directly — only update diary_markdown in your structured output.
 
+Teacher context (global):
+{teacher_context}
+
+Active class core context:
+{context}
+
 Runtime state carried by the backend:
 {memory_runtime}
-
-Class context (index + roll-ups + recent lesson detail):
-{context}
 
 {wiki_tools_policy}
 """
 
 INGEST_WIKI_TOOLS_POLICY = """Update-memory lookup tools are available for target discovery and evidence.
-- Use the context pack first. It already contains the recent lesson, student notes, roll-ups, and most recent saved plan needed for normal logging.
+- Use the context pack first. It already contains the active class core, compact memory pages, selected subject guide, teacher profile, previous lesson, roster excerpt, and most recent saved plan when available.
 - If the teacher gives a vague target ("today", "last class", "the planned lesson", "that acids lesson"), use list_memory_targets to identify likely dates.
 - If the teacher wants to fill results for a planned/older lesson or correct an existing lesson, use read_memory_target(date) before editing the draft.
 - If you need a class-memory fact not in the pack, use search_memory(query), then read_memory_page(path) only when the snippet is not enough.
@@ -206,10 +209,11 @@ Rules:
 
 {memory_policy}
 
-{class_slice}
+## Teacher context (global)
+{teacher_context}
 
-## Teacher and copilot profile
-{profiles}
+## Active class core context
+{active_class_core}
 
 {session_state}
 

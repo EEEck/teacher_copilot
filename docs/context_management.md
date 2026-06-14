@@ -22,8 +22,8 @@ That was meant as a cheap guard when someone confused **14k tokens** with
 - behaved unlike ChatGPT or Claude, which do not slice composed system prompts
   at a fixed character boundary
 
-**Plan chat no longer uses this pattern.** It uses `build_plan_context_slim` +
-structured `PlanRuntime` state instead.
+**Plan chat no longer uses this pattern.** It composes a global teacher layer,
+one active-class core layer, and structured `PlanRuntime` state instead.
 
 ## How ChatGPT / Claude actually manage context
 
@@ -80,21 +80,29 @@ it.
 1. **Structured state** — `SessionState`, `LessonPlanningState` persisted on
    backend-owned `PlanRuntime`; the model proposes `state_patch` updates and
    backend merge rules prevent empty fields from wiping accumulated state.
-2. **Slim class slice** — `build_plan_context_slim` (each wiki page clamped via
-   `MEMORY_PAGE_BUDGETS`).
-3. **Full lesson plan** — current `lessonplan.md` injected each turn (no char
+2. **Teacher layer** — `build_teacher_context_trace()` loads only
+   `wiki/teacher_profile.md`.
+3. **Active class core** — `build_active_class_core_context_trace(class_id)`
+   loads class identity, the subject guide selected from
+   `wiki.get_class(class_id).subject`, and all existing
+   `wiki/classes/{class_id}/memory/*.md` pages, each clamped via
+   `MEMORY_PAGE_BUDGETS`.
+4. **Full lesson plan** — current `lessonplan.md` injected each turn (no char
    cap by default).
-4. **Verbatim window** — last `plan_history_turns` teacher turns in the user
+5. **Verbatim window** — last `plan_history_turns` teacher turns in the user
    message (default 8).
-5. **Evidence briefs** — compact tool summaries; raw outputs behind `raw_ref`.
-6. **No blunt 14k clip** on composed instructions.
+6. **Evidence briefs** — compact tool summaries; raw outputs behind `raw_ref`.
+7. **No blunt 14k clip** on composed instructions.
 
 ### Ingest / memory update
 
-Uses `build_ingest_context_slim`: one purpose-built pack for lesson logging.
-It includes each high-signal source once (previous lesson, roster excerpt,
-course state, open loops, misconceptions, compact memory, logging conventions)
-instead of stacking index + base + ingest + query-pack layers. Blunt
+Uses the same `build_teacher_context_trace()` and
+`build_active_class_core_context_trace(class_id)` layers as planning, then adds
+a lightweight Update Memory task layer for lesson logging. The task layer may
+include bounded continuity hints such as previous lesson, roster excerpt, and
+the most recent saved plan. It does not stack index + base + ingest +
+query-pack layers, and it does not inject `teacher_wiki/AGENTS.md`, full
+roll-ups, full student files, or full lesson files by default. Blunt
 end-truncation remains **disabled by default** (`ingest_context_backstop=0`).
 
 ### Durable wiki memory (Hermes-style)
@@ -122,10 +130,9 @@ forgetting.
 | `profile_propose_field_chars` | **0** | Profile proposal field cap; 0 = unlimited |
 | `memory_compact_source_chars` | **0** | Memory compaction source packet; 0 = unlimited |
 | `ingest_previous_lesson_chars` | **0** | Previous lesson excerpt in slim ingest context; 0 = unlimited |
-| `ingest_student_roster_chars` | **0** | Student roster excerpt in slim ingest context; 0 = unlimited |
+| `ingest_student_roster_chars` | **1800** | Student roster excerpt in slim ingest context; 0 = unlimited |
 | `ingest_course_state_chars` | **0** | Course state excerpt in slim ingest context; 0 = unlimited |
 | `ingest_open_loops_chars` | **0** | Open loops excerpt in slim ingest context; 0 = unlimited |
-| `ingest_logging_conventions_chars` | **0** | Wiki logging conventions excerpt; 0 = unlimited |
 | `ingest_saved_plan_chars` | **0** | Most recent saved plan excerpt in slim ingest context; 0 = unlimited |
 | `ingest_draft_chars` | **0** | Current diary draft in ingest user input; 0 = unlimited |
 | `upload_attachment_chars` | **0** | Per-upload content in chat user input; 0 = unlimited |
@@ -172,11 +179,11 @@ remembered:
 GET /api/classes/{class_id}/plan/sessions/{session_id}/trace
 ```
 
-The response includes the class slice, teacher/copilot profile slices, rendered
-`SessionState` / `LessonPlanningState`, current `lessonplan.md`, evidence
-briefs, streamed tool/final events, raw evidence refs, prompt assembly, and the
-latest runtime payload. Treat this as local developer diagnostics; it may
-contain teacher content and raw tool output.
+The response includes the teacher layer, active class core, compatibility
+`class_slice`, rendered `SessionState` / `LessonPlanningState`, current
+`lessonplan.md`, evidence briefs, streamed tool/final events, raw evidence refs,
+prompt assembly, and the latest runtime payload. Treat this as local developer
+diagnostics; it may contain teacher content and raw tool output.
 
 `prompt_assembly` is the preferred debug view when asking "what exactly got fed
 to the model?" It breaks the prompt into:

@@ -90,9 +90,15 @@ def test_plan_chat_stream_fckw_redox_uses_memory_pathfinder(client: TestClient):
     trace = client.get(f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/trace")
     assert trace.status_code == 200, trace.text
     body = trace.json()
-    assert body["prompt_stack"]["class_slice"]
+    assert body["prompt_stack"]["teacher_context"]
+    assert body["prompt_stack"]["active_class_core"]
     assert body["prompt_assembly"]["stage"] == "plan_chat"
-    assert body["prompt_assembly"]["nested"]["class_slice"]["sections"]
+    section_names = [s["name"] for s in body["prompt_assembly"]["sections"]]
+    assert section_names.count("Teacher layer") == 1
+    assert section_names.count("Active class core") == 1
+    assert body["prompt_assembly"]["nested"]["teacher_context"]["sections"]
+    assert body["prompt_assembly"]["nested"]["active_class_core"]["sections"]
+    assert "Class Copilot Profile" in body["prompt_stack"]["active_class_core"]
     assert body["prompt_stack"]["current_lessonplan_md"]
     assert body["runtime"]["session_state"]["phase"] == "lesson_refinement"
     assert body["runtime"]["lesson_planning_state"]["duration_minutes"] == 45

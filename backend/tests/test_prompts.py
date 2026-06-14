@@ -30,21 +30,29 @@ HOSTILE_CONTEXT = (
 
 
 def test_apply_prompt_does_not_treat_braces_as_format_fields():
-    out = apply_prompt(PLAN_CHAT_SYSTEM, class_slice=HOSTILE_CONTEXT)
+    out = apply_prompt(
+        PLAN_CHAT_SYSTEM,
+        teacher_context="Teacher context",
+        active_class_core=HOSTILE_CONTEXT,
+    )
     assert "{class_id}" in out  # left untouched, not interpreted
-    assert "{class_slice}" not in out  # placeholder was substituted
+    assert "{active_class_core}" not in out  # placeholder was substituted
 
 
 @pytest.mark.parametrize(
     "template,kwargs",
     [
-        (PLAN_CHAT_SYSTEM, {"class_slice": HOSTILE_CONTEXT}),
+        (
+            PLAN_CHAT_SYSTEM,
+            {"teacher_context": "Teacher context", "active_class_core": HOSTILE_CONTEXT},
+        ),
         (PLAN_OPENING_SYSTEM, {"context": HOSTILE_CONTEXT}),
         (
             INGEST_SYSTEM,
             {
                 "memory_skill": "Active skill: update_memory.",
                 "sections": "- A\n- B",
+                "teacher_context": "Teacher context",
                 "context": HOSTILE_CONTEXT,
                 "memory_runtime": "## Update-memory runtime state\n- phase: identify_target",
                 "wiki_tools_policy": CHAT_WIKI_TOOLS_POLICY,

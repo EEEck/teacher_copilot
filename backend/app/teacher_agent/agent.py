@@ -64,6 +64,7 @@ def build_ingest_agent(
         INGEST_SYSTEM,
         memory_skill=MEMORY_SKILL,
         sections=sections,
+        teacher_context=ctx.wiki.build_teacher_context_trace()["text"],
         context=apply_char_limit(context, lim.ingest_context_backstop),
         memory_runtime=render_memory_runtime(rt),
         wiki_tools_policy=INGEST_WIKI_TOOLS_POLICY,

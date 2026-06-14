@@ -164,6 +164,18 @@ class WikiStore:
             self, class_id, pages, source_paths=source_paths
         )
 
+    def build_teacher_context_trace(self):
+        return context_packs.build_teacher_context_trace(self)
+
+    def build_active_class_core_context_trace(self, class_id):
+        return context_packs.build_active_class_core_context_trace(self, class_id)
+
+    def build_ingest_task_context_trace(self, class_id):
+        return context_packs.build_ingest_task_context_trace(self, class_id)
+
+    def build_ingest_context_slim_trace(self, class_id):
+        return context_packs.build_ingest_context_slim_trace(self, class_id)
+
     def build_plan_context(self, class_id):
         return context_packs.build_plan_context(self, class_id)
 

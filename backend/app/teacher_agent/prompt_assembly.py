@@ -186,8 +186,10 @@ def build_ingest_chat_prompt_assembly(
     rt = runtime or MemoryRuntime()
     lim = get_context_limits()
     sections_text = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
+    teacher_trace = wiki.build_teacher_context_trace()
+    ingest_trace = wiki.build_ingest_context_slim_trace(class_id)
     ingest_context = apply_char_limit(
-        wiki.build_ingest_context_slim(class_id), lim.ingest_context_backstop
+        ingest_trace["text"], lim.ingest_context_backstop
     )
     memory_runtime = render_memory_runtime(rt)
     user_input = build_ingest_user_input_assembly(
@@ -196,6 +198,7 @@ def build_ingest_chat_prompt_assembly(
     instructions = apply_prompt(
         INGEST_SYSTEM,
         sections=sections_text,
+        teacher_context=teacher_trace["text"],
         context=ingest_context,
         memory_runtime=memory_runtime,
         wiki_tools_policy=INGEST_WIKI_TOOLS_POLICY,
@@ -221,9 +224,27 @@ def build_ingest_chat_prompt_assembly(
                 text=sections_text,
             ),
             _section(
-                name="Ingest class context",
+                name="Teacher layer",
+                function="wiki.build_teacher_context_trace",
+                source="wiki/teacher_profile.md",
+                text=teacher_trace["text"],
+            ),
+            _section(
+                name="Active class core",
+                function="wiki.build_active_class_core_context_trace",
+                source=f"wiki/classes/{class_id}/memory/*.md + selected subject guide",
+                text=ingest_trace["nested"]["active_class_core"]["text"],
+            ),
+            _section(
+                name="Update Memory task context",
+                function="wiki.build_ingest_task_context_trace",
+                source="recent lesson/roster/saved plan",
+                text=ingest_trace["nested"]["task_context"]["text"],
+            ),
+            _section(
+                name="Ingest context",
                 function="wiki.build_ingest_context_slim",
-                source="compact class wiki memory + recent lesson context",
+                source="active class core + update-memory task context",
                 text=ingest_context,
             ),
             _section(
@@ -247,18 +268,13 @@ def build_ingest_chat_prompt_assembly(
         ],
         "nested": {
             "user_input": user_input,
+            "teacher_context": teacher_trace,
             "ingest_context": {
                 "function": "wiki.build_ingest_context_slim",
                 "chars": len(ingest_context),
                 "text": ingest_context,
-                "sections": [
-                    _section(
-                        name="Ingest context",
-                        function="wiki.build_ingest_context_slim",
-                        source="compact class wiki memory + recent lesson context",
-                        text=ingest_context,
-                    )
-                ],
+                "sections": ingest_trace["sections"],
+                "nested": ingest_trace.get("nested", {}),
             },
         },
     }
@@ -316,8 +332,8 @@ def build_plan_chat_prompt_assembly(
 ) -> dict:
     rt = runtime or PlanRuntime()
     lim = get_context_limits()
-    class_trace = wiki.build_plan_context_slim_trace(class_id)
-    profiles_trace = build_profiles_assembly(wiki, class_id)
+    teacher_trace = wiki.build_teacher_context_trace()
+    class_trace = wiki.build_active_class_core_context_trace(class_id)
     session_state = render_session_state(rt.session_state)
     lesson_state = render_lesson_planning_state(rt.lesson_planning_state)
     current_plan_text = (
@@ -332,8 +348,8 @@ def build_plan_chat_prompt_assembly(
         PLAN_CHAT_SYSTEM,
         skill=PLAN_SKILL,
         memory_policy=PLAN_MEMORY_POLICY,
-        class_slice=class_trace["text"],
-        profiles=profiles_trace["text"],
+        teacher_context=teacher_trace["text"],
+        active_class_core=class_trace["text"],
         session_state=session_state,
         lesson_state=lesson_state,
         current_plan=current_plan_text,
@@ -363,16 +379,16 @@ def build_plan_chat_prompt_assembly(
             text=PLAN_MEMORY_POLICY,
         ),
         _section(
-            name="Class slice",
-            function="wiki.build_plan_context_slim",
-            source="compact class wiki memory",
-            text=class_trace["text"],
+            name="Teacher layer",
+            function="wiki.build_teacher_context_trace",
+            source="wiki/teacher_profile.md",
+            text=teacher_trace["text"],
         ),
         _section(
-            name="Profiles",
-            function="build_profiles_assembly",
-            source="wiki/teacher_profile.md + class copilot_profile.md",
-            text=profiles_trace["text"],
+            name="Active class core",
+            function="wiki.build_active_class_core_context_trace",
+            source=f"wiki/classes/{class_id}/memory/*.md + selected subject guide",
+            text=class_trace["text"],
         ),
         _section(
             name="Session state",
@@ -420,8 +436,8 @@ def build_plan_chat_prompt_assembly(
         "user_input": user_input["text"],
         "sections": sections,
         "nested": {
-            "class_slice": class_trace,
-            "profiles": profiles_trace,
+            "teacher_context": teacher_trace,
+            "active_class_core": class_trace,
             "user_input": user_input,
         },
     }
@@ -460,5 +476,5 @@ def build_plan_opening_prompt_assembly(wiki, class_id: str) -> dict:
                 text=user_input,
             ),
         ],
-        "nested": {"class_slice": class_trace},
+        "nested": {"active_class_core": class_trace, "class_slice": class_trace},
     }

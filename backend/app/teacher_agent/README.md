@@ -48,10 +48,10 @@ prompt trace diagnostics.
   calls. Future one-shot helper agents should adopt the same pattern when the
   v1.2 debug generalization is implemented.
 - New teacher-facing workflows should define their memory layers up front:
-  profile context via `build_profiles_assembly` when teacher/class preferences
-  matter, a task-specific compact context pack from the wiki memory hierarchy,
-  detailed canonical evidence through tools, runtime/session state as a
-  separate injected layer, and trace metadata for every rendered section.
+  global teacher context via `build_teacher_context_trace`, active-class memory
+  via `build_active_class_core_context_trace`, task-specific runtime context,
+  detailed canonical evidence through tools, and trace metadata for every
+  rendered section.
 - If agent behavior changes, update `../../../docs/agent_contracts.md`.
 
 ## Related Docs

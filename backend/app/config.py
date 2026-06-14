@@ -45,10 +45,9 @@ class Settings(BaseSettings):
     memory_compact_source_chars: int = 0
     # Ingest slim context / user-input field caps. 0 = no limit on that field.
     ingest_previous_lesson_chars: int = 0
-    ingest_student_roster_chars: int = 0
+    ingest_student_roster_chars: int = 1800
     ingest_course_state_chars: int = 0
     ingest_open_loops_chars: int = 0
-    ingest_logging_conventions_chars: int = 0
     ingest_saved_plan_chars: int = 0
     ingest_draft_chars: int = 0
     upload_attachment_chars: int = 0

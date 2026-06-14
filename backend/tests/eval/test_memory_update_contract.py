@@ -32,9 +32,17 @@ def test_update_memory_trace_before_first_message(client: TestClient):
     body = trace.json()
 
     assert body["prompt_stack"]["ingest_context"]
+    assert body["prompt_stack"]["teacher_context"]
+    assert body["prompt_stack"]["active_class_core"]
     assert body["prompt_stack"]["current_diary_markdown"]
     assert body["prompt_assembly"]["stage"] == "ingest_chat"
     assert body["prompt_assembly"]["sections"]
+    section_names = [s["name"] for s in body["prompt_assembly"]["sections"]]
+    assert section_names.count("Teacher layer") == 1
+    assert section_names.count("Active class core") == 1
+    assert "AGENTS.md" not in body["prompt_stack"]["ingest_context"]
+    assert "Wiki logging conventions" not in body["prompt_stack"]["ingest_context"]
+    assert "Class Copilot Profile" in body["prompt_stack"]["active_class_core"]
     assert body["runtime"]["phase"] == "identify_target"
     assert body["runtime"]["target"]["target_confirmed"] is False
     assert body["event_trace"] == []

@@ -79,7 +79,6 @@ class ContextLimits:
     ingest_student_roster_chars: int
     ingest_course_state_chars: int
     ingest_open_loops_chars: int
-    ingest_logging_conventions_chars: int
     ingest_saved_plan_chars: int
     ingest_draft_chars: int
     upload_attachment_chars: int
@@ -110,7 +109,6 @@ class ContextLimits:
             ingest_student_roster_chars=settings.ingest_student_roster_chars,
             ingest_course_state_chars=settings.ingest_course_state_chars,
             ingest_open_loops_chars=settings.ingest_open_loops_chars,
-            ingest_logging_conventions_chars=settings.ingest_logging_conventions_chars,
             ingest_saved_plan_chars=settings.ingest_saved_plan_chars,
             ingest_draft_chars=settings.ingest_draft_chars,
             upload_attachment_chars=settings.upload_attachment_chars,

@@ -292,6 +292,8 @@ class IngestService:
         runtime = session.runtime if isinstance(session.runtime, MemoryRuntime) else None
         runtime_payload = memory_api_payload(runtime) if runtime else {}
         prompt_stack = {
+            "teacher_context": self.wiki.build_teacher_context_trace()["text"],
+            "active_class_core": self.wiki.build_active_class_core_context_trace(class_id)["text"],
             "ingest_context": self.wiki.build_ingest_context_slim(class_id),
             "memory_runtime": render_memory_runtime(runtime)
             if runtime
