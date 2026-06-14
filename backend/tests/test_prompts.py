@@ -13,6 +13,7 @@ import pytest
 from app.teacher_agent.prompts import (
     CHAT_WIKI_TOOLS_POLICY,
     INGEST_SYSTEM,
+    MEMORY_SKILL,
     PLAN_CHAT_SYSTEM,
     PLAN_SKILL,
     PLAN_WIKI_TOOLS_POLICY,
@@ -42,8 +43,10 @@ def test_apply_prompt_does_not_treat_braces_as_format_fields():
         (
             INGEST_SYSTEM,
             {
+                "memory_skill": "Active skill: update_memory.",
                 "sections": "- A\n- B",
                 "context": HOSTILE_CONTEXT,
+                "memory_runtime": "## Update-memory runtime state\n- phase: identify_target",
                 "wiki_tools_policy": CHAT_WIKI_TOOLS_POLICY,
             },
         ),
@@ -69,6 +72,19 @@ def test_plan_policy_uses_information_need_not_keyword_triggers():
     assert "source-backed claims" in policy
     assert "list_lessons" in policy
     assert "read_lesson_range" in policy
+
+
+def test_memory_phase_skill_documents_transitions():
+    skill = MEMORY_SKILL.lower()
+    ingest = INGEST_SYSTEM.lower()
+
+    assert "identify_target" in skill
+    assert "collect_results" in skill
+    assert "review_draft" in skill
+    assert "state_patch.session_state.phase" in skill
+    assert "stay in collect_results" in skill
+    assert "ready to save" in skill
+    assert "{memory_skill}" in ingest
 
 
 def test_plan_phase_finalize_uses_semantic_teacher_intent_not_keyword_triggers():

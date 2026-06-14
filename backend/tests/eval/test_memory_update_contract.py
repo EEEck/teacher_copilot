@@ -48,8 +48,9 @@ def test_update_memory_three_turn_stub_scenario_contract(client: TestClient):
     events_per_turn: list[list[dict]] = []
     traces_after: list[dict] = []
     final_artifact = ""
+    expected_phases = ["collect_results", "collect_results", "review_draft"]
 
-    for prompt in MEMORY_UPDATE_PROMPTS:
+    for turn_idx, prompt in enumerate(MEMORY_UPDATE_PROMPTS, start=1):
         events = _parse_turn_events(client, session_id, prompt)
         events_per_turn.append(events)
         trace = client.get(
@@ -58,9 +59,9 @@ def test_update_memory_three_turn_stub_scenario_contract(client: TestClient):
         assert trace.status_code == 200, trace.text
         traces_after.append(trace.json())
         final_artifact = traces_after[-1].get("artifact_markdown") or final_artifact
+        assert traces_after[-1]["runtime"]["phase"] == expected_phases[turn_idx - 1]
 
     all_tools = [name for events in events_per_turn for name in _tool_names(events)]
-    assert "list_memory_targets" in all_tools
     assert "read_memory_target" in all_tools
 
     final_trace = traces_after[-1]

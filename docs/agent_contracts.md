@@ -210,6 +210,13 @@ Runtime context manager:
   phase (`identify_target`, `collect_results`, `review_draft`, `unsupported`),
   lesson-result categories, compact evidence briefs, raw evidence refs, and a
   diary version counter.
+- After each model `state_patch` merge, the backend may auto-advance phase when
+  the case is unambiguous: confirmed target + lesson date moves
+  `identify_target` → `collect_results`; a clearly accepting teacher message
+  with a complete diary moves `collect_results` → `review_draft`. Timeline
+  start hints still seed `collect_results` directly when the target is known.
+- `ready_to_propose` / streamed `ready` requires both a complete diary and
+  `phase == review_draft`.
 - Runtime state is returned to clients as `memory_state` on ingest session/chat,
   draft/propose responses, and streamed final events. It is diagnostic/workflow
   state, not durable memory.

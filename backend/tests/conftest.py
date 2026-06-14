@@ -36,6 +36,7 @@ from app.teacher_agent.memory_update_state import (
     MemoryTargetPatch,
     memory_api_payload,
     merge_memory_turn,
+    teacher_signals_finalize,
 )
 from app.teacher_agent.planning_state import (
     EvidenceBrief,
@@ -220,6 +221,16 @@ class StubAgentRunner:
         )
         planning.session_state.phase = phase
 
+    def _memory_phase(self, messages: list[ChatMessage], scenario_0529: bool) -> str:
+        latest = messages[-1].content if messages else ""
+        if not scenario_0529:
+            return "review_draft"
+        if teacher_signals_finalize(latest):
+            return "review_draft"
+        if any("2026-05-29" in m.content or "05/29" in m.content for m in messages):
+            return "collect_results"
+        return "identify_target"
+
     def _emit_memory_state(
         self,
         memory: MemoryRuntime,
@@ -228,7 +239,9 @@ class StubAgentRunner:
         """Simulate the model emitting structured update-memory state."""
         latest = messages[-1].content if messages else ""
         scenario_0529 = any(
-            "2026-05-29" in m.content or "open loops from 5-25" in m.content.lower()
+            "2026-05-29" in m.content
+            or "05/29" in m.content
+            or "open loops from 5-25" in m.content.lower()
             for m in messages
         )
         if scenario_0529:
@@ -260,6 +273,7 @@ class StubAgentRunner:
             lesson_title = "Anions and Oxidation State Review"
             target_kind = "taught_lesson"
             intent = "correct_existing_results"
+            phase = self._memory_phase(messages, scenario_0529=True)
         else:
             covered = ["Topic A"]
             participation = ["Active discussion"]
@@ -271,6 +285,8 @@ class StubAgentRunner:
             lesson_title = "Stub Lesson"
             target_kind = "new_lesson"
             intent = "log_new_results"
+            phase = "review_draft"
+        diary_md = MEMORY_UPDATE_DIARY if scenario_0529 else COMPLETE_DIARY
         merge_memory_turn(
             memory,
             state_patch=MemoryStatePatch(
@@ -285,7 +301,7 @@ class StubAgentRunner:
                     needs_confirmation=False,
                 ),
                 session_state=MemorySessionPatch(
-                    phase="review_draft",
+                    phase=phase,
                     teacher_goal=latest[:80],
                     decisions=[f"Update lesson results for {lesson_date}."],
                 ),
@@ -316,6 +332,8 @@ class StubAgentRunner:
             last_change_summary="Updated lesson results.",
             unsupported_intent_reason="",
             diary_changed=True,
+            teacher_message=latest,
+            diary_complete=self.wiki.is_diary_complete(diary_md),
         )
 
     async def plan_chat(
@@ -339,7 +357,9 @@ class StubAgentRunner:
         memory: MemoryRuntime | None = None,
     ) -> tuple[str, str, CompletenessChecklist, bool]:
         scenario_0529 = any(
-            "2026-05-29" in m.content or "open loops from 5-25" in m.content.lower()
+            "2026-05-29" in m.content
+            or "05/29" in m.content
+            or "open loops from 5-25" in m.content.lower()
             for m in messages
         )
         diary = MEMORY_UPDATE_DIARY if scenario_0529 else COMPLETE_DIARY
@@ -446,29 +466,15 @@ class StubAgentRunner:
         yield SseReasoningDelta(text="Reviewing class memory…")
         latest = messages[-1].content.lower() if messages else ""
         scenario_0529 = any(
-            "2026-05-29" in m.content or "open loops from 5-25" in m.content.lower()
+            "2026-05-29" in m.content
+            or "05/29" in m.content
+            or "open loops from 5-25" in m.content.lower()
             for m in messages
         )
         diary = MEMORY_UPDATE_DIARY if scenario_0529 else COMPLETE_DIARY
         if scenario_0529 and (
-            "2026-05-29" in latest or "lesson results" in latest
+            "2026-05-29" in latest or "05/29" in latest or "lesson results" in latest
         ):
-            yield SseToolCall(
-                name="list_memory_targets",
-                args='{"start_date":"2026-05-29","end_date":"2026-05-29","max_results":5}',
-                call_id="memory-targets-1",
-            )
-            target_payload = (
-                '[{"date":"2026-05-29","title":"Anions and Oxidation State Review",'
-                '"status":"taught"}]'
-            )
-            if memory is not None:
-                memory.raw_store["list_memory_targets_stub"] = target_payload
-            yield SseToolResult(
-                name="list_memory_targets",
-                output=f"raw_ref: list_memory_targets_stub\n{target_payload}",
-                call_id="memory-targets-1",
-            )
             yield SseToolCall(
                 name="read_memory_target",
                 args='{"lesson_date":"2026-05-29"}',
@@ -499,15 +505,21 @@ class StubAgentRunner:
         checklist = self.wiki.checklist_from_diary(diary)
         if memory is not None:
             self._emit_memory_state(memory, messages)
+        memory_payload = memory_api_payload(memory) if memory is not None else {}
+        ready = bool(
+            memory is not None
+            and memory_payload.get("phase") == "review_draft"
+            and self.wiki.is_diary_complete(diary)
+        )
         yield SseFinal(
             reply="Logged the lesson.",
             artifact_markdown=diary,
-            ready=True,
+            ready=ready,
             completeness=checklist,
             last_change_summary=(
                 memory.last_change_summary if memory is not None else None
             ),
-            memory_state=memory_api_payload(memory) if memory is not None else None,
+            memory_state=memory_payload or None,
         )
 
     def _plan_final(

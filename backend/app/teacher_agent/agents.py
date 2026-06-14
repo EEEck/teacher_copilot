@@ -248,7 +248,13 @@ class AgentRunner:
         )
 
     def _merge_memory_turn(
-        self, runtime: MemoryRuntime, parsed: IngestTurnOutput, *, diary_changed: bool
+        self,
+        runtime: MemoryRuntime,
+        parsed: IngestTurnOutput,
+        *,
+        diary_changed: bool,
+        teacher_message: str = "",
+        diary_complete: bool = False,
     ) -> None:
         merge_memory_turn(
             runtime,
@@ -257,6 +263,8 @@ class AgentRunner:
             last_change_summary=parsed.last_change_summary,
             unsupported_intent_reason=parsed.unsupported_intent_reason,
             diary_changed=diary_changed,
+            teacher_message=teacher_message,
+            diary_complete=diary_complete,
         )
 
     def _memory_final_event(
@@ -307,18 +315,23 @@ class AgentRunner:
         parsed: Any,
         current_draft: str,
         runtime: MemoryRuntime,
+        *,
+        teacher_message: str = "",
     ) -> tuple[str, str, CompletenessChecklist, bool] | None:
         if not isinstance(parsed, IngestTurnOutput):
             return None
         reply = parsed.reply
         diary_md = parsed.diary_markdown.strip() or current_draft
         checklist = self.wiki.checklist_from_diary(diary_md)
-        ready = self.wiki.is_diary_complete(diary_md)
+        diary_complete = self.wiki.is_diary_complete(diary_md)
         self._merge_memory_turn(
             runtime,
             parsed,
             diary_changed=diary_md.strip() != current_draft.strip(),
+            teacher_message=teacher_message,
+            diary_complete=diary_complete,
         )
+        ready = diary_complete and runtime.session_state.phase == "review_draft"
         return reply, diary_md, checklist, ready
 
     def _prepare_plan_turn(
@@ -443,7 +456,10 @@ class AgentRunner:
         if out is None:
             return
         finalized = self._finalize_ingest_turn(
-            out.final_output, turn.current_draft, turn.runtime
+            out.final_output,
+            turn.current_draft,
+            turn.runtime,
+            teacher_message=messages[-1].content if messages else "",
         )
         if finalized is None:
             yield SseError(
@@ -577,16 +593,20 @@ class AgentRunner:
                 self.wiki.checklist_from_diary(current_draft),
                 False,
             )
-        reply = parsed.reply
-        diary_md = parsed.diary_markdown.strip() or current_draft
-        checklist = self.wiki.checklist_from_diary(diary_md)
-        ready = self.wiki.is_diary_complete(diary_md)
-        self._merge_memory_turn(
-            runtime,
+        finalized = self._finalize_ingest_turn(
             parsed,
-            diary_changed=diary_md.strip() != current_draft.strip(),
+            current_draft,
+            runtime,
+            teacher_message=messages[-1].content if messages else "",
         )
-        return reply, diary_md, checklist, ready
+        if finalized is None:
+            return (
+                "I had trouble processing that — could you try again?",
+                current_draft,
+                self.wiki.checklist_from_diary(current_draft),
+                False,
+            )
+        return finalized
 
     async def compile_diary(self, class_id: str, messages: list[ChatMessage]) -> str:
         context = self.wiki.load_index_context(class_id)

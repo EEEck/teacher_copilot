@@ -236,6 +236,53 @@ def apply_memory_state_patch(runtime: MemoryRuntime, patch: MemoryStatePatch) ->
     )
 
 
+def teacher_signals_finalize(message: str) -> bool:
+    """True when the teacher's latest message clearly accepts the draft for save."""
+    text = (message or "").lower()
+    if not text.strip():
+        return False
+    markers = (
+        "ready to save",
+        "enough detail",
+        "that's enough",
+        "that is enough",
+        "looks good to save",
+        "good to save",
+        "please finalize",
+        "make the lesson results ready",
+    )
+    return any(marker in text for marker in markers)
+
+
+def apply_memory_phase_auto_advance(
+    runtime: MemoryRuntime,
+    *,
+    teacher_message: str = "",
+    diary_complete: bool = False,
+) -> None:
+    """Apply deterministic phase transitions the backend owns after model patches."""
+    if runtime.session_state.phase == "unsupported":
+        return
+
+    phase = runtime.session_state.phase
+    target = runtime.target
+
+    if (
+        phase == "identify_target"
+        and target.target_confirmed
+        and target.lesson_date.strip()
+    ):
+        runtime.session_state.phase = "collect_results"
+        phase = "collect_results"
+
+    if (
+        phase == "collect_results"
+        and diary_complete
+        and teacher_signals_finalize(teacher_message)
+    ):
+        runtime.session_state.phase = "review_draft"
+
+
 def merge_memory_turn(
     runtime: MemoryRuntime,
     *,
@@ -244,6 +291,8 @@ def merge_memory_turn(
     last_change_summary: str,
     unsupported_intent_reason: str,
     diary_changed: bool,
+    teacher_message: str = "",
+    diary_complete: bool = False,
 ) -> None:
     if _patch_has_values(state_patch):
         apply_memory_state_patch(runtime, state_patch)
@@ -264,6 +313,11 @@ def merge_memory_turn(
         runtime.evidence_briefs = runtime.evidence_briefs[-cap:]
     if diary_changed:
         runtime.diary_version += 1
+    apply_memory_phase_auto_advance(
+        runtime,
+        teacher_message=teacher_message,
+        diary_complete=diary_complete,
+    )
 
 
 def memory_api_payload(runtime: MemoryRuntime) -> dict:

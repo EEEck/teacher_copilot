@@ -21,6 +21,7 @@ from app.teacher_agent.prompts import (
     COMPILE_SYSTEM,
     INGEST_WIKI_TOOLS_POLICY,
     INGEST_SYSTEM,
+    MEMORY_SKILL,
     LINT_SYSTEM,
     MEMORY_COMPACT_SYSTEM,
     PROFILE_PROPOSAL_SYSTEM,
@@ -61,6 +62,7 @@ def build_ingest_agent(
     rt = memory or MemoryRuntime()
     instructions = apply_prompt(
         INGEST_SYSTEM,
+        memory_skill=MEMORY_SKILL,
         sections=sections,
         context=apply_char_limit(context, lim.ingest_context_backstop),
         memory_runtime=render_memory_runtime(rt),

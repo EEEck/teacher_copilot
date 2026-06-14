@@ -17,7 +17,10 @@ import urllib.request
 from typing import Any
 
 
-DEFAULT_PROMPT_1 = """Lesson Results — 2026-05-29 —
+DEFAULT_PROMPT_1 = """I want to update the lesson outcome from 05/29
+"""
+
+DEFAULT_PROMPT_2 = """Lesson Results — 2026-05-29 —
 What was covered
 no problem on those two items:
 Review common anions and their charges.
@@ -36,15 +39,14 @@ Homework & follow-ups
 gave mainly homework about common anions
 """
 
-DEFAULT_PROMPT_2 = """I want to add more information about student participation:
+DEFAULT_PROMPT_3 = """I want to add more information about student participation:
 Matt was also doing well and helped other students
 with reguards to interruption that was mainly due to my poor lesson organization
 
 in terms of open loops from 5-25,
 I review metal displacement and student should have gotten that concept now, I had no time for the other open loop items
-"""
 
-DEFAULT_PROMPT_3 = """That is enough detail. Please make the lesson results ready to save memory.
+That is enough detail. Please make the lesson results ready to save memory.
 """
 
 

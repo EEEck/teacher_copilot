@@ -5,6 +5,8 @@ from __future__ import annotations
 CLASS_ID = "chemie_9b_2026_27"
 
 MEMORY_UPDATE_PROMPTS = [
+    """I want to update the lesson outcome from 05/29
+""",
     """Lesson Results — 2026-05-29 —
 What was covered
 no problem on those two items:
@@ -29,7 +31,7 @@ with reguards to interruption that was mainly due to my poor lesson organization
 
 in terms of open loops from 5-25,
 I review metal displacement and student should have gotten that concept now, I had no time for the other open loop items
-""",
-    """That is enough detail. Please make the lesson results ready to save memory.
+
+That is enough detail. Please make the lesson results ready to save memory.
 """,
 ]
