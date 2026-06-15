@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.config import get_settings
+from tests.eval.ingest_trace_scorer import score_ingest_startup_context
 from tests.eval.memory_update_prompts import CLASS_ID, MEMORY_UPDATE_PROMPTS
 from tests.test_api_stream import _parse_sse
 
@@ -29,31 +29,8 @@ def test_update_memory_trace_before_first_message(client: TestClient):
 
     trace = client.get(f"/api/classes/{CLASS_ID}/ingest/sessions/{session_id}/trace")
     assert trace.status_code == 200, trace.text
-    body = trace.json()
-
-    assert body["prompt_stack"]["ingest_context"]
-    assert body["prompt_stack"]["teacher_context"]
-    assert body["prompt_stack"]["active_class_core"]
-    assert body["prompt_stack"]["memory_target_state"]
-    assert body["prompt_stack"]["memory_session_state"]
-    assert body["prompt_stack"]["lesson_result_state"]
-    assert body["prompt_stack"]["memory_evidence_briefs"]
-    assert body["prompt_stack"]["current_diary_markdown"]
-    assert body["prompt_assembly"]["stage"] == "ingest_chat"
-    assert body["prompt_assembly"]["sections"]
-    section_names = [s["name"] for s in body["prompt_assembly"]["sections"]]
-    assert section_names.count("Teacher layer") == 1
-    assert section_names.count("Active class core") == 1
-    assert "Memory target state" in section_names
-    assert "Memory session state" in section_names
-    assert "Lesson result state" in section_names
-    assert "Memory evidence briefs" in section_names
-    assert "AGENTS.md" not in body["prompt_stack"]["ingest_context"]
-    assert "Wiki logging conventions" not in body["prompt_stack"]["ingest_context"]
-    assert "Class Copilot Profile" in body["prompt_stack"]["active_class_core"]
-    assert body["runtime"]["phase"] == "identify_target"
-    assert body["runtime"]["target"]["target_confirmed"] is False
-    assert body["event_trace"] == []
+    result = score_ingest_startup_context(trace.json())
+    assert result.passed, result.failures
 
 
 def test_update_memory_three_turn_stub_scenario_contract(client: TestClient):
@@ -105,6 +82,8 @@ def test_update_memory_three_turn_stub_scenario_contract(client: TestClient):
 def test_update_memory_trace_disabled_by_default_in_production(
     client: TestClient, monkeypatch
 ):
+    from app.config import get_settings
+
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.delenv("AGENT_TRACE_ENABLED", raising=False)
     monkeypatch.delenv("PLAN_TRACE_ENABLED", raising=False)

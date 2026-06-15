@@ -36,14 +36,66 @@ not call OpenAI or mutate the repo wiki.
 - `eval/fckw_contract.py` - declarative expectations aligned with
   `docs/memory_hierarchy.md`.
 - `fixtures/fckw_plan/trace_before_turn1.json` - committed startup trace fixture.
+- `fixtures/eval_wiki/` - eval-only `engl_10c_2026_27` mock class + `ESL.md` subject guide.
+- `eval/ingest_trace_scorer.py` - shared ingest startup trace scorer.
+- `evals/` - DeepEval build-loop goldens (layer isolation + workflow startup).
+
+## DeepEval build loop (`tests/evals/`)
+
+**Where to run:** host/CI `backend/.venv` with `pip install -e ".[dev]"` — **not**
+inside the running docker/uvicorn container. Tests use in-process `TestClient`;
+no server on `:8010` required for tiers 0–2.
+
+Canonical guide: [`docs/evals.md`](../docs/evals.md) (architecture, tiers, env
+vars, CI notes).
+
+Deterministic DeepEval goldens wrap the existing trace contract scorers. No OpenAI
+credits required for the committed suite.
+
+**Golden matrix (12 total):**
+
+| Family | Goldens | What it checks |
+|--------|---------|----------------|
+| Layer isolation — Chemie 9b | `9b_global`, `9b_global_class`, `9b_global_class_subject` | Global teacher layer → + class memory → + `chemie.md` subject |
+| Layer isolation — Englisch 10c mock | `10c_global`, `10c_global_class`, `10c_global_class_subject` | Same progression with `engl_10c_2026_27` + `ESL.md` (no chemie leakage) |
+| Workflow startup — Chemie 9b | `9b_plan_startup`, `9b_ingest_startup` | Full plan/ingest session trace before first teacher message |
+| **Chat turns (stub, CI)** | `9b_plan_fckw_turn1`, `9b_plan_redox_lesson_lookup`, `9b_plan_fckw_turn2_review`, `9b_ingest_turn2_collect` | Message → tool calls → trace evidence (deterministic) |
+| **Chat turns (live, opt-in)** | same 4 goldens | Above + DeepEval `GEval` LLM judge on retrieval context |
+
+**Run deterministic suite (CI-safe):**
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py -v
+```
+
+**Run live chat evals (real OpenAI Agents SDK + LLM judge):**
+
+```powershell
+cd backend
+$env:RUN_LIVE_AGENT_EVALS="1"
+$env:RUN_LLM_CHAT_JUDGE="1"   # GEval grounding judge (default on for live)
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_chat_live.py -v
+```
+
+Each chat golden scores three metrics:
+
+1. **ToolInvocation** — required/any-of tool names from SSE `tool_call` events
+2. **TraceEvidence** — post-turn trace phase, `raw_evidence`, artifact patterns
+3. **GroundedChat** (live only) — `GEval` judges `input` + `retrieval_context` + `actual_output`
+
+Retrieval context for the judge is built from startup class core, tool results, and `raw_evidence` refs in the trace.
+
+**Build-loop rules:**
+
+1. Read metric `reason` strings on failure.
+2. Fix context loading in `app/teacher_agent/wiki/context_packs.py` or `prompt_assembly.py` — do not weaken thresholds or delete goldens.
+3. Re-run the eval suite above plus tier-1 tests in `tests/eval/`.
+
+OpenAI Agents SDK tracing (`DeepEvalTracingProcessor`) is registered in
+`tests/evals/conftest.py` for future live goldens.
 
 ## Agent behavior eval (recommended tiers)
-
-Do **not** add a heavy eval framework (DeepEval, LangSmith, Promptfoo) for this
-prototype. You already have the right primitive: the plan trace endpoint and
-run bundle format expose prompt sections, tool calls, runtime phase, and the
-final artifact as structured JSON. Build a thin **trace contract scorer** on
-top of pytest instead.
 
 | Tier | When | Cost | What it catches |
 |------|------|------|-----------------|
@@ -96,11 +148,11 @@ cd backend
 .\.venv\Scripts\python -m pytest
 ```
 
-Focused agent/memory set:
+Focused agent/memory + DeepEval set:
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest tests\test_api_ingest.py tests\test_api_stream.py tests\eval\test_memory_update_contract.py tests\test_api_plan.py
+.\.venv\Scripts\python -m pytest tests/evals/ tests/eval/test_fckw_plan_contract.py tests/eval/test_memory_update_contract.py
 ```
 
 ## Rules

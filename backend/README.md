@@ -215,3 +215,24 @@ pytest
 ```
 
 From repo root: `.\scripts\test.ps1`
+
+**Agent evals (DeepEval):** deterministic goldens live under `tests/evals/`. Run
+from a **host/CI venv** with dev deps — not inside the running uvicorn/docker
+container. Full guide: [`docs/evals.md`](docs/evals.md).
+
+Quick deterministic eval run:
+
+```powershell
+cd backend
+.\.venv\Scripts\pip install -e ".[dev]"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py -v
+```
+
+Live agent + LLM judge (opt-in, uses `OPENAI_API_KEY` from `backend/.env`):
+
+```powershell
+$env:RUN_LIVE_AGENT_EVALS="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_chat_live.py -v
+```
+
+See also [`tests/README.md`](tests/README.md).
