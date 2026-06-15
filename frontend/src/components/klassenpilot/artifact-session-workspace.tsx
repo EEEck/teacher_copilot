@@ -32,28 +32,30 @@ export function ArtifactSessionWorkspace({
     // Shared by memory + plan, so this fixes both.
     <ResizablePanelGroup
       orientation="horizontal"
-      className="h-[70vh] min-h-[32rem] overflow-hidden rounded-lg border"
+      className="h-[70vh] min-h-[32rem] max-h-[44rem] overflow-hidden rounded-lg border"
     >
-      <ResizablePanel defaultSize={58} minSize={40} className="min-h-0 overflow-hidden">
+      <ResizablePanel defaultSize={58} minSize={40} className="h-full min-h-0 overflow-hidden">
         <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-4">
-          <Card className="min-h-0 flex-1 overflow-hidden">
+          <Card className="min-h-0 flex-1 basis-0 overflow-hidden py-0">
             <CardContent className="flex h-full min-h-0 flex-col p-0">
               {reviewDiff ? (
-                <div className="max-h-[42%] shrink-0 overflow-hidden border-b border-border p-3">
+                <div className="max-h-[42%] shrink-0 overflow-y-auto border-b border-border p-3">
                   {reviewDiff}
                 </div>
               ) : null}
               <div
                 className={
                   inReview
-                    ? "min-h-0 flex-1 overflow-hidden"
-                    : "flex h-full min-h-0 flex-col overflow-hidden"
+                    ? "flex min-h-0 flex-1 basis-0 flex-col overflow-hidden"
+                    : "flex h-full min-h-0 flex-1 basis-0 flex-col overflow-hidden"
                 }
               >
                 {thread}
               </div>
               {reviewFileList ? (
-                <div className="shrink-0 border-t border-border p-3">{reviewFileList}</div>
+                <div className="max-h-[34%] shrink-0 overflow-y-auto border-t border-border p-3">
+                  {reviewFileList}
+                </div>
               ) : null}
             </CardContent>
           </Card>
@@ -61,8 +63,12 @@ export function ArtifactSessionWorkspace({
         </div>
       </ResizablePanel>
       <ResizableHandle withHandle />
-      <ResizablePanel defaultSize={42} minSize={30} className="min-h-0 overflow-hidden">
-        <div className="flex h-full min-h-0 overflow-hidden p-4">{draftPanel}</div>
+      <ResizablePanel defaultSize={42} minSize={30} className="h-full min-h-0 overflow-hidden">
+        <div className="flex h-full min-h-0 w-full min-w-0 overflow-hidden p-4">
+          <div className="flex h-full min-h-0 w-full min-w-0 flex-1 basis-0 overflow-hidden">
+            {draftPanel}
+          </div>
+        </div>
       </ResizablePanel>
     </ResizablePanelGroup>
   );

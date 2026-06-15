@@ -57,7 +57,12 @@ export function MarkdownEditorPanel({
       : (emptyPreviewFallback ?? "");
 
   return (
-    <div className={cn("flex h-full min-h-0 flex-col gap-2 overflow-hidden", className)}>
+    <div
+      className={cn(
+        "flex h-full min-h-0 w-full min-w-0 flex-1 basis-0 flex-col gap-2 overflow-hidden",
+        className,
+      )}
+    >
       <div className="flex shrink-0 items-center justify-between">
         <p className="text-sm font-medium">{label}</p>
         <div className="flex items-center gap-1">
@@ -117,14 +122,14 @@ export function MarkdownEditorPanel({
 
       {editable && viewMode === "edit" ? (
         <Textarea
-          className="min-h-0 flex-1 resize-none overflow-y-auto [field-sizing:fixed] font-mono text-sm"
+          className="min-h-0 w-full flex-1 basis-0 resize-none overflow-y-auto overscroll-contain [field-sizing:fixed] font-mono text-sm"
           value={markdown}
           onChange={(e) => onChange?.(e.target.value)}
           placeholder={placeholder}
           aria-label={`${label} markdown`}
         />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-md border bg-background p-3">
+        <div className="min-h-0 max-h-full w-full min-w-0 flex-1 basis-0 overflow-y-auto overscroll-contain rounded-md border bg-background p-3">
           <MarkdownPreview markdown={previewMarkdown} />
         </div>
       )}

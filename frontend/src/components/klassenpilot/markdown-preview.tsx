@@ -9,7 +9,7 @@ import { assistantUiMarkdownComponents } from "@/components/assistant-ui/markdow
 
 export function MarkdownPreview({ markdown }: { markdown: string }) {
   return (
-    <div className="aui-md text-foreground">
+    <div className="aui-md max-w-full overflow-hidden wrap-break-word text-foreground">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={assistantUiMarkdownComponents}
