@@ -207,7 +207,7 @@ def _write_readme(
         "- `snapshot-00-before-first-message-*`: exact prompt stack before any chat",
         "- `snapshot-01-after-turn1-next-prompt-*`: exact prompt stack after turn 1 if another turn starts",
         "- `snapshot-02-after-turn2-next-prompt-*`: exact prompt stack after turn 2 if another turn starts",
-        "- `08-tool-calls-and-results.md`: tool call inputs and streamed outputs",
+        "- `NN-tool-calls-and-results.md`: tool call inputs and streamed outputs",
         "- `raw-evidence/`: full captured tool outputs by raw_ref",
         "",
         "## Prompt Calls",
@@ -249,7 +249,7 @@ def _write_readme(
             "",
             "## Quick Quality Notes",
             "- Use `prompt-*-sections.md` to inspect exact context, not legacy flat context previews.",
-            "- Use `08-tool-calls-and-results.md` and `raw-evidence/` to inspect what tools actually returned.",
+            "- Use `NN-tool-calls-and-results.md` and `raw-evidence/` to inspect what tools actually returned.",
         ]
     )
     _write_text(run_dir / "README.md", "\n".join(lines))

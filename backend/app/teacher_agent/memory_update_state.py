@@ -13,6 +13,11 @@ from dataclasses import dataclass, field
 from pydantic import BaseModel, Field
 
 from app.context_limits import get_context_limits
+from app.teacher_agent.runtime_render import (
+    append_bullet_section,
+    render_evidence_briefs,
+    render_scalar,
+)
 
 MEMORY_PHASES = ("identify_target", "collect_results", "review_draft", "unsupported")
 MEMORY_INTENTS = (
@@ -189,6 +194,15 @@ def _apply_target_patch(state: MemoryTargetState, patch: MemoryTargetPatch) -> M
         value = getattr(patch, field_name)
         if value is not None:
             data[field_name] = value
+    if data["target_confirmed"] and data["target_kind"] == "unknown":
+        if data["existing_results_loaded"] or data["intent"] == "correct_existing_results":
+            data["target_kind"] = "taught_lesson"
+        elif data["plan_loaded"] or data["intent"] == "update_missing_results":
+            data["target_kind"] = "planned_lesson"
+        elif data["intent"] == "log_new_results":
+            data["target_kind"] = "new_lesson"
+    if data["target_confirmed"]:
+        data["needs_confirmation"] = False
     return MemoryTargetState(**data)
 
 
@@ -334,34 +348,75 @@ def memory_api_payload(runtime: MemoryRuntime) -> dict:
     }
 
 
-def render_memory_runtime(runtime: MemoryRuntime) -> str:
-    target = runtime.target
-    session = runtime.session_state
-    result = runtime.lesson_result_state
+def render_memory_target_state(target: MemoryTargetState) -> str:
     parts = [
-        "## Update-memory runtime state",
-        f"- phase: {session.phase}",
+        "## Memory target state",
         f"- intent: {target.intent}",
         f"- target kind: {target.target_kind}",
         f"- target confirmed: {target.target_confirmed}",
+        f"- needs confirmation: {target.needs_confirmation}",
+        f"- confidence: {target.confidence}",
     ]
     if target.lesson_date:
-        parts.append(f"- lesson date: {target.lesson_date}")
+        parts.append(render_scalar("lesson date", target.lesson_date))
     if target.lesson_title:
-        parts.append(f"- lesson title: {target.lesson_title}")
-    if session.teacher_goal:
-        parts.append(f"- teacher goal: {session.teacher_goal[:200]}")
-    if session.open_questions:
-        parts.append("### Open questions")
-        parts.extend(f"- {q[:200]}" for q in session.open_questions[:5])
-    if session.decisions:
-        parts.append("### Decisions")
-        parts.extend(f"- {d[:200]}" for d in session.decisions[:5])
-    if result.missing_categories:
-        parts.append("### Missing lesson-result categories")
-        parts.extend(f"- {m[:160]}" for m in result.missing_categories[:8])
-    if runtime.evidence_briefs:
-        parts.append("### Evidence briefs")
-        for brief in runtime.evidence_briefs[-5:]:
-            parts.append(f"- [{brief.raw_ref or 'no-ref'}] {brief.purpose[:160]}")
+        parts.append(render_scalar("lesson title", target.lesson_title))
+    if target.source:
+        parts.append(render_scalar("source", target.source))
+    parts.append(f"- saved plan loaded: {target.plan_loaded}")
+    parts.append(f"- existing results loaded: {target.existing_results_loaded}")
     return "\n".join(parts)
+
+
+def render_memory_session_state(session: MemorySessionState) -> str:
+    parts = [
+        "## Memory session state",
+        f"- phase: {session.phase}",
+    ]
+    if session.teacher_goal:
+        parts.append(render_scalar("teacher goal", session.teacher_goal))
+    if session.agent_next_step:
+        parts.append(render_scalar("next step", session.agent_next_step))
+    append_bullet_section(parts, "Decisions", session.decisions)
+    append_bullet_section(parts, "Open questions", session.open_questions)
+    append_bullet_section(parts, "Superseded / rejected", session.superseded)
+    return "\n".join(parts)
+
+
+def render_lesson_result_state(result: LessonResultState) -> str:
+    parts = [
+        "## Lesson result state",
+        f"- draft confidence: {result.draft_confidence}",
+    ]
+    sections = [
+        ("What was covered", result.covered),
+        ("Student participation", result.participation),
+        ("What went well", result.went_well),
+        ("What did not go well", result.did_not_go_well),
+        ("Student observations", result.student_observations),
+        ("Homework and follow-ups", result.homework_followups),
+        ("Missing lesson-result categories", result.missing_categories),
+    ]
+    for label, items in sections:
+        append_bullet_section(parts, label, items)
+    return "\n".join(parts)
+
+
+def render_memory_briefs(briefs: list[MemoryEvidenceBrief]) -> str:
+    return render_evidence_briefs(
+        briefs,
+        title="## Memory evidence briefs (compact; request raw via get_raw_evidence)",
+        empty="## Memory evidence briefs\n- None yet.",
+    )
+
+
+def render_memory_runtime(runtime: MemoryRuntime) -> str:
+    """Legacy combined renderer; prefer split renderers for prompt assembly."""
+    return "\n\n".join(
+        [
+            render_memory_target_state(runtime.target),
+            render_memory_session_state(runtime.session_state),
+            render_lesson_result_state(runtime.lesson_result_state),
+            render_memory_briefs(runtime.evidence_briefs),
+        ]
+    )

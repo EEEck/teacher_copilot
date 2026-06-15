@@ -12,7 +12,10 @@ from app.context_limits import apply_char_limit, get_context_limits
 from app.schemas.api import ChatAttachment, ChatMessage
 from app.teacher_agent.memory_update_state import (
     MemoryRuntime,
-    render_memory_runtime,
+    render_lesson_result_state,
+    render_memory_briefs,
+    render_memory_session_state,
+    render_memory_target_state,
 )
 from app.teacher_agent.planning_state import (
     PlanRuntime,
@@ -23,6 +26,7 @@ from app.teacher_agent.planning_state import (
 from app.teacher_agent.prompts import (
     INGEST_SYSTEM,
     INGEST_WIKI_TOOLS_POLICY,
+    MEMORY_SKILL,
     PLAN_CHAT_SYSTEM,
     PLAN_MEMORY_POLICY,
     PLAN_OPENING_SYSTEM,
@@ -108,12 +112,12 @@ def build_plan_user_input_assembly(
     parts.append(convo)
     sections.append(
         _section(
-                name="Recent conversation window",
-                function="AgentRunner._build_plan_user_input",
-                source=f"last {turn_limit} user turns",
-                text=convo,
-            )
+            name="Recent conversation window",
+            function="AgentRunner._build_plan_user_input",
+            source=f"last {turn_limit} user turns",
+            text=convo,
         )
+    )
     rendered = "\n".join(parts)
     return {
         "function": "AgentRunner._build_plan_user_input",
@@ -127,8 +131,12 @@ def build_ingest_user_input_assembly(
     messages: list[ChatMessage],
     current_draft: str,
     attachments: list[ChatAttachment] | None = None,
+    *,
+    history_turns: int | None = None,
 ) -> dict:
     lim = get_context_limits()
+    turn_limit = lim.ingest_history_turns if history_turns is None else history_turns
+    trimmed = trim_to_last_user_turns(messages, turn_limit)
     parts = [
         "Current diary draft (update each turn):\n"
         f"{apply_char_limit(current_draft, lim.ingest_draft_chars)}\n"
@@ -153,7 +161,7 @@ def build_ingest_user_input_assembly(
             )
         )
     convo_lines = ["Recent conversation (most recent last):"]
-    for m in messages:
+    for m in trimmed:
         convo_lines.append(f"{m.role}: {m.content}")
     convo = "\n".join(convo_lines)
     parts.append(convo)
@@ -161,7 +169,7 @@ def build_ingest_user_input_assembly(
         _section(
             name="Conversation window",
             function="AgentRunner._build_user_input",
-            source="ArtifactSession.messages",
+            source=f"last {turn_limit} user turns",
             text=convo,
         )
     )
@@ -182,25 +190,34 @@ def build_ingest_chat_prompt_assembly(
     current_diary: str,
     runtime: MemoryRuntime | None,
     attachments: list[ChatAttachment] | None = None,
+    history_turns: int | None = None,
 ) -> dict:
     rt = runtime or MemoryRuntime()
     lim = get_context_limits()
     sections_text = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
     teacher_trace = wiki.build_teacher_context_trace()
     ingest_trace = wiki.build_ingest_context_slim_trace(class_id)
-    ingest_context = apply_char_limit(
-        ingest_trace["text"], lim.ingest_context_backstop
-    )
-    memory_runtime = render_memory_runtime(rt)
+    active_class_core = ingest_trace["nested"]["active_class_core"]["text"]
+    ingest_task_context = ingest_trace["nested"]["task_context"]["text"]
+    ingest_context = apply_char_limit(ingest_trace["text"], lim.ingest_context_backstop)
+    target_state = render_memory_target_state(rt.target)
+    session_state = render_memory_session_state(rt.session_state)
+    lesson_result_state = render_lesson_result_state(rt.lesson_result_state)
+    evidence = render_memory_briefs(rt.evidence_briefs)
     user_input = build_ingest_user_input_assembly(
-        messages, current_diary, attachments
+        messages, current_diary, attachments, history_turns=history_turns
     )
     instructions = apply_prompt(
         INGEST_SYSTEM,
+        memory_skill=MEMORY_SKILL,
         sections=sections_text,
         teacher_context=teacher_trace["text"],
-        context=ingest_context,
-        memory_runtime=memory_runtime,
+        active_class_core=active_class_core,
+        ingest_task_context=ingest_task_context,
+        target_state=target_state,
+        session_state=session_state,
+        lesson_result_state=lesson_result_state,
+        evidence=evidence,
         wiki_tools_policy=INGEST_WIKI_TOOLS_POLICY,
     )
     return {
@@ -230,28 +247,46 @@ def build_ingest_chat_prompt_assembly(
                 text=teacher_trace["text"],
             ),
             _section(
+                name="Active skill",
+                function="build_ingest_agent",
+                source="prompts.MEMORY_SKILL",
+                text=MEMORY_SKILL,
+            ),
+            _section(
                 name="Active class core",
                 function="wiki.build_active_class_core_context_trace",
                 source=f"wiki/classes/{class_id}/memory/*.md + selected subject guide",
-                text=ingest_trace["nested"]["active_class_core"]["text"],
+                text=active_class_core,
             ),
             _section(
                 name="Update Memory task context",
                 function="wiki.build_ingest_task_context_trace",
                 source="recent lesson/roster/saved plan",
-                text=ingest_trace["nested"]["task_context"]["text"],
+                text=ingest_task_context,
             ),
             _section(
-                name="Ingest context",
-                function="wiki.build_ingest_context_slim",
-                source="active class core + update-memory task context",
-                text=ingest_context,
+                name="Memory target state",
+                function="render_memory_target_state",
+                source="MemoryRuntime.target",
+                text=target_state,
             ),
             _section(
-                name="Memory runtime",
-                function="render_memory_runtime",
-                source="MemoryRuntime",
-                text=memory_runtime,
+                name="Memory session state",
+                function="render_memory_session_state",
+                source="MemoryRuntime.session_state",
+                text=session_state,
+            ),
+            _section(
+                name="Lesson result state",
+                function="render_lesson_result_state",
+                source="MemoryRuntime.lesson_result_state",
+                text=lesson_result_state,
+            ),
+            _section(
+                name="Memory evidence briefs",
+                function="render_memory_briefs",
+                source="MemoryRuntime.evidence_briefs",
+                text=evidence,
             ),
             _section(
                 name="Update-memory tools policy",
@@ -275,6 +310,36 @@ def build_ingest_chat_prompt_assembly(
                 "text": ingest_context,
                 "sections": ingest_trace["sections"],
                 "nested": ingest_trace.get("nested", {}),
+            },
+            "runtime_context": {
+                "function": "memory_update_state split renderers",
+                "chars": len(target_state + session_state + lesson_result_state + evidence),
+                "sections": [
+                    _section(
+                        name="Memory target state",
+                        function="render_memory_target_state",
+                        source="MemoryRuntime.target",
+                        text=target_state,
+                    ),
+                    _section(
+                        name="Memory session state",
+                        function="render_memory_session_state",
+                        source="MemoryRuntime.session_state",
+                        text=session_state,
+                    ),
+                    _section(
+                        name="Lesson result state",
+                        function="render_lesson_result_state",
+                        source="MemoryRuntime.lesson_result_state",
+                        text=lesson_result_state,
+                    ),
+                    _section(
+                        name="Memory evidence briefs",
+                        function="render_memory_briefs",
+                        source="MemoryRuntime.evidence_briefs",
+                        text=evidence,
+                    ),
+                ],
             },
         },
     }

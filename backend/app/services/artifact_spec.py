@@ -10,6 +10,7 @@ not "fork pages, services, providers, and threads".
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 
 from app.schemas.api import (
@@ -28,6 +29,13 @@ from app.teacher_agent.prompt_trace import (
     build_plan_opening_prompt_trace,
 )
 from app.teacher_agent.wiki_store import dedupe_wiki_proposals
+from app.teacher_agent.stream_events import SseEvent, SseFinal
+from app.teacher_agent.workflow_contract import (
+    FinalEventToTurnResult,
+    WorkflowContract,
+    WorkflowHistoryPolicy,
+    WorkflowTraceContract,
+)
 
 if TYPE_CHECKING:  # avoid import cycles; these are only used for typing
     from app.teacher_agent.agents import AgentRunner
@@ -93,6 +101,21 @@ class ArtifactSpec:
     lazy_opening: Optional[Callable[["AgentRunner", str], Awaitable[str]]] = None
     runtime_factory: Optional[Callable[[], Any]] = None
     prompt_trace: Optional[PromptTraceHook] = None
+    stream_turn: Optional[
+        Callable[
+            [
+                "AgentRunner",
+                str,
+                list[ChatMessage],
+                str,
+                list[ChatAttachment],
+                Any,
+            ],
+            AsyncIterator[SseEvent],
+        ]
+    ] = None
+    final_event_to_turn_result: Optional[FinalEventToTurnResult] = None
+    workflow_contract: Optional[WorkflowContract] = None
 
 
 # --- ingest (lesson diary) -------------------------------------------------
@@ -138,6 +161,33 @@ async def _ingest_run_turn(
         ready=ready,
         completeness=checklist,
         memory=payload,
+    )
+
+
+def _ingest_stream_turn(
+    agents: "AgentRunner",
+    class_id: str,
+    messages: list[ChatMessage],
+    partial: str,
+    attachments: list[ChatAttachment],
+    runtime: Any,
+) -> AsyncIterator[SseEvent]:
+    return agents.ingest_chat_stream(
+        class_id,
+        messages,
+        partial,
+        attachments=attachments,
+        memory=runtime if isinstance(runtime, MemoryRuntime) else None,
+    )
+
+
+def _ingest_final_event_to_turn_result(event: SseFinal) -> TurnResult:
+    return TurnResult(
+        reply=event.reply,
+        markdown=event.artifact_markdown,
+        ready=event.ready,
+        completeness=event.completeness,
+        memory=event.memory_state,
     )
 
 
@@ -196,6 +246,39 @@ async def _plan_run_turn(
     )
 
 
+def _plan_stream_turn(
+    agents: "AgentRunner",
+    class_id: str,
+    messages: list[ChatMessage],
+    partial: str,
+    attachments: list[ChatAttachment],
+    runtime: Any,
+) -> AsyncIterator[SseEvent]:
+    return agents.plan_chat_stream(
+        class_id,
+        messages,
+        partial,
+        attachments=attachments,
+        planning=runtime if isinstance(runtime, PlanRuntime) else None,
+    )
+
+
+def _plan_final_event_to_turn_result(event: SseFinal) -> TurnResult:
+    return TurnResult(
+        reply=event.reply,
+        markdown=event.artifact_markdown,
+        ready=event.ready,
+        completeness=event.completeness,
+        planning={
+            "phase": event.phase,
+            "last_change_summary": event.last_change_summary,
+            "session_state": event.session_state,
+            "lesson_planning_state": event.lesson_planning_state,
+            "memory_candidates": event.memory_candidates or [],
+        },
+    )
+
+
 async def _plan_opening(agents: "AgentRunner", class_id: str) -> str:
     return await agents.plan_opening(class_id)
 
@@ -234,6 +317,27 @@ INGEST_SPEC = ArtifactSpec(
     opening=None,
     runtime_factory=MemoryRuntime,
     prompt_trace=_ingest_prompt_trace,
+    stream_turn=_ingest_stream_turn,
+    final_event_to_turn_result=_ingest_final_event_to_turn_result,
+    workflow_contract=WorkflowContract(
+        history=WorkflowHistoryPolicy(
+            conversation_turns_setting="ingest_history_turns",
+            artifact_location="user_input",
+        ),
+        trace=WorkflowTraceContract(
+            expected_sections=(
+                "Teacher layer",
+                "Active class core",
+                "Update Memory task context",
+                "Memory target state",
+                "Memory session state",
+                "Lesson result state",
+                "Memory evidence briefs",
+            )
+        ),
+        stream_turn=_ingest_stream_turn,
+        final_event_to_turn_result=_ingest_final_event_to_turn_result,
+    ),
 )
 
 PLAN_SPEC = ArtifactSpec(
@@ -250,6 +354,25 @@ PLAN_SPEC = ArtifactSpec(
     lazy_opening=_plan_opening,
     runtime_factory=PlanRuntime,
     prompt_trace=_plan_prompt_trace,
+    stream_turn=_plan_stream_turn,
+    final_event_to_turn_result=_plan_final_event_to_turn_result,
+    workflow_contract=WorkflowContract(
+        history=WorkflowHistoryPolicy(
+            conversation_turns_setting="plan_history_turns",
+            artifact_location="system_prompt",
+        ),
+        trace=WorkflowTraceContract(
+            expected_sections=(
+                "Teacher layer",
+                "Active class core",
+                "Session state",
+                "Lesson planning state",
+                "Evidence briefs",
+            )
+        ),
+        stream_turn=_plan_stream_turn,
+        final_event_to_turn_result=_plan_final_event_to_turn_result,
+    ),
 )
 
 

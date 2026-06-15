@@ -204,35 +204,24 @@ class ArtifactSessionService:
         stage = "plan_chat" if session.mode == "plan" else f"{session.mode}_chat"
         self._record_prompt_assembly(session, stage, attachments or [])
 
-        if session.mode == "ingest":
-            stream = self.agents.ingest_chat_stream(
-                session.class_id,
-                session.messages,
-                session.partial_markdown,
-                attachments=attachments or [],
-                memory=session.runtime,
+        spec = self.specs[session.mode]
+        if not spec.stream_turn or not spec.final_event_to_turn_result:
+            yield sse_encode(
+                SseError(message="Workflow streaming is not configured.", code="config_error")
             )
-        else:
-            stream = self.agents.plan_chat_stream(
-                session.class_id,
-                session.messages,
-                session.partial_markdown,
-                attachments=attachments or [],
-                planning=session.runtime,
-            )
+            return
+        stream = spec.stream_turn(
+            self.agents,
+            session.class_id,
+            session.messages,
+            session.partial_markdown,
+            attachments or [],
+            session.runtime,
+        )
         async for event in stream:
             self._record_debug_event(session, event)
             if isinstance(event, SseFinal):
-                self._apply_turn_result(
-                    session,
-                    TurnResult(
-                        reply=event.reply,
-                        markdown=event.artifact_markdown,
-                        ready=event.ready,
-                        completeness=event.completeness,
-                        memory=event.memory_state,
-                    ),
-                )
+                self._apply_turn_result(session, spec.final_event_to_turn_result(event))
             yield sse_encode(event)
 
     def update_draft(self, session_id: str, markdown: str) -> object:

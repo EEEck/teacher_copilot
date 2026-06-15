@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     profile_propose_field_chars: int = 0
     memory_compact_source_chars: int = 0
     # Ingest slim context / user-input field caps. 0 = no limit on that field.
+    ingest_history_turns: int = 8
     ingest_previous_lesson_chars: int = 0
     ingest_student_roster_chars: int = 1800
     ingest_course_state_chars: int = 0

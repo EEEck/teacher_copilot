@@ -46,6 +46,13 @@ buttons pass `lesson_date`, `lesson_title`, `intent`, `target_kind`, and
 lesson detail exists; unknown hinted dates seed a draft but stay in
 `identify_target` with `needs_confirmation=true`.
 
+Both planning and Update Memory use the same app-owned conversation strategy:
+`ArtifactSessionService` stores messages, the current markdown artifact, and a
+workflow runtime object. Planning uses `PlanRuntime`; Update Memory uses
+`MemoryRuntime`. Future artifact chats should register an `ArtifactSpec` with
+runtime, prompt trace, stream, final-event, and trace-contract hooks instead of
+adding mode-specific branches to the session core.
+
 ## Agent debug CLI
 
 Interactive multi-turn chat against the real `AgentRunner` (no FastAPI). Shows reasoning, wiki tool calls, and **full** tool results (not capped like browser SSE).
@@ -143,9 +150,14 @@ Recommended debugging flow:
 1. Open the run folder `README.md`.
 2. Inspect `prompt-02-plan_chat-sections.md` or the latest
    `prompt-*-sections.md` to see exact prompt context.
-3. Inspect `08-tool-calls-and-results.md` to verify browsing behavior.
-4. Inspect `07-final-lessonplan.md` to compare the final artifact against the
+3. Inspect `NN-tool-calls-and-results.md` to verify browsing behavior.
+4. Inspect `NN-final-lessonplan.md` to compare the final artifact against the
    evidence and prompt instructions.
+
+Expected plan prompt sections include `Teacher layer`, `Active class core`,
+`Session state`, `Lesson planning state`, `Current lesson artifact`, and
+`Evidence briefs`. Full lessons, full student files, and full roll-ups should
+come from tools, not the default prompt.
 
 ## Update Memory trace bundle
 
@@ -170,6 +182,12 @@ The bundle includes raw SSE per turn, trace JSON after each turn, exact prompt
 instructions and user input, section-by-section context, tool call/result
 report, `raw-evidence/`, and the final `NN-final-diary.md`.
 
+Expected Update Memory prompt sections include `Teacher layer`, `Active class
+core`, `Update Memory task context`, `Memory target state`, `Memory session
+state`, `Lesson result state`, and `Memory evidence briefs`. The prompt should
+not inject `teacher_wiki/AGENTS.md`, full roll-ups, full student files, or full
+lesson files by default.
+
 The default turns:
 
 1. Log lesson results for `2026-05-29`, including named student observations.
@@ -186,8 +204,9 @@ runner before adding another near-copy script.
 The class wiki now includes compact memory pages under `wiki/classes/{class_id}/memory/`:
 `taught_so_far.md`, `planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and `session_summaries.md`.
 
-Planning and ingest context packs are derived from those pages plus the current lesson artifacts.
-`search_memory` is the deterministic pathfinder; use `read_memory_page` or `read_lesson_range` when the snippet is not enough.
+Planning and ingest prompt layers are derived from those pages plus the current
+artifact/runtime state. `search_memory` is the deterministic pathfinder; use
+`read_memory_page` or `read_lesson_range` when the snippet is not enough.
 
 ## Tests
 

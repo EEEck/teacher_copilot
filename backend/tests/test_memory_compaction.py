@@ -22,11 +22,12 @@ def test_context_packages_include_compact_memory_when_present(wiki: WikiStore):
     plan = wiki.build_context_package(CLASS_ID, "plan")
     ingest = wiki.build_context_package(CLASS_ID, "ingest")
 
-    assert "Base class context" in plan
-    assert "Last 2 taught lessons" in plan
+    assert "Active class core context" in plan
+    assert "Recent lessons" in plan
     assert "Compact sequence marker" in plan
     assert "Profile marker" in plan
-    assert "Ingest context (compact)" in ingest
+    assert "Active class core context" in ingest
+    assert "Update Memory task context" in ingest
     assert "Compact sequence marker" in ingest
 
 

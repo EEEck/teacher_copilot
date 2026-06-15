@@ -36,7 +36,8 @@ The strongest choices are:
 - `@function_tool` wrappers for deterministic wiki reads
 - Pydantic `output_type` models for ingest, planning, compaction, and profile
   proposal
-- backend-owned `PlanRuntime` with model-proposed `state_patch`
+- backend-owned `PlanRuntime` and `MemoryRuntime` with model-proposed
+  `state_patch`
 - explicit separation between chat turns and durable wiki writes
 - compact evidence briefs plus raw evidence refs
 - local prompt/tool trace bundles for debugging
@@ -62,7 +63,7 @@ The main gaps are not urgent blockers. They are future upgrade points:
 | Agent loop | `backend/app/teacher_agent/agents.py` | Good: async `Runner.run` and streamed runs are used; sync blocking is avoided. |
 | Function tools | `backend/app/teacher_agent/tools.py` | Good: chat tools are read-only, class-scoped, and documented. |
 | Structured outputs | `backend/app/teacher_agent/models.py` | Good: downstream code receives typed outputs instead of parsing prose. |
-| App-owned state | `PlanRuntime` in `planning_state.py` | Good: state is validated and compactly re-injected. |
+| App-owned state | `PlanRuntime` in `planning_state.py`; `MemoryRuntime` in `memory_update_state.py` | Good: state is validated and compactly re-injected. |
 | Conversation strategy | `ArtifactSessionService` + trimmed message window | Valid: the app owns sessions and artifacts. Do not also add SDK sessions unless replacing this strategy deliberately. |
 | Human approval | memory refresh/propose/apply APIs | Good: durable writes are outside chat and teacher-approved. |
 | Observability | plan trace endpoint + stream event trace | Good locally; add SDK trace correlation later. |
@@ -85,14 +86,16 @@ creates a genuinely different approval boundary.
 
 ### Keep State Ownership In The Backend
 
-The planning chat currently uses app-owned session state:
+Planning and Update Memory use app-owned session state:
 
 - `PlanRuntime` stores workflow state, lesson state, evidence briefs, raw refs,
   memory candidates, and artifact version.
+- `MemoryRuntime` stores update target state, workflow-session state,
+  lesson-result category progress, evidence briefs, raw refs, and diary version.
 - The model proposes `state_patch`.
 - Backend code validates and merges the patch.
-- The prompt injects compact rendered state instead of replaying the full
-  transcript.
+- The prompt injects compact rendered state sections instead of replaying the
+  full transcript.
 
 This matches the SDK distinction between model-visible conversation/context and
 runtime-only application state. Continue keeping teacher/class IDs, wiki root,
@@ -145,7 +148,14 @@ If the prototype outgrows RAM sessions, evaluate:
 - avoiding a mixed strategy that sends both local replay and SDK-managed history
   for the same conversation
 
-### 3. Guardrail Placement
+### 3. Workflow Spec Discipline
+
+Artifact workflows should register their runtime factory, prompt trace hook,
+streaming adapter, final-event adapter, and trace contract on `ArtifactSpec`.
+The shared session service may dispatch through the registered spec; it should
+not grow workflow-name branches for streaming or finalization.
+
+### 4. Guardrail Placement
 
 Current safety relies on scoped tools, Pydantic outputs, backend validation, and
 teacher approval. That is appropriate for read-only chat tools.
@@ -159,7 +169,7 @@ Add SDK guardrails when the risk changes:
 - tool guardrails next to any tool that touches files, external systems, or
   sensitive student data
 
-### 4. Eval Ladder
+### 5. Eval Ladder
 
 Keep deterministic tests for contracts and local behavior. Add live/eval layers
 in this order:

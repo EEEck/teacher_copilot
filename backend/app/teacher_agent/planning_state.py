@@ -19,6 +19,11 @@ from dataclasses import dataclass, field
 from pydantic import BaseModel, Field
 
 from app.context_limits import get_context_limits
+from app.teacher_agent.runtime_render import (
+    append_bullet_section,
+    render_evidence_briefs,
+    render_scalar,
+)
 
 PLAN_PHASES = ("requirements_discussion", "lesson_refinement", "finalize")
 
@@ -253,6 +258,62 @@ def apply_state_patch(runtime: PlanRuntime, patch: StatePatch) -> None:
     )
 
 
+def teacher_signals_plan_finalize(message: str) -> bool:
+    """True when the teacher clearly accepts the plan after the requested turn."""
+    text = (message or "").lower()
+    if not text.strip():
+        return False
+    if any(marker in text for marker in ("not happy", "isn't good", "doesn't work")):
+        return False
+    direct = (
+        "ready to save",
+        "good to save",
+        "please finalize",
+        "finalize it",
+        "that's it",
+        "that is it",
+    )
+    if any(marker in text for marker in direct):
+        return True
+    acceptance = (
+        "i am happy",
+        "i'm happy",
+        "happy with it",
+        "looks good",
+        "works for me",
+        "i like it",
+    )
+    completion = (
+        "last refinement",
+        "final refinement",
+        "last tweak",
+        "final tweak",
+        "done",
+        "finished",
+    )
+    return any(marker in text for marker in acceptance) and any(
+        marker in text for marker in completion
+    )
+
+
+def apply_plan_phase_auto_advance(
+    runtime: PlanRuntime,
+    *,
+    teacher_message: str = "",
+    plan_ready: bool = False,
+) -> None:
+    """Apply deterministic phase transitions the backend owns after model patches."""
+    if runtime.session_state.phase == "finalize":
+        return
+    if plan_ready and teacher_signals_plan_finalize(teacher_message):
+        runtime.session_state.phase = "finalize"
+        runtime.session_state.open_questions = []
+        runtime.session_state.agent_next_step = (
+            "Present the finalized lesson plan for teacher review."
+        )
+        runtime.lesson_planning_state.needs_revision = []
+
+
 def _candidate_is_allowed(c: MemoryCandidate) -> bool:
     return (
         c.target in MEMORY_TARGETS
@@ -288,6 +349,8 @@ def merge_turn_into_runtime(
     last_change_summary: str,
     plan_changed: bool,
     state_patch: StatePatch | None = None,
+    teacher_message: str = "",
+    plan_ready: bool = False,
 ) -> None:
     """Persist a turn's emitted state (merge state, merge briefs/candidates)."""
     if _patch_has_values(state_patch):
@@ -330,25 +393,14 @@ def merge_turn_into_runtime(
     if plan_changed:
         runtime.plan_version += 1
 
+    apply_plan_phase_auto_advance(
+        runtime,
+        teacher_message=teacher_message,
+        plan_ready=plan_ready,
+    )
+
 
 # --- compact renderers (injected into the per-turn system prompt) -----------
-
-
-def _bullets(
-    items: list[str],
-    *,
-    limit: int | None = None,
-    max_chars: int | None = None,
-) -> list[str]:
-    lim = get_context_limits()
-    limit = lim.state_list_limit if limit is None else limit
-    max_chars = lim.state_bullet_max_chars if max_chars is None else max_chars
-    out = []
-    for item in items[:limit]:
-        text = " ".join(str(item).split())
-        if text:
-            out.append(f"- {text[:max_chars]}")
-    return out
 
 
 def render_session_state(s: SessionState) -> str:
@@ -357,18 +409,12 @@ def render_session_state(s: SessionState) -> str:
         f"- phase: {s.phase}",
     ]
     if s.teacher_goal:
-        parts.append(f"- teacher goal: {s.teacher_goal[:200]}")
+        parts.append(render_scalar("teacher goal", s.teacher_goal))
     if s.agent_next_step:
-        parts.append(f"- next step: {s.agent_next_step[:200]}")
-    if s.decisions:
-        parts.append("### Decisions")
-        parts.extend(_bullets(s.decisions))
-    if s.open_questions:
-        parts.append("### Open questions")
-        parts.extend(_bullets(s.open_questions))
-    if s.superseded:
-        parts.append("### Superseded / rejected")
-        parts.extend(_bullets(s.superseded))
+        parts.append(render_scalar("next step", s.agent_next_step))
+    append_bullet_section(parts, "Decisions", s.decisions)
+    append_bullet_section(parts, "Open questions", s.open_questions)
+    append_bullet_section(parts, "Superseded / rejected", s.superseded)
     return "\n".join(parts)
 
 
@@ -391,26 +437,16 @@ def render_lesson_planning_state(s: LessonPlanningState) -> str:
         ("Needs revision", s.needs_revision),
     ]
     for label, items in sections:
-        if items:
-            parts.append(f"### {label}")
-            parts.extend(_bullets(items))
+        append_bullet_section(parts, label, items)
     return "\n".join(parts)
 
 
 def render_briefs(briefs: list[EvidenceBrief], *, max_briefs: int | None = None) -> str:
-    lim = get_context_limits()
-    max_briefs = lim.briefs_inject_limit if max_briefs is None else max_briefs
-    if not briefs:
-        return "## Evidence briefs\n- None yet."
-    parts = ["## Evidence briefs (compact; request raw via get_raw_evidence)"]
-    for b in briefs[-max_briefs:]:
-        head = f"- [{b.raw_ref or 'no-ref'}] {b.type}: {b.purpose[:160]}".rstrip()
-        parts.append(head)
-        for line in b.brief[: lim.brief_lines_per_item]:
-            parts.append(f"  - {' '.join(str(line).split())[:200]}")
-        if b.impact_on_plan:
-            parts.append(f"  - impact: {b.impact_on_plan[:200]}")
-    return "\n".join(parts)
+    return render_evidence_briefs(
+        briefs,
+        impact_field="impact_on_plan",
+        max_briefs=max_briefs,
+    )
 
 
 def planning_api_payload(rt: PlanRuntime) -> dict:

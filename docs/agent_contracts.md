@@ -102,6 +102,9 @@ Runtime context manager:
   the teacher's intent clearly indicates the plan is accepted/finished after any
   requested final tweak. The model should infer that intent from the whole
   message and conversation, not from a keyword trigger list.
+- After each plan turn, backend merge logic may auto-advance `phase` to
+  `finalize` when the plan is ready and the teacher clearly accepts it after a
+  final tweak or direct save/finalize intent.
 - `memory_candidates` are proposed only during chat and surfaced at save; they
   are never written from a planning turn (durable writes are a separate
   teacher-approved action — see Memory Review/Apply Contract).
@@ -214,6 +217,14 @@ Runtime context manager:
   phase (`identify_target`, `collect_results`, `review_draft`, `unsupported`),
   lesson-result categories, compact evidence briefs, raw evidence refs, and a
   diary version counter.
+- The model-facing prompt renders this runtime state as separate sections:
+  `Memory target state`, `Memory session state`, `Lesson result state`, and
+  `Memory evidence briefs`. Do not reintroduce a single opaque runtime blob for
+  new workflows.
+- `Memory session state` follows the shared workflow-session envelope:
+  `phase`, `teacher_goal`, `decisions`, `open_questions`, `superseded`, and
+  `agent_next_step`. Workflow-specific facts belong in the task state, not this
+  shared envelope.
 - After each model `state_patch` merge, the backend may auto-advance phase when
   the case is unambiguous: confirmed target + lesson date moves
   `identify_target` → `collect_results`; a clearly accepting teacher message
@@ -224,6 +235,10 @@ Runtime context manager:
 - Runtime state is returned to clients as `memory_state` on ingest session/chat,
   draft/propose responses, and streamed final events. It is diagnostic/workflow
   state, not durable memory.
+- The verbatim ingest conversation window is limited by `ingest_history_turns`
+  (default 8 user turns). Trimmed turns are not treated as lost; durable
+  decisions, open questions, superseded details, target state, lesson-result
+  facts, and evidence briefs must be carried in `MemoryRuntime`.
 
 Allowed behavior:
 
@@ -445,6 +460,26 @@ Plan trace endpoint:
   session summaries.
 - Trace output may contain teacher/session content and raw tool evidence; treat
   it as local developer data, not durable product memory.
+
+## Workflow Spec Contract
+
+Future teacher-facing artifact chats must register a workflow spec rather than
+adding new mode branches to the shared session service.
+
+Required shared shape:
+
+- Fixed workflow-session state: `phase`, `teacher_goal`, `decisions`,
+  `open_questions`, `superseded`, `agent_next_step`.
+- Workflow-specific task state: plan state, lesson-result state, grading state,
+  exam state, or other domain state.
+- Shared evidence/raw-ref handling: compact evidence in prompt, raw output
+  behind `raw_ref`.
+- Explicit history policy: setting name and artifact placement.
+- Typed SDK output model and read-only tools during chat.
+- Trace contract listing the sections expected for the workflow.
+
+The service may dispatch through the registered spec, but it should not branch
+on concrete workflow names such as `plan` or `ingest` for streaming/finalization.
 
 ## Deferred Contracts
 

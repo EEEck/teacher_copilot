@@ -34,12 +34,20 @@ def test_update_memory_trace_before_first_message(client: TestClient):
     assert body["prompt_stack"]["ingest_context"]
     assert body["prompt_stack"]["teacher_context"]
     assert body["prompt_stack"]["active_class_core"]
+    assert body["prompt_stack"]["memory_target_state"]
+    assert body["prompt_stack"]["memory_session_state"]
+    assert body["prompt_stack"]["lesson_result_state"]
+    assert body["prompt_stack"]["memory_evidence_briefs"]
     assert body["prompt_stack"]["current_diary_markdown"]
     assert body["prompt_assembly"]["stage"] == "ingest_chat"
     assert body["prompt_assembly"]["sections"]
     section_names = [s["name"] for s in body["prompt_assembly"]["sections"]]
     assert section_names.count("Teacher layer") == 1
     assert section_names.count("Active class core") == 1
+    assert "Memory target state" in section_names
+    assert "Memory session state" in section_names
+    assert "Lesson result state" in section_names
+    assert "Memory evidence briefs" in section_names
     assert "AGENTS.md" not in body["prompt_stack"]["ingest_context"]
     assert "Wiki logging conventions" not in body["prompt_stack"]["ingest_context"]
     assert "Class Copilot Profile" in body["prompt_stack"]["active_class_core"]

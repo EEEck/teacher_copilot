@@ -75,6 +75,7 @@ class ContextLimits:
     memory_compact_source_chars: int
 
     # --- Ingest slim context / user input ------------------------------------
+    ingest_history_turns: int
     ingest_previous_lesson_chars: int
     ingest_student_roster_chars: int
     ingest_course_state_chars: int
@@ -105,6 +106,7 @@ class ContextLimits:
             lint_context_chars=settings.lint_context_chars,
             profile_propose_field_chars=settings.profile_propose_field_chars,
             memory_compact_source_chars=settings.memory_compact_source_chars,
+            ingest_history_turns=settings.ingest_history_turns,
             ingest_previous_lesson_chars=settings.ingest_previous_lesson_chars,
             ingest_student_roster_chars=settings.ingest_student_roster_chars,
             ingest_course_state_chars=settings.ingest_course_state_chars,

@@ -18,6 +18,13 @@ MEMORY_SKILL = (
     "Patch state_patch.session_state.phase when the conversation crosses these boundaries. "
     "Patch state_patch.target.intent when the workflow becomes clear "
     "(log_new_results, update_missing_results, correct_existing_results). "
+    "Patch state_patch.target with lesson date/title/kind/confirmation whenever the target changes. "
+    "Patch state_patch.session_state.decisions for confirmed targets or teacher constraints, "
+    "open_questions for the single most important missing answer, superseded when the teacher "
+    "retracts or corrects an earlier detail, and agent_next_step with the next concrete action. "
+    "Patch state_patch.lesson_result_state category lists as the teacher provides facts; "
+    "diary_markdown is the save artifact, while runtime lists are compact working memory "
+    "for continuity after conversation trimming. "
     "Stay in collect_results while the teacher is still adding or revising details, even if the "
     "diary looks structurally complete. Move to review_draft only when the teacher's intent clearly "
     "indicates they are done revising and ready to save. Infer that intent from the whole message "
@@ -82,19 +89,31 @@ Teacher context (global):
 {teacher_context}
 
 Active class core context:
-{context}
+{active_class_core}
 
-Runtime state carried by the backend:
-{memory_runtime}
+Update Memory task context:
+{ingest_task_context}
+
+Memory target state carried by the backend:
+{target_state}
+
+Memory session state carried by the backend:
+{session_state}
+
+Lesson result state carried by the backend:
+{lesson_result_state}
+
+Evidence captured by tools:
+{evidence}
 
 {wiki_tools_policy}
 """
 
 INGEST_WIKI_TOOLS_POLICY = """Update-memory lookup tools are available for target discovery and evidence.
-- Use the context pack first. It already contains the active class core, compact memory pages, selected subject guide, teacher profile, previous lesson, roster excerpt, and most recent saved plan when available.
+- Use the injected layers first: teacher profile, active class core, update-memory task context, runtime state, and compact evidence briefs.
 - If the teacher gives a vague target ("today", "last class", "the planned lesson", "that acids lesson"), use list_memory_targets to identify likely dates.
 - If the teacher wants to fill results for a planned/older lesson or correct an existing lesson, use read_memory_target(date) before editing the draft.
-- If you need a class-memory fact not in the pack, use search_memory(query), then read_memory_page(path) only when the snippet is not enough.
+- If you need a class-memory fact not in the injected layers, use search_memory(query), then read_memory_page(path) only when the snippet is not enough.
 - Tool outputs are tagged with raw_ref and captured. Summarize useful results into new_evidence_briefs; call get_raw_evidence(raw_ref) only when exact wording/provenance is needed.
 - Keep lookup use small and focused. Never write wiki files directly."""
 

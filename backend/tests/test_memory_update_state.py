@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+from app.teacher_agent.agents import _pseudonymize_known_students
 from app.teacher_agent.memory_update_state import (
+    LessonResultPatch,
+    MemoryEvidenceBrief,
     MemoryRuntime,
     MemorySessionPatch,
     MemoryStatePatch,
     MemoryTargetPatch,
     apply_memory_phase_auto_advance,
     merge_memory_turn,
+    render_lesson_result_state,
+    render_memory_briefs,
+    render_memory_runtime,
+    render_memory_session_state,
+    render_memory_target_state,
     teacher_signals_finalize,
 )
 
@@ -66,3 +74,107 @@ def test_merge_memory_turn_applies_auto_advance_after_model_patch():
 
     assert runtime.session_state.phase == "collect_results"
     assert runtime.target.intent == "correct_existing_results"
+
+
+def test_confirmed_memory_target_derives_kind_when_model_omits_it():
+    runtime = MemoryRuntime()
+    merge_memory_turn(
+        runtime,
+        state_patch=MemoryStatePatch(
+            target=MemoryTargetPatch(
+                intent="correct_existing_results",
+                lesson_date="2026-05-29",
+                target_confirmed=True,
+                existing_results_loaded=True,
+            ),
+        ),
+        new_evidence_briefs=[],
+        last_change_summary="Loaded existing lesson.",
+        unsupported_intent_reason="",
+        diary_changed=False,
+    )
+
+    assert runtime.target.target_kind == "taught_lesson"
+    assert runtime.target.needs_confirmation is False
+
+
+def test_split_memory_renderers_include_runtime_context():
+    runtime = MemoryRuntime()
+    merge_memory_turn(
+        runtime,
+        state_patch=MemoryStatePatch(
+            target=MemoryTargetPatch(
+                intent="log_new_results",
+                lesson_date="2026-06-02",
+                lesson_title="Ions review",
+                target_kind="new_lesson",
+                target_confirmed=True,
+                confidence="high",
+            ),
+            session_state=MemorySessionPatch(
+                phase="collect_results",
+                teacher_goal="Log today's lesson.",
+                decisions=["Use 2026-06-02 as the lesson date."],
+                superseded=["Earlier date guess was 2026-06-01."],
+                agent_next_step="Ask for homework follow-ups.",
+            ),
+            lesson_result_state=LessonResultPatch(
+                covered=["Reviewed ion charge vs oxidation number."],
+                missing_categories=["Homework & follow-ups"],
+                draft_confidence="medium",
+            ),
+        ),
+        new_evidence_briefs=[
+            MemoryEvidenceBrief(
+                type="tool_call",
+                purpose="read target lesson",
+                brief=["No existing lesson results found."],
+                raw_ref="memory_target_001",
+            )
+        ],
+        last_change_summary="Updated runtime.",
+        unsupported_intent_reason="",
+        diary_changed=False,
+    )
+
+    assert "lesson date: 2026-06-02" in render_memory_target_state(runtime.target)
+    session = render_memory_session_state(runtime.session_state)
+    assert "Use 2026-06-02 as the lesson date." in session
+    assert "Earlier date guess" in session
+    assert "Ask for homework follow-ups." in session
+    result = render_lesson_result_state(runtime.lesson_result_state)
+    assert "Reviewed ion charge" in result
+    assert "Homework & follow-ups" in result
+    evidence = render_memory_briefs(runtime.evidence_briefs)
+    assert "memory_target_001" in evidence
+    assert "No existing lesson results found." in evidence
+    combined = render_memory_runtime(runtime)
+    assert "## Memory target state" in combined
+    assert "## Memory session state" in combined
+    assert "## Lesson result state" in combined
+    assert "## Memory evidence briefs" in combined
+
+
+def test_pseudonymize_known_students_replaces_roster_names():
+    roster = """# Students
+
+| ID | Name | Note | Page |
+|---|---|---|---|
+| S-014 | Alex Weber | Strong with formula writing. | [students/S-014.md](students/S-014.md) |
+| S-033 | Joonho Kim | Concrete tasks help. | [students/S-033.md](students/S-033.md) |
+| S-042 | Matt Keller | Reliable on conservation checks. | [students/S-042.md](students/S-042.md) |
+"""
+    diary = (
+        "- Matt (S-042) helped other students.\n"
+        "- Joonho Kim understood the phosphate link.\n"
+        "- Alex was interrupting."
+    )
+
+    out = _pseudonymize_known_students(diary, roster)
+
+    assert "Matt" not in out
+    assert "Joonho" not in out
+    assert "Alex" not in out
+    assert "S-042 helped other students" in out
+    assert "S-033 understood the phosphate link" in out
+    assert "S-014 was interrupting" in out

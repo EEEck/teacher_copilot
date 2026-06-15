@@ -53,8 +53,12 @@ def test_apply_prompt_does_not_treat_braces_as_format_fields():
                 "memory_skill": "Active skill: update_memory.",
                 "sections": "- A\n- B",
                 "teacher_context": "Teacher context",
-                "context": HOSTILE_CONTEXT,
-                "memory_runtime": "## Update-memory runtime state\n- phase: identify_target",
+                "active_class_core": HOSTILE_CONTEXT,
+                "ingest_task_context": "Update Memory task context",
+                "target_state": "## Memory target state\n- intent: unknown",
+                "session_state": "## Memory session state\n- phase: identify_target",
+                "lesson_result_state": "## Lesson result state\n- draft confidence: low",
+                "evidence": "## Memory evidence briefs\n- None yet.",
                 "wiki_tools_policy": CHAT_WIKI_TOOLS_POLICY,
             },
         ),
@@ -90,6 +94,10 @@ def test_memory_phase_skill_documents_transitions():
     assert "collect_results" in skill
     assert "review_draft" in skill
     assert "state_patch.session_state.phase" in skill
+    assert "state_patch.session_state.decisions" in skill
+    assert "state_patch.lesson_result_state" in skill
+    assert "superseded" in skill
+    assert "agent_next_step" in skill
     assert "stay in collect_results" in skill
     assert "ready to save" in skill
     assert "{memory_skill}" in ingest

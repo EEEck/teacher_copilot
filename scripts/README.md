@@ -34,6 +34,12 @@ $env:Path = "${env:ProgramFiles}\nodejs;$env:Path"
 These call the local API, run the default three-turn FCKW/CFC planning debug
 scenario, and write a trace bundle under `backend/runs/`.
 
+Use the generated `prompt-*-sections.md` files to verify the default prompt
+context. Planning should show `Teacher layer`, `Active class core`, `Session
+state`, `Lesson planning state`, `Current lesson artifact`, and `Evidence
+briefs`; long lesson history and raw evidence should appear through tool calls
+and `raw-evidence/`.
+
 The API trace endpoints are enabled by default in development and disabled by
 default in production. Set `AGENT_TRACE_ENABLED=true` for local production-mode
 debug runs. `PLAN_TRACE_ENABLED=true` remains supported as a backward-compatible
@@ -50,6 +56,12 @@ These call the local API, run the default three-turn lesson-results update
 debug scenario for `2026-05-29`, and write a trace bundle under `backend/runs/`.
 The bundle includes prompt assembly, streamed tool calls/results, memory runtime
 state, raw evidence refs, and the final diary markdown.
+
+Update Memory should show `Teacher layer`, `Active class core`, `Update Memory
+task context`, `Memory target state`, `Memory session state`, `Lesson result
+state`, and `Memory evidence briefs`. It should not include
+`teacher_wiki/AGENTS.md`, full roll-ups, full student files, or full lesson
+files in the default prompt context.
 
 ## Trace Script Maintenance
 

@@ -183,7 +183,7 @@ def _write_readme(
         "- `NN-trace-after-turnX.json`: trace after each teacher prompt",
         "- `NN-final-diary.md`: final lesson-results artifact",
         "- `prompt-XX-ingest_chat-*`: exact model instructions/user input/context sections",
-        "- `08-tool-calls-and-results.md`: tool call inputs and streamed outputs",
+        "- `NN-tool-calls-and-results.md`: tool call inputs and streamed outputs",
         "- `raw-evidence/`: captured tool outputs by raw_ref",
         "",
         "## Prompt Calls",
@@ -212,7 +212,7 @@ def _write_readme(
             "",
             "## Debug Focus",
             "- Check whether the agent identified the 2026-05-29 target early.",
-            "- Check whether it used `read_memory_target` for 2026-05-25 before updating open loops.",
+            "- Check whether explicit open-loop updates are reflected without overclaiming unsupported evidence.",
             "- Check that real student names are converted to pseudonymous IDs in the final diary.",
         ]
     )

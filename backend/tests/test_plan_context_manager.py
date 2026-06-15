@@ -20,6 +20,7 @@ from app.teacher_agent.agents import (
     _trim_to_last_user_turns,
 )
 from app.context_limits import get_context_limits
+from app.teacher_agent.prompt_assembly import build_ingest_user_input_assembly
 from app.teacher_agent.planning_state import (
     EvidenceBrief,
     LessonPlanningState,
@@ -29,9 +30,11 @@ from app.teacher_agent.planning_state import (
     SessionState,
     SessionStatePatch,
     StatePatch,
+    apply_plan_phase_auto_advance,
     merge_turn_into_runtime,
     render_briefs,
     render_session_state,
+    teacher_signals_plan_finalize,
 )
 from app.teacher_agent.tools import _capture, lookup_raw_evidence
 from app.teacher_agent.wiki import memory as wiki_memory
@@ -180,6 +183,62 @@ def test_state_patch_dedupes_lists_and_rejects_invalid_phase():
     ]
 
 
+def test_plan_finalize_signal_requires_acceptance_or_direct_save_intent():
+    assert teacher_signals_plan_finalize(
+        "I am very happy with it. Maybe as a last refinement, add active recall."
+    )
+    assert teacher_signals_plan_finalize("Looks good, ready to save.")
+    assert not teacher_signals_plan_finalize("Can we revise the warmup?")
+    assert not teacher_signals_plan_finalize("I am not happy with this yet.")
+
+
+def test_plan_auto_advance_finalizes_ready_plan_after_last_refinement():
+    rt = PlanRuntime()
+    rt.session_state.phase = "lesson_refinement"
+    rt.session_state.open_questions = ["Which exact opener?"]
+    rt.lesson_planning_state.needs_revision = ["Tighten the opening."]
+
+    apply_plan_phase_auto_advance(
+        rt,
+        teacher_message=(
+            "I am very happy with it. Maybe as a last refinement, "
+            "add only a 2 min recap."
+        ),
+        plan_ready=True,
+    )
+
+    assert rt.session_state.phase == "finalize"
+    assert rt.session_state.open_questions == []
+    assert rt.lesson_planning_state.needs_revision == []
+    assert rt.session_state.agent_next_step == (
+        "Present the finalized lesson plan for teacher review."
+    )
+
+
+def test_merge_turn_auto_advance_finalizes_ready_plan():
+    rt = PlanRuntime()
+    merge_turn_into_runtime(
+        rt,
+        state_patch=StatePatch(
+            session_state=SessionStatePatch(phase="lesson_refinement")
+        ),
+        session_state=SessionState(),
+        lesson_planning_state=LessonPlanningState(),
+        new_evidence_briefs=[],
+        memory_candidates=[],
+        last_change_summary="Final tweak applied.",
+        plan_changed=True,
+        teacher_message=(
+            "I am very happy with it. Maybe as a last refinement, "
+            "add active recall."
+        ),
+        plan_ready=True,
+    )
+
+    assert rt.session_state.phase == "finalize"
+    assert rt.lesson_planning_state.needs_revision == []
+
+
 # --- verbatim-window trimming ----------------------------------------------
 
 
@@ -202,6 +261,24 @@ def test_trim_to_last_user_turns_keeps_window():
 def test_trim_to_last_user_turns_handles_short_history():
     msgs = [_msg("user", "only")]
     assert _trim_to_last_user_turns(msgs, 8) == msgs
+
+
+def test_ingest_user_input_trims_to_last_user_turns():
+    msgs = []
+    for i in range(10):
+        msgs.append(_msg("user", f"old-or-new-user-{i}"))
+        msgs.append(_msg("assistant", f"assistant-{i}"))
+    out = build_ingest_user_input_assembly(
+        msgs,
+        "# Lesson Results\n\nDraft",
+        history_turns=3,
+    )
+
+    assert "old-or-new-user-0" not in out["text"]
+    assert "old-or-new-user-6" not in out["text"]
+    assert "old-or-new-user-7" in out["text"]
+    assert "old-or-new-user-9" in out["text"]
+    assert out["sections"][-1]["source"] == "last 3 user turns"
 
 
 def test_strip_plan_debug_sections_removes_evidence_briefs():

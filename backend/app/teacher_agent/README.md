@@ -18,6 +18,10 @@ prompt trace diagnostics.
 - `memory_update_state.py` - backend-owned Update Memory runtime state:
   target/date, intent, phase, lesson-result category progress, evidence briefs,
   raw refs, and merge validation.
+- `runtime_render.py` - shared compact render helpers for workflow session
+  state and evidence briefs.
+- `workflow_contract.py` - minimal spec-level contract for artifact chat
+  workflows.
 - `prompt_assembly.py` - shared live-call and diagnostic prompt/context assembly.
 - `prompt_trace.py` - compatibility wrapper for plan-session prompt diagnostics.
 - `stream_events.py` - internal SSE event models and SDK event translation.

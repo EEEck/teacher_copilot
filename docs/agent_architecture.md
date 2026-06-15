@@ -21,8 +21,9 @@ boundaries, not a broad multi-agent graph.
 - Planning is read-only with respect to the wiki.
 - Memory update can draft lesson memory, but durable wiki writes happen only
   through teacher-approved commit or explicit revise actions.
-- The model receives small class-scoped context packs, then browses only when
-  the teacher request needs older or broader evidence.
+- The model receives explicit prompt layers (global teacher profile, active
+  class core, workflow/runtime state), then browses only when the teacher
+  request needs older or broader evidence.
 - The backend owns class scope, allowed paths, write validation, and persistence.
 - The agent should cite or name the class memory it uses.
 
@@ -70,7 +71,7 @@ The product uses tiered class memory.
    time via `clamp_memory_page` (Hermes-style: small, high-signal, replace not
    append).
 
-3. **Workflow context packs**
+3. **Workflow prompt layers**
    Read-only packs for base class chat, lesson planning, ingest, and review.
    These are rebuilt from the wiki and compact memory rather than stored as
    separate durable state. The planning chat uses `build_plan_context_slim`: a
@@ -85,6 +86,13 @@ The product uses tiered class memory.
    centralized in `app/context_limits.py` (see
    `context_management.md`).
 
+   Current live planning and Update Memory calls compose explicit layers through
+   `prompt_assembly.py`: Teacher Layer, Active Class Core, and workflow-specific
+   runtime/task sections. The Active Class Core loads exactly one class, the
+   subject guide selected by `wiki.get_class(class_id).subject`, and all compact
+   `wiki/classes/{class_id}/memory/*.md` pages. Legacy stacked pack builders are
+   compatibility/debug views, not the model-facing contract.
+
 4. **Runtime session memory (lesson planning and update memory)**
    `PlanRuntime` (in `planning_state.py`): backend-owned `SessionState`,
    `LessonPlanningState`, compact `EvidenceBrief`s with a raw-output store
@@ -97,9 +105,12 @@ The product uses tiered class memory.
    `MemoryRuntime` (in `memory_update_state.py`) applies the same pattern to
    Update Memory: target/date identification, intent, phase, lesson-result
    category progress, compact evidence briefs, and raw refs live on the session
-   until the teacher approves the normal memory commit. This keeps the workflow
-   free-agent from the teacher's perspective while preserving backend-owned
-   validation and no hidden wiki writes. Timeline/detail entry points can pass a
+   until the teacher approves the normal memory commit. Its model-facing context
+   is rendered as separate `Memory target state`, `Memory session state`,
+   `Lesson result state`, and `Memory evidence briefs` sections. This keeps the
+   workflow free-agent from the teacher's perspective while preserving
+   backend-owned validation and no hidden wiki writes. Timeline/detail entry
+   points can pass a
    structured date/intent hint into the same ingest session start call; the
    backend seeds the target and draft from canonical lesson detail when a
    planned or taught lesson is found. Unknown hinted dates may seed a dated
@@ -180,17 +191,18 @@ output.
 
 ## Workflow Context
 
-The agent should use purpose-specific context packages.
+The agent should use purpose-specific prompt layers, not whole-wiki dumps.
 
-- `base_class_context`: subject, class configuration, current unit, curriculum
-  direction, core misconceptions, open loops, recent timeline, compact profile.
-- `plan_context`: base context plus last taught lessons, recent saved plans,
-  taught-so-far summary, teaching patterns, planning preferences.
-- `ingest_context`: previous lesson, student roster excerpt, course state, open
-  loops, misconception watchlist, compact class memory, and logging conventions;
-  each source appears once in the live prompt.
-- `review_context`: compact sequence, recurring misconceptions, unresolved
-  issues, and relevant lesson range.
+- `teacher_context`: global teacher profile only.
+- `active_class_core`: one active class, selected subject guide, and compact
+  class memory pages.
+- `plan workflow context`: current plan artifact, planning session state,
+  lesson-planning state, compact evidence briefs, and recent conversation.
+- `ingest workflow context`: update-memory task hints, current diary artifact,
+  target/session/result runtime state, compact evidence briefs, and recent
+  conversation.
+- `review_context` or future workflows: build a separate overview/task layer
+  instead of overloading active-class core.
 
 The teacher should not have to restate class state in each chat. The model
 should receive enough context to start well and use tools for the long tail.
@@ -245,6 +257,8 @@ should receive enough context to start well and use tools for the long tail.
 - Structured outputs: `backend/app/teacher_agent/models.py`
 - Planning runtime context manager: `backend/app/teacher_agent/planning_state.py`
 - Update-memory runtime context manager: `backend/app/teacher_agent/memory_update_state.py`
+- Shared runtime render helpers: `backend/app/teacher_agent/runtime_render.py`
+- Workflow spec contract: `backend/app/teacher_agent/workflow_contract.py`
 - Plan-session trace bundle: `GET /api/classes/{id}/plan/sessions/{session_id}/trace`
 - Prompt assembly source of truth: `backend/app/teacher_agent/prompt_assembly.py`
 - Prompt trace compatibility wrapper: `backend/app/teacher_agent/prompt_trace.py`

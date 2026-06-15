@@ -33,6 +33,10 @@ from app.teacher_agent.memory_update_state import (
     MemoryTargetPatch,
     apply_memory_state_patch,
     memory_api_payload,
+    render_lesson_result_state,
+    render_memory_briefs,
+    render_memory_session_state,
+    render_memory_target_state,
     render_memory_runtime,
 )
 from app.teacher_agent.prompt_trace import build_ingest_chat_prompt_trace
@@ -295,6 +299,18 @@ class IngestService:
             "teacher_context": self.wiki.build_teacher_context_trace()["text"],
             "active_class_core": self.wiki.build_active_class_core_context_trace(class_id)["text"],
             "ingest_context": self.wiki.build_ingest_context_slim(class_id),
+            "memory_target_state": render_memory_target_state(runtime.target)
+            if runtime
+            else "",
+            "memory_session_state": render_memory_session_state(runtime.session_state)
+            if runtime
+            else "",
+            "lesson_result_state": render_lesson_result_state(runtime.lesson_result_state)
+            if runtime
+            else "",
+            "memory_evidence_briefs": render_memory_briefs(runtime.evidence_briefs)
+            if runtime
+            else "",
             "memory_runtime": render_memory_runtime(runtime)
             if runtime
             else "",

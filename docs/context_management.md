@@ -105,6 +105,19 @@ query-pack layers, and it does not inject `teacher_wiki/AGENTS.md`, full
 roll-ups, full student files, or full lesson files by default. Blunt
 end-truncation remains **disabled by default** (`ingest_context_backstop=0`).
 
+Update Memory now mirrors planning's runtime-state strategy:
+
+1. **Teacher layer** — global `teacher_profile.md`.
+2. **Active class core** — one active class, selected subject guide, and all
+   compact class `memory/*.md` pages.
+3. **Task context** — bounded previous lesson, roster excerpt, and saved-plan
+   continuity.
+4. **Split runtime state** — target state, session decisions/questions,
+   lesson-result category state, and compact evidence briefs are rendered as
+   separate traceable sections.
+5. **Verbatim window** — last `ingest_history_turns` teacher turns in the user
+   message (default 8); older decisions must survive in `MemoryRuntime`.
+
 ### Durable wiki memory (Hermes-style)
 
 `MEMORY_PAGE_BUDGETS` in `wiki/memory.py` cap each memory page at write and
@@ -123,6 +136,7 @@ forgetting.
 | `plan_current_chars` | **0** | Max chars for lessonplan in system prompt; 0 = unlimited |
 | `plan_instructions_backstop` | **0** | Emergency cap on full plan instructions; 0 = disabled |
 | `ingest_context_backstop` | **0** | Emergency cap on ingest context pack; 0 = disabled |
+| `ingest_history_turns` | 8 | Verbatim teacher turns in ingest user message |
 | `plan_opening_context_chars` | **0** | Plan opening agent context; 0 = unlimited |
 | `compile_context_chars` | **0** | Compile diary context; 0 = unlimited |
 | `plan_lesson_context_chars` | **0** | One-shot plan lesson context; 0 = unlimited |

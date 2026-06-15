@@ -14,14 +14,14 @@ from app.teacher_agent.models import (
     PlanTurnOutput,
     ProfileProposalOutput,
 )
-from app.teacher_agent.memory_update_state import MemoryRuntime, render_memory_runtime
+from app.teacher_agent.memory_update_state import MemoryRuntime
 from app.teacher_agent.planning_state import PlanRuntime
-from app.teacher_agent.prompt_assembly import build_plan_chat_prompt_assembly
+from app.teacher_agent.prompt_assembly import (
+    build_ingest_chat_prompt_assembly,
+    build_plan_chat_prompt_assembly,
+)
 from app.teacher_agent.prompts import (
     COMPILE_SYSTEM,
-    INGEST_WIKI_TOOLS_POLICY,
-    INGEST_SYSTEM,
-    MEMORY_SKILL,
     LINT_SYSTEM,
     MEMORY_COMPACT_SYSTEM,
     PROFILE_PROPOSAL_SYSTEM,
@@ -51,24 +51,21 @@ def chat_model_settings(reasoning_effort: str) -> ModelSettings | None:
 
 def build_ingest_agent(
     ctx: WikiToolContext,
-    sections: str,
-    context: str,
     model: str,
     *,
     memory: MemoryRuntime | None = None,
     reasoning_effort: str = "medium",
 ) -> Agent:
-    lim = get_context_limits()
     rt = memory or MemoryRuntime()
-    instructions = apply_prompt(
-        INGEST_SYSTEM,
-        memory_skill=MEMORY_SKILL,
-        sections=sections,
-        teacher_context=ctx.wiki.build_teacher_context_trace()["text"],
-        context=apply_char_limit(context, lim.ingest_context_backstop),
-        memory_runtime=render_memory_runtime(rt),
-        wiki_tools_policy=INGEST_WIKI_TOOLS_POLICY,
+    assembly = build_ingest_chat_prompt_assembly(
+        ctx.wiki,
+        ctx.class_id,
+        messages=[],
+        current_diary="",
+        runtime=rt,
+        attachments=[],
     )
+    instructions = assembly["instructions"]
     settings = chat_model_settings(reasoning_effort)
     return Agent(
         name="KlassenPilot Ingest",

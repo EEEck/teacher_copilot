@@ -54,7 +54,7 @@ from app.teacher_agent.planning_state import (
 )
 from app.teacher_agent.tools import WikiToolContext
 from app.teacher_agent.stream_events import SseError, SseEvent, SseFinal, translate_sdk_event
-from app.teacher_agent.wiki_store import DIARY_SECTION_HEADINGS, WikiStore
+from app.teacher_agent.wiki_store import WikiStore
 
 class AgentTurnLimitError(RuntimeError):
     """Agent used too many tool/reasoning steps in one turn."""
@@ -76,11 +76,45 @@ _DEBUG_PLAN_SECTION_RE = re.compile(
     r"\n## Evidence briefs\b.*?(?=\n## |\Z)",
     flags=re.IGNORECASE | re.DOTALL,
 )
+_STUDENT_ROSTER_ROW_RE = re.compile(
+    r"^\|\s*(S-\d{3})\s*\|\s*([^|]+?)\s*\|",
+    flags=re.MULTILINE,
+)
 
 
 def _strip_plan_debug_sections(plan_md: str) -> str:
     """Remove runtime/debug sections if the model copies them into plan_markdown."""
     return _DEBUG_PLAN_SECTION_RE.sub("", plan_md or "").rstrip() + "\n"
+
+
+def _student_name_replacements(roster_md: str) -> list[tuple[str, str]]:
+    """Return known roster name variants mapped to pseudonymous student IDs."""
+    replacements: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for match in _STUDENT_ROSTER_ROW_RE.finditer(roster_md or ""):
+        sid = match.group(1).strip()
+        full_name = " ".join(match.group(2).split())
+        variants = [full_name]
+        first_name = full_name.split()[0] if full_name else ""
+        if first_name and first_name != full_name:
+            variants.append(first_name)
+        for variant in variants:
+            key = (variant.lower(), sid)
+            if variant and key not in seen:
+                seen.add(key)
+                replacements.append((variant, sid))
+    return sorted(replacements, key=lambda item: len(item[0]), reverse=True)
+
+
+def _pseudonymize_known_students(text: str, roster_md: str) -> str:
+    """Replace known roster names with S-### IDs in model-produced diary text."""
+    out = text or ""
+    for name, sid in _student_name_replacements(roster_md):
+        pattern = re.compile(
+            rf"(?<![\w-]){re.escape(name)}(?:\s*\({re.escape(sid)}\))?(?![\w-])"
+        )
+        out = pattern.sub(sid, out)
+    return out
 
 
 def _trim_to_last_user_turns(
@@ -218,7 +252,13 @@ class AgentRunner:
         )["text"]
 
     def _merge_plan_turn(
-        self, runtime: PlanRuntime, parsed: PlanTurnOutput, *, plan_changed: bool
+        self,
+        runtime: PlanRuntime,
+        parsed: PlanTurnOutput,
+        *,
+        plan_changed: bool,
+        teacher_message: str = "",
+        plan_ready: bool = False,
     ) -> None:
         merge_turn_into_runtime(
             runtime,
@@ -229,6 +269,8 @@ class AgentRunner:
             memory_candidates=parsed.memory_candidates,
             last_change_summary=parsed.last_change_summary,
             plan_changed=plan_changed,
+            teacher_message=teacher_message,
+            plan_ready=plan_ready,
         )
 
     def _plan_final_event(
@@ -294,12 +336,8 @@ class AgentRunner:
         memory: MemoryRuntime | None = None,
     ) -> _PreparedAgentTurn:
         runtime = memory or MemoryRuntime()
-        context = self.wiki.build_ingest_context_slim(class_id)
-        sections = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
         agent = build_ingest_agent(
             self._wiki_ctx(class_id, memory=runtime),
-            sections,
-            context,
             self.chat_model,
             memory=runtime,
             reasoning_effort=self.reasoning_effort,
@@ -316,12 +354,15 @@ class AgentRunner:
         current_draft: str,
         runtime: MemoryRuntime,
         *,
+        class_id: str,
         teacher_message: str = "",
     ) -> tuple[str, str, CompletenessChecklist, bool] | None:
         if not isinstance(parsed, IngestTurnOutput):
             return None
         reply = parsed.reply
         diary_md = parsed.diary_markdown.strip() or current_draft
+        roster_md = self.wiki.read_text(self.wiki.roll_up_paths(class_id)["students"])
+        diary_md = _pseudonymize_known_students(diary_md, roster_md)
         checklist = self.wiki.checklist_from_diary(diary_md)
         diary_complete = self.wiki.is_diary_complete(diary_md)
         self._merge_memory_turn(
@@ -359,6 +400,8 @@ class AgentRunner:
         parsed: Any,
         current_draft: str,
         runtime: PlanRuntime,
+        *,
+        teacher_message: str = "",
     ) -> tuple[str, str, bool] | None:
         if not isinstance(parsed, PlanTurnOutput):
             return None
@@ -368,7 +411,11 @@ class AgentRunner:
         )
         ready = self.wiki.is_plan_ready(plan_md)
         self._merge_plan_turn(
-            runtime, parsed, plan_changed=plan_md.strip() != current_draft.strip()
+            runtime,
+            parsed,
+            plan_changed=plan_md.strip() != current_draft.strip(),
+            teacher_message=teacher_message,
+            plan_ready=ready,
         )
         return reply, plan_md, ready
 
@@ -459,6 +506,7 @@ class AgentRunner:
             out.final_output,
             turn.current_draft,
             turn.runtime,
+            class_id=class_id,
             teacher_message=messages[-1].content if messages else "",
         )
         if finalized is None:
@@ -494,7 +542,10 @@ class AgentRunner:
         if out is None:
             return
         finalized = self._finalize_plan_turn(
-            out.final_output, turn.current_draft, turn.runtime
+            out.final_output,
+            turn.current_draft,
+            turn.runtime,
+            teacher_message=messages[-1].content if messages else "",
         )
         if finalized is None:
             yield SseError(
@@ -554,15 +605,15 @@ class AgentRunner:
             return str(exc), turn.current_draft, False
         if not isinstance(parsed, PlanTurnOutput):
             return "I had trouble processing that — could you try again?", current_draft, False
-        reply = parsed.reply
-        plan_md = _strip_plan_debug_sections(
-            parsed.plan_markdown.strip() or current_draft
+        finalized = self._finalize_plan_turn(
+            parsed,
+            current_draft,
+            runtime,
+            teacher_message=messages[-1].content if messages else "",
         )
-        ready = self.wiki.is_plan_ready(plan_md)
-        self._merge_plan_turn(
-            runtime, parsed, plan_changed=plan_md.strip() != current_draft.strip()
-        )
-        return reply, plan_md, ready
+        if finalized is None:
+            return "I had trouble processing that â€” could you try again?", current_draft, False
+        return finalized
 
     async def ingest_chat(
         self,
@@ -597,6 +648,7 @@ class AgentRunner:
             parsed,
             current_draft,
             runtime,
+            class_id=class_id,
             teacher_message=messages[-1].content if messages else "",
         )
         if finalized is None:

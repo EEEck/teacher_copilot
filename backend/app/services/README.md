@@ -10,7 +10,8 @@ wiki storage.
   streaming finalization, and optional mode-specific runtime hooks.
 - `artifact_spec.py` - per-mode policy for artifact sessions. Ingest and plan
   define their templates, readiness checks, turn runners, optional openings,
-  and mode-specific runtime/trace hooks here.
+  mode-specific runtime/trace hooks, streaming adapters, final-event adapters,
+  and workflow trace contracts here.
 - `ingest_service.py` - memory-update adapter around the artifact session core,
   start-hint resolution for timeline/detail entry points, and propose/commit
   behavior for lesson diaries.
@@ -22,6 +23,9 @@ wiki storage.
 
 - `ArtifactSessionService` is the lifecycle core.
 - `ArtifactSpec` is the mode policy.
+- Streaming dispatch and final-event normalization go through `ArtifactSpec`;
+  the shared session service should not branch on concrete modes such as
+  `plan` or `ingest`.
 - `IngestService` and `PlanService` are API-facing adapters.
 - Durable wiki mutations are explicit service methods, not side effects of chat.
 - Update Memory start hints are resolved before the agent turn. Known planned
@@ -35,8 +39,8 @@ wiki storage.
 
 - If a future artifact type is added, prefer a new `ArtifactSpec` and a thin
   service adapter before forking the session lifecycle.
-- Keep plan-specific runtime concepts behind spec/service hooks so the artifact
-  core stays reusable.
+- Keep workflow-specific runtime concepts behind spec/service hooks so the
+  artifact core stays reusable.
 - Prefer small helper functions or strategy objects over inheritance when
   reducing plan/ingest duplication. The current abstraction is `ArtifactSpec`
   plus thin service adapters.
