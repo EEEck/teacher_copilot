@@ -1,0 +1,187 @@
+# Agent evals (DeepEval + trace contracts)
+
+How to run KlassenPilot agent evals, where they should execute, and how they
+relate to the running dev container vs a separate test environment.
+
+## Recommendation: where evals run
+
+**Use a separate host/CI Python venv — not inside the running app container.**
+
+| Approach | Use for | Why |
+|----------|---------|-----|
+| **Host/CI venv + pytest** (recommended) | Default CI, build loop, live agent evals | Tests use FastAPI `TestClient` with dependency injection — **no running uvicorn required**. Temp wiki copy; seed wiki is never mutated. |
+| **Running backend HTTP** (`localhost:8010`) | Human debug bundles, optional `RUN_LIVE_API_TESTS` | Trace bundle scripts and `test_live_api_plan_trace.py` hit the live API. Good for “what is docker serving right now?” — not the primary CI gate. |
+| **Inside `docker compose` backend service** | **Not recommended** | Dev image installs runtime deps only (`pip install -e .`), not `deepeval`/pytest. Couples test tooling to the serving process and slows hot-reload dev. |
+
+```mermaid
+flowchart LR
+  subgraph recommended [Recommended CI / build loop]
+    Venv[Host or CI venv]
+    Pytest[pytest tests/evals]
+    TC[TestClient in-process]
+    App[app.main FastAPI]
+    Venv --> Pytest --> TC --> App
+  end
+  subgraph optional [Optional debug]
+    Docker[docker compose backend :8010]
+    Bundle[trace bundle scripts]
+    Bundle --> Docker
+  end
+```
+
+**Summary:** The eval suite is a **test harness that imports the app**, not a
+client of the production/dev server. Keep `docker compose up` for manual UI/API
+work; run `pytest` from `backend/.venv` (or CI) for gates.
+
+Exception: if you explicitly want to validate the **exact** long-running
+process (e.g. after env wiring changes in Compose), use trace bundles or
+`RUN_LIVE_API_TESTS=1` against `http://localhost:8010` — treat that as a
+secondary smoke path, not the default loop.
+
+## One-time setup
+
+From repo root or `backend/`:
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\pip install -e ".[dev]"
+```
+
+`[dev]` adds `pytest`, `ruff`, and `deepeval`. Copy `backend/.env` with
+`OPENAI_API_KEY` only when running **live** evals (see below).
+
+## Eval tiers
+
+| Tier | Tests | OpenAI | Server needed |
+|------|-------|--------|---------------|
+| **0 — Unit / API stub** | `tests/test_*.py`, `tests/eval/*` | No | No |
+| **1 — DeepEval context** | `tests/evals/test_klassenpilot_layers.py`, `test_klassenpilot_context.py` | No | No |
+| **2 — DeepEval chat stub** | `tests/evals/test_klassenpilot_chat_stub.py` | No | No |
+| **3 — DeepEval chat live** | `tests/evals/test_klassenpilot_chat_live.py` | Yes | No |
+| **4 — Live API HTTP** | `tests/test_live_api_plan_trace.py` | Yes | Yes (`:8010`) |
+| **5 — Trace bundles** | `scripts/run_*_trace_bundle.py` | Yes | Yes (`:8010`) |
+
+Tiers 0–2 are **CI-safe** (no API key, no running backend).
+
+## Commands
+
+### Full backend suite (includes evals)
+
+From repo root:
+
+```powershell
+.\scripts\test.ps1
+```
+
+Backend only:
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest
+```
+
+### DeepEval goldens only (deterministic — recommended every PR)
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py -v
+```
+
+### Live agent chat + LLM judge (opt-in)
+
+Uses real `AgentRunner` (OpenAI Agents SDK) still **in-process** via
+`TestClient` — docker does not need to be running.
+
+```powershell
+cd backend
+$env:RUN_LIVE_AGENT_EVALS="1"
+$env:RUN_LLM_CHAT_JUDGE="1"          # GEval grounding judge (default on for live)
+$env:OPENAI_API_KEY="sk-..."         # or backend/.env loaded by pydantic-settings
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_chat_live.py -v
+```
+
+Optional judge model override:
+
+```powershell
+$env:DEEPEVAL_MODEL="gpt-4o-mini"
+```
+
+Disable LLM judge but keep live agent:
+
+```powershell
+$env:RUN_LLM_CHAT_JUDGE="0"
+```
+
+### Live API against running backend (secondary)
+
+Start backend first (`docker compose up`, `restart-dev.ps1`, or manual uvicorn).
+
+```powershell
+$env:RUN_LIVE_API_TESTS="1"
+$env:LIVE_API_BASE_URL="http://localhost:8010"
+cd backend
+.\.venv\Scripts\python -m pytest tests/test_live_api_plan_trace.py -v
+```
+
+### Human trace bundles (debug, not CI gates)
+
+Requires backend on `:8010`. See [backend/README.md](../README.md) plan/memory
+trace bundle sections.
+
+## Golden matrix
+
+| Family | IDs | What it checks |
+|--------|-----|----------------|
+| Layer isolation — 9b | `9b_global`, `9b_global_class`, `9b_global_class_subject` | Teacher → class memory → `chemie.md` |
+| Layer isolation — 10c mock | `10c_global`, `10c_global_class`, `10c_global_class_subject` | Same + `ESL.md`, no chemie leakage |
+| Workflow startup — 9b | `9b_plan_startup`, `9b_ingest_startup` | Session-open `prompt_assembly` |
+| Chat stub/live — 9b | `9b_plan_fckw_turn1`, `9b_plan_redox_lesson_lookup`, `9b_plan_fckw_turn2_review`, `9b_ingest_turn2_collect` | Message → tools → trace → (live) GEval judge |
+
+Fixture wiki overlay: `tests/fixtures/eval_wiki/` (`engl_10c_2026_27`, `ESL.md`).
+
+## How failures look
+
+DeepEval metrics return **score 0–1** and a **reason** string. Example:
+
+```
+AssertionError: Metrics: ToolInvocation[9b_plan_fckw_turn1] (
+  score: 0.0, reason: - missing required tool 'search_memory' ...
+) failed.
+```
+
+Build-loop rules:
+
+1. Read `reason` bullets.
+2. Fix app code (`context_packs.py`, `prompt_assembly.py`, tools, prompts).
+3. Do **not** lower thresholds or delete goldens to greenwash.
+4. Re-run the tier that failed.
+
+Note: `deepeval test run` CLI may fail in some installs; **pytest is the
+supported runner** (`deepeval` pytest plugin).
+
+## File map
+
+| Path | Role |
+|------|------|
+| `tests/evals/goldens/` | Golden definitions (layer, startup, chat) |
+| `tests/evals/contracts/layer_contract.py` | Layer isolation scorer |
+| `tests/evals/metrics/` | DeepEval `BaseMetric` + `GEval` wrappers |
+| `tests/evals/harness.py` | Trace fetch, chat turns, retrieval context for judge |
+| `tests/evals/conftest.py` | Eval wiki fixture, `DeepEvalTracingProcessor`, live client |
+| `tests/eval/plan_trace_scorer.py` | Shared trace contract scorer |
+| `tests/eval/ingest_trace_scorer.py` | Ingest startup scorer |
+| `tests/README.md` | Shorter test-group index |
+
+## CI sketch (future)
+
+```yaml
+# Example job — not wired in repo yet
+- pip install -e ".[dev]"
+- pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py
+# Nightly only:
+# RUN_LIVE_AGENT_EVALS=1 pytest tests/evals/test_klassenpilot_chat_live.py
+```
+
+Do **not** add pytest/deepeval to the runtime `Dockerfile.dev` CMD image unless
+you introduce a separate `Dockerfile.test` used only in CI.

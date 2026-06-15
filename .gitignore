@@ -5,6 +5,7 @@ literature/**/*.pdf
 # Python
 backend/.env
 backend/.venv/
+backend/.deepeval/
 __pycache__/
 *.py[cod]
 .pytest_cache/

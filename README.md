@@ -247,17 +247,40 @@ The current developer file stack is:
 - [`docs/memory_hierarchy.md`](docs/memory_hierarchy.md) - memory scope, loading behavior, and update rules
 - [`docs/context_management.md`](docs/context_management.md) - prompt assembly and context limits
 - [`docs/agent_learning_guide.md`](docs/agent_learning_guide.md) - optional agent learning/reference notes
+- [`backend/docs/evals.md`](backend/docs/evals.md) - agent eval tiers, how to run, container vs venv
 - [`backend/teacher_wiki/AGENTS.md`](backend/teacher_wiki/AGENTS.md) - wiki schema and workflow rules
 
 ## Testing
 
-Offline, deterministic tests â€” no OpenAI calls.
+Offline, deterministic tests — no OpenAI calls by default.
 
 ```powershell
 .\scripts\test.ps1
 ```
 
-Runs backend `pytest` (agent stub + tmp wiki copy) and frontend `tsc` + Vitest (`src/lib/sse-chat.test.ts`). From `backend/` only: `pytest`.
+Runs backend `pytest` (agent stub + tmp wiki copy) and frontend `tsc` + Vitest.
+From `backend/` only:
+
+```powershell
+cd backend
+.\.venv\Scripts\pip install -e ".[dev]"   # first time: includes deepeval
+.\.venv\Scripts\python -m pytest
+```
+
+### Agent evals (DeepEval)
+
+Evals run from a **separate host/CI venv**, not inside the running app
+container. They import the FastAPI app in-process (`TestClient`) — you do **not**
+need `docker compose up` for CI goldens.
+
+| Run | Command |
+|-----|---------|
+| CI-safe evals | `pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py` |
+| Live agent + LLM judge | `$env:RUN_LIVE_AGENT_EVALS="1"; pytest tests/evals/test_klassenpilot_chat_live.py` |
+| Live API smoke (needs `:8010`) | `$env:RUN_LIVE_API_TESTS="1"; pytest tests/test_live_api_plan_trace.py` |
+
+Full documentation: [`backend/docs/evals.md`](backend/docs/evals.md),
+[`backend/tests/README.md`](backend/tests/README.md).
 
 ## Prototype limitations (sessions)
 
