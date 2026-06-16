@@ -1,4 +1,4 @@
-﻿# KlassenPilot
+# KlassenPilot
 
 Private teacher copilot for Gymnasium teachers. Log lessons through chat, review structured memory with human-in-the-loop approval, and plan the next lesson from accumulated class wiki memory.
 
@@ -40,11 +40,11 @@ three-turn Update Memory lesson-results scenario.
 
 ## Quick start
 
-### Option A â€” Docker Compose (simplest)
+### Option A - Docker Compose (simplest)
 
 Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose).
 
-**1. Backend env** â€” copy and add your OpenAI key:
+**1. Backend env** - copy and add your OpenAI key:
 
 ```bash
 copy .env.example backend\.env    # Windows
@@ -77,11 +77,11 @@ Python and frontend code reload automatically inside the containers (see [Develo
 
 If Next.js HMR is flaky on Windows Docker, `WATCHPACK_POLLING=true` is already set in [`compose.yaml`](compose.yaml).
 
-### Option B â€” dev scripts (host venv + Node)
+### Option B - dev scripts (host venv + Node)
 
 Best when you already have Python and Node installed and want logs in `scripts/.logs/`.
 
-**Windows (Cursor terminal / PowerShell)** â€” use the PowerShell script (do not type `bash`; that often opens WSL, which may not be installed):
+**Windows (Cursor terminal / PowerShell)** - use the PowerShell script (do not type `bash`; that often opens WSL, which may not be installed):
 
 ```powershell
 .\scripts\restart-dev.ps1 -NoNewWindow
@@ -105,7 +105,7 @@ Starts backend on **8010** and frontend on **3000** (8010 avoids a stuck Windows
 tail -f scripts/.logs/backend.log
 ```
 
-### Option C â€” manual (two terminals)
+### Option C - manual (two terminals)
 
 **1. Backend**
 
@@ -135,16 +135,16 @@ App: http://localhost:3000
 
 ## Developing & restarting
 
-Both backend and frontend use **hot reload** in dev â€” you usually do not restart after code edits.
+Both backend and frontend use **hot reload** in dev - you usually do not restart after code edits.
 
 | What changed | Backend | Frontend | Docker |
 |--------------|---------|----------|--------|
-| Python in `backend/app/` | Auto (`uvicorn --reload`) | â€” | No action |
-| React/TS in `frontend/src/` | â€” | Auto HMR (`next dev`) | No action |
-| `backend/.env` | Restart backend | â€” | `docker compose restart backend` |
-| `frontend/.env.local` | â€” | Restart frontend | `docker compose restart frontend` |
-| `pyproject.toml` / new pip deps | `pip install -e .` then restart | â€” | `docker compose up --build backend` |
-| `package.json` / new npm deps | â€” | `npm install` then restart | `docker compose up --build frontend` |
+| Python in `backend/app/` | Auto (`uvicorn --reload`) | - | No action |
+| React/TS in `frontend/src/` | - | Auto HMR (`next dev`) | No action |
+| `backend/.env` | Restart backend | - | `docker compose restart backend` |
+| `frontend/.env.local` | - | Restart frontend | `docker compose restart frontend` |
+| `pyproject.toml` / new pip deps | `pip install -e .` then restart | - | `docker compose up --build backend` |
+| `package.json` / new npm deps | - | `npm install` then restart | `docker compose up --build frontend` |
 | Stuck port / ghost process | `.\scripts\restart-dev.ps1 -Stop` | same | `docker compose down` then `up` |
 | Wiki markdown only | No restart | No restart | No action |
 
@@ -160,14 +160,14 @@ Both backend and frontend use **hot reload** in dev â€” you usually do not 
 ./scripts/restart-dev.sh --frontend-only
 ```
 
-**Sessions (prototype):** ingest/plan chat sessions live in backend memory â€” restarting the backend clears server session state. The UI recreates a session and restores your draft; chat history in the tab is cleared. File/SQLite session persistence is deferred â€” see [backend/README.md](backend/README.md).
+**Sessions (prototype):** ingest/plan chat sessions live in backend memory - restarting the backend clears server session state. The UI recreates a session and restores your draft; chat history in the tab is cleared. File/SQLite session persistence is deferred - see [backend/README.md](backend/README.md).
 
 ## Workflows (v1)
 
-1. **Landing** â†’ select a class
-2. **Class home** â†’ lesson timeline + status
-3. **Update memory** â†’ chat + diary draft (right panel) â†’ review wiki proposals â†’ save
-4. **Create lesson plan** â†’ chat + plan draft (same layout) â†’ save to a lesson date
+1. **Landing** -> select a class
+2. **Class home** -> lesson timeline + status
+3. **Update memory** -> chat + diary draft (right panel) -> review wiki proposals -> save
+4. **Create lesson plan** -> chat + plan draft (same layout) -> save to a lesson date
 
 Both chat flows share the same UI shell (`ArtifactSessionWorkspace`: thread left, markdown draft right).
 Update Memory can start free-form from the class header, or from a lesson
@@ -201,7 +201,7 @@ teacher_wiki/
 | `OPENAI_MODEL` | `backend/.env` | Default model fallback for legacy settings |
 | `OPENAI_CHAT_MODEL` | `backend/.env` | Chat turns (ingest/plan); default `gpt-5.4-mini` for reasoning + streaming |
 | `OPENAI_FAST_MODEL` | `backend/.env` | Compile/lint/opening; default `gpt-4o-mini` |
-| `OPENAI_REASONING_EFFORT` | `backend/.env` | `none`, `low`, `medium`, `high`, `xhigh` â€” hidden thinking tokens (billed as output). Default `medium`; use `none` or `low` to save cost |
+| `OPENAI_REASONING_EFFORT` | `backend/.env` | `none`, `low`, `medium`, `high`, `xhigh` - hidden thinking tokens (billed as output). Default `medium`; use `none` or `low` to save cost |
 | `WIKI_ROOT` | `backend/.env` | Path to `teacher_wiki` (Docker: set in `compose.yaml` as `/data/teacher_wiki`) |
 | `NEXT_PUBLIC_API_BASE_URL` | `frontend/.env.local` | Backend URL for browser (default `http://localhost:8010`) |
 | `INTERNAL_API_BASE_URL` | Docker / SSR only | Server-side fetches in frontend container (`http://backend:8010` in Compose) |
@@ -210,17 +210,17 @@ teacher_wiki/
 
 Two layers read the key:
 
-1. **`backend/.env`** â€” loaded by FastAPI `Settings` (`pydantic-settings`).
-2. **OpenAI Agents SDK** â€” used for ingest/plan chat; expects `OPENAI_API_KEY` in the **process environment**. See [Agents SDK configuration](https://openai.github.io/openai-agents-python/config/).
+1. **`backend/.env`** - loaded by FastAPI `Settings` (`pydantic-settings`).
+2. **OpenAI Agents SDK** - used for ingest/plan chat; expects `OPENAI_API_KEY` in the **process environment**. See [Agents SDK configuration](https://openai.github.io/openai-agents-python/config/).
 
 This repo bridges them via **`app/openai_bootstrap.configure_openai_from_settings()`**, called from **`app/main.py`** on startup. Always run the API as `uvicorn app.main:app` (or Docker/restart-dev, which do the same).
 
-- **`scripts/restart-dev.ps1`** â€” also loads `backend/.env` into the backend shell before `uvicorn`.
-- **`compose.yaml`** â€” `env_file: backend/.env` for the backend service.
+- **`scripts/restart-dev.ps1`** - also loads `backend/.env` into the backend shell before `uvicorn`.
+- **`compose.yaml`** - `env_file: backend/.env` for the backend service.
 
-Check `GET /api/health` â€” field `openai_configured` should be `true` when the key is set.
+Check `GET /api/health` - field `openai_configured` should be `true` when the key is set.
 
-**If misconfigured:** Create lesson plan may hang on â€œStarting sessionâ€¦â€ or return 500; Update memory opens without AI, but the first chat message fails.
+**If misconfigured:** Create lesson plan may hang on "Starting session..." or return 500; Update memory opens without AI, but the first chat message fails.
 
 **Manual workaround** (backend PowerShell window):
 
@@ -252,7 +252,7 @@ The current developer file stack is:
 
 ## Testing
 
-Offline, deterministic tests — no OpenAI calls by default.
+Offline, deterministic tests - no OpenAI calls by default.
 
 ```powershell
 .\scripts\test.ps1
@@ -270,7 +270,7 @@ cd backend
 ### Agent evals (DeepEval)
 
 Evals run from a **separate host/CI venv**, not inside the running app
-container. They import the FastAPI app in-process (`TestClient`) — you do **not**
+container. They import the FastAPI app in-process (`TestClient`) - you do **not**
 need `docker compose up` for CI goldens.
 
 | Run | Command |
@@ -284,17 +284,17 @@ Full documentation: [`backend/docs/evals.md`](backend/docs/evals.md),
 
 ## Prototype limitations (sessions)
 
-Ingest/plan **session IDs and chat history** live in server RAM (`ArtifactSessionService`). Restarting uvicorn (or `docker compose restart backend`) drops sessions. The UI recovers by starting a new session and keeping your **draft markdown** in the browser; in-thread chat history is not restored. **SQLite (or any DB) is not required for the prototype** â€” add persistence only when you need multi-worker deploys or durable server-side history.
+Ingest/plan **session IDs and chat history** live in server RAM (`ArtifactSessionService`). Restarting uvicorn (or `docker compose restart backend`) drops sessions. The UI recovers by starting a new session and keeping your **draft markdown** in the browser; in-thread chat history is not restored. **SQLite (or any DB) is not required for the prototype** - add persistence only when you need multi-worker deploys or durable server-side history.
 
 ## UI architecture
 
 | Layer | Location | Purpose |
 |---|---|---|
 | Design tokens | `src/app/globals.css` | shadcn CSS variables |
-| Primitives | `src/components/ui/` | Button, Card, Textarea, Checkbox, â€¦ |
+| Primitives | `src/components/ui/` | Button, Card, Textarea, Checkbox, ... |
 | Layout | `src/components/layout/` | AppShell, PageHeader |
 | Domain | `src/components/klassenpilot/` | Timeline, checklist, wiki cards |
-| Chat | `src/components/assistant-ui/` | Shared artifact session runtime â†’ FastAPI |
+| Chat | `src/components/assistant-ui/` | Shared artifact session runtime -> FastAPI |
 
 ## Roadmap
 
