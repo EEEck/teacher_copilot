@@ -38,7 +38,7 @@ not call OpenAI or mutate the repo wiki.
 - `fixtures/fckw_plan/trace_before_turn1.json` - committed startup trace fixture.
 - `fixtures/eval_wiki/` - eval-only `engl_10c_2026_27` mock class + `ESL.md` subject guide.
 - `eval/ingest_trace_scorer.py` - shared ingest startup trace scorer.
-- `evals/` - DeepEval build-loop goldens (layer isolation + workflow startup).
+- `evals/` - DeepEval build-loop goldens (layer isolation, workflow startup, chat, wiki search, workflow E2E).
 
 ## DeepEval build loop (`tests/evals/`)
 
@@ -52,7 +52,7 @@ vars, CI notes).
 Deterministic DeepEval goldens wrap the existing trace contract scorers. No OpenAI
 credits required for the committed suite.
 
-**Golden matrix (12 total):**
+**Golden matrix (18 deterministic total):**
 
 | Family | Goldens | What it checks |
 |--------|---------|----------------|
@@ -60,13 +60,30 @@ credits required for the committed suite.
 | Layer isolation — Englisch 10c mock | `10c_global`, `10c_global_class`, `10c_global_class_subject` | Same progression with `engl_10c_2026_27` + `ESL.md` (no chemie leakage) |
 | Workflow startup — Chemie 9b | `9b_plan_startup`, `9b_ingest_startup` | Full plan/ingest session trace before first teacher message |
 | **Chat turns (stub, CI)** | `9b_plan_fckw_turn1`, `9b_plan_redox_lesson_lookup`, `9b_plan_fckw_turn2_review`, `9b_ingest_turn2_collect` | Message → tool calls → trace evidence (deterministic) |
-| **Chat turns (live, opt-in)** | same 4 goldens | Above + DeepEval `GEval` LLM judge on retrieval context |
+| **Chat turns (live, opt-in)** | same chat goldens | Above + selected DeepEval `GEval` LLM judge on retrieval context |
+
+Additional deterministic goldens:
+
+| Family | Goldens | What it checks |
+|--------|---------|----------------|
+| **Wiki search (stub, CI)** | `9b_misconception_charge_vs_oxidation`, `9b_redox_date_range_pathfinder`, `10c_subject_bound_search` | Source-bounded wiki pathfinding and class isolation |
+| **Workflow E2E (stub, CI)** | `9b_plan_fckw_3turn_e2e`, `9b_memory_update_3turn_e2e` | Complete multi-turn workflow state, evidence, and final artifact |
+
+The chat-turn family also includes `9b_ingest_turn3_ready`, which checks final
+Update Memory readiness, review phase, and pseudonymized diary output.
 
 **Run deterministic suite (CI-safe):**
 
 ```powershell
 cd backend
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py -v
+```
+
+Expanded deterministic set:
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py tests/evals/test_klassenpilot_wiki_search.py tests/evals/test_klassenpilot_workflows_stub.py -v
 ```
 
 **Run live chat evals (real OpenAI Agents SDK + LLM judge):**

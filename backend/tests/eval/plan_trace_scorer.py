@@ -117,6 +117,15 @@ def score_startup_context(trace: dict[str, Any]) -> ScoreResult:
         if not _has_top_section(expected, included_top):
             failures.append(f"prompt_assembly missing top-level section {expected!r}")
 
+    for singleton in ("Teacher layer", "Active class core"):
+        count = sum(
+            1
+            for section in top_sections
+            if _has_top_section(singleton, {_normalize_name(str(section.get("name", "")))})
+        )
+        if count != 1:
+            failures.append(f"prompt_assembly must include {singleton!r} exactly once, got {count}")
+
     for expectation in STARTUP_CLASS_SLICE_SECTIONS:
         if not expectation.required:
             sec = _find_section(class_sections, expectation)
@@ -169,7 +178,22 @@ def score_startup_context(trace: dict[str, Any]) -> ScoreResult:
                 f"{tool_only} appears in startup class slice; memory_hierarchy expects tool-fetch only"
             )
 
+    forbidden_startup_markers = (
+        "teacher_wiki/AGENTS.md",
+        "AGENTS.md",
+        "Wiki logging conventions",
+        "Subject guide: ESL",
+        "wiki/subjects/ESL.md",
+        "Subject guide: mathe",
+    )
+    for marker in forbidden_startup_markers:
+        if marker in class_text or marker in teacher_text:
+            failures.append(f"startup context includes forbidden marker {marker!r}")
+
     instructions = assembly.get("instructions") or ""
+    for marker in forbidden_startup_markers:
+        if marker in instructions:
+            failures.append(f"rendered instructions include forbidden marker {marker!r}")
     if "Teacher context (global)" not in instructions and "Teacher and copilot profile" not in instructions:
         failures.append("rendered instructions missing teacher context block")
     if "Active class core context" not in instructions and "Class memory (compact)" not in instructions:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 from deepeval.metrics import BaseMetric, GEval
@@ -123,6 +124,23 @@ class TraceEvidenceMetric(BaseMetric):
 
             output = actual_output_text(result)
             failures.extend(check_artifact_patterns(output, self.golden.artifact_patterns))
+            for pattern in self.golden.forbidden_artifact_patterns:
+                if re.search(pattern, output or "", flags=re.IGNORECASE):
+                    failures.append(f"artifact includes forbidden pattern /{pattern}/")
+
+            if self.golden.expected_ready is not None:
+                ready = bool(result.final.get("ready"))
+                if ready != self.golden.expected_ready:
+                    failures.append(f"expected ready={self.golden.expected_ready}, got {ready}")
+
+            if self.golden.expected_phase:
+                runtime = result.trace.get("runtime") or {}
+                session_state = runtime.get("session_state") or {}
+                phase = session_state.get("phase") or runtime.get("phase")
+                if phase != self.golden.expected_phase:
+                    failures.append(
+                        f"expected phase {self.golden.expected_phase!r}, got {phase!r}"
+                    )
 
             event_types = [str(e.get("type", "")) for e in result.events]
             if "tool_call" not in event_types and (

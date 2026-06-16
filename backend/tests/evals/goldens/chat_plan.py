@@ -26,6 +26,9 @@ class ChatGolden:
     require_raw_evidence: bool = False
     geval_criteria: str = ""
     artifact_patterns: tuple[str, ...] = ()
+    forbidden_artifact_patterns: tuple[str, ...] = ()
+    expected_phase: str = ""
+    expected_ready: bool | None = None
 
 
 PLAN_CHAT_GOLDENS: tuple[ChatGolden, ...] = (
@@ -58,11 +61,6 @@ PLAN_CHAT_GOLDENS: tuple[ChatGolden, ...] = (
         tools_any_of=("read_lesson", "read_lesson_range", "search_memory"),
         tools_any_of_min=1,
         require_raw_evidence=True,
-        geval_criteria=(
-            "The assistant reply must answer using wiki lesson evidence for the "
-            "2026-05-25 redox lesson. It should mention metal displacement or redox "
-            "content from the retrieved context, not generic chemistry boilerplate."
-        ),
         artifact_patterns=("2026-05-25", "redox"),
     ),
     ChatGolden(
@@ -98,6 +96,26 @@ INGEST_CHAT_GOLDENS: tuple[ChatGolden, ...] = (
         ),
         artifact_patterns=("2026-05-29", "anion"),
     ),
+    ChatGolden(
+        golden_id="9b_ingest_turn3_ready",
+        workflow="ingest",
+        class_id=CHEMIE_9B_CLASS_ID,
+        message=MEMORY_UPDATE_PROMPTS[2],
+        turn=3,
+        tools_any_of=("read_memory_target", "list_memory_targets", "search_memory"),
+        tools_any_of_min=1,
+        require_raw_evidence=True,
+        geval_criteria=(
+            "The final diary draft should reflect the teacher's corrections for "
+            "2026-05-29, including common anions, the unfinished redox-sequence link, "
+            "the 2026-05-25 metal-displacement follow-up, lesson-organization cause "
+            "of interruption, and pseudonymous student IDs only."
+        ),
+        artifact_patterns=("2026-05-29", "common anions", "metal displacement", r"S-\d{3}"),
+        forbidden_artifact_patterns=(r"\bJoonho\b", r"\bAlex\b", r"\bRita\b", r"\bMatt\b", r"raw_ref"),
+        expected_phase="review_draft",
+        expected_ready=True,
+    ),
 )
 
 CHAT_GOLDENS: tuple[ChatGolden, ...] = PLAN_CHAT_GOLDENS + INGEST_CHAT_GOLDENS
@@ -106,4 +124,5 @@ CHAT_GOLDENS: tuple[ChatGolden, ...] = PLAN_CHAT_GOLDENS + INGEST_CHAT_GOLDENS
 CHAT_SCENARIO_PRIORS: dict[str, tuple[str, ...]] = {
     "9b_plan_fckw_turn2_review": (PROMPT_TURN_1,),
     "9b_ingest_turn2_collect": (MEMORY_UPDATE_PROMPTS[0],),
+    "9b_ingest_turn3_ready": (MEMORY_UPDATE_PROMPTS[0], MEMORY_UPDATE_PROMPTS[1]),
 }

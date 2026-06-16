@@ -88,6 +88,13 @@ cd backend
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py -v
 ```
 
+Expanded deterministic eval set:
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py tests/evals/test_klassenpilot_wiki_search.py tests/evals/test_klassenpilot_workflows_stub.py -v
+```
+
 ### Live agent chat + LLM judge (opt-in)
 
 Uses real `AgentRunner` (OpenAI Agents SDK) still **in-process** via
@@ -140,6 +147,17 @@ trace bundle sections.
 
 Fixture wiki overlay: `tests/fixtures/eval_wiki/` (`engl_10c_2026_27`, `ESL.md`).
 
+Additional deterministic goldens:
+
+| Family | IDs | What it checks |
+|--------|-----|----------------|
+| Wiki search - 9b/10c | `9b_misconception_charge_vs_oxidation`, `9b_redox_date_range_pathfinder`, `10c_subject_bound_search` | Source-bounded wiki pathfinding and class isolation |
+| Workflow E2E stub - 9b | `9b_plan_fckw_3turn_e2e`, `9b_memory_update_3turn_e2e` | Complete multi-turn workflow state, evidence, and final artifact |
+
+Live GEval is intentionally limited to four chat goldens by default: two
+planning quality checks and two memory-update quality checks. The redox lesson
+lookup remains a deterministic live/tool-routing check without an LLM judge.
+
 ## How failures look
 
 DeepEval metrics return **score 0–1** and a **reason** string. Example:
@@ -164,7 +182,7 @@ supported runner** (`deepeval` pytest plugin).
 
 | Path | Role |
 |------|------|
-| `tests/evals/goldens/` | Golden definitions (layer, startup, chat) |
+| `tests/evals/goldens/` | Golden definitions (layer, startup, chat, search, workflow) |
 | `tests/evals/contracts/layer_contract.py` | Layer isolation scorer |
 | `tests/evals/metrics/` | DeepEval `BaseMetric` + `GEval` wrappers |
 | `tests/evals/harness.py` | Trace fetch, chat turns, retrieval context for judge |

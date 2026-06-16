@@ -58,6 +58,16 @@ def score_ingest_startup_context(trace: dict[str, Any]) -> ScoreResult:
     if section_names.count("Active class core") != 1:
         failures.append("prompt_assembly must include Active class core exactly once")
 
+    for singleton in (
+        "Update Memory task context",
+        "Memory target state",
+        "Memory session state",
+        "Lesson result state",
+        "Memory evidence briefs",
+    ):
+        if section_names.count(singleton) != 1:
+            failures.append(f"prompt_assembly must include {singleton} exactly once")
+
     runtime = trace.get("runtime") or {}
     if runtime.get("phase") != "identify_target":
         failures.append(f"expected runtime.phase identify_target, got {runtime.get('phase')!r}")
@@ -109,6 +119,17 @@ def score_ingest_startup_context(trace: dict[str, Any]) -> ScoreResult:
             )
 
     instructions = assembly.get("instructions") or ""
+    forbidden_markers = (
+        "teacher_wiki/AGENTS.md",
+        "AGENTS.md",
+        "Wiki logging conventions",
+        "Subject guide: ESL",
+        "wiki/subjects/ESL.md",
+        "Subject guide: mathe",
+    )
+    for marker in forbidden_markers:
+        if marker in instructions or marker in active_class_core or marker in teacher_context:
+            failures.append(f"ingest prompt context includes forbidden marker {marker!r}")
     if "Teacher context (global)" not in instructions and "Teacher and copilot profile" not in instructions:
         failures.append("rendered instructions missing teacher context block")
     if "Active class core context" not in instructions and "Class memory (compact)" not in instructions:

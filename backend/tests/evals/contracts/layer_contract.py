@@ -24,6 +24,7 @@ class LayerExpectation:
     forbidden_markers: tuple[str, ...] = ()
     subject_id: str = ""
     subject_required_markers: tuple[str, ...] = ()
+    required_memory_files: tuple[str, ...] = ()
 
 
 def _section_text(sections: list[dict[str, Any]], *, include_subject: bool) -> str:
@@ -104,5 +105,16 @@ def score_layer_context(
                     subject_text = str(section.get("text", ""))
                     break
         _check_markers(subject_text, expectation.subject_required_markers, f"{label} subject", failures)
+
+    if core_trace and expectation.required_memory_files:
+        included_sources = {
+            str(section.get("source", ""))
+            for section in core_trace.get("sections") or []
+            if section.get("included", True)
+        }
+        for filename in expectation.required_memory_files:
+            expected_suffix = f"memory/{filename}"
+            if not any(source.endswith(expected_suffix) for source in included_sources):
+                failures.append(f"{label}: missing compact memory file {filename!r}")
 
     return ScoreResult(passed=not failures, failures=failures, warnings=warnings)

@@ -23,6 +23,21 @@ class ChatTurnResult:
     final: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class WorkflowScenarioResult:
+    class_id: str
+    session_id: str
+    workflow: str
+    messages: tuple[str, ...]
+    turns: list[ChatTurnResult] = field(default_factory=list)
+
+    @property
+    def final_turn(self) -> ChatTurnResult:
+        if not self.turns:
+            raise ValueError("WorkflowScenarioResult has no turns")
+        return self.turns[-1]
+
+
 def _parse_sse(body: str) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for block in body.split("\n\n"):
@@ -109,6 +124,34 @@ def run_chat_scenario(
         class_id=class_id,
         session_id=session_id,
         message=message,
+    )
+
+
+def run_workflow_scenario(
+    client: TestClient,
+    *,
+    workflow: str,
+    class_id: str,
+    messages: tuple[str, ...],
+) -> WorkflowScenarioResult:
+    session_id = start_session(client, workflow=workflow, class_id=class_id)
+    turns = [
+        run_chat_turn(
+            client,
+            workflow=workflow,
+            class_id=class_id,
+            session_id=session_id,
+            message=message,
+        )
+        for message in messages
+    ]
+    normalized, _, _ = _workflow_paths(workflow, class_id)
+    return WorkflowScenarioResult(
+        class_id=class_id,
+        session_id=session_id,
+        workflow=normalized,
+        messages=messages,
+        turns=turns,
     )
 
 

@@ -448,6 +448,27 @@ reviewed reason.
 
 Agents need evals because good demos can hide weak reliability.
 
+DeepEval gives useful vocabulary for this:
+
+- **Golden**: one durable scenario plus the expected behavior. A golden is the
+  test case; it can be checked by deterministic assertions, an LLM judge, or
+  both.
+- **Component eval**: checks one bounded part of the system, such as context
+  loading, class/subject routing, wiki search, tool selection, state patches, or
+  evidence compaction.
+- **End-to-end eval**: runs the teacher-facing workflow from conversation input
+  through artifact or state output, then checks whether the whole behavior is
+  useful and contract-compliant.
+- **Deterministic metric**: exact code checks for invariants such as "teacher
+  profile appears once", "English class did not load Chemie memory", "no raw
+  diary blob leaked", or "the target lesson became confirmed".
+- **LLM-as-judge metric**: an evaluator model scores quality that is hard to
+  express exactly, such as whether a lesson plan is teacher-facing, grounded,
+  appropriately sparse, and avoids inventing prior lessons.
+- **Trace/span eval**: evaluates the observed workflow structure. Framework
+  integrations create spans for agent runs, LLM calls, and tool calls so the
+  eval can ask whether the right component did the right work at the right time.
+
 Useful metrics:
 
 - valid citation rate
@@ -460,6 +481,37 @@ Useful metrics:
 - teacher edit distance on generated plans
 - approval/rejection rate for proposed memory updates
 - cross-class leakage rate
+
+KlassenPilot should use a layered eval strategy:
+
+- Use deterministic component evals for hard contracts: context layer
+  singletons, active class bounds, subject memory selection, forbidden wiki
+  files, pseudonymization, state transitions, direct-write prevention, and tool
+  routing.
+- Use deterministic end-to-end evals for workflow shape: multi-turn lesson
+  planning and memory update conversations should reach the expected runtime
+  state, keep evidence compact, keep raw evidence behind refs, and avoid
+  duplicate prompt layers.
+- Use LLM-as-judge evals only where deterministic checks are too brittle:
+  artifact usefulness, groundedness, teacher-facing tone, honest sparse-memory
+  handling, and whether the plan uses class memory in an inspectable way.
+- Give judge metrics retrieval context from the wiki/tool evidence, not just the
+  final answer. The judge should compare the artifact to the same compact
+  evidence the agent was supposed to use.
+- Keep default CI network-free and OpenAI-free. Live DeepEval/GEval runs should
+  be explicit because they spend model calls and may inspect sensitive class
+  memory.
+- Do not improve a score by lowering thresholds, deleting goldens, or loosening
+  the metric. First inspect the metric reason/span, then make the smallest app
+  change that addresses the failure.
+- Add new goldens only when they cover a new behavior class. If an existing
+  layer, chat, wiki-search, or workflow golden already covers the same risk,
+  extend it instead of duplicating it.
+
+Because KlassenPilot uses the OpenAI Agents SDK, prefer DeepEval's OpenAI Agents
+integration for live tracing and span-level evaluation. Do not add manual
+`@observe` tracing around the same agent paths unless there is no supported
+integration or a specific manual span is needed for a non-framework component.
 
 OpenAI Agents SDK tracing and local CLI traces are useful for debugging tool
 choices, context packs, and final outputs. Traces can contain sensitive class
@@ -529,6 +581,24 @@ Public references:
   https://developers.openai.com/api/docs/guides/agents/guardrails-approvals
 - OpenAI Agents SDK running agents:
   https://developers.openai.com/api/docs/guides/agents/running-agents
+- DeepEval docs:
+  https://www.deepeval.com/docs
+- DeepEval quickstart:
+  https://www.deepeval.com/docs/getting-started
+- DeepEval vibe-coding loop:
+  https://www.deepeval.com/docs/vibe-coding
+- DeepEval end-to-end evals:
+  https://www.deepeval.com/docs/evaluation-end-to-end-llm-evals
+- DeepEval component-level evals:
+  https://www.deepeval.com/docs/evaluation-component-level-llm-evals
+- DeepEval metrics catalog:
+  https://www.deepeval.com/docs/metrics-introduction
+- DeepEval OpenAI Agents integration:
+  https://www.deepeval.com/integrations/frameworks/openai-agents
+- DeepEval CLI:
+  https://www.deepeval.com/docs/command-line-interface
+- DeepEval LLM-friendly docs:
+  https://www.deepeval.com/llms.txt
 - LlamaIndex agent memory docs:
   https://developers.llamaindex.ai/python/framework/module_guides/deploying/agents/memory/
 - Honcho docs:

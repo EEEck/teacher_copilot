@@ -66,7 +66,7 @@ def test_update_memory_three_turn_stub_scenario_contract(client: TestClient):
     assert runtime["lesson_result_state"]["draft_confidence"] == "high"
     assert final_trace["raw_evidence"]
 
-    assert "Matt did well" in final_artifact
+    assert "S-004 did well" in final_artifact
     assert "poor lesson organization" in final_artifact
     assert "metal displacement" in final_artifact
     assert "Joonho" not in final_artifact

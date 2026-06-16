@@ -95,7 +95,7 @@ MEMORY_UPDATE_DIARY = """# Lesson Results — 2026-05-29 — Anions and Oxidatio
 ## Student participation
 - Students were engaged, but confusion surfaced too late.
 - Interruptions were mainly connected to poor lesson organization rather than only student behavior.
-- Matt did well and helped other students.
+- S-004 did well and helped other students.
 
 ## What went well
 - Students understood common anions quickly.
@@ -252,7 +252,7 @@ class StubAgentRunner:
             ]
             participation = [
                 "Students were engaged, but confusion surfaced too late.",
-                "Matt did well and helped other students.",
+                "S-004 did well and helped other students.",
             ]
             went_well = ["Common anions were understood quickly."]
             did_not_go_well = [

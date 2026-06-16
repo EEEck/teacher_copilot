@@ -1,5 +1,7 @@
 # Class Config — Chemie 9b
 
+subject: chemie
+
 ## Lesson results sections (fixed v1)
 - What was covered
 - Student participation
