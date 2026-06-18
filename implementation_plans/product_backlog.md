@@ -97,7 +97,27 @@ Primary items:
 | **Material upload library** | Store teacher-provided notes, prior plans, worksheets, and curriculum docs as source material with provenance. |
 | **Docling/PDF ingestion spike** | Evaluate Docling for PDF/DOCX/PPTX extraction. Preserve source pages/sections for citations. |
 | **Teacher-approved import to wiki** | Distinguish one-time planning context, source-library material, and durable class memory. |
+| **Class concept map / curriculum graph** | Small class-scoped concept graph for one school year plus high-level prior-year foundations. Use plain wiki JSON plus backend validation: concepts, skills, vocabulary sets, misconceptions, prerequisites, and assessment targets. Agents propose source-backed graph patches; teacher approval writes them. |
 | **New-class sparse memory handling** | Make sparse memory explicit; ask one targeted setup question at a time. |
+
+Concept-map design notes from `ref_repos/AutoSci`:
+
+- Borrow the graph contract discipline, not the research graph system. AutoSci
+  keeps node schemas in `runtime/schema/entities.yaml`, edge types in
+  `runtime/schema/edges.yaml`, slug/storage rules in
+  `runtime/schema/conventions.yaml`, and declarative writer ownership in
+  `runtime/policy/writers.yaml`.
+- The useful code pattern is `tools/research_wiki.py::add_edge`: validate edge
+  type, node ids, confidence/evidence fields, symmetry, and dedupe before
+  writing. For KlassenPilot, mirror this with a small backend graph-patch
+  validator instead of letting chat mutate graph files directly.
+- AutoSci's `tools/visualize.py` shows useful read-side behavior: load graph
+  rows, build focused subgraphs with BFS, and render derived views. For
+  KlassenPilot v1.2, keep this as optional inspiration for a later teacher
+  concept-map view, not a dependency.
+- Initial non-goals: no NetworkX requirement, no SQLite graph storage, no graph
+  database, no broad AutoSci runtime/schema port, and no autonomous concept-map
+  writes.
 
 Non-goals:
 
@@ -106,12 +126,16 @@ Non-goals:
 - Vector database as the default retrieval path unless deterministic retrieval
   shows measured limits.
 - Autonomous conversion of uploaded materials into durable wiki facts.
+- Dedicated graph database or general-purpose graph analytics layer.
 
 Validation:
 
 - A teacher can create a class and get a useful first plan in under 15 minutes.
 - Uploaded material can be cited in a plan and reviewed separately from class
   memory.
+- A generated plan or assessment can name the prerequisite concepts,
+  vocabulary sets, or prior-year foundations it relies on, with source-backed
+  graph evidence.
 
 ---
 
