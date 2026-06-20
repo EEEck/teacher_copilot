@@ -168,6 +168,11 @@ Primary bets:
 - resource suggestions for lessons
 - subject teaching-practice library, starting narrow with chemistry
 - no automatic writes from external sources
+- agent safety hardening before higher-risk tools: SDK guardrails where useful,
+  teacher-visible output sanitization, OWASP ASI red-team discovery, and
+  deterministic security evals
+- lightweight EU/Germany product-boundary note: teacher copilot, not automated
+  grading, placement, diagnosis, admission, or discipline
 
 ### v1.4 - Become Proactive
 

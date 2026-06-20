@@ -29,7 +29,7 @@ local backend URL used by the repo scripts.
 
 - `src/app/` - Next.js App Router pages and route-specific UI.
 - `src/components/assistant-ui/` - shared assistant-ui primitives and chat
-  runtime integration.
+  runtime integration; see its README for provenance and update notes.
 - `src/components/klassenpilot/` - product/domain components for timelines,
   artifact panels, review flows, and proposed memory updates.
 - `src/components/ui/` - shadcn-style low-level UI primitives.

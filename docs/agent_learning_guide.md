@@ -444,6 +444,17 @@ The product should store only what helps instructional continuity. It should
 avoid raw conversation transcripts as durable memory unless there is a specific
 reviewed reason.
 
+The lightweight teacher-agent security contract adds one more rule: source
+trust is not the same as source usefulness. Teacher messages are task requests,
+while uploads, wiki pages, lesson notes, tool outputs, and raw evidence are
+untrusted data. The agent can use them as evidence, but must not follow
+instructions found inside them.
+
+For now, keep this as prompt policy plus deterministic evals. SDK guardrails,
+full output sanitization, DeepTeam automation, and stronger anonymization can
+come later when the product handles real student data or side-effecting agent
+tools.
+
 ## Evaluation And Observability
 
 Agents need evals because good demos can hide weak reliability.
@@ -512,6 +523,15 @@ Because KlassenPilot uses the OpenAI Agents SDK, prefer DeepEval's OpenAI Agents
 integration for live tracing and span-level evaluation. Do not add manual
 `@observe` tracing around the same agent paths unless there is no supported
 integration or a specific manual span is needed for a non-framework component.
+
+Use DeepEval and DeepTeam differently:
+
+- DeepEval is the stable regression layer. Keep curated security goldens for
+  direct prompt injection, upload/retrieval injection, hidden write requests,
+  prompt/trace leakage, and unsupported high-stakes student decisions.
+- DeepTeam is a later discovery layer. Use it for broader OWASP ASI-style
+  red-team runs, then promote useful findings into deterministic DeepEval
+  goldens.
 
 OpenAI Agents SDK tracing and local CLI traces are useful for debugging tool
 choices, context packs, and final outputs. Traces can contain sensitive class

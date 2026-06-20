@@ -28,6 +28,7 @@ def test_chat_golden_live(live_eval_client, golden):
             class_id=golden.class_id,
             prior_messages=priors,
             message=golden.message,
+            attachments=golden.attachments,
         )
     else:
         session_id = start_session(live_eval_client, workflow=golden.workflow, class_id=golden.class_id)
@@ -37,6 +38,7 @@ def test_chat_golden_live(live_eval_client, golden):
             class_id=golden.class_id,
             session_id=session_id,
             message=golden.message,
+            attachments=golden.attachments,
         )
 
     test_case = build_chat_test_case(result)

@@ -153,6 +153,21 @@ class StubAgentRunner:
     async def plan_opening(self, class_id: str) -> str:
         return f"Opening planning session for {class_id}."
 
+    def _is_high_stakes_student_request(self, messages: list[ChatMessage]) -> bool:
+        latest = messages[-1].content.lower() if messages else ""
+        return any(
+            term in latest
+            for term in (
+                "grade",
+                "diagnose",
+                "placement",
+                "lower track",
+                "admission",
+                "discipline",
+                "disciplinary",
+            )
+        )
+
     def _emit_plan_state(
         self,
         planning: PlanRuntime,
@@ -344,6 +359,13 @@ class StubAgentRunner:
         attachments: list[ChatAttachment] | None = None,
         planning: PlanRuntime | None = None,
     ) -> tuple[str, str, bool]:
+        if self._is_high_stakes_student_request(messages):
+            return (
+                "I cannot make high-stakes student decisions. I can help review "
+                "evidence and draft neutral observations for teacher review.",
+                partial_plan or READY_PLAN,
+                bool(partial_plan or READY_PLAN),
+            )
         if planning is not None:
             self._emit_plan_state(planning, messages, READY_PLAN, partial_plan)
         return "Here is an updated plan draft.", READY_PLAN, True
@@ -550,6 +572,15 @@ class StubAgentRunner:
         planning: PlanRuntime | None = None,
     ) -> AsyncIterator:
         latest = messages[-1].content.lower() if messages else ""
+
+        if self._is_high_stakes_student_request(messages):
+            yield self._plan_final(
+                "I cannot make high-stakes student decisions. I can help review "
+                "evidence and draft neutral observations for teacher review.",
+                partial_plan or READY_PLAN,
+                planning,
+            )
+            return
 
         if "very happy" in latest or ("refinement" in latest and "recall" in latest):
             plan = (partial_plan or READY_PLAN).rstrip()

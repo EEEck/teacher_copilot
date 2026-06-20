@@ -17,7 +17,7 @@ This folder contains the Next.js app and shared UI code.
 - `components/ui/` - generic primitives. Keep these domain-free.
 - `components/layout/` - page/app chrome.
 - `components/assistant-ui/` - chat runtime, thread UI, tool display, streaming
-  event handling.
+  event handling; see `components/assistant-ui/README.md` for provenance.
 - `components/klassenpilot/` - domain-specific workflow components.
 
 ## Library Code

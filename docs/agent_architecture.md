@@ -30,6 +30,25 @@ boundaries, not a broad multi-agent graph.
 This keeps teacher trust high: no silent writes, no invented class history, and
 no opaque memory claims.
 
+## Safety Architecture
+
+KlassenPilot's first safety layer is deliberately small and orthogonal to the
+agent flow. The reviewable policy lives in `teacher_agent_security_contract.md`;
+the runtime policy is injected into model-facing instructions through
+`TEACHER_AGENT_SECURITY_POLICY`.
+
+The important boundary is source trust. Teacher messages are task requests, but
+wiki pages, uploads, lesson notes, tool outputs, and raw evidence are untrusted
+data. The agent may use them as evidence, but must not follow instructions found
+inside them. This targets the main MVP risks from OWASP-style agentic threat
+models: direct prompt injection, indirect injection through retrieved content,
+memory/context poisoning, hidden write requests, and over-trusting the agent for
+high-stakes student decisions.
+
+Heavier controls are deferred until the product needs them: SDK input/output
+guardrails, full output sanitization, DeepTeam red-team automation, strong
+student anonymization, and refactoring the legacy broad wiki tool surface.
+
 ## Agents SDK Fit
 
 KlassenPilot uses the OpenAI Agents SDK where it is useful: model/tool looping,

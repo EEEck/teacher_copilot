@@ -28,6 +28,7 @@ from app.teacher_agent.prompts import (
     PLAN_OPENING_SYSTEM,
     PLAN_SYSTEM,
     apply_prompt,
+    TEACHER_AGENT_SECURITY_POLICY,
 )
 from app.context_limits import apply_char_limit, get_context_limits
 from app.teacher_agent.tools import (
@@ -152,7 +153,10 @@ def build_lint_agent(ctx: WikiToolContext, context: str, model: str) -> Agent:
 def build_memory_compact_agent(model: str) -> Agent:
     return Agent(
         name="KlassenPilot Memory Compact",
-        instructions=MEMORY_COMPACT_SYSTEM,
+        instructions=apply_prompt(
+            MEMORY_COMPACT_SYSTEM,
+            security_policy=TEACHER_AGENT_SECURITY_POLICY,
+        ),
         model=model,
         output_type=MemoryCompactOutput,
     )
@@ -161,7 +165,10 @@ def build_memory_compact_agent(model: str) -> Agent:
 def build_profile_proposal_agent(model: str) -> Agent:
     return Agent(
         name="KlassenPilot Profile Proposal",
-        instructions=PROFILE_PROPOSAL_SYSTEM,
+        instructions=apply_prompt(
+            PROFILE_PROPOSAL_SYSTEM,
+            security_policy=TEACHER_AGENT_SECURITY_POLICY,
+        ),
         model=model,
         output_type=ProfileProposalOutput,
     )

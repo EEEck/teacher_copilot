@@ -155,17 +155,26 @@ Primary items:
 | **Source cards** | Show external source, class memory, and uploaded-material provenance in one evidence UI. |
 | **Subject teaching-practice library v1** | Start narrow with chemistry: common misconceptions, diagnostic questions, safe experiments, activity formats, and assessment templates. |
 | **Search/tool guardrails** | Keep class wiki retrieval as the default memory path; external search is task-specific. |
+| **Agent safety hardening v1** | Extend the minimal teacher-agent security layer before adding trusted search or other higher-risk tools: SDK input/output guardrails for prompt leakage, PII-like leakage, hidden write requests, and high-stakes student decisions; lightweight teacher-visible output sanitization; and stronger adversarial eval coverage. |
+| **OWASP ASI red-team pass** | Add optional DeepTeam/manual red-team runs for ASI-style risks, starting with goal hijack, tool misuse, memory/context poisoning, and human-agent trust exploitation. Promote useful findings into deterministic DeepEval goldens. |
+| **Retire legacy broad wiki tools** | Replace or fence the broader `create_wiki_tools()` read path before the agent has external search or more sensitive data. Main chat tools should remain class-scoped and purpose-specific. |
+| **EU/Germany launch boundary note** | Keep this lightweight unless launch plans become concrete: document that KlassenPilot is a teacher copilot, not an automated grading/placement/diagnosis/discipline system; identify which future features would trigger legal review. |
 
 Non-goals:
 
 - Broad open web browsing by default.
 - External source claims without citations.
 - Automatic wiki writes from trusted search.
+- High-stakes student decisions such as grading, placement, diagnosis,
+  admission, or discipline.
+- Full compliance certification before a real launch path exists.
 
 Validation:
 
 - Teacher can add a reputable resource to a plan and inspect why it was chosen.
 - The copilot distinguishes "class memory says" from "external source says."
+- Safety evals catch prompt/trace leakage, hidden write claims, and high-stakes
+  decision attempts before trusted external tools are enabled.
 
 ---
 
@@ -285,6 +294,7 @@ teacher-value work without a concrete blocker.
 | **SQLite/app session persistence** | When real users hit restart/history loss or multi-worker deploys. |
 | **Generalized trace assemblies** | Before adding several more artifact/helper agents. |
 | **Typed index/search improvements** | When deterministic retrieval has measured failures. |
+| **Real-data privacy/security hardening** | Before real teacher/student data or non-local deployment: stronger pseudonymization/redaction, retention rules, access control for traces, output sanitization review, and EU/Germany legal checklist. |
 | **Postgres/object storage/accounts** | Only after multi-user or hosted deployment demand is clear. |
 
 ---

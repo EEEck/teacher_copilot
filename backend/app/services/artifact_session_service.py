@@ -23,6 +23,11 @@ from app.teacher_agent.stream_events import (
     sse_encode,
 )
 from app.services.artifact_spec import ArtifactSpec, TurnResult, default_specs
+from app.services.output_safety import (
+    SAFE_INTERNAL_DATA_REPLY,
+    OutputSafetyFinding,
+    check_teacher_visible_output,
+)
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.wiki_store import WikiStore
 
@@ -119,6 +124,89 @@ class ArtifactSessionService:
         if len(session.debug_events) > _TRACE_EVENT_CAP:
             session.debug_events = session.debug_events[-_TRACE_EVENT_CAP:]
 
+    def _record_safety_output_blocked(
+        self,
+        session: ArtifactSession,
+        findings: list[OutputSafetyFinding],
+    ) -> None:
+        session.debug_events.append(
+            {
+                "type": "safety_output_blocked",
+                "rules": [
+                    {"field": finding.field, "rule": finding.rule}
+                    for finding in findings
+                ],
+            }
+        )
+        if len(session.debug_events) > _TRACE_EVENT_CAP:
+            session.debug_events = session.debug_events[-_TRACE_EVENT_CAP:]
+
+    def _safe_fallback_result(
+        self,
+        session: ArtifactSession,
+        result: TurnResult,
+        previous_markdown: str,
+        findings: list[OutputSafetyFinding],
+    ) -> TurnResult:
+        spec = self.specs[session.mode]
+        self._record_safety_output_blocked(session, findings)
+        return TurnResult(
+            reply=SAFE_INTERNAL_DATA_REPLY,
+            markdown=previous_markdown,
+            ready=spec.readiness(self.wiki, previous_markdown),
+            completeness=spec.completeness_of(self.wiki, previous_markdown),
+            planning=result.planning,
+            memory=result.memory,
+        )
+
+    def _guard_turn_result(
+        self,
+        session: ArtifactSession,
+        result: TurnResult,
+        previous_markdown: str,
+    ) -> TurnResult:
+        findings = check_teacher_visible_output(
+            reply=result.reply,
+            markdown=result.markdown,
+        )
+        if not findings:
+            return result
+        return self._safe_fallback_result(session, result, previous_markdown, findings)
+
+    def _safe_fallback_final_event(
+        self,
+        session: ArtifactSession,
+        event: SseFinal,
+        previous_markdown: str,
+        findings: list[OutputSafetyFinding],
+    ) -> SseFinal:
+        spec = self.specs[session.mode]
+        self._record_safety_output_blocked(session, findings)
+        return event.model_copy(
+            update={
+                "reply": SAFE_INTERNAL_DATA_REPLY,
+                "artifact_markdown": previous_markdown,
+                "ready": spec.readiness(self.wiki, previous_markdown),
+                "completeness": spec.completeness_of(self.wiki, previous_markdown),
+            }
+        )
+
+    def _guard_final_event(
+        self,
+        session: ArtifactSession,
+        event: SseFinal,
+        previous_markdown: str,
+    ) -> SseFinal:
+        findings = check_teacher_visible_output(
+            reply=event.reply,
+            artifact_markdown=event.artifact_markdown,
+        )
+        if not findings:
+            return event
+        return self._safe_fallback_final_event(
+            session, event, previous_markdown, findings
+        )
+
     async def chat(
         self,
         session_id: str,
@@ -135,6 +223,7 @@ class ArtifactSessionService:
         session.messages.append(ChatMessage(role="user", content=message))
         stage = "plan_chat" if session.mode == "plan" else f"{session.mode}_chat"
         self._record_prompt_assembly(session, stage, attachments or [])
+        previous_markdown = session.partial_markdown
         result = await spec.run_turn(
             self.agents,
             session.class_id,
@@ -143,6 +232,7 @@ class ArtifactSessionService:
             attachments or [],
             session.runtime,
         )
+        result = self._guard_turn_result(session, result, previous_markdown)
         session.messages.append(ChatMessage(role="assistant", content=result.reply))
         session.partial_markdown = result.markdown
         if result.completeness is not None:
@@ -218,7 +308,10 @@ class ArtifactSessionService:
             attachments or [],
             session.runtime,
         )
+        previous_markdown = session.partial_markdown
         async for event in stream:
+            if isinstance(event, SseFinal):
+                event = self._guard_final_event(session, event, previous_markdown)
             self._record_debug_event(session, event)
             if isinstance(event, SseFinal):
                 self._apply_turn_result(session, spec.final_event_to_turn_result(event))

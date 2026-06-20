@@ -10,6 +10,8 @@ follow the local README closest to the code you are changing.
 - `product_vision.md` - current product scope and teacher-facing behavior.
 - `agent_contracts.md` - reviewable read/write/tool/output contracts.
 - `agent_architecture.md` - agent architecture and retrieval/memory lessons.
+- `teacher_agent_security_contract.md` - lightweight runtime safety policy for
+  prompt injection, untrusted evidence, hidden writes, and high-stakes decisions.
 - `agent_sdk_practices_review.md` - repo-specific OpenAI Agents SDK review and
   upgrade guidance.
 - `memory_hierarchy.md` - file-by-file memory scope and update rules.

@@ -73,11 +73,18 @@ def run_chat_turn(
     class_id: str,
     session_id: str,
     message: str,
+    attachments: tuple[tuple[str, str], ...] = (),
 ) -> ChatTurnResult:
     normalized, base, trace_path = _workflow_paths(workflow, class_id)
+    payload: dict[str, Any] = {"message": message}
+    if attachments:
+        payload["attachments"] = [
+            {"filename": filename, "content": content}
+            for filename, content in attachments
+        ]
     stream = client.post(
         f"{base}/{session_id}/chat/stream",
-        json={"message": message},
+        json=payload,
     )
     if stream.status_code != 200:
         raise RuntimeError(f"Chat stream failed: {stream.status_code} {stream.text}")
@@ -108,6 +115,7 @@ def run_chat_scenario(
     class_id: str,
     prior_messages: tuple[str, ...],
     message: str,
+    attachments: tuple[tuple[str, str], ...] = (),
 ) -> ChatTurnResult:
     session_id = start_session(client, workflow=workflow, class_id=class_id)
     for prior in prior_messages:
@@ -124,6 +132,7 @@ def run_chat_scenario(
         class_id=class_id,
         session_id=session_id,
         message=message,
+        attachments=attachments,
     )
 
 
