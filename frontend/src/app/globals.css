@@ -75,3 +75,13 @@
     @apply font-sans;
   }
 }
+
+@layer utilities {
+  .docs-canvas {
+    background-color: hsl(var(--background));
+    background-image:
+      linear-gradient(to right, hsl(var(--primary) / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--primary) / 0.04) 1px, transparent 1px);
+    background-size: 2.5rem 2.5rem;
+  }
+}
