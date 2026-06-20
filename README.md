@@ -204,6 +204,7 @@ teacher_wiki/
 | `OPENAI_REASONING_EFFORT` | `backend/.env` | `none`, `low`, `medium`, `high`, `xhigh` - hidden thinking tokens (billed as output). Default `medium`; use `none` or `low` to save cost |
 | `WIKI_ROOT` | `backend/.env` | Path to `teacher_wiki` (Docker: set in `compose.yaml` as `/data/teacher_wiki`) |
 | `NEXT_PUBLIC_API_BASE_URL` | `frontend/.env.local` | Backend URL for browser (default `http://localhost:8010`) |
+| `APP_ENV` | `backend/.env` / Compose | `development` keeps raw local stream diagnostics; `production` strips streamed reasoning text, tool args, and tool outputs before they reach the browser. |
 | `INTERNAL_API_BASE_URL` | Docker / SSR only | Server-side fetches in frontend container (`http://backend:8010` in Compose) |
 
 ### OpenAI API key (required for chat & plan)

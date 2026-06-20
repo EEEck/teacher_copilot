@@ -81,4 +81,34 @@ describe("streamPartsToRunContent", () => {
       expect(part.args).toEqual({ raw: "not-json" });
     }
   });
+
+  it("renders stripped production tool events without raw args or result data", () => {
+    const acc = new StreamPartsAccumulator();
+    acc.apply({
+      type: "tool_call",
+      name: "search_memory",
+      args: "",
+      call_id: "c1",
+    });
+    acc.apply({
+      type: "tool_result",
+      name: "search_memory",
+      output: "",
+      call_id: "c1",
+    });
+
+    const content = streamPartsToRunContent(acc.parts());
+
+    assert(content);
+    expect(content).toHaveLength(1);
+    const part = content[0];
+    assert(part);
+    expect(part.type).toBe("tool-call");
+    if (part.type === "tool-call") {
+      expect(part.toolName).toBe("search_memory");
+      expect(part.args).toEqual({});
+      expect(part.argsText).toBe("");
+      expect(part.result).toBe("");
+    }
+  });
 });

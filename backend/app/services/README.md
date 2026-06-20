@@ -12,6 +12,9 @@ wiki storage.
   define their templates, readiness checks, turn runners, optional openings,
   mode-specific runtime/trace hooks, streaming adapters, final-event adapters,
   and workflow trace contracts here.
+- `stream_safety.py` - production stream display policy for teacher-visible
+  SSE events. Development mode keeps raw diagnostics; production strips raw
+  reasoning text, tool arguments, and tool outputs before emission.
 - `ingest_service.py` - memory-update adapter around the artifact session core,
   start-hint resolution for timeline/detail entry points, and propose/commit
   behavior for lesson diaries.

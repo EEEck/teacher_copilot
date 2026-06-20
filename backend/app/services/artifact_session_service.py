@@ -28,6 +28,10 @@ from app.services.output_safety import (
     OutputSafetyFinding,
     check_teacher_visible_output,
 )
+from app.services.stream_safety import (
+    StreamSafetyState,
+    sanitize_teacher_visible_stream_event,
+)
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.wiki_store import WikiStore
 
@@ -309,9 +313,18 @@ class ArtifactSessionService:
             session.runtime,
         )
         previous_markdown = session.partial_markdown
+        sanitize_stream = get_settings().app_env == "production"
+        stream_safety_state = StreamSafetyState()
         async for event in stream:
             if isinstance(event, SseFinal):
                 event = self._guard_final_event(session, event, previous_markdown)
+            elif sanitize_stream:
+                safe_event = sanitize_teacher_visible_stream_event(
+                    event, stream_safety_state
+                )
+                if safe_event is None:
+                    continue
+                event = safe_event
             self._record_debug_event(session, event)
             if isinstance(event, SseFinal):
                 self._apply_turn_result(session, spec.final_event_to_turn_result(event))

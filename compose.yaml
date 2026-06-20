@@ -6,6 +6,7 @@ services:
       dockerfile: Dockerfile.dev
     env_file: backend/.env
     environment:
+      APP_ENV: development
       WIKI_ROOT: /data/teacher_wiki
     volumes:
       - ./backend/app:/app/app

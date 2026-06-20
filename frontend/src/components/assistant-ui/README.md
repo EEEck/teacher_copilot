@@ -20,5 +20,8 @@ Maintenance notes:
   behavior contracts.
 - Keep KlassenPilot-specific session, artifact, safety, and SSE behavior in the
   local runtime integration files and backend stream policy.
+- Raw reasoning/tool panels are for development diagnostics. In production the
+  backend stream policy strips raw reasoning text, tool args, and tool outputs
+  before these components receive events.
 - When updating from assistant-ui, diff carefully and preserve local artifact
   behavior.

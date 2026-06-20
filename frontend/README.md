@@ -15,6 +15,11 @@ npm run dev
 The app expects `NEXT_PUBLIC_API_BASE_URL` in `.env.local` or falls back to the
 local backend URL used by the repo scripts.
 
+Raw reasoning/tool panels are a backend-controlled diagnostic surface. The
+frontend renders the SSE events it receives; backend `APP_ENV=production`
+strips streamed reasoning text, tool args, and tool outputs before they reach
+the browser.
+
 ## Workflow Notes
 
 - The top-level **Update memory** action starts a generic free-agent session.

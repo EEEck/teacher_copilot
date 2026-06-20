@@ -111,6 +111,86 @@ def test_plan_chat_stream_fckw_redox_uses_memory_pathfinder(client: TestClient):
     assert "final" in event_types
 
 
+def test_plan_chat_stream_preserves_raw_tool_events_in_development(
+    client: TestClient, monkeypatch
+):
+    monkeypatch.setenv("APP_ENV", "development")
+    get_settings.cache_clear()
+    try:
+        start = client.post(f"/api/classes/{CLASS_ID}/plan/sessions")
+        session_id = start.json()["session_id"]
+
+        res = client.post(
+            f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/chat/stream",
+            json={"message": "Plan a redox FCKW lesson."},
+        )
+
+        assert res.status_code == 200, res.text
+        events = _parse_sse(res.text)
+        tool_calls = [e for e in events if e.get("type") == "tool_call"]
+        tool_results = [e for e in events if e.get("type") == "tool_result"]
+        assert any("FCKW redox" in e.get("args", "") for e in tool_calls)
+        assert any("wiki/classes" in e.get("output", "") for e in tool_results)
+    finally:
+        get_settings.cache_clear()
+
+
+def test_plan_chat_stream_strips_raw_tool_events_in_production(
+    client: TestClient, monkeypatch
+):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("AGENT_TRACE_ENABLED", raising=False)
+    monkeypatch.delenv("PLAN_TRACE_ENABLED", raising=False)
+    get_settings.cache_clear()
+    try:
+        start = client.post(f"/api/classes/{CLASS_ID}/plan/sessions")
+        session_id = start.json()["session_id"]
+
+        res = client.post(
+            f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/chat/stream",
+            json={"message": "Plan a redox FCKW lesson."},
+        )
+
+        assert res.status_code == 200, res.text
+        events = _parse_sse(res.text)
+        tool_calls = [e for e in events if e.get("type") == "tool_call"]
+        tool_results = [e for e in events if e.get("type") == "tool_result"]
+        assert tool_calls
+        assert tool_results
+        assert all(e.get("name") for e in tool_calls)
+        assert all(e.get("args", "") == "" for e in tool_calls)
+        assert all(e.get("output", "") == "" for e in tool_results)
+        final = [e for e in events if e.get("type") == "final"][-1]
+        assert final["reply"]
+        assert final["artifact_markdown"]
+    finally:
+        get_settings.cache_clear()
+
+
+def test_ingest_chat_stream_collapses_reasoning_in_production(
+    client: TestClient, monkeypatch
+):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("AGENT_TRACE_ENABLED", raising=False)
+    monkeypatch.delenv("PLAN_TRACE_ENABLED", raising=False)
+    get_settings.cache_clear()
+    try:
+        start = client.post(f"/api/classes/{CLASS_ID}/ingest/sessions")
+        session_id = start.json()["session_id"]
+
+        res = client.post(
+            f"/api/classes/{CLASS_ID}/ingest/sessions/{session_id}/chat/stream",
+            json={"message": "We covered acids today."},
+        )
+
+        assert res.status_code == 200, res.text
+        events = _parse_sse(res.text)
+        reasoning = [e for e in events if e.get("type") == "reasoning_delta"]
+        assert [e.get("text") for e in reasoning] == ["Working through the request..."]
+    finally:
+        get_settings.cache_clear()
+
+
 def test_plan_trace_disabled_by_default_in_production(
     client: TestClient, monkeypatch
 ):
