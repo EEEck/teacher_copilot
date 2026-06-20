@@ -41,6 +41,7 @@ the browser.
 - `src/components/layout/` - app shell and page headers.
 - `src/lib/` - API client, SSE parsing, markdown diff/session utilities, and
   tests.
+- `src/content/docs/` - markdown content rendered into in-app docs pages.
 - `src/hooks/` - shared React hooks.
 - `DESIGN.md` - frontend design notes.
 
