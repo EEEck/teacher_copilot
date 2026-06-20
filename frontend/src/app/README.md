@@ -13,7 +13,7 @@ state, and composing domain components.
 - `classes/[classId]/lessons/[lessonDate]/page.tsx` - lesson detail.
 - `classes/[classId]/plan/page.tsx` - lesson-planning artifact session.
 - `classes/[classId]/wiki/view/page.tsx` - markdown wiki file viewer.
-- `docs/page.tsx` - markdown-driven teacher user guide.
+- `docs/page.tsx` and `docs/[slug]/page.tsx` - in-app beta docs.
 
 ## Conventions
 

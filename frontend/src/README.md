@@ -11,7 +11,7 @@ This folder contains the Next.js app and shared UI code.
 - `app/classes/[classId]/lessons/[lessonDate]/page.tsx` - lesson detail.
 - `app/classes/[classId]/plan/page.tsx` - create lesson plan workflow.
 - `app/classes/[classId]/wiki/view/page.tsx` - wiki file viewer.
-- `app/docs/page.tsx` - teacher-facing guide rendered from markdown content.
+- `app/docs/` - in-app beta docs landing and markdown-backed article pages.
 
 ## Component Layers
 
@@ -28,7 +28,7 @@ This folder contains the Next.js app and shared UI code.
 - `lib/session-attachments.ts` - upload/session attachment utilities.
 - `lib/markdown-diff.ts` - review diff helpers.
 - `lib/diary-utils.ts` - diary-specific helpers.
-- `content/docs/user-guide.md` - markdown source for the in-app user guide.
+- `content/docs/en/` - teacher-facing markdown docs (English; add `de/` for German later).
 
 ## Boundaries
 

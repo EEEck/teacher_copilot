@@ -37,6 +37,8 @@ plans only.
 - `../frontend/README.md` - frontend setup and folder map.
 - `../frontend/src/README.md` - Next.js app, components, and frontend API flow.
 - `../frontend/src/app/README.md` - App Router page map.
+- `../frontend/src/content/docs/en/` - teacher-facing beta docs (locale folder; add `de/` later) rendered at
+  `/docs` in the app.
 - `../frontend/src/components/README.md` - frontend component layers.
 - `../frontend/src/lib/README.md` - frontend API/parser/utilities map.
 - `../scripts/README.md` - dev, test, Docker, and trace scripts.
