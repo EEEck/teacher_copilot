@@ -1,34 +1,53 @@
 # Start Here
 
-**So what:** KlassenPilot helps you keep a useful class notebook and turn it into a better next lesson — without rewriting the same context every time you open chat.
+KlassenPilot is a private AI assistant for teachers.
 
-KlassenPilot is a private class copilot for teachers. In the beta, it has one main job: help you log what happened in class, review what gets remembered, and draft the next lesson from approved memory.
+The long-term vision is simple: every class should have an assistant that knows where the class stands, keeps track of what matters, and helps prepare the next teaching step — so teachers spend less time on work around teaching and more time with students.
 
-Think of it as a **class notebook that can help** — selective, compact, and always under your control.
+The current beta is narrower. KlassenPilot focuses on one core loop:
+
+> update class reality → review what gets remembered → plan the next lesson
+
+## How KlassenPilot works in this beta
+
+KlassenPilot is not a blank chatbot. It combines four pieces:
+
+1. **A strong AI model**
+   It can reason, draft, summarize, and help plan in natural language.
+
+2. **A private class database**
+   Each class has its own structured notebook: lesson notes, saved plans, open loops, misconceptions, teaching patterns, and useful context.
+
+3. **Agent skills**
+   KlassenPilot can search the class notebook, draft a lesson plan, turn lesson conversations into class updates, and prepare proposed changes for review.
+
+4. **Teacher approval**
+   The assistant can suggest what to write or remember. You decide what becomes part of the durable class record.
 
 > [!important]
-> KlassenPilot never saves class memory without your approval. It can draft and suggest; you decide what becomes durable memory.
+> **KlassenPilot can suggest. You decide what gets remembered.**
+>
+> Nothing becomes durable class memory until you review and approve it.
+
+For more detail, see [How the Copilot Works](/docs/how-it-works).
 
 ## What the beta tests
 
-The beta answers one question:
+This beta answers one question:
 
-> Can you update class memory, trust what changed, and get a better next lesson plan because of it?
+> Can a teacher update class memory, trust what changed, and get a better next lesson plan because of it?
 
-If that loop feels fast and trustworthy, the product is working.
+We are not testing whether AI can write a generic lesson plan. We are testing whether a class-specific assistant becomes more useful when it works from approved class context.
 
-## Three layers of memory
+Your feedback should focus on the memory loop:
 
-The copilot personalizes in three layers — the same way a good colleague would skim your notes before helping:
+* Did KlassenPilot capture the right teaching facts?
+* Did the proposed changes feel trustworthy?
+* Did the next lesson plan actually use the class context?
+* What felt wrong, missing, stale, or too much work?
+* Where did you still have to repeat context?
 
-1. **You as the teacher** — stable preferences: planning style, level of detail, tone, corrections you repeat.
-2. **This class** — what was taught, recurring misconceptions, open loops, teaching moves that worked.
-3. **This task** — the current lesson date, draft plan or diary, decisions from this chat, evidence for this turn.
-
-It starts with the smallest useful slice, then looks up more detail only when the task needs it.
-
-> [!tip]
-> You do not need a perfect prompt. Open the class and describe what happened or what you need next — the copilot loads relevant context first.
+The main walkthrough is in [Your first session](/docs/first-session).
 
 ## What to try first
 
@@ -36,30 +55,42 @@ Use the seeded **Chemie 9b** mock class. It already has lesson history, misconce
 
 > [!blueprint]
 > **Quick start**
+>
 > 1. Open Chemie 9b from the class list.
-> 2. Scan the class home: unit, open loops, timeline.
+> 2. Scan the class home: unit, open loops, misconceptions, and timeline.
 > 3. Create a lesson plan for the next class.
 > 4. Save the plan to a lesson date.
 > 5. After teaching, add lesson results from that planned lesson.
+> 6. Review what KlassenPilot proposes to remember.
 
 The full walkthrough is in [Your first session](/docs/first-session).
 
 ## What KlassenPilot is for
 
-Use it for work around teaching:
+KlassenPilot helps with the work around teaching.
 
-- remembering what happened in class
-- tracking open loops and misconceptions
-- preparing practical next lessons
-- keeping class context available without restating it every chat
-- reviewing changes before they become durable memory
+In this beta, it has two main jobs:
+
+1. **Plan lessons from class context**
+   It uses the class notebook, recent lesson sequence, open loops, and teacher preferences to draft a practical next lesson.
+
+2. **Update class reality**
+   It helps capture what actually happened: what was covered, what students struggled with, what needs follow-up, and what should shape the next plan.
+
+Over time, this should create a class record that becomes more useful every week.
+
+Coming later: assessment generation, material adaptation, trusted external resources, voice or message capture, report drafts, and broader teaching logistics.
 
 ## What it is not
 
 > [!warning]
-> During beta, do not enter real student names or sensitive student records. KlassenPilot is not a grading system, student diagnosis tool, or school administration platform.
+> During beta, do not enter real student names or sensitive student records.
+>
+> KlassenPilot is not a grading system, student diagnosis tool, discipline system, or school administration platform.
 
 Keep saved memory **class-level**, **pseudonymous**, and useful for teaching the next lesson.
+
+KlassenPilot is also not a replacement for teacher judgment. It prepares, drafts, and suggests. The teacher decides what is correct, what is useful, and what gets saved.
 
 ---
 

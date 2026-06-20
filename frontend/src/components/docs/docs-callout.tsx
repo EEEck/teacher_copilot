@@ -22,17 +22,17 @@ const calloutStyles: Record<
   note: {
     icon: Info,
     label: "Note",
-    className: "border-border bg-muted/70",
+    className: "border-border bg-muted/45",
   },
   tip: {
     icon: Lightbulb,
     label: "Tip",
-    className: "border-primary/20 bg-[var(--diff-added-bg)]/60",
+    className: "border-primary/20 bg-muted/45",
   },
   warning: {
     icon: AlertTriangle,
     label: "Warning",
-    className: "border-destructive/25 bg-[var(--error-bg)]/70",
+    className: "border-destructive/25 bg-muted/45",
   },
   important: {
     icon: ShieldCheck,
@@ -42,7 +42,7 @@ const calloutStyles: Record<
   blueprint: {
     icon: ClipboardList,
     label: "Blueprint",
-    className: "border-dashed border-primary/35 bg-card",
+    className: "border-dashed border-primary/35 bg-muted/45",
   },
 };
 

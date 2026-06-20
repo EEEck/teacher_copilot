@@ -57,10 +57,10 @@ export default async function DocArticlePage({
   return (
     <div
       className={cn(
-        "grid gap-10",
+        "grid gap-8 xl:gap-10",
         headings.length >= 3
-          ? "lg:grid-cols-[14rem_minmax(0,1fr)_11rem] xl:grid-cols-[15rem_minmax(0,1fr)_12rem]"
-          : "lg:grid-cols-[14rem_minmax(0,1fr)]",
+          ? "lg:grid-cols-[10rem_minmax(0,1fr)] xl:grid-cols-[10rem_minmax(0,1fr)_9rem] 2xl:grid-cols-[10.5rem_minmax(0,1fr)_9.5rem]"
+          : "lg:grid-cols-[10rem_minmax(0,1fr)]",
       )}
     >
       <aside className="hidden lg:block">
@@ -88,7 +88,7 @@ export default async function DocArticlePage({
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
               {page.title}
             </h1>
-            <p className="mt-4 max-w-2xl text-lg leading-8 text-muted-foreground">
+            <p className="mt-4 text-lg leading-8 text-muted-foreground">
               {page.description}
             </p>
           </div>

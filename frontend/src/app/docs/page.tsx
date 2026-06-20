@@ -12,45 +12,44 @@ export default function DocsLandingPage() {
     <div className="space-y-10 pb-8">
       <DocsHero />
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-10">
-        <DocsReadingPath />
+      <div className="grid gap-6 sm:grid-cols-2">
+        <Card variant="highlight" className="border-primary/15">
+          <CardContent className="p-5 sm:p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+              Core promise
+            </p>
+            <p className="mt-3 text-base font-semibold leading-7 text-foreground">
+              The executive assistant every teacher deserves.
+            </p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              KlassenPilot saves teachers time by remembering each class, preparing the
+              next step, and reducing the work around teaching — so teachers can focus
+              on what matters most: their students.
+            </p>
+          </CardContent>
+        </Card>
 
-        <div className="space-y-6">
-          <Card variant="highlight" className="border-primary/15">
-            <CardContent className="p-5 sm:p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-                Key takeaway
-              </p>
-              <p className="mt-3 text-base font-medium leading-7 text-foreground">
-                KlassenPilot never saves class memory without your approval.
-              </p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Chat drafts plans and lesson results. Durable wiki changes happen only
-                after you review proposed file changes.
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-dashed border-primary/25">
-            <CardContent className="p-5 sm:p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Beta question
-              </p>
-              <p className="mt-3 text-sm leading-7 text-foreground">
-                Can you update class memory, trust what changed, and get a better next
-                lesson plan because of it?
-              </p>
-              <Link
-                href="/docs/start-here"
-                className="mt-4 inline-flex items-center text-sm font-medium text-primary hover:underline"
-              >
-                Read how we test this
-                <ArrowRight className="ml-1 h-4 w-4" aria-hidden="true" />
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="border-dashed border-primary/25">
+          <CardContent className="p-5 sm:p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Beta question
+            </p>
+            <p className="mt-3 rounded-lg border border-primary/15 bg-muted/60 px-4 py-3 text-base font-medium leading-7 text-foreground">
+              Can you update class memory, trust what changed, and get a better next
+              lesson plan because of it?
+            </p>
+            <Link
+              href="/docs/start-here"
+              className="mt-4 inline-flex items-center text-sm font-medium text-primary hover:underline"
+            >
+              Read how we test this
+              <ArrowRight className="ml-1 h-4 w-4" aria-hidden="true" />
+            </Link>
+          </CardContent>
+        </Card>
       </div>
+
+      <DocsReadingPath />
 
       <section className="border-t border-dashed border-primary/20 pt-8">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">

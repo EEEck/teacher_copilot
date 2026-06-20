@@ -4,6 +4,30 @@
 
 KlassenPilot is agent-backed, but the product contract is **teacher-controlled**. It should behave like a careful colleague with access to the class notebook.
 
+## Design: why it feels class-aware
+
+KlassenPilot is designed to feel less like a blank chatbot and more like a private assistant who already prepared before helping.
+
+It combines four parts:
+
+1. **A best-in-class reasoning model**
+   KlassenPilot uses a strong OpenAI reasoning model to understand teacher requests, plan multi-step work, draft lesson artifacts, and decide when it needs more context.
+
+2. **An agent framework with teaching skills**
+   The model is not only chatting. It can use specific skills, such as searching class memory, reading lesson notes, drafting a plan, preparing lesson results, and proposing memory updates for review.
+
+3. **A private class database**
+   Each class has its own structured knowledge base: lesson history, saved plans, open loops, misconceptions, class state, teacher preferences, and useful source material. This is the class file the copilot works from.
+
+4. **A teacher approval gate**
+   The agent may draft or suggest changes, but it does not silently change durable class memory. The teacher reviews what changed and decides what gets saved.
+
+The important design choice is context loading.
+
+KlassenPilot does not paste the entire class database into every chat. Instead, it starts with the most useful current briefing: what was taught recently, what matters now, known open issues, and relevant teacher preferences. If the conversation needs more detail, the agent can search the class database and pull in the exact lesson, plan, or note it needs.
+
+That is what creates the executive-assistant feeling: the copilot starts prepared, keeps track of the current task, and can fetch the right background without making the teacher repeat everything.
+
 ## Class memory first
 
 The copilot starts from approved class memory:
@@ -14,18 +38,20 @@ The copilot starts from approved class memory:
 
 It should not make you restate the same context in every chat.
 
-## Memory in plain language
+## How the Agents remembers 
 
-Not all memory has the same job:
+KlassenPilot does not remember everything in one big pile. It keeps a few kinds of notes, each with a different job.
 
-| Layer | Purpose |
-|-------|---------|
-| **Long-term memory** | The approved class notebook — reliable enough to use next week |
-| **Compact memory** | The short version loaded often — what matters right now |
-| **Task memory** | Temporary working state for this chat — target lesson, draft, open questions |
-| **Evidence** | Detail the copilot can look up when exact lesson context is needed |
+| Memory type               | What it means                                                                                                                     |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Living class notebook** | The approved record of the class: lessons, plans, open loops, misconceptions, and what should matter next time                    |
+| **Current class state**   | The short briefing KlassenPilot loads often: where the class stands right now, what was taught recently, and what needs attention |
+| **Teacher preferences**   | Stable things about how you like to plan: structure, tone, level of detail, recurring corrections, and teaching style             |
+| **Assistant notes**       | Small reminders that help KlassenPilot behave better: what worked before, what to avoid, and how to respond more usefully         |
+| **Sources and evidence**  | Specific lesson notes, saved plans, or uploaded materials KlassenPilot can look up when exact context matters                     |
 
-This keeps responses fast while still allowing careful lookup when your request depends on past class details.
+The goal is simple: when you open a class, KlassenPilot should already know the useful context — without forcing you to explain everything again.
+
 
 > [!tip]
 > When memory matters, the copilot should name the lesson or source it used — e.g. “based on the 2026-05-29 lesson notes.” Richer source panels are on the roadmap.
