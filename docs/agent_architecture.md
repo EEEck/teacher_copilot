@@ -45,9 +45,30 @@ models: direct prompt injection, indirect injection through retrieved content,
 memory/context poisoning, hidden write requests, and over-trusting the agent for
 high-stakes student decisions.
 
+The safety design is layered rather than prompt-only:
+
+- Prompt policy sets the instruction hierarchy and labels untrusted evidence.
+- Tool design limits capabilities; chat tools stay read-only unless a later
+  contract adds explicit human approval for side effects.
+- Backend validation owns durable writes, class scope, path safety, artifact
+  readiness, and final teacher-visible output checks.
+- Evals/red-team tests simulate adversarial prompts, malicious uploads/wiki
+  content, unsafe tool requests, exfiltration attempts, and high-stakes misuse.
+
 Heavier controls are deferred until the product needs them: SDK input/output
 guardrails, full output sanitization, DeepTeam red-team automation, strong
 student anonymization, and refactoring the legacy broad wiki tool surface.
+
+Two deterministic backend safety guards now sit outside the model prompt:
+
+- Final output safety validates teacher-visible replies and artifacts for
+  obvious internal-data leakage patterns such as raw refs, prompt/trace labels,
+  API-key-looking strings, and hidden-write claims. If blocked, the backend
+  returns a safe fallback reply and preserves the previous artifact draft.
+- Stream safety is mode-based. `APP_ENV=development` keeps raw local diagnostic
+  streams. `APP_ENV=production` strips raw reasoning text, tool arguments, and
+  tool outputs before SSE events reach the browser; tool names/status and final
+  guarded outputs still flow.
 
 ## Agents SDK Fit
 

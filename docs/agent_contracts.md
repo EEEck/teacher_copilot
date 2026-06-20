@@ -41,6 +41,26 @@ model-facing chat prompts as `TEACHER_AGENT_SECURITY_POLICY`.
   diagnosis, admission, discipline, or other consequential judgments.
 - Conflict order is: system/developer policy, the teacher's latest legitimate
   request, backend runtime state, then class memory.
+- Backend state is authoritative for writes. If the model claims it wrote wiki
+  memory or changed durable profile state, that claim is ignored unless the
+  teacher-approved backend apply/commit route actually performed the write.
+- Safety coverage must include deterministic adversarial tests for direct
+  prompt injection, upload/retrieval injection, wiki/tool-output injection,
+  hidden-write attempts, prompt/trace/raw-ref leakage, and high-stakes student
+  decision requests.
+
+Teacher-visible stream/output contract:
+
+- In development mode, raw streaming reasoning/tool details may remain visible
+  for local debugging.
+- In production mode, teacher-visible streams must not expose raw reasoning
+  text, tool arguments, or tool outputs. Stream safe progress/status events
+  instead.
+- Final teacher-visible replies and artifacts must pass the deterministic
+  output-safety guard before session state is updated or the final event is
+  emitted.
+- On final-output violation, return the safe fallback reply and preserve the
+  previous artifact draft.
 
 ## Agents SDK Integration Contract
 
