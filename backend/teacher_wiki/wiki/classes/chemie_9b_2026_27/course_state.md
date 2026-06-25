@@ -1,13 +1,13 @@
 # Course State
 
 ## Current unit
-- Reaction writing, balancing equations, oxidation numbers, and redox with ion follow-up.
+- See latest lesson
 
 ## Last lesson
-- 2026-05-29: Anions and Oxidation State Review
+- 2027-02-03: Lesson Results
 
 ## Next planned focus
-- Apply oxidation-state rules to mixed ion practice and keep separating ion charge from oxidation number.
+- See open loops
 
 ## Overall status
-- Updated 2026-05-29
+- Updated 2027-02-03

@@ -6,3 +6,5 @@
 ## Planning Patterns That Worked
 - Quick diagnostic assessments reveal misconceptions early; use them to target support within the lesson.
 - Mixed examples paired with peer checking improve accuracy and foster collaboration.
+
+## Planning Patterns
