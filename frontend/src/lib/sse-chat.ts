@@ -33,9 +33,12 @@ export function streamPartsToRunContent(
 
 export type MemoryCandidate = {
   target: string;
+  section?: string;
   candidate_update: string;
   evidence?: string;
+  evidence_refs?: string[];
   source?: string;
+  basis?: string;
   confidence?: string;
   requires_teacher_approval?: boolean;
 };

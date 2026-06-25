@@ -12,7 +12,11 @@ import pytest
 
 from app.teacher_agent.prompts import (
     CHAT_WIKI_TOOLS_POLICY,
+    DURABLE_MEMORY_CANDIDATE_POLICY,
     INGEST_SYSTEM,
+    MEMORY_SWEEP_ALIGNMENT_SYSTEM,
+    MEMORY_SWEEP_CARD_SYSTEM,
+    MEMORY_SWEEP_PROPOSAL_SYSTEM,
     MEMORY_SKILL,
     PLAN_CHAT_SYSTEM,
     PLAN_SKILL,
@@ -68,6 +72,8 @@ def test_apply_prompt_does_not_treat_braces_as_format_fields():
                 "session_state": "## Memory session state\n- phase: identify_target",
                 "lesson_result_state": "## Lesson result state\n- draft confidence: low",
                 "evidence": "## Memory evidence briefs\n- None yet.",
+                "memory_candidates": "## Memory candidates\n- None proposed yet.",
+                "durable_memory_candidate_policy": DURABLE_MEMORY_CANDIDATE_POLICY,
                 "security_policy": TEACHER_AGENT_SECURITY_POLICY,
                 "wiki_tools_policy": CHAT_WIKI_TOOLS_POLICY,
             },
@@ -112,6 +118,67 @@ def test_memory_phase_skill_documents_transitions():
     assert "stay in collect_results" in skill
     assert "ready to save" in skill
     assert "{memory_skill}" in ingest
+
+
+def test_durable_memory_candidate_policy_is_reusable_and_routed():
+    policy = DURABLE_MEMORY_CANDIDATE_POLICY.lower()
+    assert "review-only" in policy
+    assert "never direct wiki writes" in policy
+    assert "target=user.md" in policy
+    assert "target=copilot.md" in policy
+    assert "teaching_patterns.md" in policy
+    assert "wiki/subjects/{subject}.md" in policy
+    assert "one-off instructions" in policy
+
+
+def test_durable_memory_candidate_policy_is_in_chat_instructions(wiki):
+    plan = build_plan_chat_prompt_assembly(
+        wiki,
+        "chemie_9b_2026_27",
+        messages=[ChatMessage(role="user", content="Plan the next lesson.")],
+        current_plan="",
+        runtime=PlanRuntime(),
+    )
+    ingest = build_ingest_chat_prompt_assembly(
+        wiki,
+        "chemie_9b_2026_27",
+        messages=[ChatMessage(role="user", content="Log today's lesson.")],
+        current_diary="",
+        runtime=MemoryRuntime(),
+    )
+
+    for assembly in (plan, ingest):
+        instructions = assembly["instructions"]
+        assert "durable_memory_candidate_policy" in instructions
+        assert "review-only" in instructions
+        assert "never direct wiki writes" in instructions
+        assert "{durable_memory_candidate_policy}" not in instructions
+
+
+def test_memory_sweep_prompt_requires_claim_level_consolidation():
+    alignment_prompt = apply_prompt(
+        MEMORY_SWEEP_ALIGNMENT_SYSTEM,
+        security_policy=TEACHER_AGENT_SECURITY_POLICY,
+    ).lower()
+    card_prompt = apply_prompt(
+        MEMORY_SWEEP_CARD_SYSTEM,
+        security_policy=TEACHER_AGENT_SECURITY_POLICY,
+    ).lower()
+
+    assert "assign every input candidate_id to exactly one alignment group" in alignment_prompt
+    assert "underlying durable claim" in alignment_prompt
+    assert "mbb style" in alignment_prompt
+    assert "executive-style communication" in alignment_prompt
+    assert "executive_structured_communication" in alignment_prompt
+    assert "decision=\"adjust_existing\"" in alignment_prompt
+    assert "decision=\"already_covered\"" in alignment_prompt
+    assert "never omit a candidate" in alignment_prompt
+    assert "review cards" in card_prompt
+    assert "validated alignment groups" in card_prompt
+    assert "operation=\"adjust\"" in card_prompt
+    assert "replaces_content" in card_prompt
+    assert "candidate_ids must exactly match" in card_prompt
+    assert MEMORY_SWEEP_PROPOSAL_SYSTEM == MEMORY_SWEEP_CARD_SYSTEM
 
 
 def test_plan_phase_finalize_uses_semantic_teacher_intent_not_keyword_triggers():

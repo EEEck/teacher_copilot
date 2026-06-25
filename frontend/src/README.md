@@ -34,6 +34,8 @@ This folder contains the Next.js app and shared UI code.
 
 - API shape changes should be reflected in `lib/api.ts` and backend
   `app/schemas/api.py`.
+- Memory Sweep UI/API changes should also update
+  `../../docs/mem_v2/frontend.md`.
 - Keep assistant-ui integration reusable across ingest/plan workflows.
 - Keep typed memory hint construction in page/domain code, not low-level UI
   primitives. The backend remains the source of truth for whether a hinted

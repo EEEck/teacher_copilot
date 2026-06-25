@@ -18,9 +18,15 @@ wiki storage.
 - `ingest_service.py` - memory-update adapter around the artifact session core,
   start-hint resolution for timeline/detail entry points, and propose/commit
   behavior for lesson diaries.
+- `memory_candidate_ledger.py` - SQLite-backed durable memory candidate ledger
+  for cross-session Memory Sweep evidence, grouping, and status transitions.
+- `memory_sweep.py` - two-pass Memory Sweep consolidation helpers: packet
+  building, alignment validation, card validation, unresolved fallback cards,
+  and review-card assembly.
 - `plan_service.py` - lesson-planning adapter around the artifact session core,
   plus plan save and trace response assembly.
-- `memory_apply.py` - teacher-approved durable memory apply dispatcher.
+- `memory_apply.py` - teacher-approved durable memory apply dispatcher,
+  including exact `adjust` replacement support for Memory Sweep cards.
 
 ## Mental Model
 
@@ -31,6 +37,9 @@ wiki storage.
   `plan` or `ingest`.
 - `IngestService` and `PlanService` are API-facing adapters.
 - Durable wiki mutations are explicit service methods, not side effects of chat.
+- Memory Sweep treats the candidate ledger as raw evidence. It normalizes rows
+  into validated alignment groups before generating teacher-review cards, then
+  applies only teacher-approved decisions.
 - Update Memory start hints are resolved before the agent turn. Known planned
   or taught lessons can be confirmed and moved to `collect_results`; unknown
   hinted dates must stay in `identify_target` with `needs_confirmation=true`.
@@ -54,3 +63,4 @@ wiki storage.
 - `../teacher_agent/README.md`
 - `../../tests/README.md`
 - `../../../docs/agent_architecture.md`
+- `../../../docs/mem_v2/backend.md`

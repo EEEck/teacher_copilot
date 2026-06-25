@@ -17,6 +17,8 @@ follow the local README closest to the code you are changing.
 - `memory_hierarchy.md` - file-by-file memory scope and update rules.
 - `context_management.md` - prompt assembly and context-limit policy.
 - `agent_learning_guide.md` - optional learning/reference notes.
+- `mem_v2/` - Memory V2 design, backend/frontend maps, tests, traces, and bug
+  reports.
 
 Use `../implementation_plans/` for the backlog and concrete implementation
 plans only.
@@ -54,6 +56,8 @@ plans only.
   `../implementation_plans/product_backlog.md`.
 - Memory scope or loading changes should update `memory_hierarchy.md` and/or
   `context_management.md`.
+- Memory V2 architecture, backend/frontend integration, or trace changes should
+  update `mem_v2/`.
 - Agents SDK integration changes should update `agent_sdk_practices_review.md`
   when they change orchestration, session strategy, guardrails, approvals,
   tracing, or eval expectations.

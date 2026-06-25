@@ -23,6 +23,7 @@ from app.schemas.api import (
     SavePlanResponse,
 )
 from app.services.artifact_session_service import ArtifactSession, ArtifactSessionService
+from app.services.memory_candidate_ledger import MemoryCandidateLedger
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.planning_state import (
     planning_api_payload,
@@ -37,10 +38,17 @@ MODE = "plan"
 
 
 class PlanService:
-    def __init__(self, wiki: WikiStore, agents: AgentRunner) -> None:
+    def __init__(
+        self,
+        wiki: WikiStore,
+        agents: AgentRunner,
+        memory_candidate_ledger: MemoryCandidateLedger | None = None,
+    ) -> None:
         self.wiki = wiki
         self.agents = agents
-        self.core = ArtifactSessionService(wiki, agents)
+        self.core = ArtifactSessionService(
+            wiki, agents, memory_candidate_ledger=memory_candidate_ledger
+        )
 
     def _to_model(self, s: ArtifactSession) -> PlanSession:
         return PlanSession(

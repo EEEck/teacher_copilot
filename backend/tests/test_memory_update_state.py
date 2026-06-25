@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.teacher_agent.agents import _pseudonymize_known_students
+from app.teacher_agent.memory_capture import MemoryCandidate
 from app.teacher_agent.memory_update_state import (
     LessonResultPatch,
     MemoryEvidenceBrief,
@@ -178,3 +179,31 @@ def test_pseudonymize_known_students_replaces_roster_names():
     assert "S-042 helped other students" in out
     assert "S-033 understood the phosphate link" in out
     assert "S-014 was interrupting" in out
+
+
+def test_merge_memory_turn_accumulates_memory_candidates_once():
+    runtime = MemoryRuntime()
+    candidate = MemoryCandidate(
+        target="user.md",
+        section="Communication",
+        candidate_update="Prefers MBB-style concise communication.",
+        evidence="Repeated teacher request in update-memory chat.",
+        source="teacher_explicit",
+        basis="explicit",
+        confidence="high",
+    )
+
+    for _ in range(2):
+        merge_memory_turn(
+            runtime,
+            state_patch=MemoryStatePatch(),
+            new_evidence_briefs=[],
+            memory_candidates=[candidate],
+            last_change_summary="",
+            unsupported_intent_reason="",
+            diary_changed=False,
+        )
+
+    assert len(runtime.memory_candidates) == 1
+    assert runtime.memory_candidates[0].target == "user.md"
+    assert runtime.memory_candidates[0].basis == "explicit"

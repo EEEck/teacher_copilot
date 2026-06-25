@@ -32,11 +32,14 @@ def test_ingest_full_flow(client: TestClient):
     assert chat_body["last_change_summary"] == "Updated lesson results."
     assert chat_body["memory_state"]["target"]["lesson_date"] == "2026-10-01"
     assert chat_body["memory_state"]["target"]["target_confirmed"] is True
+    assert chat_body["memory_candidates"]
+    assert chat_body["memory_candidates"][0]["target"] == "teaching_patterns.md"
 
     propose = client.post(f"{base}/sessions/{session_id}/propose")
     assert propose.status_code == 200, propose.text
     propose_body = propose.json()
     assert propose_body["memory_state"]["intent"] == "log_new_results"
+    assert propose_body["memory_candidates"]
     proposals = propose_body["wiki_proposals"]
     assert len(proposals) > 0
 
@@ -56,6 +59,49 @@ def test_ingest_full_flow(client: TestClient):
     commit_body = commit.json()
     assert commit_body["applied_wiki_paths"]
     assert commit_body["log_entry_id"]
+    proposal = commit_body["class_memory_proposal"]
+    assert proposal["class_id"] == CLASS_ID
+    assert "class_state" in proposal["pages"]
+    assert "teaching_patterns" in proposal["pages"]
+    assert "Peer checking helps reduce balancing errors." in proposal["pages"]["teaching_patterns"]
+    assert f"wiki/classes/{CLASS_ID}/memory/class_state.md" not in commit_body["applied_wiki_paths"]
+
+    class_state = client.get(
+        f"/api/classes/{CLASS_ID}/wiki/file",
+        params={"path": f"wiki/classes/{CLASS_ID}/memory/class_state.md"},
+    )
+    assert class_state.status_code == 404
+
+    apply_compact = client.post(
+        f"/api/classes/{CLASS_ID}/memory/compact/apply",
+        json={
+            "pages": {
+                "class_state": proposal["pages"]["class_state"],
+                "teaching_patterns": proposal["pages"]["teaching_patterns"],
+            },
+            "source_paths": proposal["source_paths"],
+        },
+    )
+    assert apply_compact.status_code == 200, apply_compact.text
+    apply_body = apply_compact.json()
+    assert f"wiki/classes/{CLASS_ID}/memory/class_state.md" in apply_body["applied_wiki_paths"]
+    assert f"wiki/classes/{CLASS_ID}/memory/teaching_patterns.md" in apply_body["applied_wiki_paths"]
+
+    class_state = client.get(
+        f"/api/classes/{CLASS_ID}/wiki/file",
+        params={"path": f"wiki/classes/{CLASS_ID}/memory/class_state.md"},
+    )
+    assert class_state.status_code == 200
+    assert "Current unit: redox" in class_state.json()["markdown"]
+
+
+def test_compact_memory_apply_rejects_non_compact_memory_pages(client: TestClient):
+    res = client.post(
+        f"/api/classes/{CLASS_ID}/memory/compact/apply",
+        json={"pages": {"canonical_wiki": "# Unsafe"}, "source_paths": []},
+    )
+    assert res.status_code == 400
+    assert "Unsupported compact memory page" in res.json()["error"]["message"]
 
 
 def test_ingest_start_accepts_empty_body(client: TestClient):

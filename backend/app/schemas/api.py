@@ -34,6 +34,11 @@ class MemoryCompactRequest(BaseModel):
     end_date: Optional[date] = None
 
 
+class MemoryCompactApplyRequest(BaseModel):
+    pages: dict[str, str] = Field(default_factory=dict)
+    source_paths: list[str] = Field(default_factory=list)
+
+
 class MemoryCompactResponse(BaseModel):
     class_id: str
     applied_wiki_paths: list[str]
@@ -78,7 +83,7 @@ class ProfileProposalResponse(BaseModel):
 
 
 class MemoryApplyItem(BaseModel):
-    target: str  # user.md | copilot.md | class_state.md
+    target: str  # user.md | copilot.md | class_state.md | wiki/subjects/{subject}.md
     section: str = "General"
     content: str
 
@@ -90,6 +95,92 @@ class MemoryApplyRequest(BaseModel):
 class MemoryApplyResponse(BaseModel):
     class_id: str
     applied_wiki_paths: list[str] = Field(default_factory=list)
+    skipped: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class MemorySweepCandidate(BaseModel):
+    card_id: str = ""
+    source_group_id: str = ""
+    candidate_id: str
+    candidate_ids: list[str] = Field(default_factory=list)
+    review_queue: str
+    channel: str
+    target: str
+    section: str = "General"
+    content: str
+    evidence_summary: str = ""
+    evidence_refs: list[str] = Field(default_factory=list)
+    confidence: str = "low"
+    basis: str = "inferred"
+    status: str = "captured"
+    relationship: str = ""
+    group_label: str = ""
+    public_rationale: str = ""
+    operation: Literal[
+        "add",
+        "adjust",
+        "already_covered",
+        "reject_low_signal",
+        "needs_decision",
+    ] = "add"
+    replaces_content: str = ""
+    status_recommendation: Literal[
+        "promote",
+        "already_covered",
+        "needs_decision",
+        "reject_low_signal",
+    ] = "promote"
+    why_now: str = ""
+    current_memory_excerpt: str = ""
+    signal_count: int = 1
+
+
+class MemorySweepProposalResponse(BaseModel):
+    class_id: str
+    subject: str = ""
+    queues: dict[str, list[MemorySweepCandidate]] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class MemoryCandidateStatusRequest(BaseModel):
+    status: Literal["proposed", "approved", "applied", "rejected", "snoozed", "deleted", "expired"]
+    rejection_reason: str | None = None
+    review_batch_id: str | None = None
+
+
+class MemoryCandidateStatusResponse(BaseModel):
+    candidate_id: str
+    status: str
+
+
+class MemorySweepDecision(BaseModel):
+    card_id: str = ""
+    action: Literal["apply", "reject", "snooze", "delete", "already_covered"]
+    target: str
+    section: str = "General"
+    content: str = ""
+    operation: Literal[
+        "add",
+        "adjust",
+        "already_covered",
+        "reject_low_signal",
+        "needs_decision",
+    ] = "add"
+    replaces_content: str = ""
+    candidate_ids: list[str] = Field(default_factory=list)
+    rejection_reason: str | None = None
+
+
+class MemorySweepApplyRequest(BaseModel):
+    decisions: list[MemorySweepDecision] = Field(default_factory=list)
+    review_batch_id: str | None = None
+
+
+class MemorySweepApplyResponse(BaseModel):
+    class_id: str
+    applied_wiki_paths: list[str] = Field(default_factory=list)
+    updated_candidate_ids: list[str] = Field(default_factory=list)
     skipped: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
@@ -204,6 +295,7 @@ class IngestSession(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
     completeness: CompletenessChecklist = Field(default_factory=lambda: CompletenessChecklist(items=[]))
     memory_state: Optional[dict] = None
+    memory_candidates: list[dict] = Field(default_factory=list)
 
 
 class WikiUpdateProposal(BaseModel):
@@ -218,6 +310,7 @@ class IngestDraft(BaseModel):
     wiki_proposals: list[WikiUpdateProposal]
     completeness: CompletenessChecklist
     memory_state: Optional[dict] = None
+    memory_candidates: list[dict] = Field(default_factory=list)
 
 
 class ApprovedWikiUpdate(BaseModel):
@@ -238,6 +331,7 @@ class CommitIngestResponse(BaseModel):
     log_entry_id: str
     lesson_date: str = ""
     title: str = ""
+    class_memory_proposal: Optional[MemoryProposalResponse] = None
 
 
 class WikiFileResponse(BaseModel):
@@ -263,6 +357,7 @@ class ChatResponse(BaseModel):
     ready_to_propose: bool = False
     last_change_summary: str = ""
     memory_state: Optional[dict] = None
+    memory_candidates: list[dict] = Field(default_factory=list)
 
 
 class UpdateDraftRequest(BaseModel):

@@ -250,17 +250,17 @@ Runtime context manager:
 - The chat is driven by backend-owned `MemoryRuntime` persisted on
   `ArtifactSession.runtime`.
 - The model returns `state_patch`, `new_evidence_briefs`,
-  `last_change_summary`, and optional `unsupported_intent_reason` as part of
-  `IngestTurnOutput`. The backend validates and merges the patch; missing fields
-  mean "no change".
+  `memory_candidates`, `last_change_summary`, and optional
+  `unsupported_intent_reason` as part of `IngestTurnOutput`. The backend
+  validates and merges the patch/candidates; missing fields mean "no change".
 - Runtime state tracks target/date identification (`target`), conversation
   phase (`identify_target`, `collect_results`, `review_draft`, `unsupported`),
-  lesson-result categories, compact evidence briefs, raw evidence refs, and a
-  diary version counter.
+  lesson-result categories, compact evidence briefs, raw evidence refs,
+  memory candidates, and a diary version counter.
 - The model-facing prompt renders this runtime state as separate sections:
-  `Memory target state`, `Memory session state`, `Lesson result state`, and
-  `Memory evidence briefs`. Do not reintroduce a single opaque runtime blob for
-  new workflows.
+  `Memory target state`, `Memory session state`, `Lesson result state`,
+  `Memory evidence briefs`, and `Memory candidates`. Do not reintroduce a
+  single opaque runtime blob for new workflows.
 - `Memory session state` follows the shared workflow-session envelope:
   `phase`, `teacher_goal`, `decisions`, `open_questions`, `superseded`, and
   `agent_next_step`. Workflow-specific facts belong in the task state, not this
@@ -273,12 +273,14 @@ Runtime context manager:
 - `ready_to_propose` / streamed `ready` requires both a complete diary and
   `phase == review_draft`.
 - Runtime state is returned to clients as `memory_state` on ingest session/chat,
-  draft/propose responses, and streamed final events. It is diagnostic/workflow
-  state, not durable memory.
+  draft/propose responses, and streamed final events. `memory_candidates` are
+  also surfaced directly for UI review. This is diagnostic/workflow state, not
+  durable memory.
 - The verbatim ingest conversation window is limited by `ingest_history_turns`
   (default 8 user turns). Trimmed turns are not treated as lost; durable
   decisions, open questions, superseded details, target state, lesson-result
-  facts, and evidence briefs must be carried in `MemoryRuntime`.
+  facts, evidence briefs, and memory candidates must be carried in
+  `MemoryRuntime`.
 
 Allowed behavior:
 
@@ -329,6 +331,81 @@ Browsing policy:
   results for a planned lesson.
 - Capture and summarize useful tool results into `new_evidence_briefs`; fetch
   raw refs only for exact wording, provenance, or contradiction checks.
+- Add `memory_candidates` for stable durable-memory signals discovered during
+  the chat: explicit teacher preferences, repeated communication requests,
+  class learning patterns, copilot working-agreement corrections, current class
+  state, planning priorities, or taught-sequence updates. These are proposed
+  only. The chat turn never writes them.
+
+## Memory Sweep Contract
+
+Purpose:
+
+- Help the teacher periodically review captured durable-memory candidates
+  across class evolution, teacher/copilot preferences, subject concepts, and
+  wiki-review queues.
+- Keep slow memory promotion separate from normal lesson-planning and
+  update-memory chat turns.
+- Make each review card understandable enough for a nontechnical teacher to
+  accept, edit, reject, snooze, or delete.
+
+Reads:
+
+- Open rows from the application-owned memory candidate ledger.
+- Current excerpts from the target memory pages for comparison and dedupe.
+
+Writes:
+
+- `/memory/sweep/propose` writes nothing.
+- `/memory/sweep/apply` accepts a teacher-reviewed decision set, applies
+  approved memory writes first, then updates represented ledger rows.
+- Candidate status changes write only ledger status and remain available for
+  compatibility/debug operations.
+- Durable wiki memory writes only through deterministic, teacher-approved
+  `/memory/apply`.
+
+Proposal behavior:
+
+- Backend Memory Sweep grouping owns candidate identity, channel, review queue,
+  target, and status. The SQLite ledger stores evidence rows; the sweep service
+  turns them into bounded target/scope packets.
+- A review card may represent multiple related ledger rows. In that case,
+  `card_id` is the review-card identity, `candidate_id` is the primary row,
+  `candidate_ids` lists all represented rows, and `signal_count` is the count
+  of represented evidence rows.
+- Rows with the same backend `cluster_key` are deterministically consolidated
+  before sweep packets are built. Rows without a shared cluster key remain
+  separate at staging time, but can be normalized semantically inside the same
+  packet.
+- The isolated alignment pass groups every candidate in a packet exactly once
+  by underlying durable claim. It compares raw ledger evidence with current
+  target memory and returns relationship/decision metadata such as
+  `new_semantic_claim`, `broadens_existing_memory`, `already_covered`,
+  `possible_conflict`, `merge`, `adjust_existing`, or `needs_decision`.
+- Backend alignment validation rejects missing, duplicated, unknown,
+  cross-target, cross-section, or unsupported assignments. One retry may be
+  attempted with the validation error; if alignment still fails, rows surface as
+  unresolved `needs_decision` cards with warnings.
+- The isolated card pass generates review cards only from validated alignment
+  groups. A card must carry `source_group_id`, and its `candidate_ids`,
+  target, section, and operation must match the source group.
+- Card operations are `add`, `adjust`, `already_covered`, `needs_decision`, or
+  `reject_low_signal`. `status_recommendation` remains compatibility metadata:
+  `add`/`adjust` map to `promote`, while the other operations map directly.
+- For `adjust`, `replaces_content` must exactly match an existing bullet in the
+  current memory excerpt. If validation fails after retry, the affected packet
+  is surfaced as unresolved `needs_decision`, not as misleading `add` cards.
+- Route validation preserves backend-owned fields, rejects unsupported targets,
+  ignores unknown candidate ids from model output, and preserves evidence
+  ownership. A single candidate row may support multiple target-specific review
+  cards only when those target scopes are explicit and validated.
+- The UI should submit sweep decisions as a batch. Ledger row status is resolved
+  only after the whole decision set is processed, so overlapping evidence does
+  not disappear during proposal review.
+- If the isolated proposer is unavailable, the route falls back to the
+  deterministic Memory Sweep grouping and returns unresolved warning cards.
+- `canonical_wiki` remains review-only; it is never converted into a direct
+  write target by the proposer.
 
 ## Tool Result Contract
 
@@ -414,6 +491,24 @@ Honcho-style profile rules:
 - LLM synthesis may propose compact content, but backend code controls allowed
   paths, scope, and persistence.
 
+Shared memory-capture rules:
+
+- Workflow runtimes stay workflow-specific. `PlanRuntime` owns planning state
+  and `MemoryRuntime` owns update-memory target/result state.
+- Candidate capture mechanics are shared: validation, target allowlisting,
+  dedupe, caps, evidence refs, ledger conversion, and ledger persistence.
+- The main workflow model should emit `memory_candidates` in the same turn when
+  it detects durable teacher/class/copilot memory. Backend code may repair a
+  missed candidate only from typed runtime state the model already emitted, not
+  from broad raw-message keyword scraping.
+- If planning state carries a durable global teacher communication preference
+  but top-level `memory_candidates` is empty, the backend may synthesize a
+  review-only `user.md` / `Communication` candidate with
+  `source=teacher_explicit`, `basis=explicit`, and `confidence=high`.
+- Artifact-approved, session-end, pre-compaction, and Weekly Memory Sweep
+  capture are lifecycle hooks around the shared candidate layer. They may add
+  ledger evidence, but they cannot write wiki files.
+
 ## Memory Review / Apply Contract
 
 Purpose:
@@ -426,6 +521,9 @@ Proposal (read-only, no writes):
 - `POST /classes/{id}/memory/refresh` proposes refreshed derived pages
   (`taught_so_far`, `planning_brief`, `teaching_patterns`, `copilot_profile`,
   `class_state`) plus a `stale_report`. It does not write.
+- After a successful teacher-approved ingest commit, the commit response may
+  include the same proposal shape as `class_memory_proposal`. This is an
+  immediate class-evolution review aid, not an automatic compact-memory write.
 - `POST /classes/{id}/memory/profile/propose` proposes `user.md` / `copilot.md`
   updates from a finished session, labeling each candidate `explicit` vs
   `inferred` with a confidence. It does not write.
@@ -437,8 +535,15 @@ Apply (the only durable-write path for these pages):
 
 - `POST /classes/{id}/memory/apply` writes only the teacher-approved items via
   the bounded helpers (`add_user_profile_conclusion`, `add_profile_conclusion`,
-  `commit_memory_compaction` for `class_state`). Unsupported targets (e.g.
-  `canonical_wiki`) are skipped, not written.
+  `add_compact_memory_conclusion` for `class_state`, `planning_brief`,
+  `taught_so_far`, and `teaching_patterns`, plus
+  `add_subject_guide_conclusion` for the active class subject guide).
+  Unsupported targets such as `canonical_wiki` or a different subject guide are
+  skipped, not written.
+- `POST /classes/{id}/memory/compact/apply` writes teacher-reviewed compact
+  pages exactly as approved from a proposal payload. It is for full compact page
+  replacement and uses the deterministic compact-memory allowlist; it must not
+  be used for teacher-profile or canonical-wiki edits.
 - `POST /classes/{id}/memory/compact` remains the full derived-page rebuild and
   now also writes `class_state`, each page clamped to budget.
 

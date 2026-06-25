@@ -11,6 +11,7 @@ import {
 } from "@/components/klassenpilot/artifact-session-page";
 import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
 import { DiaryDraftPanel } from "@/components/klassenpilot/diary-draft-panel";
+import { ProposedMemoryUpdates } from "@/components/klassenpilot/proposed-memory-updates";
 import {
   FileChangeReviewPanel,
   MarkdownLineDiff,
@@ -23,6 +24,8 @@ import {
   client,
   uniqueWikiProposals,
   type IngestStartHint,
+  type MemoryCandidate,
+  type MemoryProposalResponse,
   type WikiUpdateProposal,
 } from "@/lib/api";
 
@@ -31,6 +34,15 @@ type CommitResult = {
   title: string;
   log_entry_id: string;
   applied_wiki_paths: string[];
+};
+
+const COMPACT_PAGE_LABELS: Record<string, string> = {
+  class_state: "Class state",
+  taught_so_far: "Taught so far",
+  planning_brief: "Planning brief",
+  teaching_patterns: "Teaching patterns",
+  copilot_profile: "Class copilot profile",
+  session_summaries: "Session summaries",
 };
 
 function ReadyToSaveButton({ onReady, loading }: { onReady: () => void; loading: boolean }) {
@@ -56,6 +68,119 @@ function textFromRecord(value: unknown): string {
 
 function boolFromRecord(value: unknown): boolean {
   return typeof value === "boolean" ? value : false;
+}
+
+function normalizeMemoryCandidates(value: unknown): MemoryCandidate[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is MemoryCandidate =>
+      !!item &&
+      typeof item === "object" &&
+      typeof (item as MemoryCandidate).target === "string" &&
+      typeof (item as MemoryCandidate).candidate_update === "string",
+  );
+}
+
+function dedupeMemoryCandidates(candidates: MemoryCandidate[]): MemoryCandidate[] {
+  const seen = new Set<string>();
+  const out: MemoryCandidate[] = [];
+  for (const c of candidates) {
+    const key = `${c.target}::${c.section ?? ""}::${c.candidate_update.trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
+
+function CompactMemoryProposalCard({
+  proposal,
+  applying,
+  onApply,
+  onContinue,
+}: {
+  proposal: MemoryProposalResponse;
+  applying: boolean;
+  onApply: (pages: Record<string, string>) => void;
+  onContinue: () => void;
+}) {
+  const pageKeys = useMemo(() => Object.keys(proposal.pages ?? {}), [proposal.pages]);
+  const [approved, setApproved] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(pageKeys.map((key) => [key, true])),
+  );
+  const approvedPages = Object.fromEntries(
+    pageKeys
+      .filter((key) => approved[key])
+      .map((key) => [key, proposal.pages[key]]),
+  );
+  const approvedCount = Object.keys(approvedPages).length;
+
+  if (!pageKeys.length && !proposal.warnings.length) return null;
+
+  return (
+    <Card variant="highlight" size="sm">
+      <CardHeader>
+        <CardTitle>Refresh class memory</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Review the compact class-memory pages generated from the saved lesson.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {proposal.warnings.length > 0 && (
+          <ul className="space-y-1 text-xs text-destructive">
+            {proposal.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        )}
+        <ul className="flex flex-col gap-3">
+          {pageKeys.map((key) => {
+            const preview = proposal.pages[key]
+              .split("\n")
+              .filter((line) => line.trim() && !line.startsWith("#"))
+              .slice(0, 2)
+              .join(" ");
+            return (
+              <li key={key} className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={!!approved[key]}
+                  disabled={applying}
+                  onChange={(e) =>
+                    setApproved((prev) => ({ ...prev, [key]: e.target.checked }))
+                  }
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">
+                    {COMPACT_PAGE_LABELS[key] ?? key}
+                  </div>
+                  {preview && (
+                    <p className="line-clamp-2 text-xs text-muted-foreground">
+                      {preview}
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+      <div className="flex flex-wrap gap-3 px-6 pb-6">
+        {pageKeys.length > 0 && (
+          <Button
+            onClick={() => onApply(approvedPages)}
+            disabled={applying || approvedCount === 0}
+          >
+            {applying ? "Applying..." : `Apply ${approvedCount} page(s)`}
+          </Button>
+        )}
+        <Button variant="outline" onClick={onContinue} disabled={applying}>
+          Skip for now
+        </Button>
+      </div>
+    </Card>
+  );
 }
 
 function MemoryTargetStatus() {
@@ -102,6 +227,11 @@ function MemoryWorkspace({
   const [inReview, setInReview] = useState(false);
   const [editingWiki, setEditingWiki] = useState(false);
   const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
+  const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidate[]>([]);
+  const [applyingMemory, setApplyingMemory] = useState(false);
+  const [classMemoryProposal, setClassMemoryProposal] =
+    useState<MemoryProposalResponse | null>(null);
+  const [applyingClassMemory, setApplyingClassMemory] = useState(false);
 
   const {
     items: reviewItems,
@@ -134,6 +264,7 @@ function MemoryWorkspace({
     setLoading(true);
     onError(null);
     setCommitResult(null);
+    setClassMemoryProposal(null);
     try {
       await runWithSessionRecovery((sessionId) =>
         client.ingestUpdateDraft(classId, sessionId, diaryMarkdown),
@@ -142,6 +273,13 @@ function MemoryWorkspace({
         client.ingestPropose(classId, sessionId),
       );
       const unique = uniqueWikiProposals(d.wiki_proposals);
+      setMemoryCandidates(
+        dedupeMemoryCandidates(
+          d.memory_candidates?.length
+            ? d.memory_candidates
+            : normalizeMemoryCandidates(d.memory_state?.memory_candidates),
+        ),
+      );
       setProposals(unique);
       initFromProposals(unique);
       setInReview(true);
@@ -165,6 +303,12 @@ function MemoryWorkspace({
         log_entry_id: result.log_entry_id,
         applied_wiki_paths: result.applied_wiki_paths,
       });
+      const proposal = result.class_memory_proposal;
+      setClassMemoryProposal(
+        proposal && (Object.keys(proposal.pages ?? {}).length > 0 || proposal.warnings.length > 0)
+          ? proposal
+          : null,
+      );
       setInReview(false);
       setProposals([]);
       clearReview();
@@ -176,6 +320,52 @@ function MemoryWorkspace({
     }
   }, [classId, diaryMarkdown, getCommitPayload, clearReview, onError, router, runWithSessionRecovery]);
 
+  const applyClassMemory = useCallback(
+    async (pages: Record<string, string>) => {
+      setApplyingClassMemory(true);
+      onError(null);
+      try {
+        if (!classMemoryProposal) return;
+        await client.memoryCompactApply(
+          classId,
+          pages,
+          classMemoryProposal.source_paths ?? [],
+        );
+        setClassMemoryProposal(null);
+        router.refresh();
+      } catch (e) {
+        onError(e instanceof Error ? e.message : "Could not refresh class memory");
+      } finally {
+        setApplyingClassMemory(false);
+      }
+    },
+    [classId, classMemoryProposal, onError, router],
+  );
+
+  const applyMemory = useCallback(
+    async (approved: MemoryCandidate[]) => {
+      setApplyingMemory(true);
+      onError(null);
+      try {
+        await client.memoryApply(
+          classId,
+          approved.map((c) => ({
+            target: c.target,
+            section: c.section,
+            content: c.candidate_update,
+          })),
+        );
+        setMemoryCandidates([]);
+        router.refresh();
+      } catch (e) {
+        onError(e instanceof Error ? e.message : "Could not apply memory updates");
+      } finally {
+        setApplyingMemory(false);
+      }
+    },
+    [classId, onError, router],
+  );
+
   const keepAll = useCallback(() => {
     approveAll();
     void commit();
@@ -185,6 +375,8 @@ function MemoryWorkspace({
     setInReview(false);
     setEditingWiki(false);
     setProposals([]);
+    setMemoryCandidates([]);
+    setClassMemoryProposal(null);
     clearReview();
     onError(null);
   }, [onError, clearReview]);
@@ -288,6 +480,26 @@ function MemoryWorkspace({
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {commitResult && memoryCandidates.length > 0 && (
+        <ProposedMemoryUpdates
+          candidates={memoryCandidates}
+          onApply={applyMemory}
+          applying={applyingMemory}
+          onContinue={() => setMemoryCandidates([])}
+          continueLabel="Skip for now"
+        />
+      )}
+
+      {commitResult && classMemoryProposal && (
+        <CompactMemoryProposalCard
+          key={`${commitResult.log_entry_id}-class-memory`}
+          proposal={classMemoryProposal}
+          onApply={applyClassMemory}
+          applying={applyingClassMemory}
+          onContinue={() => setClassMemoryProposal(null)}
+        />
       )}
     </div>
   );

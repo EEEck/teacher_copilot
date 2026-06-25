@@ -93,8 +93,17 @@ Design implication:
 
 Updated by:
 
-- Manual developer/teacher editing for now.
-- It should not be updated from class-specific lesson chats.
+- Manual developer/teacher editing.
+- Weekly Memory Sweep / review flows may promote approved `subject_concept`
+  candidates through `POST /api/classes/{class_id}/memory/apply`.
+- `/memory/apply` only accepts the active class subject path, for example
+  `wiki/subjects/chemie.md` for a chemistry class. Other subject paths are
+  skipped.
+
+Do not update from:
+
+- normal class-specific lesson chats without teacher approval.
+- compact class-memory refresh (`/memory/refresh` or `class_memory_proposal`).
 
 ### 3. Canonical Class Wiki Memory
 
@@ -152,6 +161,19 @@ Scope: one class.
 These pages are derived and rebuildable. They make the next prompt small and
 high-signal.
 
+Update paths:
+
+- `POST /api/classes/{class_id}/memory/refresh` proposes refreshed compact
+  pages without writing.
+- `POST /api/classes/{class_id}/ingest/commit` may return
+  `class_memory_proposal` after the approved lesson wiki commit. This is the
+  immediate class-evolution proposal for the saved lesson.
+- `POST /api/classes/{class_id}/memory/compact/apply` writes the reviewed
+  compact pages exactly as approved.
+- `POST /api/classes/{class_id}/memory/apply` appends bounded approved
+  conclusions to selected compact pages; it is not the full-page replacement
+  path.
+
 #### `taught_so_far.md`
 
 Purpose:
@@ -170,6 +192,7 @@ Loaded where today:
 Good update source:
 
 - memory compaction over approved lesson results and saved plans.
+- reviewed `class_memory_proposal` after an approved lesson-memory commit.
 
 #### `planning_brief.md`
 
@@ -189,6 +212,7 @@ Good update source:
 
 - memory compaction after lesson results accumulate
 - teacher-approved memory refresh
+- reviewed `class_memory_proposal` after an approved lesson-memory commit
 
 #### `teaching_patterns.md`
 
@@ -219,6 +243,8 @@ Good update source:
 
 - compaction from lesson results (`What went well`, `What didn't go well`,
   participation, follow-ups)
+- reviewed `class_memory_proposal` after an approved lesson-memory commit when
+  the evidence is class-learning behavior, not teacher preference
 
 #### `copilot_profile.md`
 
@@ -275,6 +301,7 @@ Current observed state:
 Good update source:
 
 - memory refresh/compaction from approved canonical wiki
+- reviewed `class_memory_proposal` after an approved lesson-memory commit
 
 #### `session_summaries.md`
 
@@ -307,7 +334,7 @@ Purpose:
   outputs behind `raw_ref`, `MemoryCandidate`s, and current plan version.
 - Update Memory: `MemoryTargetState`, `MemorySessionState`,
   `LessonResultState`, `MemoryEvidenceBrief`s, raw tool outputs behind
-  `raw_ref`, and current diary version.
+  `raw_ref`, `MemoryCandidate`s, and current diary version.
 
 Loaded where:
 
@@ -329,6 +356,10 @@ Durability:
   through teacher-approved memory apply
 - update-memory runtime state is discarded with the session after the normal
   teacher-approved commit/revise path writes canonical lesson memory
+- candidate observations are not canonical memory. They are session-scoped
+  suggestions surfaced for teacher review after save/commit. A future durable
+  ledger should live outside `wiki/` (for example SQLite session storage or a
+  gitignored workflow file), not in a teacher-visible or model-loaded wiki page.
 
 ## What Planning Chat Loads Today
 
@@ -385,6 +416,10 @@ After a plan is saved, profile/memory proposal can suggest:
 - `user.md`: stable global teacher preference
 - `copilot.md`: class-specific copilot behavior preference
 - `class_state.md`: updated current class state
+- `teaching_patterns.md`: stable class learning patterns seen across approved
+  lesson evidence
+- `planning_brief.md` / `taught_so_far.md`: compact class-current or sequence
+  updates when the signal is stable enough for teacher review
 - `canonical_wiki`: only as a suggestion for teacher-approved wiki action, not
   an automatic write
 
@@ -407,6 +442,8 @@ Examples:
 - Copilot behavior rules go to `copilot_profile.md`.
 - Current state goes to `class_state.md`.
 - Year-to-date taught sequence goes to `taught_so_far.md`.
+- Review-only lesson facts go to `canonical_wiki` candidates until an ingest
+  commit/revise action writes the canonical lesson files.
 - Detailed lesson history stays canonical in `lessons/{date}/`.
 - Individual student facts stay pseudonymous in `students/S-###.md`, not broad
   profiles.

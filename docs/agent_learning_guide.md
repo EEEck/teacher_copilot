@@ -225,6 +225,130 @@ So the best pattern is:
 
 > LLM proposes, backend validates, teacher approves, code writes.
 
+## Candidate-Led Human Memory Updates
+
+Subtle teacher preferences usually show up in chat behavior before they show up
+in the approved class wiki. Examples: the teacher repeatedly asks for
+MBB-style communication, changes preferred lesson structure after a seminar, or
+gets a new school policy that affects how plans should be worded. If the app
+does not store raw chats as durable memory, those signals can disappear before
+a later memory-refresh run.
+
+The useful pattern is a candidate ledger:
+
+1. During an active chat, the model may emit `memory_candidates` alongside the
+   artifact and runtime `state_patch`.
+2. The backend stores them in session runtime, dedupes them, caps the list, and
+   returns them to the UI.
+3. After the teacher saves a plan or commits lesson memory, the UI presents
+   candidates for approval.
+4. Backend apply code writes only supported targets through bounded helpers.
+   `canonical_wiki` candidates stay review-only until a normal ingest or revise
+   flow writes lesson records.
+
+This is grounded in three ideas:
+
+- OpenAI SDK practice separates resumable conversation/session state from
+  distilled reusable memory. Sessions keep a workflow coherent; durable memory
+  should contain reusable lessons/preferences, not every turn.
+- Hermes separates curated bounded files (`USER.md` / `MEMORY.md`) from
+  searchable session history and uses add/replace/remove-style memory updates
+  instead of stuffing transcripts into the prompt.
+- Current memory-agent research converges on extraction, reflection,
+  consolidation, and retrieval, but also shows that stale or false memory can
+  poison later behavior. Human review, replacement, deletion, provenance, and
+  small scope-specific stores matter as much as recall.
+
+For KlassenPilot this means:
+
+- teacher-level preferences -> `teacher_profile.md` / `user.md`
+- class learning patterns -> `teaching_patterns.md`
+- copilot behavior rules -> `copilot_profile.md` / `copilot.md`
+- current class state -> `class_state.md`
+- taught sequence or planning priorities -> `taught_so_far.md` /
+  `planning_brief.md`
+
+Do not create a teacher-facing `agent_tmp` wiki page for this. If candidate
+state must survive backend restarts, persist it outside canonical wiki memory
+with an app-owned store such as SQLite session storage or a gitignored workflow
+ledger, then feed only reviewed candidates into memory apply.
+
+## Memory Sweep Lessons From The MBB/Executive Failure
+
+The 2026 SOTA pattern for agent memory is:
+
+> observe -> normalize -> stage -> consolidate -> inject only when relevant.
+
+Modern agent memory is a lifecycle, not a transcript dump. The OpenAI
+personalization cookbook pattern uses structured profiles plus memory notes,
+end-of-session consolidation, deduplication, conflict handling, and precedence
+rules. LangGraph and similar frameworks make the same broad split between
+short-term working memory and long-term semantic, episodic, or procedural
+memory. For KlassenPilot, the translation is simple: raw ledger evidence and
+current curated memory become an observation or adjustment proposal, then a
+teacher-reviewed card, then deterministic wiki application only if approved.
+
+The hardest Memory V2 bug was not raw capture. The system could observe that
+the teacher repeatedly wanted MBB-style or executive-style communication. The
+failure happened later: Memory Sweep asked one LLM call to both normalize raw
+ledger rows and produce final review cards. In live traces, the model often did
+the easy lexical merge (`MBB` + `MBB`) but left `executive-style communication`
+as a separate card, or treated compatible labels as a conflict.
+
+The important lesson:
+
+> If normalization matters, make it a first-class contract. Do not hide it as a
+> sentence inside a card-generation prompt.
+
+The fixed pattern is a two-pass sweep:
+
+1. **Alignment / normalization pass**: assign every candidate id exactly once to
+   an underlying durable claim group. This is where aliases such as MBB,
+   McKinsey, consulting-style, and executive communication are judged.
+2. **Backend validation**: reject missing ids, duplicate ids, unknown ids,
+   cross-target merges, section drift, unsupported relationships, and invalid
+   decisions. Retry once with the validation error.
+3. **Card generation pass**: generate one teacher-review card per validated
+   group. Do not regroup, split, or merge in this pass.
+4. **Backend card validation**: the card must reference its `source_group_id`,
+   use exactly the group's candidate ids, preserve target/section, and map the
+   group decision to the expected operation.
+5. **Teacher approval / apply**: only after review does deterministic backend
+   code append or exactly replace wiki memory.
+
+This changed the failure mode in a good way. Before the refactor, an omitted
+row looked like an ordinary fallback `add` card. After the refactor, unresolved
+normalization or card-generation failures surface as `needs_decision` with a
+warning. That is much safer because the teacher sees uncertainty instead of a
+quiet duplicate memory.
+
+The live MBB trace taught several concrete lessons:
+
+- Generic current memory such as "Feedback and planning language: English" does
+  not mean an executive/MBB preference is already covered.
+- A narrow bullet such as "Teacher prefers MBB-style framing" plus new
+  executive-style evidence should usually be an `adjust`, not a second
+  near-duplicate `add`.
+- MBB/McKinsey/executive-style labels are compatible aliases when the shared
+  meaning is concise, structured, answer-first communication.
+- They become a conflict only when the evidence asks for opposing attributes,
+  such as concise executive summaries versus verbose narrative explanations or
+  detached consulting tone versus warmer empathetic tone as a new default.
+- The LLM should write the underlying preference, not whichever label appeared
+  most often. A durable sentence like "Teacher prefers concise executive-style
+  communication, including MBB/McKinsey-style framing when useful" is better
+  than two separate profile bullets.
+
+The broader architecture lesson is:
+
+> Use the model for semantic grouping, but force the grouping to be observable,
+> validated, and testable before it can affect memory.
+
+This mirrors the OpenClaw-style "working notes -> consolidation -> reviewed
+memory" pattern and the Hermes-style discipline of bounded curated memory. The
+ledger stays raw and never rewrites "MBB" into "executive." Consolidation only
+proposes a reviewed durable claim that points back to the raw evidence ids.
+
 ## Current KlassenPilot Implementation
 
 The current implementation follows the tiered model.
@@ -239,9 +363,16 @@ Key files:
 - `backend/app/teacher_agent/wiki/memory.py`: manages compact memory pages,
   local profile helpers, and compaction commits.
 - `backend/app/teacher_agent/wiki/store.py`: facade exposing wiki helpers.
+- `backend/app/teacher_agent/memory_capture.py`: shared runtime candidate
+  validation, dedupe, repair, rendering, and ledger conversion.
+- `backend/app/services/memory_candidate_ledger.py`: raw candidate evidence
+  ledger for cross-session review.
+- `backend/app/services/memory_sweep.py`: two-pass alignment/card
+  consolidation and validation before Memory Sweep review cards.
 - `backend/app/teacher_agent/tools.py`: model-visible read tools.
 - `backend/app/teacher_agent/prompts.py`: workflow prompts and tool policy.
-- `backend/app/api/routes.py`: includes the memory compact endpoint.
+- `backend/app/api/routes.py`: includes memory refresh, compact rebuild,
+  reviewed compact-page apply, and append-style memory apply endpoints.
 
 Current memory pages:
 

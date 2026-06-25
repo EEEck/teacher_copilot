@@ -9,7 +9,9 @@ from openai.types.shared import Reasoning
 from app.teacher_agent.models import (
     CompileOutput,
     IngestTurnOutput,
+    MemorySweepAlignmentOutput,
     MemoryCompactOutput,
+    MemorySweepProposalOutput,
     PlanOutput,
     PlanTurnOutput,
     ProfileProposalOutput,
@@ -24,6 +26,8 @@ from app.teacher_agent.prompts import (
     COMPILE_SYSTEM,
     LINT_SYSTEM,
     MEMORY_COMPACT_SYSTEM,
+    MEMORY_SWEEP_ALIGNMENT_SYSTEM,
+    MEMORY_SWEEP_PROPOSAL_SYSTEM,
     PROFILE_PROPOSAL_SYSTEM,
     PLAN_OPENING_SYSTEM,
     PLAN_SYSTEM,
@@ -171,4 +175,28 @@ def build_profile_proposal_agent(model: str) -> Agent:
         ),
         model=model,
         output_type=ProfileProposalOutput,
+    )
+
+
+def build_memory_sweep_proposal_agent(model: str) -> Agent:
+    return Agent(
+        name="KlassenPilot Memory Sweep Proposal",
+        instructions=apply_prompt(
+            MEMORY_SWEEP_PROPOSAL_SYSTEM,
+            security_policy=TEACHER_AGENT_SECURITY_POLICY,
+        ),
+        model=model,
+        output_type=MemorySweepProposalOutput,
+    )
+
+
+def build_memory_sweep_alignment_agent(model: str) -> Agent:
+    return Agent(
+        name="KlassenPilot Memory Sweep Alignment",
+        instructions=apply_prompt(
+            MEMORY_SWEEP_ALIGNMENT_SYSTEM,
+            security_policy=TEACHER_AGENT_SECURITY_POLICY,
+        ),
+        model=model,
+        output_type=MemorySweepAlignmentOutput,
     )

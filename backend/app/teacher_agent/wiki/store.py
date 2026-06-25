@@ -4,17 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
-from app.schemas.api import (
-    ApprovedWikiUpdate,
-    ClassMemorySnapshot,
-    ClassSummary,
-    ClassTimeline,
-    CompletenessChecklist,
-    LessonDetail,
-    WikiUpdateProposal,
-)
 
 from . import (
     commit,
@@ -150,6 +139,16 @@ class WikiStore:
 
     def add_user_profile_conclusion(self, section, content):
         return memory.add_user_profile_conclusion(self, section, content)
+
+    def add_subject_guide_conclusion(self, class_id, section, content):
+        return memory.add_subject_guide_conclusion(self, class_id, section, content)
+
+    def add_compact_memory_conclusion(
+        self, class_id, key, section, content, *, source_path=None
+    ):
+        return memory.add_compact_memory_conclusion(
+            self, class_id, key, section, content, source_path=source_path
+        )
 
     def search_personal_memory(self, class_id, query, max_results=5):
         return memory.search_personal_memory(self, class_id, query, max_results)

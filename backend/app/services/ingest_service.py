@@ -24,6 +24,7 @@ from app.schemas.api import (
     MemoryTraceResponse,
 )
 from app.services.artifact_session_service import ArtifactSession, ArtifactSessionService
+from app.services.memory_candidate_ledger import MemoryCandidateLedger
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.memory_update_state import (
     LessonResultPatch,
@@ -66,10 +67,17 @@ class IngestStartHintResolution:
 
 
 class IngestService:
-    def __init__(self, wiki: WikiStore, agents: AgentRunner) -> None:
+    def __init__(
+        self,
+        wiki: WikiStore,
+        agents: AgentRunner,
+        memory_candidate_ledger: MemoryCandidateLedger | None = None,
+    ) -> None:
         self.wiki = wiki
         self.agents = agents
-        self.core = ArtifactSessionService(wiki, agents)
+        self.core = ArtifactSessionService(
+            wiki, agents, memory_candidate_ledger=memory_candidate_ledger
+        )
 
     def _to_model(self, s: ArtifactSession) -> IngestSession:
         memory_state = (
@@ -84,6 +92,7 @@ class IngestService:
             messages=s.messages,
             completeness=s.completeness or CompletenessChecklist(items=[]),
             memory_state=memory_state,
+            memory_candidates=(memory_state or {}).get("memory_candidates", []),
         )
 
     def _title_template(self, lesson_date: str, title: str) -> str:
@@ -247,6 +256,7 @@ class IngestService:
             ready_to_propose=result.ready,
             last_change_summary=(result.memory or {}).get("last_change_summary", ""),
             memory_state=result.memory,
+            memory_candidates=(result.memory or {}).get("memory_candidates", []),
         )
 
     async def chat_stream(
@@ -267,6 +277,7 @@ class IngestService:
         session = self.core.get_session(session_id)
         if isinstance(session.runtime, MemoryRuntime):
             draft.memory_state = memory_api_payload(session.runtime)
+            draft.memory_candidates = draft.memory_state.get("memory_candidates", [])
         return draft
 
     async def propose(self, session_id: str) -> IngestDraft:
@@ -279,6 +290,7 @@ class IngestService:
         assert isinstance(draft, IngestDraft)
         if isinstance(session.runtime, MemoryRuntime):
             draft.memory_state = memory_api_payload(session.runtime)
+            draft.memory_candidates = draft.memory_state.get("memory_candidates", [])
         return draft
 
     def get_draft(self, session_id: str) -> IngestDraft:
@@ -287,6 +299,7 @@ class IngestService:
         session = self.core.get_session(session_id)
         if isinstance(session.runtime, MemoryRuntime):
             draft.memory_state = memory_api_payload(session.runtime)
+            draft.memory_candidates = draft.memory_state.get("memory_candidates", [])
         return draft
 
     def trace(self, class_id: str, session_id: str) -> MemoryTraceResponse:

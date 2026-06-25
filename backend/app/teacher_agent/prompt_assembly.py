@@ -14,6 +14,7 @@ from app.teacher_agent.memory_update_state import (
     MemoryRuntime,
     render_lesson_result_state,
     render_memory_briefs,
+    render_memory_candidates,
     render_memory_session_state,
     render_memory_target_state,
 )
@@ -24,6 +25,7 @@ from app.teacher_agent.planning_state import (
     render_session_state,
 )
 from app.teacher_agent.prompts import (
+    DURABLE_MEMORY_CANDIDATE_POLICY,
     INGEST_SYSTEM,
     INGEST_WIKI_TOOLS_POLICY,
     MEMORY_SKILL,
@@ -207,6 +209,7 @@ def build_ingest_chat_prompt_assembly(
     session_state = render_memory_session_state(rt.session_state)
     lesson_result_state = render_lesson_result_state(rt.lesson_result_state)
     evidence = render_memory_briefs(rt.evidence_briefs)
+    memory_candidates = render_memory_candidates(rt.memory_candidates)
     user_input = build_ingest_user_input_assembly(
         messages, current_diary, attachments, history_turns=history_turns
     )
@@ -221,6 +224,8 @@ def build_ingest_chat_prompt_assembly(
         session_state=session_state,
         lesson_result_state=lesson_result_state,
         evidence=evidence,
+        memory_candidates=memory_candidates,
+        durable_memory_candidate_policy=DURABLE_MEMORY_CANDIDATE_POLICY,
         security_policy=TEACHER_AGENT_SECURITY_POLICY,
         wiki_tools_policy=INGEST_WIKI_TOOLS_POLICY,
     )
@@ -299,6 +304,12 @@ def build_ingest_chat_prompt_assembly(
                 text=evidence,
             ),
             _section(
+                name="Memory candidates",
+                function="render_memory_candidates",
+                source="MemoryRuntime.memory_candidates",
+                text=memory_candidates,
+            ),
+            _section(
                 name="Update-memory tools policy",
                 function="build_ingest_agent",
                 source="prompts.INGEST_WIKI_TOOLS_POLICY",
@@ -323,7 +334,13 @@ def build_ingest_chat_prompt_assembly(
             },
             "runtime_context": {
                 "function": "memory_update_state split renderers",
-                "chars": len(target_state + session_state + lesson_result_state + evidence),
+                "chars": len(
+                    target_state
+                    + session_state
+                    + lesson_result_state
+                    + evidence
+                    + memory_candidates
+                ),
                 "sections": [
                     _section(
                         name="Memory target state",
@@ -348,6 +365,12 @@ def build_ingest_chat_prompt_assembly(
                         function="render_memory_briefs",
                         source="MemoryRuntime.evidence_briefs",
                         text=evidence,
+                    ),
+                    _section(
+                        name="Memory candidates",
+                        function="render_memory_candidates",
+                        source="MemoryRuntime.memory_candidates",
+                        text=memory_candidates,
                     ),
                 ],
             },
@@ -423,6 +446,7 @@ def build_plan_chat_prompt_assembly(
         PLAN_CHAT_SYSTEM,
         skill=PLAN_SKILL,
         memory_policy=PLAN_MEMORY_POLICY,
+        durable_memory_candidate_policy=DURABLE_MEMORY_CANDIDATE_POLICY,
         teacher_context=teacher_trace["text"],
         active_class_core=class_trace["text"],
         session_state=session_state,

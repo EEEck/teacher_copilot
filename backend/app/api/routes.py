@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import get_agents, get_ingest_service, get_plan_service, get_wiki
+from app.api.deps import (
+    get_agents,
+    get_ingest_service,
+    get_memory_candidate_ledger,
+    get_plan_service,
+    get_wiki,
+)
 from app.config import get_settings
 from app.openai_bootstrap import is_openai_configured
 from app.schemas.api import (
@@ -20,11 +28,19 @@ from app.schemas.api import (
     IngestSessionStartRequest,
     LessonDetail,
     LessonPlan,
+    MemoryApplyItem,
     MemoryApplyRequest,
     MemoryApplyResponse,
+    MemoryCandidateStatusRequest,
+    MemoryCandidateStatusResponse,
+    MemoryCompactApplyRequest,
     MemoryCompactRequest,
     MemoryCompactResponse,
     MemoryProposalResponse,
+    MemorySweepApplyRequest,
+    MemorySweepApplyResponse,
+    MemorySweepCandidate,
+    MemorySweepProposalResponse,
     MemoryTraceResponse,
     PlanChatRequest,
     PlanChatResponse,
@@ -44,12 +60,89 @@ from app.schemas.api import (
     WikiLintResponse,
 )
 from app.services.ingest_service import IngestService
-from app.services.memory_apply import apply_memory_items
+from app.services.memory_apply import apply_memory_items, apply_memory_sweep_decisions
+from app.services.memory_candidate_ledger import MemoryCandidateLedger, OPEN_STATUSES
+from app.services.memory_sweep import (
+    alignment_groups_payload,
+    build_sweep_proposals,
+    build_sweep_packets,
+    fallback_review_cards,
+    grouped_review_cards,
+    memory_sweep_target_excerpts,
+    sweep_packet_payloads,
+    sweep_targets,
+    unresolved_cards_from_packet,
+    validate_alignment_output,
+    validate_cards_against_alignment,
+)
 from app.services.plan_service import PlanService
 from app.teacher_agent.agents import AgentRunner
+from app.teacher_agent.models import MemorySweepAlignmentOutput
 from app.teacher_agent.wiki_store import WikiStore
 
 router = APIRouter(prefix="/api")
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _memory_sweep_api_queues(grouped_cards) -> dict[str, list[MemorySweepCandidate]]:
+    return {
+        queue: [MemorySweepCandidate(**card.__dict__) for card in cards]
+        for queue, cards in grouped_cards.items()
+    }
+
+
+def _memory_sweep_response_from_grouped(
+    *,
+    class_id: str,
+    subject: str,
+    grouped,
+    target_excerpts: dict[str, str] | None = None,
+    warnings: list[str] | None = None,
+) -> MemorySweepProposalResponse:
+    return MemorySweepProposalResponse(
+        class_id=class_id,
+        subject=subject,
+        queues=_memory_sweep_api_queues(
+            fallback_review_cards(
+                grouped,
+                target_excerpts=target_excerpts or {},
+                why_now="",
+            )
+        ),
+        warnings=warnings or [],
+    )
+
+
+def _memory_sweep_status_for_action(action: str) -> str | None:
+    return {
+        "apply": "applied",
+        "already_covered": "applied",
+        "reject": "rejected",
+        "snooze": "snoozed",
+        "delete": "deleted",
+    }.get(action)
+
+
+def _resolve_memory_sweep_statuses(body: MemorySweepApplyRequest) -> dict[str, str]:
+    priority = {
+        "applied": 4,
+        "rejected": 3,
+        "snoozed": 2,
+        "deleted": 1,
+    }
+    resolved: dict[str, str] = {}
+    for decision in body.decisions:
+        status = _memory_sweep_status_for_action(decision.action)
+        if not status:
+            continue
+        for candidate_id in decision.candidate_ids:
+            current = resolved.get(candidate_id)
+            if current is None or priority[status] > priority[current]:
+                resolved[candidate_id] = status
+    return resolved
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -189,6 +282,37 @@ async def compact_memory(
         raise HTTPException(status_code=503, detail=str(e)) from e
 
 
+@router.post(
+    "/classes/{class_id}/memory/compact/apply",
+    response_model=MemoryCompactResponse,
+)
+def apply_compact_memory_proposal(
+    class_id: str,
+    body: MemoryCompactApplyRequest,
+    wiki: WikiStore = Depends(get_wiki),
+) -> MemoryCompactResponse:
+    """Write teacher-reviewed compact memory pages exactly as approved."""
+    try:
+        wiki.get_class(class_id)
+        if not body.pages:
+            raise HTTPException(status_code=400, detail="No compact memory pages provided")
+        applied, log_id = wiki.commit_memory_compaction(
+            class_id,
+            body.pages,
+            source_paths=body.source_paths,
+        )
+        return MemoryCompactResponse(
+            class_id=class_id,
+            applied_wiki_paths=applied,
+            log_entry_id=log_id,
+            source_paths=body.source_paths,
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 def _compaction_pages(output) -> dict[str, str]:
     pages = {
         "taught_so_far": output.taught_so_far_markdown,
@@ -293,6 +417,251 @@ def apply_memory(
     return MemoryApplyResponse(
         class_id=class_id, applied_wiki_paths=applied, skipped=skipped, warnings=warnings
     )
+
+
+@router.post(
+    "/classes/{class_id}/memory/sweep/propose",
+    response_model=MemorySweepProposalResponse,
+)
+async def propose_memory_sweep(
+    class_id: str,
+    wiki: WikiStore = Depends(get_wiki),
+    ledger: MemoryCandidateLedger = Depends(get_memory_candidate_ledger),
+    agents: AgentRunner = Depends(get_agents),
+) -> MemorySweepProposalResponse:
+    """Return grouped Memory Sweep candidates without writing wiki files."""
+    try:
+        cls = wiki.get_class(class_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+    candidates = ledger.list_candidates(
+        class_id=class_id,
+        subject=cls.subject,
+        statuses=OPEN_STATUSES,
+        include_global=True,
+    )
+    grouped = build_sweep_proposals(candidates)
+    if not grouped:
+        return _memory_sweep_response_from_grouped(
+            class_id=class_id,
+            subject=cls.subject,
+            grouped=grouped,
+        )
+
+    target_excerpts = memory_sweep_target_excerpts(wiki, class_id, sweep_targets(grouped))
+    packets = build_sweep_packets(grouped, target_excerpts)
+    try:
+        all_cards = []
+        warnings: list[str] = []
+        for packet in packets:
+            packet_payload = sweep_packet_payloads([packet])
+            packet_excerpts = {packet.target: packet.current_memory_excerpt}
+            validation_error = ""
+            alignment = MemorySweepAlignmentOutput()
+            alignment_groups = []
+            for attempt in range(2):
+                alignment = await agents.align_memory_sweep_candidates(
+                    class_id,
+                    cls.subject,
+                    packet_payload,
+                    packet_excerpts,
+                    validation_error=validation_error,
+                )
+                try:
+                    alignment_groups = validate_alignment_output(packet, alignment)
+                    warnings.extend(alignment.warnings)
+                    break
+                except ValueError as exc:
+                    validation_error = str(exc)
+                    if attempt == 1:
+                        warnings.extend(alignment.warnings)
+                        warnings.append(
+                            f"Memory Sweep alignment unresolved for {packet.packet_id}: {validation_error}"
+                        )
+                        all_cards.extend(
+                            unresolved_cards_from_packet(
+                                packet,
+                                target_excerpts,
+                                validation_error,
+                            )
+                        )
+            if not alignment_groups:
+                continue
+            card_validation_error = ""
+            packet_cards = []
+            packet_warnings: list[str] = []
+            for attempt in range(2):
+                try:
+                    packet_out = await agents.propose_memory_sweep_cards(
+                        class_id,
+                        cls.subject,
+                        packet_payload,
+                        packet_excerpts,
+                        alignment_groups=alignment_groups_payload(alignment_groups),
+                        validation_error=card_validation_error,
+                    )
+                    packet_cards, packet_warnings = validate_cards_against_alignment(
+                        packet,
+                        packet_out,
+                        alignment_groups,
+                        target_excerpts,
+                    )
+                    all_cards.extend(packet_cards)
+                    warnings.extend(packet_warnings)
+                    break
+                except Exception as exc:
+                    card_validation_error = str(exc)
+                    if attempt == 1:
+                        warnings.append(
+                            "Memory Sweep card generation unresolved for "
+                            f"{packet.packet_id}: {card_validation_error}"
+                        )
+                        all_cards.extend(
+                            unresolved_cards_from_packet(
+                                packet,
+                                target_excerpts,
+                                card_validation_error,
+                            )
+                        )
+        queues = grouped_review_cards(all_cards)
+        return MemorySweepProposalResponse(
+            class_id=class_id,
+            subject=cls.subject,
+            queues=_memory_sweep_api_queues(queues),
+            warnings=warnings,
+        )
+    except Exception as e:
+        return _memory_sweep_response_from_grouped(
+            class_id=class_id,
+            subject=cls.subject,
+            grouped=grouped,
+            target_excerpts=target_excerpts,
+            warnings=[f"isolated Memory Sweep proposer unavailable: {e}"],
+        )
+
+
+@router.post(
+    "/classes/{class_id}/memory/sweep/apply",
+    response_model=MemorySweepApplyResponse,
+)
+def apply_memory_sweep(
+    class_id: str,
+    body: MemorySweepApplyRequest,
+    wiki: WikiStore = Depends(get_wiki),
+    ledger: MemoryCandidateLedger = Depends(get_memory_candidate_ledger),
+) -> MemorySweepApplyResponse:
+    """Apply a teacher-reviewed sweep decision set, then update ledger status."""
+    try:
+        cls = wiki.get_class(class_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    if not body.decisions:
+        raise HTTPException(status_code=400, detail="No Memory Sweep decisions provided")
+
+    open_rows = ledger.list_candidates(
+        class_id=class_id,
+        subject=cls.subject,
+        statuses=OPEN_STATUSES,
+        include_global=True,
+    )
+    open_ids = {row.id for row in open_rows}
+    requested_ids = {
+        candidate_id
+        for decision in body.decisions
+        for candidate_id in decision.candidate_ids
+    }
+    unknown_ids = sorted(requested_ids - open_ids)
+    if unknown_ids:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown or closed Memory Sweep candidate ids: {', '.join(unknown_ids)}",
+        )
+
+    applied: list[str] = []
+    skipped: list[str] = []
+    warnings: list[str] = []
+    successful_apply_indexes: list[int] = []
+    if any(decision.action == "apply" for decision in body.decisions):
+        applied, skipped, warnings, successful_apply_indexes = apply_memory_sweep_decisions(
+            wiki, class_id, body.decisions
+        )
+
+    successful_apply_index_set = set(successful_apply_indexes)
+    applied_decisions = [
+        decision
+        for index, decision in enumerate(body.decisions)
+        if decision.action == "apply" and index in successful_apply_index_set
+    ]
+    effective_body = MemorySweepApplyRequest(
+        decisions=[
+            *applied_decisions,
+            *[decision for decision in body.decisions if decision.action != "apply"],
+        ],
+        review_batch_id=body.review_batch_id,
+    )
+    statuses = _resolve_memory_sweep_statuses(effective_body)
+    now = _utc_now()
+    review_batch_id = body.review_batch_id or f"memory_sweep_{now}"
+    updated_ids: list[str] = []
+    try:
+        for candidate_id, status in statuses.items():
+            rejection_reason = None
+            for decision in body.decisions:
+                if candidate_id in decision.candidate_ids and decision.rejection_reason:
+                    rejection_reason = decision.rejection_reason
+                    break
+            ledger.update_status(
+                candidate_id,
+                status,
+                updated_at=now,
+                rejection_reason=rejection_reason,
+                review_batch_id=review_batch_id,
+                promoted_at=now if status in {"approved", "applied"} else None,
+            )
+            updated_ids.append(candidate_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    return MemorySweepApplyResponse(
+        class_id=class_id,
+        applied_wiki_paths=applied,
+        updated_candidate_ids=updated_ids,
+        skipped=skipped,
+        warnings=warnings,
+    )
+
+
+@router.post(
+    "/classes/{class_id}/memory/candidates/{candidate_id}/status",
+    response_model=MemoryCandidateStatusResponse,
+)
+def update_memory_candidate_status(
+    class_id: str,
+    candidate_id: str,
+    body: MemoryCandidateStatusRequest,
+    wiki: WikiStore = Depends(get_wiki),
+    ledger: MemoryCandidateLedger = Depends(get_memory_candidate_ledger),
+) -> MemoryCandidateStatusResponse:
+    """Update review status for one candidate; does not write wiki memory."""
+    try:
+        wiki.get_class(class_id)
+        now = _utc_now()
+        ledger.update_status(
+            candidate_id,
+            body.status,
+            updated_at=now,
+            rejection_reason=body.rejection_reason,
+            review_batch_id=body.review_batch_id,
+            promoted_at=now if body.status in {"approved", "applied"} else None,
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return MemoryCandidateStatusResponse(candidate_id=candidate_id, status=body.status)
 
 
 @router.post("/classes/{class_id}/ingest/sessions", response_model=IngestSession)
@@ -443,16 +812,32 @@ def ingest_trace(
     "/classes/{class_id}/ingest/commit",
     response_model=CommitIngestResponse,
 )
-def ingest_commit(
+async def ingest_commit(
     class_id: str,
     body: CommitIngestRequest,
     ingest: IngestService = Depends(get_ingest_service),
+    agents: AgentRunner = Depends(get_agents),
 ) -> CommitIngestResponse:
     try:
         session = ingest.get_session(body.session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
-        return ingest.commit(body)
+        response = ingest.commit(body)
+        try:
+            output, source_paths, warnings = await agents.compact_memory(class_id)
+            response.class_memory_proposal = MemoryProposalResponse(
+                class_id=class_id,
+                pages=_compaction_pages(output),
+                source_paths=source_paths,
+                stale_report=list(output.stale_report),
+                warnings=warnings,
+            )
+        except RuntimeError as e:
+            response.class_memory_proposal = MemoryProposalResponse(
+                class_id=class_id,
+                warnings=[f"Post-commit class memory proposal failed: {e}"],
+            )
+        return response
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except KeyError as e:

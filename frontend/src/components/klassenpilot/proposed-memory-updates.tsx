@@ -12,7 +12,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-const APPLICABLE = new Set(["user.md", "copilot.md", "class_state.md"]);
+const APPLICABLE = new Set([
+  "user.md",
+  "teacher_profile.md",
+  "copilot.md",
+  "copilot_profile.md",
+  "class_state.md",
+  "planning_brief.md",
+  "taught_so_far.md",
+  "teaching_patterns.md",
+]);
 
 /**
  * Review surface for durable-memory updates the copilot proposed during a

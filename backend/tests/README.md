@@ -68,6 +68,7 @@ Additional deterministic goldens:
 |--------|---------|----------------|
 | **Wiki search (stub, CI)** | `9b_misconception_charge_vs_oxidation`, `9b_redox_date_range_pathfinder`, `10c_subject_bound_search` | Source-bounded wiki pathfinding and class isolation |
 | **Workflow E2E (stub, CI)** | `9b_plan_fckw_3turn_e2e`, `9b_memory_update_3turn_e2e` | Complete multi-turn workflow state, evidence, and final artifact |
+| **Memory Sweep (stub, CI)** | `9b_memory_sweep_routes_channels`, `9b_memory_sweep_subject_vs_class_boundary`, `9b_memory_sweep_rejected_stays_rejected` | Candidate queue routing, class-vs-subject write boundaries, rejected-candidate suppression |
 
 The chat-turn family also includes `9b_ingest_turn3_ready`, which checks final
 Update Memory readiness, review phase, and pseudonymized diary output.
@@ -84,6 +85,13 @@ Expanded deterministic set:
 ```powershell
 cd backend
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py tests/evals/test_klassenpilot_wiki_search.py tests/evals/test_klassenpilot_workflows_stub.py -v
+```
+
+Memory V2 deterministic evals:
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_memory_sweep_stub.py -v
 ```
 
 **Run live chat evals (real OpenAI Agents SDK + LLM judge):**

@@ -104,6 +104,7 @@ export function createArtifactRuntimeConfig(args: {
             readyToSave: event.ready,
             completeness: event.completeness ?? null,
             lastChangeSummary: event.last_change_summary ?? null,
+            memoryCandidates: event.memory_candidates ?? undefined,
             memoryState: event.memory_state ?? null,
           },
         };

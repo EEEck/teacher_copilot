@@ -17,6 +17,7 @@ import {
   type ThreadMessage,
 } from "@assistant-ui/react";
 import { isUnknownSessionError, type CompletenessChecklist } from "@/lib/api";
+import type { MemoryCandidate } from "@/lib/api";
 import type { ChatStreamChunk } from "@/components/assistant-ui/artifact-runtime-config";
 import { extractSessionAttachments, type SessionAttachment } from "@/lib/session-attachments";
 import { streamPartsToRunContent } from "@/lib/sse-chat";
@@ -27,6 +28,7 @@ export type ArtifactChatResult = {
   completeness?: CompletenessChecklist | null;
   readyToSave?: boolean;
   lastChangeSummary?: string | null;
+  memoryCandidates?: MemoryCandidate[];
   memoryState?: Record<string, unknown> | null;
 };
 

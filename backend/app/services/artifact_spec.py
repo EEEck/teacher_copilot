@@ -333,6 +333,7 @@ INGEST_SPEC = ArtifactSpec(
                 "Memory session state",
                 "Lesson result state",
                 "Memory evidence briefs",
+                "Memory candidates",
             )
         ),
         stream_turn=_ingest_stream_turn,

@@ -18,6 +18,11 @@ from app.teacher_agent.runtime_render import (
     render_evidence_briefs,
     render_scalar,
 )
+from app.teacher_agent.memory_capture import (
+    MemoryCandidate,
+    merge_memory_candidates,
+    render_memory_candidates as render_shared_memory_candidates,
+)
 
 MEMORY_PHASES = ("identify_target", "collect_results", "review_draft", "unsupported")
 MEMORY_INTENTS = (
@@ -121,6 +126,7 @@ class MemoryRuntime:
     session_state: MemorySessionState = field(default_factory=MemorySessionState)
     lesson_result_state: LessonResultState = field(default_factory=LessonResultState)
     evidence_briefs: list[MemoryEvidenceBrief] = field(default_factory=list)
+    memory_candidates: list[MemoryCandidate] = field(default_factory=list)
     raw_store: dict[str, str] = field(default_factory=dict)
     diary_version: int = 0
     last_change_summary: str = ""
@@ -302,6 +308,7 @@ def merge_memory_turn(
     *,
     state_patch: MemoryStatePatch | None,
     new_evidence_briefs: list[MemoryEvidenceBrief],
+    memory_candidates: list[MemoryCandidate] | None = None,
     last_change_summary: str,
     unsupported_intent_reason: str,
     diary_changed: bool,
@@ -325,6 +332,13 @@ def merge_memory_turn(
     cap = get_context_limits().briefs_store_cap
     if len(runtime.evidence_briefs) > cap:
         runtime.evidence_briefs = runtime.evidence_briefs[-cap:]
+
+    runtime.memory_candidates = merge_memory_candidates(
+        runtime.memory_candidates,
+        memory_candidates,
+        cap=get_context_limits().candidates_cap,
+    )
+
     if diary_changed:
         runtime.diary_version += 1
     apply_memory_phase_auto_advance(
@@ -342,6 +356,7 @@ def memory_api_payload(runtime: MemoryRuntime) -> dict:
         "session_state": runtime.session_state.model_dump(),
         "lesson_result_state": runtime.lesson_result_state.model_dump(),
         "evidence_briefs": [b.model_dump() for b in runtime.evidence_briefs],
+        "memory_candidates": [c.model_dump() for c in runtime.memory_candidates],
         "diary_version": runtime.diary_version,
         "last_change_summary": runtime.last_change_summary,
         "unsupported_intent_reason": runtime.unsupported_intent_reason,
@@ -410,6 +425,14 @@ def render_memory_briefs(briefs: list[MemoryEvidenceBrief]) -> str:
     )
 
 
+def render_memory_candidates(cands: list[MemoryCandidate]) -> str:
+    return render_shared_memory_candidates(
+        cands,
+        title="## Memory candidates",
+        max_chars=220,
+    )
+
+
 def render_memory_runtime(runtime: MemoryRuntime) -> str:
     """Legacy combined renderer; prefer split renderers for prompt assembly."""
     return "\n\n".join(
@@ -418,5 +441,6 @@ def render_memory_runtime(runtime: MemoryRuntime) -> str:
             render_memory_session_state(runtime.session_state),
             render_lesson_result_state(runtime.lesson_result_state),
             render_memory_briefs(runtime.evidence_briefs),
+            render_memory_candidates(runtime.memory_candidates),
         ]
     )

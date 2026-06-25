@@ -6,8 +6,6 @@ import re
 from datetime import date
 from typing import Any
 
-from app.teacher_agent.wiki import parsing
-
 COMPACT_MEMORY_FILES: dict[str, str] = {
     "taught_so_far": "taught_so_far.md",
     "planning_brief": "planning_brief.md",
@@ -24,6 +22,7 @@ PROFILE_ENTRY_LIMIT = 280
 USER_PROFILE_REL = "wiki/teacher_profile.md"
 USER_PROFILE_SECTION_LIMIT = 8
 USER_PROFILE_ENTRY_LIMIT = 240
+SUBJECT_GUIDE_SECTION_LIMIT = 8
 
 # Hermes-style hard size budgets (chars). Enforced at write time (clamp on
 # every compaction/profile write) AND at inject time (slim context slice), so
@@ -221,6 +220,128 @@ def add_user_profile_conclusion(
     return store.rel_wiki(path)
 
 
+def add_subject_guide_conclusion(
+    store,
+    class_id: str,
+    section: str,
+    content: str,
+) -> str:
+    """Add one teacher-approved subject-wide conclusion for this class subject."""
+    cls = store.get_class(class_id)
+    subject = re.sub(r"[^a-z0-9_-]+", "", cls.subject.lower())
+    if not subject:
+        raise ValueError("class subject is missing")
+    clean = " ".join(content.strip().split())
+    if not clean:
+        raise ValueError("subject guide conclusion cannot be empty")
+    if len(clean) > PROFILE_ENTRY_LIMIT:
+        raise ValueError(
+            f"subject guide conclusion must be <= {PROFILE_ENTRY_LIMIT} chars"
+        )
+
+    path = store.root / "wiki" / "subjects" / f"{subject}.md"
+    text = store.read_text(path)
+    if not text.strip():
+        text = f"# {subject.title()} Subject Notes\n"
+    else:
+        text = text.rstrip() + "\n"
+
+    sec = _normalize_profile_section(section)
+    heading = f"## {sec}"
+    entry = f"- {clean}"
+    if entry in text:
+        return store.rel_wiki(path)
+
+    if heading not in text:
+        text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
+    else:
+        pattern = rf"(^##\s+{re.escape(sec)}\s*\n)(.*?)(?=^##\s+|\Z)"
+        match = re.search(pattern, text, flags=re.M | re.S)
+        if not match:
+            text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
+        else:
+            existing_lines = [
+                ln for ln in match.group(2).splitlines() if ln.strip().startswith("-")
+            ]
+            existing_lines = [ln for ln in existing_lines if clean not in ln]
+            existing_lines.append(entry)
+            if len(existing_lines) > SUBJECT_GUIDE_SECTION_LIMIT:
+                existing_lines = existing_lines[-SUBJECT_GUIDE_SECTION_LIMIT:]
+            replacement = match.group(1) + "\n".join(existing_lines).rstrip() + "\n\n"
+            text = text[: match.start()] + replacement + text[match.end() :]
+
+    store.write_text(path, clamp_memory_page("subject_guide", text))
+    return store.rel_wiki(path)
+
+
+def add_compact_memory_conclusion(
+    store,
+    class_id: str,
+    key: str,
+    section: str,
+    content: str,
+    *,
+    source_path: str | None = None,
+) -> str:
+    """Add one teacher-approved conclusion to a compact class memory page."""
+    if key not in {
+        "class_state",
+        "planning_brief",
+        "taught_so_far",
+        "teaching_patterns",
+    }:
+        raise ValueError(f"unsupported compact memory target: {key}")
+    clean = " ".join(content.strip().split())
+    if not clean:
+        raise ValueError("compact memory conclusion cannot be empty")
+    if len(clean) > PROFILE_ENTRY_LIMIT:
+        raise ValueError(
+            f"compact memory conclusion must be <= {PROFILE_ENTRY_LIMIT} chars"
+        )
+    if source_path and not store.is_class_memory_path(class_id, source_path):
+        raise ValueError(f"source_path must be under wiki/classes/{class_id}/")
+
+    titles = {
+        "class_state": "Class State",
+        "planning_brief": "Planning Brief",
+        "taught_so_far": "Taught So Far",
+        "teaching_patterns": "Teaching Patterns",
+    }
+    path = memory_paths(store, class_id)[key]
+    text = store.read_text(path)
+    if not text.strip():
+        text = _page_with_fallback(titles[key], "", class_id)
+    else:
+        text = text.rstrip() + "\n"
+
+    sec = _normalize_profile_section(section)
+    heading = f"## {sec}"
+    entry = f"- {clean}" + (f" (source: `{source_path}`)" if source_path else "")
+    if entry in text:
+        return store.rel_wiki(path)
+
+    if heading not in text:
+        text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
+    else:
+        pattern = rf"(^##\s+{re.escape(sec)}\s*\n)(.*?)(?=^##\s+|\Z)"
+        match = re.search(pattern, text, flags=re.M | re.S)
+        if not match:
+            text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
+        else:
+            existing_lines = [
+                ln for ln in match.group(2).splitlines() if ln.strip().startswith("-")
+            ]
+            existing_lines = [ln for ln in existing_lines if clean not in ln]
+            existing_lines.append(entry)
+            if len(existing_lines) > PROFILE_SECTION_LIMIT:
+                existing_lines = existing_lines[-PROFILE_SECTION_LIMIT:]
+            replacement = match.group(1) + "\n".join(existing_lines).rstrip() + "\n\n"
+            text = text[: match.start()] + replacement + text[match.end() :]
+
+    store.write_text(path, clamp_memory_page(key, text))
+    return store.rel_wiki(path)
+
+
 def search_personal_memory(
     store, class_id: str, query: str, max_results: int = 5
 ) -> list[dict[str, str]]:
@@ -289,7 +410,7 @@ def build_memory_compaction_source_packet(
         warnings.append("No taught lessons found for compaction range.")
 
     parts = [
-        f"# Memory Compaction Source Packet",
+        "# Memory Compaction Source Packet",
         f"Class: {cls.label} ({class_id})",
         f"Subject: {cls.subject}",
         "",

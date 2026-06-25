@@ -1,0 +1,158 @@
+"""Trace global MBB communication preference capture and promotion boundaries."""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import pathlib
+import sys
+from types import SimpleNamespace
+from typing import Any
+
+SCRIPTS_ROOT = pathlib.Path(__file__).resolve().parent
+if str(SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_ROOT))
+
+import memory_scenario_helpers as h  # noqa: E402
+import run_plan_trace_bundle  # noqa: E402
+
+
+PROMPT_1 = """Plan the next 45-minute lesson for Chemie 9b. Topic: redox reactions applied to CFC/FCKW compounds. Build on our existing redox lessons in the wiki and keep it exam-oriented.
+"""
+
+PROMPT_2 = """Please adjust the plan. From now on, for all lesson-planning summaries, I want you to use MBB-style communication: start with the recommendation, then give 2-3 crisp reasons, then only the essential next steps. This is my standard global communication preference, not just this lesson and not just this class.
+"""
+
+PROMPT_3 = """Looks good. Do one final concise pass in that MBB style and make it ready to save.
+"""
+
+
+def _write_prompts(run_name: str) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path]:
+    prompt_dir = SCRIPTS_ROOT / ".logs" / run_name
+    files = [
+        prompt_dir / "prompt1.txt",
+        prompt_dir / "prompt2-mbb-global-preference.txt",
+        prompt_dir / "prompt3.txt",
+    ]
+    for path, text in zip(files, [PROMPT_1, PROMPT_2, PROMPT_3]):
+        h.write_text(path, text)
+    return files[0], files[1], files[2]
+
+
+def _build_summary(run_dir: pathlib.Path, *, api_base: str, class_id: str, apply: bool) -> dict[str, Any]:
+    meta = h.read_json(run_dir / "00-run-meta.json")
+    session_id = str(meta["session_id"])
+    trace_files = sorted(run_dir.glob("*-trace-after-turn*.json"))
+    final_trace = h.read_json(trace_files[-1])
+    final_sse = h.final_sse_event(sorted(run_dir.glob("*-turn*-sse.txt"))[-1].read_text(encoding="utf-8"))
+    rows = h.ledger_rows_for_session(session_id)
+    sweep = h.request_json("POST", f"{api_base.rstrip('/')}/api/classes/{class_id}/memory/sweep/propose", {})
+    cards = h.flatten_sweep_cards(sweep)
+    matches = h.matching_cards(cards, target="user.md", contains="mbb")
+
+    apply_result = None
+    status_rows: list[dict[str, Any]] = []
+    if apply and matches:
+        card = matches[0]
+        apply_result = h.request_json(
+            "POST",
+            f"{api_base.rstrip('/')}/api/classes/{class_id}/memory/apply",
+            {
+                "items": [
+                    {
+                        "target": card["target"],
+                        "section": card.get("section") or "Communication",
+                        "content": card["content"],
+                    }
+                ]
+            },
+        )
+        h.request_json(
+            "POST",
+            f"{api_base.rstrip('/')}/api/classes/{class_id}/memory/candidates/{card['candidate_id']}/status",
+            {
+                "status": "applied",
+                "review_batch_id": f"scenario_mbb_{dt.datetime.now():%Y%m%d%H%M%S}",
+            },
+        )
+        status_rows = h.ledger_rows_by_ids([card["candidate_id"]])
+
+    passed_capture = any(
+        row["target"] == "user.md"
+        and row["section"].lower() == "communication"
+        and row["basis"] == "explicit"
+        and row["confidence"] == "high"
+        and "mbb" in row["candidate_update"].lower()
+        for row in rows
+    )
+    passed_sweep = bool(matches)
+    passed_apply = not apply or bool(
+        apply_result
+        and apply_result.get("applied_wiki_paths")
+        and not apply_result.get("warnings")
+    )
+    summary = {
+        "scenario": "global_mbb_teacher_preference",
+        "passed": passed_capture and passed_sweep and passed_apply,
+        "run_dir": str(run_dir),
+        "session_id": session_id,
+        "capture": {
+            "passed": passed_capture,
+            "runtime_candidates": final_trace.get("runtime", {}).get("memory_candidates", []),
+            "final_sse_candidates": final_sse.get("memory_candidates", []),
+            "ledger_rows": rows,
+        },
+        "sweep": {
+            "passed": passed_sweep,
+            "matching_cards": matches,
+            "warnings": sweep.get("warnings", []),
+        },
+        "apply": {
+            "requested": apply,
+            "passed": passed_apply,
+            "result": apply_result,
+            "status_rows": status_rows,
+        },
+    }
+    h.write_json(run_dir / "scenario-summary.json", summary)
+    return summary
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--api-base", default="http://localhost:8010")
+    parser.add_argument("--class-id", default="chemie_9b_2026_27")
+    parser.add_argument("--output-root", default="backend/runs")
+    parser.add_argument("--run-name", default="")
+    parser.add_argument("--apply", action="store_true", help="Apply the first matching sweep card to durable memory.")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    run_name = args.run_name or f"{h.now_stamp()}-scenario-mbb-preference"
+    p1, p2, p3 = _write_prompts(run_name)
+    trace_args = SimpleNamespace(
+        api_base=args.api_base,
+        class_id=args.class_id,
+        output_root=args.output_root,
+        run_name=run_name,
+        prompt1_file=str(p1),
+        prompt2_file=str(p2),
+        prompt3_file=str(p3),
+    )
+    run_dir = run_plan_trace_bundle.run(trace_args)
+    summary = _build_summary(run_dir, api_base=args.api_base, class_id=args.class_id, apply=args.apply)
+    print(f"run_dir={run_dir}")
+    print(f"session_id={summary['session_id']}")
+    print(f"passed={summary['passed']}")
+    print(f"capture_passed={summary['capture']['passed']}")
+    print(f"sweep_passed={summary['sweep']['passed']}")
+    print(f"apply_requested={args.apply}")
+    print(f"apply_passed={summary['apply']['passed']}")
+    print(f"summary={run_dir / 'scenario-summary.json'}")
+    return 0 if summary["passed"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

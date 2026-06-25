@@ -14,15 +14,15 @@ from agents import Runner
 from agents.exceptions import AgentsException, MaxTurnsExceeded
 from openai import OpenAI
 
-logger = logging.getLogger("klassenpilot.agents")
-
 from app.config import Settings
 from app.schemas.api import ChatAttachment, ChatMessage, CompletenessChecklist, LessonPlan
 from app.teacher_agent.agent import (
+    build_memory_sweep_alignment_agent,
     build_memory_compact_agent,
     build_compile_agent,
     build_ingest_agent,
     build_lint_agent,
+    build_memory_sweep_proposal_agent,
     build_plan_chat_agent,
     build_plan_lesson_agent,
     build_plan_opening_agent,
@@ -32,6 +32,8 @@ from app.teacher_agent.models import (
     CompileOutput,
     IngestTurnOutput,
     MemoryCompactOutput,
+    MemorySweepAlignmentOutput,
+    MemorySweepProposalOutput,
     PlanOutput,
     PlanTurnOutput,
     ProfileProposalOutput,
@@ -55,6 +57,8 @@ from app.teacher_agent.planning_state import (
 from app.teacher_agent.tools import WikiToolContext
 from app.teacher_agent.stream_events import SseError, SseEvent, SseFinal, translate_sdk_event
 from app.teacher_agent.wiki_store import WikiStore
+
+logger = logging.getLogger("klassenpilot.agents")
 
 class AgentTurnLimitError(RuntimeError):
     """Agent used too many tool/reasoning steps in one turn."""
@@ -302,6 +306,7 @@ class AgentRunner:
             runtime,
             state_patch=parsed.state_patch,
             new_evidence_briefs=parsed.new_evidence_briefs,
+            memory_candidates=parsed.memory_candidates,
             last_change_summary=parsed.last_change_summary,
             unsupported_intent_reason=parsed.unsupported_intent_reason,
             diary_changed=diary_changed,
@@ -324,6 +329,7 @@ class AgentRunner:
             ready=ready,
             completeness=checklist,
             last_change_summary=payload["last_change_summary"],
+            memory_candidates=payload["memory_candidates"],
             memory_state=payload,
         )
 
@@ -757,4 +763,71 @@ class AgentRunner:
         parsed = await self._run_structured(agent, prompt)
         if not isinstance(parsed, ProfileProposalOutput):
             raise RuntimeError("Failed to propose profile updates")
+        return parsed
+
+    async def propose_memory_sweep_cards(
+        self,
+        class_id: str,
+        subject: str,
+        grouped_candidates: dict[str, list[dict]],
+        target_excerpts: dict[str, str],
+        alignment_groups: list[dict] | None = None,
+        validation_error: str = "",
+    ) -> MemorySweepProposalOutput:
+        import json
+
+        field_cap = get_context_limits().profile_propose_field_chars
+        retry_block = (
+            f"\nPrevious validation error:\n{validation_error}\n\n"
+            if validation_error
+            else ""
+        )
+        prompt = (
+            f"Class: {class_id}\n"
+            f"Subject: {subject}\n\n"
+            f"{retry_block}"
+            "Validated alignment groups:\n"
+            f"{apply_char_limit(json.dumps(alignment_groups or [], indent=2), field_cap * 3)}\n\n"
+            "Grouped candidate ledger rows:\n"
+            f"{apply_char_limit(json.dumps(grouped_candidates, indent=2), field_cap * 4)}\n\n"
+            "Current target memory excerpts:\n"
+            f"{apply_char_limit(json.dumps(target_excerpts, indent=2), field_cap * 3)}\n\n"
+            "Return review cards for the teacher. Do not write memory."
+        )
+        agent = build_memory_sweep_proposal_agent(self.fast_model)
+        parsed = await self._run_structured(agent, prompt)
+        if not isinstance(parsed, MemorySweepProposalOutput):
+            raise RuntimeError("Failed to propose Memory Sweep cards")
+        return parsed
+
+    async def align_memory_sweep_candidates(
+        self,
+        class_id: str,
+        subject: str,
+        grouped_candidates: dict[str, list[dict]],
+        target_excerpts: dict[str, str],
+        validation_error: str = "",
+    ) -> MemorySweepAlignmentOutput:
+        import json
+
+        field_cap = get_context_limits().profile_propose_field_chars
+        retry_block = (
+            f"\nPrevious validation error:\n{validation_error}\n\n"
+            if validation_error
+            else ""
+        )
+        prompt = (
+            f"Class: {class_id}\n"
+            f"Subject: {subject}\n\n"
+            f"{retry_block}"
+            "Grouped candidate ledger rows:\n"
+            f"{apply_char_limit(json.dumps(grouped_candidates, indent=2), field_cap * 4)}\n\n"
+            "Current target memory excerpts:\n"
+            f"{apply_char_limit(json.dumps(target_excerpts, indent=2), field_cap * 3)}\n\n"
+            "Return validated-ready alignment groups. Do not generate review cards."
+        )
+        agent = build_memory_sweep_alignment_agent(self.fast_model)
+        parsed = await self._run_structured(agent, prompt)
+        if not isinstance(parsed, MemorySweepAlignmentOutput):
+            raise RuntimeError("Failed to align Memory Sweep candidates")
         return parsed

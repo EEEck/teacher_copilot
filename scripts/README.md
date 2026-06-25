@@ -69,3 +69,52 @@ The plan and memory trace scripts intentionally have the same developer shape:
 start an artifact session, stream fixed teacher turns, fetch the trace endpoint,
 and write a run bundle. If another workflow needs this, create a shared
 scenario-driven runner instead of copying either script again.
+
+## Memory Candidate Scenario Traces
+
+- `trace_memory_pref_mbb.py` - live planning-chat reproduction for the MBB
+  preference capture path.
+- `trace_memory_group_learning_pattern.py` - live update-memory reproduction
+  for a class learning pattern candidate.
+- `trace_memory_repeated_signal_promotion.py` - seeded ledger scenario for
+  repeated weak class-learning signals and sweep promotion.
+- `trace_memory_mbb_executive_consolidation.py` - seeded ledger scenario with
+  two MBB-style communication signals plus one executive-style signal; records
+  whether Memory Sweep suggests one consolidated `user.md / Communication`
+  review card. By default it temporarily hides unrelated open ledger rows during
+  the proposal call and restores them immediately afterward; use `--no-isolate`
+  to inspect the full live sweep inbox.
+
+Example:
+
+```powershell
+cd .
+.\backend\.venv\Scripts\python .\scripts\trace_memory_mbb_executive_consolidation.py
+```
+
+## Memory Sweep 4.4 Trace Bundle
+
+- `run_memory_sweep_44_trace_bundle.py`
+
+This script seeds temporary Memory Sweep candidates for the examples in
+`docs/mem_v2/design.md` section 4.4, calls the local public API endpoints, writes
+before/after wiki snapshots, records apply/status responses, and stores a
+review bundle under `backend/runs/`.
+
+Default two-example run:
+
+```powershell
+cd .
+.\backend\.venv\Scripts\python .\scripts\run_memory_sweep_44_trace_bundle.py
+```
+
+All four section 4.4 examples:
+
+```powershell
+cd .
+.\backend\.venv\Scripts\python .\scripts\run_memory_sweep_44_trace_bundle.py --scenario all
+```
+
+By default the script removes its temporary smoke bullets from wiki files after
+verification while leaving applied ledger rows as audit history. Use
+`--keep-writes` to inspect the durable wiki changes in place.

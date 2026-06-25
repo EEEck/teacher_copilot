@@ -81,6 +81,7 @@ export type IngestSession = {
   messages: ChatMessage[];
   completeness: CompletenessChecklist;
   memory_state?: Record<string, unknown> | null;
+  memory_candidates?: MemoryCandidate[];
 };
 export type WikiUpdateProposal = {
   wiki_path: string;
@@ -102,6 +103,7 @@ export type IngestDraft = {
   wiki_proposals: WikiUpdateProposal[];
   completeness: CompletenessChecklist;
   memory_state?: Record<string, unknown> | null;
+  memory_candidates?: MemoryCandidate[];
 };
 export type ApprovedWikiUpdate = {
   wiki_path: string;
@@ -116,6 +118,7 @@ export type ChatResponse = {
   ready_to_propose: boolean;
   last_change_summary?: string;
   memory_state?: Record<string, unknown> | null;
+  memory_candidates?: MemoryCandidate[];
 };
 export type PlanSession = {
   session_id: string;
@@ -140,6 +143,7 @@ export type MemoryCandidate = {
   section?: string;
   candidate_update: string;
   evidence?: string;
+  evidence_refs?: string[];
   source?: string;
   basis?: string;
   confidence?: string;
@@ -186,6 +190,100 @@ export type MemoryApplyResponse = {
   class_id: string;
   applied_wiki_paths: string[];
   skipped: string[];
+  warnings: string[];
+};
+export type MemorySweepCandidate = {
+  card_id: string;
+  source_group_id: string;
+  candidate_id: string;
+  candidate_ids: string[];
+  review_queue: string;
+  channel: string;
+  target: string;
+  section: string;
+  content: string;
+  evidence_summary: string;
+  evidence_refs: string[];
+  confidence: string;
+  basis: string;
+  status: string;
+  relationship: string;
+  group_label: string;
+  public_rationale: string;
+  operation:
+    | "add"
+    | "adjust"
+    | "already_covered"
+    | "needs_decision"
+    | "reject_low_signal";
+  replaces_content: string;
+  status_recommendation:
+    | "promote"
+    | "already_covered"
+    | "needs_decision"
+    | "reject_low_signal";
+  why_now: string;
+  current_memory_excerpt: string;
+  signal_count: number;
+};
+export type MemorySweepProposalResponse = {
+  class_id: string;
+  subject: string;
+  queues: Record<string, MemorySweepCandidate[]>;
+  warnings: string[];
+};
+export type MemoryCandidateStatus =
+  | "proposed"
+  | "approved"
+  | "applied"
+  | "rejected"
+  | "snoozed"
+  | "deleted"
+  | "expired";
+export type MemorySweepDecision = {
+  card_id?: string;
+  action: "apply" | "reject" | "snooze" | "delete" | "already_covered";
+  target: string;
+  section: string;
+  content: string;
+  operation?:
+    | "add"
+    | "adjust"
+    | "already_covered"
+    | "needs_decision"
+    | "reject_low_signal";
+  replaces_content?: string;
+  candidate_ids: string[];
+  rejection_reason?: string | null;
+};
+export type MemorySweepApplyResponse = {
+  class_id: string;
+  applied_wiki_paths: string[];
+  updated_candidate_ids: string[];
+  skipped: string[];
+  warnings: string[];
+};
+export type MemoryProposalResponse = {
+  class_id: string;
+  pages: Record<string, string>;
+  source_paths: string[];
+  stale_report: string[];
+  warnings: string[];
+};
+export type CommitIngestResponse = {
+  raw_diary_path: string;
+  applied_wiki_paths: string[];
+  log_entry_id: string;
+  lesson_date: string;
+  title: string;
+  class_memory_proposal?: MemoryProposalResponse | null;
+};
+export type MemoryCompactResponse = {
+  class_id: string;
+  applied_wiki_paths: string[];
+  log_entry_id: string;
+  source_paths: string[];
+  stale_report: string[];
   warnings: string[];
 };
 export type LessonFlowPhase = { phase: string; minutes: number; description: string };
@@ -392,13 +490,7 @@ export const client = {
     diaryMarkdown: string,
     approvedUpdates: ApprovedWikiUpdate[],
   ) =>
-    api<{
-      raw_diary_path: string;
-      applied_wiki_paths: string[];
-      log_entry_id: string;
-      lesson_date: string;
-      title: string;
-    }>(
+    api<CommitIngestResponse>(
       `/api/classes/${classId}/ingest/commit`,
       {
         method: "POST",
@@ -486,5 +578,46 @@ export const client = {
     api<MemoryApplyResponse>(`/api/classes/${classId}/memory/apply`, {
       method: "POST",
       body: JSON.stringify({ items }),
+    }),
+  memorySweepPropose: (classId: string) =>
+    api<MemorySweepProposalResponse>(`/api/classes/${classId}/memory/sweep/propose`, {
+      method: "POST",
+    }),
+  memoryCandidateStatus: (
+    classId: string,
+    candidateId: string,
+    status: MemoryCandidateStatus,
+    rejectionReason?: string,
+  ) =>
+    api<{ candidate_id: string; status: string }>(
+      `/api/classes/${classId}/memory/candidates/${candidateId}/status`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          status,
+          rejection_reason: rejectionReason ?? null,
+        }),
+      },
+    ),
+  memorySweepApply: (
+    classId: string,
+    decisions: MemorySweepDecision[],
+    reviewBatchId?: string,
+  ) =>
+    api<MemorySweepApplyResponse>(`/api/classes/${classId}/memory/sweep/apply`, {
+      method: "POST",
+      body: JSON.stringify({
+        decisions,
+        review_batch_id: reviewBatchId ?? null,
+      }),
+    }),
+  memoryCompactApply: (
+    classId: string,
+    pages: Record<string, string>,
+    sourcePaths: string[] = [],
+  ) =>
+    api<MemoryCompactResponse>(`/api/classes/${classId}/memory/compact/apply`, {
+      method: "POST",
+      body: JSON.stringify({ pages, source_paths: sourcePaths }),
     }),
 };

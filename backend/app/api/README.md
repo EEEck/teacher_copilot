@@ -7,7 +7,7 @@ Routes should be thin adapters over services and wiki facades.
 
 - `routes.py` - all current `/api` endpoints.
 - `deps.py` - FastAPI dependency factories for settings, wiki store, agents,
-  ingest service, and plan service.
+  ingest service, plan service, and the memory candidate ledger.
 - `errors.py` - standard error envelope and exception handlers.
 
 ## Route Groups
@@ -16,7 +16,8 @@ Routes should be thin adapters over services and wiki facades.
 - Ingest sessions: start, optional typed start hint, chat, stream, draft,
   propose, commit.
 - Plan sessions: start, chat, stream, draft, save, trace.
-- Memory maintenance: compact, refresh, profile propose, apply.
+- Memory maintenance: compact, refresh, profile propose, apply, Memory Sweep
+  propose/apply, and candidate status updates.
 
 ## Conventions
 
@@ -38,3 +39,4 @@ Routes should be thin adapters over services and wiki facades.
 - `../services/README.md`
 - `../../README.md`
 - `../../../docs/agent_contracts.md`
+- `../../../docs/mem_v2/backend.md`
