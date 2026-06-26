@@ -30,8 +30,27 @@ backend/frontend integration map, tests, traces, and known bugs.
   `already_covered`, `reject_low_signal`, or `needs_decision`.
 - `/memory/sweep/apply` applies teacher decisions as one decision set: wiki
   writes first, ledger status updates after successful writes.
-- `user.md`, `copilot.md`, class compact memory files, and subject guides
-  remain curated memory, not automatic projections of raw ledger rows.
+- `teacher_profile.md`, `copilot_profile.md`, class compact memory files, and
+  subject guides remain curated memory, not automatic projections of raw ledger
+  rows.
+
+## Core Backend Memory-Merge Check
+
+When changing Memory Sweep contracts, prompts, backend grouping/apply logic, or
+target names, run the focused deterministic tests and the live MBB/executive
+merge trace:
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests\test_memory_targets.py tests\test_memory_sweep_backend.py tests\test_prompts.py -q
+cd ..
+.\backend\.venv\Scripts\python .\scripts\trace_memory_mbb_executive_consolidation.py --run-name manual-mbb-executive-merge
+```
+
+The trace should report `passed=true`, `full_merge_cards=1`, and one
+`teacher_profile.md / Communication` review card representing all three seeded
+candidate IDs. Keep this scenario as a regression trace, not as a hardcoded
+system-prompt example or backend synonym rule.
 
 ## Non-Goals
 

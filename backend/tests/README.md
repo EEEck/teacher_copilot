@@ -94,6 +94,25 @@ cd backend
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_memory_sweep_stub.py -v
 ```
 
+Focused Memory Sweep backend contract:
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests\test_memory_targets.py tests\test_memory_sweep_backend.py tests\test_prompts.py -q
+```
+
+Core live drift check for memory merging:
+
+```powershell
+cd ..
+.\backend\.venv\Scripts\python .\scripts\trace_memory_mbb_executive_consolidation.py --run-name manual-mbb-executive-merge
+```
+
+The trace should pass with one consolidated `teacher_profile.md /
+Communication` card representing all three seeded MBB/executive candidate IDs.
+It is intentionally a live-model drift check; the deterministic prompt tests
+assert the production system prompts do not hardcode those labels.
+
 **Run live chat evals (real OpenAI Agents SDK + LLM judge):**
 
 ```powershell

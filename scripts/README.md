@@ -80,17 +80,25 @@ scenario-driven runner instead of copying either script again.
   repeated weak class-learning signals and sweep promotion.
 - `trace_memory_mbb_executive_consolidation.py` - seeded ledger scenario with
   two MBB-style communication signals plus one executive-style signal; records
-  whether Memory Sweep suggests one consolidated `user.md / Communication`
-  review card. By default it temporarily hides unrelated open ledger rows during
-  the proposal call and restores them immediately afterward; use `--no-isolate`
-  to inspect the full live sweep inbox.
+  whether Memory Sweep suggests one consolidated
+  `teacher_profile.md / Communication` review card. By default it temporarily
+  hides unrelated open ledger rows during the proposal call and restores them
+  immediately afterward; use `--no-isolate` to inspect the full live sweep
+  inbox. Use `--current-memory none`, `--current-memory narrow-mbb`, and
+  `--current-memory generalized` to verify `add`, `adjust`, and
+  `already_covered`.
 
 Example:
 
 ```powershell
 cd .
-.\backend\.venv\Scripts\python .\scripts\trace_memory_mbb_executive_consolidation.py
+.\backend\.venv\Scripts\python .\scripts\trace_memory_mbb_executive_consolidation.py `
+  --run-name manual-mbb-executive-merge
 ```
+
+Passing shape: `passed=true`, `full_merge_cards=1`, and one card representing
+all three seeded candidate IDs. This is the core live drift check for backend
+memory merging; deterministic tests still live under `backend/tests/`.
 
 ## Memory Sweep 4.4 Trace Bundle
 
