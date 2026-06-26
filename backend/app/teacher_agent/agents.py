@@ -22,7 +22,7 @@ from app.teacher_agent.agent import (
     build_compile_agent,
     build_ingest_agent,
     build_lint_agent,
-    build_memory_sweep_proposal_agent,
+    build_memory_sweep_card_agent,
     build_plan_chat_agent,
     build_plan_lesson_agent,
     build_plan_opening_agent,
@@ -794,7 +794,7 @@ class AgentRunner:
             f"{apply_char_limit(json.dumps(target_excerpts, indent=2), field_cap * 3)}\n\n"
             "Return review cards for the teacher. Do not write memory."
         )
-        agent = build_memory_sweep_proposal_agent(self.fast_model)
+        agent = build_memory_sweep_card_agent(self.fast_model)
         parsed = await self._run_structured(agent, prompt)
         if not isinstance(parsed, MemorySweepProposalOutput):
             raise RuntimeError("Failed to propose Memory Sweep cards")

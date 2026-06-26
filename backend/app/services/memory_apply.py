@@ -42,8 +42,8 @@ def apply_memory_items(
     """Write supported items; return (applied_paths, skipped, warnings).
 
     Supported targets:
-    - ``user.md``       -> global teacher profile (bounded)
-    - ``copilot.md``    -> class copilot working agreement (bounded)
+    - ``teacher_profile.md`` -> global teacher profile (bounded)
+    - ``copilot_profile.md`` -> class copilot working agreement (bounded)
     - ``class_state.md``-> class compact state page (bounded bullet)
     - ``planning_brief.md`` / ``taught_so_far.md`` / ``teaching_patterns.md``
       -> bounded compact class memory bullets
@@ -121,9 +121,9 @@ def _apply_add_item(wiki, class_id: str, item, subject_target: str):
     target = canonical_memory_target(item.target)
     compact_key = compact_key_for_target(target)
     try:
-        if target == "user.md":
+        if target == "teacher_profile.md":
             return wiki.add_user_profile_conclusion(section, content), "", ""
-        if target == "copilot.md":
+        if target == "copilot_profile.md":
             return wiki.add_profile_conclusion(class_id, section, content), "", ""
         if compact_key:
             return (
@@ -153,11 +153,11 @@ def _apply_adjust_item(wiki, class_id: str, item, subject_target: str) -> str:
     page_key = ""
     path = None
     entry_limit = PROFILE_ENTRY_LIMIT
-    if target == "user.md":
+    if target == "teacher_profile.md":
         path = wiki.root / "wiki" / "teacher_profile.md"
         page_key = "user"
         entry_limit = USER_PROFILE_ENTRY_LIMIT
-    elif target == "copilot.md":
+    elif target == "copilot_profile.md":
         path = wiki.memory_paths(class_id)["copilot_profile"]
         page_key = "copilot_profile"
     elif compact_key:

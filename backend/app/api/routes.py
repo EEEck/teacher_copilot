@@ -63,21 +63,10 @@ from app.services.ingest_service import IngestService
 from app.services.memory_apply import apply_memory_items, apply_memory_sweep_decisions
 from app.services.memory_candidate_ledger import MemoryCandidateLedger, OPEN_STATUSES
 from app.services.memory_sweep import (
-    alignment_groups_payload,
-    build_sweep_proposals,
-    build_sweep_packets,
-    fallback_review_cards,
-    grouped_review_cards,
-    memory_sweep_target_excerpts,
-    sweep_packet_payloads,
-    sweep_targets,
-    unresolved_cards_from_packet,
-    validate_alignment_output,
-    validate_cards_against_alignment,
+    propose_memory_sweep_review,
 )
 from app.services.plan_service import PlanService
 from app.teacher_agent.agents import AgentRunner
-from app.teacher_agent.models import MemorySweepAlignmentOutput
 from app.teacher_agent.wiki_store import WikiStore
 
 router = APIRouter(prefix="/api")
@@ -92,28 +81,6 @@ def _memory_sweep_api_queues(grouped_cards) -> dict[str, list[MemorySweepCandida
         queue: [MemorySweepCandidate(**card.__dict__) for card in cards]
         for queue, cards in grouped_cards.items()
     }
-
-
-def _memory_sweep_response_from_grouped(
-    *,
-    class_id: str,
-    subject: str,
-    grouped,
-    target_excerpts: dict[str, str] | None = None,
-    warnings: list[str] | None = None,
-) -> MemorySweepProposalResponse:
-    return MemorySweepProposalResponse(
-        class_id=class_id,
-        subject=subject,
-        queues=_memory_sweep_api_queues(
-            fallback_review_cards(
-                grouped,
-                target_excerpts=target_excerpts or {},
-                why_now="",
-            )
-        ),
-        warnings=warnings or [],
-    )
 
 
 def _memory_sweep_status_for_action(action: str) -> str | None:
@@ -431,114 +398,22 @@ async def propose_memory_sweep(
 ) -> MemorySweepProposalResponse:
     """Return grouped Memory Sweep candidates without writing wiki files."""
     try:
-        cls = wiki.get_class(class_id)
+        wiki.get_class(class_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
-    candidates = ledger.list_candidates(
+    result = await propose_memory_sweep_review(
+        wiki=wiki,
+        ledger=ledger,
+        agents=agents,
         class_id=class_id,
-        subject=cls.subject,
-        statuses=OPEN_STATUSES,
-        include_global=True,
     )
-    grouped = build_sweep_proposals(candidates)
-    if not grouped:
-        return _memory_sweep_response_from_grouped(
-            class_id=class_id,
-            subject=cls.subject,
-            grouped=grouped,
-        )
-
-    target_excerpts = memory_sweep_target_excerpts(wiki, class_id, sweep_targets(grouped))
-    packets = build_sweep_packets(grouped, target_excerpts)
-    try:
-        all_cards = []
-        warnings: list[str] = []
-        for packet in packets:
-            packet_payload = sweep_packet_payloads([packet])
-            packet_excerpts = {packet.target: packet.current_memory_excerpt}
-            validation_error = ""
-            alignment = MemorySweepAlignmentOutput()
-            alignment_groups = []
-            for attempt in range(2):
-                alignment = await agents.align_memory_sweep_candidates(
-                    class_id,
-                    cls.subject,
-                    packet_payload,
-                    packet_excerpts,
-                    validation_error=validation_error,
-                )
-                try:
-                    alignment_groups = validate_alignment_output(packet, alignment)
-                    warnings.extend(alignment.warnings)
-                    break
-                except ValueError as exc:
-                    validation_error = str(exc)
-                    if attempt == 1:
-                        warnings.extend(alignment.warnings)
-                        warnings.append(
-                            f"Memory Sweep alignment unresolved for {packet.packet_id}: {validation_error}"
-                        )
-                        all_cards.extend(
-                            unresolved_cards_from_packet(
-                                packet,
-                                target_excerpts,
-                                validation_error,
-                            )
-                        )
-            if not alignment_groups:
-                continue
-            card_validation_error = ""
-            packet_cards = []
-            packet_warnings: list[str] = []
-            for attempt in range(2):
-                try:
-                    packet_out = await agents.propose_memory_sweep_cards(
-                        class_id,
-                        cls.subject,
-                        packet_payload,
-                        packet_excerpts,
-                        alignment_groups=alignment_groups_payload(alignment_groups),
-                        validation_error=card_validation_error,
-                    )
-                    packet_cards, packet_warnings = validate_cards_against_alignment(
-                        packet,
-                        packet_out,
-                        alignment_groups,
-                        target_excerpts,
-                    )
-                    all_cards.extend(packet_cards)
-                    warnings.extend(packet_warnings)
-                    break
-                except Exception as exc:
-                    card_validation_error = str(exc)
-                    if attempt == 1:
-                        warnings.append(
-                            "Memory Sweep card generation unresolved for "
-                            f"{packet.packet_id}: {card_validation_error}"
-                        )
-                        all_cards.extend(
-                            unresolved_cards_from_packet(
-                                packet,
-                                target_excerpts,
-                                card_validation_error,
-                            )
-                        )
-        queues = grouped_review_cards(all_cards)
-        return MemorySweepProposalResponse(
-            class_id=class_id,
-            subject=cls.subject,
-            queues=_memory_sweep_api_queues(queues),
-            warnings=warnings,
-        )
-    except Exception as e:
-        return _memory_sweep_response_from_grouped(
-            class_id=class_id,
-            subject=cls.subject,
-            grouped=grouped,
-            target_excerpts=target_excerpts,
-            warnings=[f"isolated Memory Sweep proposer unavailable: {e}"],
-        )
+    return MemorySweepProposalResponse(
+        class_id=result.class_id,
+        subject=result.subject,
+        queues=_memory_sweep_api_queues(result.cards_by_queue),
+        warnings=result.warnings,
+    )
 
 
 @router.post(

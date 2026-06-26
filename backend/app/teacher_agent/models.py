@@ -172,6 +172,22 @@ class MemorySweepAlignmentGroupOutput(BaseModel):
         ),
     )
     group_label: str = Field(default="", description="Short semantic label for the claim")
+    surface_labels: list[str] = Field(
+        default_factory=list,
+        description="Surface phrasings or labels used by the raw ledger rows in this group.",
+    )
+    shared_attributes: list[str] = Field(
+        default_factory=list,
+        description="Attributes that make the grouped rows one coherent durable claim.",
+    )
+    distinguishing_attributes: list[str] = Field(
+        default_factory=list,
+        description="Meaningful differences that remain after grouping; empty when none matter.",
+    )
+    merge_test: str = Field(
+        default="",
+        description="Short public test explaining why the rows can or cannot be one memory claim.",
+    )
     public_rationale: str = Field(
         default="",
         description="Short teacher/operator-reviewable rationale; no hidden reasoning.",
@@ -212,6 +228,10 @@ class MemorySweepCardOutput(BaseModel):
     status: str = "captured"
     relationship: str = ""
     group_label: str = ""
+    surface_labels: list[str] = Field(default_factory=list)
+    shared_attributes: list[str] = Field(default_factory=list)
+    distinguishing_attributes: list[str] = Field(default_factory=list)
+    merge_test: str = ""
     public_rationale: str = ""
     operation: str = Field(
         default="add",

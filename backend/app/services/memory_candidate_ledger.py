@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
 
 from app.teacher_agent.memory_targets import (
+    canonical_memory_target,
     is_global_teacher_target,
     is_supported_runtime_target,
     memory_channel_for_target,
@@ -339,12 +340,13 @@ def rows_from_runtime_candidates(
     ts = now or _utc_now()
     rows: list[MemoryCandidateRow] = []
     for candidate in candidates:
-        target = _field(candidate, "target").strip()
+        raw_target = _field(candidate, "target").strip()
         update = " ".join(_field(candidate, "candidate_update").split())
-        if not target or not update:
+        if not raw_target or not update:
             continue
-        if not is_supported_runtime_target(target):
+        if not is_supported_runtime_target(raw_target):
             continue
+        target = canonical_memory_target(raw_target)
         section = _field(candidate, "section") or "General"
         source = _field(candidate, "source") or "inferred_from_session"
         basis = _field(candidate, "basis") or "inferred"

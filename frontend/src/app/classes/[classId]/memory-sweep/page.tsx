@@ -15,25 +15,8 @@ import {
   type MemorySweepProposalResponse,
 } from "@/lib/api";
 
-const APPLY_TARGETS = new Set([
-  "user.md",
-  "teacher_profile.md",
-  "copilot.md",
-  "copilot_profile.md",
-  "class_state.md",
-  "planning_brief.md",
-  "taught_so_far.md",
-  "teaching_patterns.md",
-]);
-
 function canApply(candidate: MemorySweepCandidate): boolean {
-  const operation = candidate.operation ?? "add";
-  return (
-    (operation === "add" || operation === "adjust") &&
-    (APPLY_TARGETS.has(candidate.target) ||
-      (candidate.target.startsWith("wiki/subjects/") &&
-        candidate.target.endsWith(".md")))
-  );
+  return Boolean(candidate.can_apply);
 }
 
 function cardKey(candidate: MemorySweepCandidate): string {
@@ -276,7 +259,9 @@ export default function MemorySweepPage() {
                           {candidate.signal_count > 1 && (
                             <span>{candidate.signal_count} signals</span>
                           )}
-                          {!applicable && <span>review only</span>}
+                          {!applicable && (
+                            <span>{candidate.review_only_reason || "review only"}</span>
+                          )}
                           {decision && <span>selected: {decision.action}</span>}
                         </div>
                       </CardHeader>

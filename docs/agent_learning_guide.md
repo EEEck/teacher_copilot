@@ -339,6 +339,45 @@ The live MBB trace taught several concrete lessons:
   communication, including MBB/McKinsey-style framing when useful" is better
   than two separate profile bullets.
 
+The prompt-engineering follow-up was just as important as the two-pass refactor.
+The first tempting fix was to put the exact failing labels into the system
+prompt: "MBB, McKinsey, consulting-style, and executive communication are
+aliases." That made the trace pass, but it was too narrow. It taught the model a
+single regression case instead of the general operation we need.
+
+The cleaner fix was to make the model's abstraction observable:
+
+- `surface_labels`: the literal words that appeared in raw evidence.
+- `shared_attributes`: the behavior, preference, or learning pattern those
+  labels imply.
+- `distinguishing_attributes`: only real incompatible differences in behavior,
+  scope, or durability.
+- `merge_test`: a short statement of whether the evidence can become one
+  coherent memory claim.
+
+Then the system prompt used teacher/classroom examples instead of the regression
+labels: redox misconceptions expressed as OIL RIG, electron transfer, and
+oxidation-number changes; board-ready, copyable, and paste-ready task wording;
+concrete examples and visual models before formal rules. This is better prompt
+engineering because it trains the operation ("merge compatible surface labels
+into one durable claim") without hardcoding the answer to one test.
+
+The card-generation prompt then consumes those observable fields. It is not
+allowed to keep only one surface label when a validated group contains multiple
+compatible labels. It must write the underlying durable memory sentence from the
+shared attributes, preserve scope from distinguishing attributes, and use the
+merge test as a coherence check.
+
+The lesson for future agent work:
+
+> A good prompt example should teach the contract, not memorize the benchmark.
+
+Keep the MBB/executive case as a regression trace and deterministic test. Keep
+production prompts free of MBB-specific shortcuts, synonym dictionaries, or
+backend semantic aliases. If another semantic-merge bug appears, add a
+domain-neutral prompt example and contract field only if it improves the
+general abstraction.
+
 The broader architecture lesson is:
 
 > Use the model for semantic grouping, but force the grouping to be observable,

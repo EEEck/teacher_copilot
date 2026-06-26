@@ -16,7 +16,6 @@ from app.teacher_agent.prompts import (
     INGEST_SYSTEM,
     MEMORY_SWEEP_ALIGNMENT_SYSTEM,
     MEMORY_SWEEP_CARD_SYSTEM,
-    MEMORY_SWEEP_PROPOSAL_SYSTEM,
     MEMORY_SKILL,
     PLAN_CHAT_SYSTEM,
     PLAN_SKILL,
@@ -124,8 +123,8 @@ def test_durable_memory_candidate_policy_is_reusable_and_routed():
     policy = DURABLE_MEMORY_CANDIDATE_POLICY.lower()
     assert "review-only" in policy
     assert "never direct wiki writes" in policy
-    assert "target=user.md" in policy
-    assert "target=copilot.md" in policy
+    assert "target=teacher_profile.md" in policy
+    assert "target=copilot_profile.md" in policy
     assert "teaching_patterns.md" in policy
     assert "wiki/subjects/{subject}.md" in policy
     assert "one-off instructions" in policy
@@ -167,18 +166,57 @@ def test_memory_sweep_prompt_requires_claim_level_consolidation():
 
     assert "assign every input candidate_id to exactly one alignment group" in alignment_prompt
     assert "underlying durable claim" in alignment_prompt
-    assert "mbb style" in alignment_prompt
-    assert "executive-style communication" in alignment_prompt
-    assert "executive_structured_communication" in alignment_prompt
+    assert "oil rig" in alignment_prompt
+    assert "board-ready" in alignment_prompt
+    assert "story-based hook" in alignment_prompt
+    assert "teacher_profile.md" in alignment_prompt
+    assert "copilot_profile.md" in alignment_prompt
+    assert "mbb" not in alignment_prompt
+    assert "mckinsey" not in alignment_prompt
+    assert "consulting-style" not in alignment_prompt
+    assert "executive-style" not in alignment_prompt
+    assert "user.md" not in alignment_prompt
+    assert "copilot.md" not in alignment_prompt
     assert "decision=\"adjust_existing\"" in alignment_prompt
     assert "decision=\"already_covered\"" in alignment_prompt
+    assert "different labels" in alignment_prompt
+    assert "without contradiction" in alignment_prompt
+    assert "exact existing bullet" in alignment_prompt
+    assert "do not choose broadens_existing_memory" in alignment_prompt
+    assert "named-label rule" in alignment_prompt
+    assert "merge rule" in alignment_prompt
+    assert "surface_labels" in alignment_prompt
+    assert "shared_attributes" in alignment_prompt
+    assert "distinguishing_attributes" in alignment_prompt
+    assert "merge_test" in alignment_prompt
+    assert "actual opposing attributes" in alignment_prompt
+    assert "<teacher_agent_security_policy>" in alignment_prompt
+    assert "{security_policy}" not in alignment_prompt
     assert "never omit a candidate" in alignment_prompt
     assert "review cards" in card_prompt
     assert "validated alignment groups" in card_prompt
     assert "operation=\"adjust\"" in card_prompt
     assert "replaces_content" in card_prompt
     assert "candidate_ids must exactly match" in card_prompt
-    assert MEMORY_SWEEP_PROPOSAL_SYSTEM == MEMORY_SWEEP_CARD_SYSTEM
+    assert "stand alone" in card_prompt
+    assert "not only one label" in card_prompt
+    assert "do not erase important named surface labels" in card_prompt
+    assert "shared_attributes" in card_prompt
+    assert "merge_test" in card_prompt
+    assert "redox_oxidation_reduction_concept_confusion" in card_prompt
+    assert "copyable_classroom_task_wording" in card_prompt
+    assert "redox_intro_sequence_conflict" in card_prompt
+    assert "new_semantic_claim" in card_prompt
+    assert "<teacher_agent_security_policy>" in card_prompt
+    assert "{security_policy}" not in card_prompt
+    assert "teacher_profile.md" in card_prompt
+    assert "copilot_profile.md" in card_prompt
+    assert "mbb" not in card_prompt
+    assert "mckinsey" not in card_prompt
+    assert "consulting-style" not in card_prompt
+    assert "executive-style" not in card_prompt
+    assert "user.md" not in card_prompt
+    assert "copilot.md" not in card_prompt
 
 
 def test_plan_phase_finalize_uses_semantic_teacher_intent_not_keyword_triggers():

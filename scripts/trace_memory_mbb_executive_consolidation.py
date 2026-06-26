@@ -33,42 +33,11 @@ TRACE_PROFILE_BULLETS = {
 }
 
 
-def _create_table(con: sqlite3.Connection) -> None:
-    con.execute(
-        """
-        CREATE TABLE IF NOT EXISTS memory_candidates (
-          id TEXT PRIMARY KEY,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          class_id TEXT,
-          subject TEXT,
-          workflow TEXT NOT NULL,
-          session_id TEXT,
-          turn_index INTEGER NOT NULL DEFAULT 0,
-          channel TEXT NOT NULL,
-          target TEXT NOT NULL,
-          section TEXT NOT NULL,
-          candidate_update TEXT NOT NULL,
-          evidence_summary TEXT NOT NULL,
-          evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-          source TEXT NOT NULL,
-          basis TEXT NOT NULL,
-          confidence TEXT NOT NULL,
-          cluster_key TEXT,
-          status TEXT NOT NULL,
-          promoted_at TEXT,
-          review_batch_id TEXT,
-          rejection_reason TEXT
-        )
-        """
-    )
-
-
 def _seed_rows(class_id: str, *, batch_id: str) -> list[str]:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH)
     try:
-        _create_table(con)
+        h.ensure_memory_candidates_table(con)
         rows = [
             (
                 f"{batch_id}_mbb_comm_1",
@@ -79,7 +48,7 @@ def _seed_rows(class_id: str, *, batch_id: str) -> list[str]:
                 f"{batch_id}_sess_mbb_1",
                 2,
                 "teacher_behavior",
-                "user.md",
+                "teacher_profile.md",
                 "Communication",
                 "Teacher prefers MBB-style communication as the standard for lesson planning.",
                 "In planning chat 1, the teacher asked for MBB-style communication as the default.",
@@ -99,7 +68,7 @@ def _seed_rows(class_id: str, *, batch_id: str) -> list[str]:
                 f"{batch_id}_sess_mbb_2",
                 2,
                 "teacher_behavior",
-                "user.md",
+                "teacher_profile.md",
                 "Communication",
                 "Teacher again requested MBB-style concise communication for planning outputs.",
                 "In planning chat 2, the teacher repeated the MBB-style preference for concise plans.",
@@ -119,7 +88,7 @@ def _seed_rows(class_id: str, *, batch_id: str) -> list[str]:
                 f"{batch_id}_sess_exec_1",
                 2,
                 "teacher_behavior",
-                "user.md",
+                "teacher_profile.md",
                 "Communication",
                 "Teacher wants executive-style communication with concise framing and clear recommendations.",
                 "In planning chat 3, the teacher described the desired style as executive communication.",
@@ -164,7 +133,7 @@ def _isolated_open_scope(class_id: str, candidate_ids: list[str], *, enabled: bo
     con = sqlite3.connect(DB_PATH)
     hidden_rows: list[tuple[str, str, str]] = []
     try:
-        _create_table(con)
+        h.ensure_memory_candidates_table(con)
         hidden_rows = con.execute(
             f"""
             SELECT id, status, updated_at
@@ -207,6 +176,10 @@ def _content_text(card: dict[str, Any]) -> str:
         card.get("why_now"),
     ]
     return "\n".join(part for part in parts if isinstance(part, str)).lower()
+
+
+def _card_content_text(card: dict[str, Any]) -> str:
+    return str(card.get("content") or "").lower()
 
 
 def _section_text_for_current_memory(mode: str) -> str:
@@ -272,13 +245,14 @@ def _build_summary(
     full_merge_cards = [
         card
         for card in matching_cards
-        if _represented_ids(card) >= seeded_id_set and card.get("target") == "user.md"
+        if _represented_ids(card) >= seeded_id_set
+        and card.get("target") == "teacher_profile.md"
     ]
     semantic_merge_cards = [
         card
         for card in full_merge_cards
-        if "executive" in _content_text(card)
-        and ("mbb" in _content_text(card) or "mckinsey" in _content_text(card))
+        if "executive" in _card_content_text(card)
+        and ("mbb" in _card_content_text(card) or "mckinsey" in _card_content_text(card))
     ]
     operation_match_cards = [
         card
@@ -301,7 +275,7 @@ def _build_summary(
                         {
                             "card_id": card.get("card_id") or card.get("candidate_id"),
                             "action": action,
-                            "target": "user.md",
+                    "target": card.get("target") or "teacher_profile.md",
                             "section": card.get("section") or "Communication",
                             "content": card.get("content", ""),
                             "operation": card.get("operation") or "add",
@@ -313,7 +287,7 @@ def _build_summary(
             )
         status_rows = h.ledger_rows_by_ids(sorted(_represented_ids(card)))
 
-    passed_sweep = bool(operation_match_cards)
+    passed_sweep = bool(operation_match_cards) and bool(semantic_merge_cards)
     passed_apply = not apply or bool(
         apply_result
         and (
@@ -365,9 +339,9 @@ def parse_args() -> argparse.Namespace:
         "--current-memory",
         choices=["none", "narrow-mbb", "generalized"],
         default="none",
-        help="Temporary current user.md state used to test add/adjust/already_covered.",
+        help="Temporary current teacher_profile.md state used to test add/adjust/already_covered.",
     )
-    parser.add_argument("--apply", action="store_true", help="Apply the first full merged user.md card.")
+    parser.add_argument("--apply", action="store_true", help="Apply the first full merged teacher_profile.md card.")
     return parser.parse_args()
 
 

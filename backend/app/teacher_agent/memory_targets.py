@@ -14,8 +14,8 @@ COMPACT_TARGETS = {
 }
 CANONICAL_REVIEW_TARGET = "canonical_wiki"
 TARGET_ALIASES = {
-    "teacher_profile.md": "user.md",
-    "copilot_profile.md": "copilot.md",
+    "user.md": "teacher_profile.md",
+    "copilot.md": "copilot_profile.md",
 }
 
 
@@ -40,11 +40,11 @@ def is_global_teacher_target(target: str) -> bool:
 
 
 def compact_key_for_target(target: str) -> str | None:
-    return COMPACT_TARGETS.get(normalize_memory_target(target))
+    return COMPACT_TARGETS.get(canonical_memory_target(target))
 
 
 def is_supported_runtime_target(target: str) -> bool:
-    normalized = normalize_memory_target(target)
+    normalized = canonical_memory_target(target)
     return (
         normalized in TEACHER_PROFILE_TARGETS
         or normalized in COPILOT_PROFILE_TARGETS
@@ -55,7 +55,7 @@ def is_supported_runtime_target(target: str) -> bool:
 
 
 def memory_channel_for_target(target: str) -> str:
-    normalized = normalize_memory_target(target)
+    normalized = canonical_memory_target(target)
     if normalized in TEACHER_PROFILE_TARGETS or normalized in COPILOT_PROFILE_TARGETS:
         return "teacher_behavior"
     if normalized == "teaching_patterns.md":

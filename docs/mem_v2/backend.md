@@ -80,18 +80,32 @@ map to `promote`; the other operations map directly.
 - One candidate row may support multiple review cards when the target scopes
   differ, but each card writes to exactly one target.
 
-## Regression Trace
+## Prompt Contract
 
 The Memory Sweep prompts state that ledger rows are raw evidence for durable
-claims, not one card per row. Alignment examples explicitly cover
-MBB/McKinsey/executive-style aliases and require comparison against current
-target memory before choosing `merge`, `adjust_existing`, `already_covered`,
-`needs_decision`, or `reject_low_signal`. Card generation then maps those
-decisions to `add`, `adjust`, `already_covered`, `needs_decision`, or
-`reject_low_signal`.
+claims, not one card per row. The alignment pass must make semantic grouping
+inspectable with `surface_labels`, `shared_attributes`,
+`distinguishing_attributes`, and `merge_test`. Those fields are not backend
+synonym rules; they are model-produced evidence of why rows can or cannot become
+one durable claim.
 
-`scripts/trace_memory_mbb_executive_consolidation.py` remains the live check:
-the desired behavior is a single polished `user.md / Communication` card. With
-no current memory it should be `add`; with narrow MBB memory plus executive
-evidence it should be `adjust`; with generalized executive/MBB memory it should
-be `already_covered`.
+Prompt examples should teach the general operation, not memorize one regression.
+Current examples use teacher/classroom cases: redox misconceptions expressed
+through different labels, board-ready/copyable artifact wording, concrete
+examples before formal rules, scoped lesson exceptions, and true sequencing
+conflicts. The active system prompts must not contain MBB/McKinsey/executive
+communication examples or hardcoded aliases. The card pass consumes the
+validated alignment fields and writes one generalized durable memory sentence
+from the shared attributes.
+
+Card generation then maps alignment decisions to `add`, `adjust`,
+`already_covered`, `needs_decision`, or `reject_low_signal`.
+
+## Regression Trace
+
+`scripts/trace_memory_mbb_executive_consolidation.py` remains the live check for
+the original semantic-merge failure, but it is intentionally outside the
+production prompt. The desired behavior is a single polished
+`teacher_profile.md / Communication` card. With no current memory it should be
+`add`; with narrow MBB memory plus executive evidence it should be `adjust`;
+with generalized executive/MBB memory it should be `already_covered`.

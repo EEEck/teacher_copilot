@@ -225,6 +225,8 @@ export type MemorySweepCandidate = {
   why_now: string;
   current_memory_excerpt: string;
   signal_count: number;
+  can_apply: boolean;
+  review_only_reason: string;
 };
 export type MemorySweepProposalResponse = {
   class_id: string;

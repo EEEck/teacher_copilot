@@ -19,7 +19,6 @@ from app.services.memory_sweep import (
     validate_alignment_output,
     validate_cards_against_alignment,
     memory_sweep_target_excerpts,
-    sanitize_sweep_output,
 )
 from app.services.ingest_service import IngestService
 from app.services.plan_service import PlanService
@@ -407,6 +406,14 @@ def test_memory_sweep_packets_by_target_scope(tmp_path, wiki: WikiStore):
 def test_memory_sweep_packets_enforce_candidate_cap(tmp_path, wiki: WikiStore):
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()
+    profile_path = wiki.root / "wiki" / "teacher_profile.md"
+    profile = wiki.read_text(profile_path)
+    profile = "\n".join(
+        line
+        for line in profile.splitlines()
+        if "executive-style communication" not in line and "MBB" not in line
+    )
+    wiki.write_text(profile_path, profile)
     ledger.add_many(
         [
             MemoryCandidateRow(
@@ -473,12 +480,116 @@ def test_memory_sweep_alignment_validation_requires_exact_coverage(tmp_path, wik
                 ledger_candidate_ids=["align_mbb_1"],
                 relationship="new_semantic_claim",
                 decision="merge",
+                surface_labels=["recommendation first", "answer-first"],
+                shared_attributes=["concise", "recommendation-oriented"],
+                distinguishing_attributes=[],
+                merge_test="Can be written as one coherent preference.",
             )
         ]
     )
 
     with pytest.raises(ValueError, match="invalid alignment coverage"):
         validate_alignment_output(packet, output)
+
+
+def test_memory_sweep_alignment_validation_has_no_backend_synonym_split_guard(
+    tmp_path,
+    wiki: WikiStore,
+):
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    ledger.add_many(
+        [
+            _teacher_behavior_row(
+                "split_mbb_1",
+                update="Use MBB-style communication for lesson plans.",
+                evidence="Teacher asked for MBB style.",
+                created_at="2026-06-22T09:00:00Z",
+            ),
+            _teacher_behavior_row(
+                "split_exec_1",
+                update="Use executive-style communication with concise framing.",
+                evidence="Teacher asked for executive style.",
+                created_at="2026-06-22T09:05:00Z",
+            ),
+        ]
+    )
+    grouped = build_sweep_proposals(ledger.list_candidates(class_id=CLASS_ID, subject="chemie"))
+    packet = build_sweep_packets(grouped, {"user.md": ""})[0]
+    output = MemorySweepAlignmentOutput(
+        alignment_groups=[
+            MemorySweepAlignmentGroupOutput(
+                group_id="mbb_only",
+                target="user.md",
+                section="Communication",
+                ledger_candidate_ids=["split_mbb_1"],
+                relationship="new_semantic_claim",
+                decision="merge",
+            ),
+            MemorySweepAlignmentGroupOutput(
+                group_id="exec_only",
+                target="user.md",
+                section="Communication",
+                ledger_candidate_ids=["split_exec_1"],
+                relationship="new_semantic_claim",
+                decision="merge",
+            ),
+        ]
+    )
+
+    groups = validate_alignment_output(packet, output)
+
+    assert [group.group_id for group in groups] == ["mbb_only", "exec_only"]
+    assert groups[0].surface_labels == []
+
+
+def test_memory_sweep_alignment_validation_has_no_backend_synonym_conflict_guard(
+    tmp_path,
+    wiki: WikiStore,
+):
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    ledger.add_many(
+        [
+            _teacher_behavior_row(
+                "conflict_mbb_1",
+                update="Use MBB-style communication for lesson plans.",
+                evidence="Teacher asked for MBB style.",
+                created_at="2026-06-22T09:00:00Z",
+            ),
+            _teacher_behavior_row(
+                "conflict_exec_1",
+                update="Use executive-style communication with concise framing.",
+                evidence="Teacher asked for executive style.",
+                created_at="2026-06-22T09:05:00Z",
+            ),
+        ]
+    )
+    grouped = build_sweep_proposals(ledger.list_candidates(class_id=CLASS_ID, subject="chemie"))
+    packet = build_sweep_packets(
+        grouped,
+        {"user.md": "## Communication\n- Teacher prefers MBB-style framing.\n"},
+    )[0]
+    output = MemorySweepAlignmentOutput(
+        alignment_groups=[
+            MemorySweepAlignmentGroupOutput(
+                group_id="mbb_exec_conflict",
+                target="user.md",
+                section="Communication",
+                ledger_candidate_ids=["conflict_mbb_1", "conflict_exec_1"],
+                relationship="possible_conflict",
+                decision="needs_decision",
+                group_label="MBB and executive communication",
+                public_rationale="Teacher has expressed dual preferences.",
+            )
+        ]
+    )
+
+    groups = validate_alignment_output(packet, output)
+
+    assert groups[0].relationship == "possible_conflict"
+    assert groups[0].decision == "needs_decision"
+    assert groups[0].merge_test == ""
 
 
 def test_memory_sweep_alignment_validation_rejects_duplicates_unknowns_and_bad_labels(
@@ -559,7 +670,7 @@ def test_memory_sweep_card_validation_requires_group_match(tmp_path, wiki: WikiS
         ]
     )
     grouped = build_sweep_proposals(ledger.list_candidates(class_id=CLASS_ID, subject="chemie"))
-    target_excerpts = memory_sweep_target_excerpts(wiki, CLASS_ID, {"user.md"})
+    target_excerpts = {"user.md": ""}
     packet = build_sweep_packets(grouped, target_excerpts)[0]
     alignment = validate_alignment_output(
         packet,
@@ -594,7 +705,7 @@ def test_memory_sweep_card_validation_requires_group_match(tmp_path, wiki: WikiS
         validate_cards_against_alignment(packet, bad_cards, alignment, target_excerpts)
 
 
-def test_memory_sweep_sanitizer_allows_one_row_to_support_two_target_cards(
+def test_memory_sweep_alignment_rejects_cross_target_reassignment(
     tmp_path,
     wiki: WikiStore,
 ):
@@ -626,60 +737,37 @@ def test_memory_sweep_sanitizer_allows_one_row_to_support_two_target_cards(
     )
     rows = ledger.list_candidates(class_id=CLASS_ID, subject="chemie")
     grouped = build_sweep_proposals(rows)
-    target_excerpts = memory_sweep_target_excerpts(
-        wiki,
-        CLASS_ID,
-        {"user.md", "wiki/subjects/chemie.md"},
-    )
-    output = MemorySweepProposalOutput(
-        cards=[
-            MemorySweepCardOutput(
-                candidate_id="cross_scope_fckw_mbb",
-                candidate_ids=["cross_scope_fckw_mbb"],
-                review_queue="Teacher/Copilot Preferences",
-                channel="teacher_behavior",
-                target="user.md",
-                section="Communication",
-                content="Teacher prefers concise executive-style lesson summaries.",
-                evidence_summary="Teacher explicitly requested MBB style.",
-                confidence="high",
-                basis="explicit",
-                status_recommendation="promote",
-                why_now="Explicit durable communication preference.",
-            ),
-            MemorySweepCardOutput(
-                candidate_id="cross_scope_fckw_mbb",
-                candidate_ids=["cross_scope_fckw_mbb"],
-                review_queue="Subject Concepts",
-                channel="subject_concept",
+    target_excerpts = {"user.md": ""}
+    packets = build_sweep_packets(grouped, target_excerpts)
+    packet = packets[0]
+    output = MemorySweepAlignmentOutput(
+        alignment_groups=[
+            MemorySweepAlignmentGroupOutput(
+                group_id="bad_cross_target",
                 target="wiki/subjects/chemie.md",
-                section="FCKW lesson patterns",
-                content=(
-                    "For FCKW lessons, connect the core concept to an "
-                    "experiment before exam phrasing."
-                ),
-                evidence_summary="Same evidence contains a chemistry lesson pattern.",
-                confidence="medium",
-                basis="explicit",
-                status_recommendation="needs_decision",
-                why_now="Potential subject-wide teaching method needs review.",
-            ),
-        ],
-        warnings=[],
+                section="Communication",
+                ledger_candidate_ids=["cross_scope_fckw_mbb"],
+                relationship="new_semantic_claim",
+                decision="merge",
+            )
+        ]
     )
 
-    queues, warnings = sanitize_sweep_output(grouped, output, target_excerpts)
-
-    assert warnings == []
-    cards = [card for proposals in queues.values() for card in proposals]
-    assert len(cards) == 2
-    assert {card.target for card in cards} == {"user.md", "wiki/subjects/chemie.md"}
-    assert all(card.candidate_ids == ["cross_scope_fckw_mbb"] for card in cards)
+    with pytest.raises(ValueError, match="changed packet target"):
+        validate_alignment_output(packet, output)
 
 
-def test_memory_sweep_sanitizer_preserves_adjust_operation(tmp_path, wiki: WikiStore):
+def test_memory_sweep_card_validation_preserves_adjust_operation(tmp_path, wiki: WikiStore):
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()
+    profile_path = wiki.root / "wiki" / "teacher_profile.md"
+    profile = wiki.read_text(profile_path)
+    profile = "\n".join(
+        line
+        for line in profile.splitlines()
+        if "executive-style communication" not in line and "MBB" not in line
+    )
+    wiki.write_text(profile_path, profile)
     ledger.add_many(
         [
             _teacher_behavior_row(
@@ -698,10 +786,27 @@ def test_memory_sweep_sanitizer_preserves_adjust_operation(tmp_path, wiki: WikiS
     )
     grouped = build_sweep_proposals(ledger.list_candidates(class_id=CLASS_ID, subject="chemie"))
     target_excerpts = {"user.md": "## Communication\n- Teacher prefers MBB-style framing.\n"}
+    packet = build_sweep_packets(grouped, target_excerpts)[0]
+    alignment = validate_alignment_output(
+        packet,
+        MemorySweepAlignmentOutput(
+            alignment_groups=[
+                MemorySweepAlignmentGroupOutput(
+                    group_id="adjust_mbb_exec",
+                    target="user.md",
+                    section="Communication",
+                    ledger_candidate_ids=["adjust_mbb_1", "adjust_exec_1"],
+                    relationship="broadens_existing_memory",
+                    decision="adjust_existing",
+                )
+            ]
+        ),
+    )
     output = MemorySweepProposalOutput(
         cards=[
             MemorySweepCardOutput(
                 candidate_id="adjust_mbb_1",
+                source_group_id="adjust_mbb_exec",
                 candidate_ids=["adjust_mbb_1", "adjust_exec_1"],
                 review_queue="Teacher/Copilot Preferences",
                 channel="teacher_behavior",
@@ -722,17 +827,20 @@ def test_memory_sweep_sanitizer_preserves_adjust_operation(tmp_path, wiki: WikiS
         ]
     )
 
-    queues, warnings = sanitize_sweep_output(grouped, output, target_excerpts)
+    cards, warnings = validate_cards_against_alignment(
+        packet, output, alignment, target_excerpts
+    )
 
     assert warnings == []
-    card = queues["Teacher/Copilot Preferences"][0]
+    card = cards[0]
     assert card.operation == "adjust"
     assert card.status_recommendation == "promote"
     assert card.replaces_content == "Teacher prefers MBB-style framing."
     assert set(card.candidate_ids) == {"adjust_mbb_1", "adjust_exec_1"}
+    assert card.can_apply is True
 
 
-def test_memory_sweep_sanitizer_downgrades_invalid_operation_and_adjust_missing_replace(
+def test_memory_sweep_card_validation_rejects_invalid_operation_and_adjust_missing_replace(
     tmp_path,
 ):
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
@@ -746,33 +854,64 @@ def test_memory_sweep_sanitizer_downgrades_invalid_operation_and_adjust_missing_
         )
     )
     grouped = build_sweep_proposals(ledger.list_candidates(class_id=CLASS_ID, subject="chemie"))
+    target_excerpts = {"user.md": "## Communication\n- Teacher prefers MBB-style framing.\n"}
+    packet = build_sweep_packets(grouped, target_excerpts)[0]
+    alignment = validate_alignment_output(
+        packet,
+        MemorySweepAlignmentOutput(
+            alignment_groups=[
+                MemorySweepAlignmentGroupOutput(
+                    group_id="bad_operation_group",
+                    target="user.md",
+                    section="Communication",
+                    ledger_candidate_ids=["bad_operation_1"],
+                    relationship="new_semantic_claim",
+                    decision="merge",
+                )
+            ]
+        ),
+    )
 
     class BadOperationCard:
         candidate_id = "bad_operation_1"
+        source_group_id = "bad_operation_group"
         candidate_ids = ["bad_operation_1"]
         target = "user.md"
         section = "Communication"
         content = "Teacher prefers concise executive-style communication."
         operation = "rewrite_file"
         status_recommendation = "promote"
-        why_now = "Invalid operation should be downgraded."
+        why_now = "Invalid operation should fail validation."
         model_fields_set = {"operation"}
 
-    queues, warnings = sanitize_sweep_output(
-        grouped,
-        type("Output", (), {"cards": [BadOperationCard()], "warnings": []})(),
-        {"user.md": ""},
+    with pytest.raises(ValueError, match="operation needs_decision does not match"):
+        validate_cards_against_alignment(
+            packet,
+            type("Output", (), {"cards": [BadOperationCard()], "warnings": []})(),
+            alignment,
+            target_excerpts,
+        )
+
+    adjust_alignment = validate_alignment_output(
+        packet,
+        MemorySweepAlignmentOutput(
+            alignment_groups=[
+                MemorySweepAlignmentGroupOutput(
+                    group_id="missing_replace_group",
+                    target="user.md",
+                    section="Communication",
+                    ledger_candidate_ids=["bad_operation_1"],
+                    relationship="broadens_existing_memory",
+                    decision="adjust_existing",
+                )
+            ]
+        ),
     )
-
-    assert any("unsupported Memory Sweep operation" in warning for warning in warnings)
-    card = queues["Teacher/Copilot Preferences"][0]
-    assert card.operation == "needs_decision"
-    assert card.status_recommendation == "needs_decision"
-
     output = MemorySweepProposalOutput(
         cards=[
             MemorySweepCardOutput(
                 candidate_id="bad_operation_1",
+                source_group_id="missing_replace_group",
                 candidate_ids=["bad_operation_1"],
                 review_queue="Teacher/Copilot Preferences",
                 channel="teacher_behavior",
@@ -785,12 +924,9 @@ def test_memory_sweep_sanitizer_downgrades_invalid_operation_and_adjust_missing_
             )
         ]
     )
-    queues, warnings = sanitize_sweep_output(grouped, output, {"user.md": ""})
 
-    assert any("adjust card without replaces_content" in warning for warning in warnings)
-    card = queues["Teacher/Copilot Preferences"][0]
-    assert card.operation == "needs_decision"
-    assert card.replaces_content == ""
+    with pytest.raises(ValueError, match="adjust missing replaces_content"):
+        validate_cards_against_alignment(packet, output, adjust_alignment, target_excerpts)
 
 
 def test_memory_candidate_ledger_rejects_invalid_status(tmp_path):
@@ -1090,9 +1226,9 @@ def test_memory_sweep_44_examples_route_and_apply_to_expected_files(
     assert by_id["doc44_subject_redox_sequence"].review_queue == "Subject Concepts"
     assert by_id["doc44_subject_redox_sequence"].target == "wiki/subjects/chemie.md"
     assert by_id["doc44_teacher_mbb"].review_queue == "Teacher/Copilot Preferences"
-    assert by_id["doc44_teacher_mbb"].target == "user.md"
+    assert by_id["doc44_teacher_mbb"].target == "teacher_profile.md"
     assert by_id["doc44_friday_discovery"].review_queue == "Teacher/Copilot Preferences"
-    assert by_id["doc44_friday_discovery"].target == "copilot.md"
+    assert by_id["doc44_friday_discovery"].target == "copilot_profile.md"
 
     before_lesson = wiki.read_wiki_page(
         f"wiki/classes/{CLASS_ID}/lessons/2026-05-29/lesson_results.md"
@@ -1161,7 +1297,7 @@ def test_memory_sweep_api_proposes_and_updates_candidate_status(client: TestClie
     prefs = queues["Teacher/Copilot Preferences"]
     assert len(prefs) == 1
     candidate = prefs[0]
-    assert candidate["target"] == "copilot.md"
+    assert candidate["target"] == "copilot_profile.md"
     assert candidate["channel"] == "teacher_behavior"
     assert candidate["why_now"] == "Stub isolated sweep review."
     assert isinstance(candidate["current_memory_excerpt"], str)
@@ -1400,14 +1536,14 @@ def test_memory_sweep_api_merges_mbb_and_executive_communication(
                 item
                 for items in grouped_candidates.values()
                 for item in items
-                if item["target"] == "user.md"
+                if item["target"] == "teacher_profile.md"
             ]
             ids = [item["candidate_id"] for item in rows]
             return MemorySweepAlignmentOutput(
                 alignment_groups=[
                     MemorySweepAlignmentGroupOutput(
                         group_id="executive_structured_communication",
-                        target="user.md",
+                            target="teacher_profile.md",
                         section="Communication",
                         ledger_candidate_ids=ids,
                         relationship="new_semantic_claim",
@@ -1431,7 +1567,7 @@ def test_memory_sweep_api_merges_mbb_and_executive_communication(
                 item
                 for items in grouped_candidates.values()
                 for item in items
-                if item["target"] == "user.md"
+                if item["target"] == "teacher_profile.md"
             ]
             ids = [item["candidate_id"] for item in rows]
             first = rows[0]
@@ -1444,7 +1580,7 @@ def test_memory_sweep_api_merges_mbb_and_executive_communication(
                         signal_count=len(ids),
                         review_queue=first["review_queue"],
                         channel=first["channel"],
-                        target="user.md",
+                            target="teacher_profile.md",
                         section="Communication",
                         content=(
                             "Teacher prefers concise executive-style communication, "
@@ -1467,6 +1603,14 @@ def test_memory_sweep_api_merges_mbb_and_executive_communication(
 
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()
+    profile_path = wiki.root / "wiki" / "teacher_profile.md"
+    profile = wiki.read_text(profile_path)
+    profile = "\n".join(
+        line
+        for line in profile.splitlines()
+        if "executive-style communication" not in line and "MBB" not in line
+    )
+    wiki.write_text(profile_path, profile)
     ledger.add_many(
         [
             _teacher_behavior_row(
@@ -1504,7 +1648,7 @@ def test_memory_sweep_api_merges_mbb_and_executive_communication(
     cards = res.json()["queues"]["Teacher/Copilot Preferences"]
     assert len(cards) == 1
     card = cards[0]
-    assert card["target"] == "user.md"
+    assert card["target"] == "teacher_profile.md"
     assert card["section"] == "Communication"
     assert card["operation"] == "add"
     assert card["status_recommendation"] == "promote"
@@ -1543,14 +1687,14 @@ def test_memory_sweep_api_repeated_mbb_preamble_is_already_covered(
                 item
                 for items in grouped_candidates.values()
                 for item in items
-                if item["target"] == "user.md"
+                if item["target"] == "teacher_profile.md"
             ]
             ids = [item["candidate_id"] for item in rows]
             return MemorySweepAlignmentOutput(
                 alignment_groups=[
                     MemorySweepAlignmentGroupOutput(
                         group_id="covered_executive_structured_communication",
-                        target="user.md",
+                            target="teacher_profile.md",
                         section="Communication",
                         ledger_candidate_ids=ids,
                         relationship="already_covered",
@@ -1570,12 +1714,12 @@ def test_memory_sweep_api_repeated_mbb_preamble_is_already_covered(
             alignment_groups=None,
             validation_error: str = "",
         ):
-            assert "executive-style communication" in target_excerpts["user.md"]
+            assert "executive-style communication" in target_excerpts["teacher_profile.md"]
             rows = [
                 item
                 for items in grouped_candidates.values()
                 for item in items
-                if item["target"] == "user.md"
+                if item["target"] == "teacher_profile.md"
             ]
             ids = [item["candidate_id"] for item in rows]
             first = rows[0]
@@ -1588,7 +1732,7 @@ def test_memory_sweep_api_repeated_mbb_preamble_is_already_covered(
                         signal_count=len(ids),
                         review_queue=first["review_queue"],
                         channel=first["channel"],
-                        target="user.md",
+                            target="teacher_profile.md",
                         section="Communication",
                         content=(
                             "Teacher prefers concise executive-style communication, "
@@ -1602,7 +1746,7 @@ def test_memory_sweep_api_repeated_mbb_preamble_is_already_covered(
                         status="captured",
                         operation="already_covered",
                         status_recommendation="already_covered",
-                        why_now="Current user.md already contains this communication preference.",
+                        why_now="Current teacher_profile.md already contains this communication preference.",
                     )
                 ],
                 warnings=[],
@@ -1936,7 +2080,7 @@ async def test_plan_chat_persists_runtime_candidates_to_sqlite(tmp_path, wiki: W
     assert row.session_id == session.session_id
     assert row.class_id == CLASS_ID
     assert row.channel == "teacher_behavior"
-    assert row.target == "copilot.md"
+    assert row.target == "copilot_profile.md"
     assert "Draft early" in row.candidate_update
 
 

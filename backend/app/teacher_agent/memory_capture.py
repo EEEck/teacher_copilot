@@ -13,17 +13,17 @@ from typing import Any, Iterable
 from pydantic import BaseModel, Field
 
 from app.context_limits import get_context_limits
-from app.teacher_agent.memory_targets import is_supported_runtime_target
+from app.teacher_agent.memory_targets import canonical_memory_target, is_supported_runtime_target
 
 MEMORY_TARGETS = (
     "class_state.md",
     "planning_brief.md",
     "taught_so_far.md",
     "teaching_patterns.md",
-    "copilot.md",
     "copilot_profile.md",
-    "user.md",
     "teacher_profile.md",
+    "copilot.md",
+    "user.md",
     "canonical_wiki",
 )
 MEMORY_SOURCES = (
@@ -41,7 +41,7 @@ BASIS = ("explicit", "inferred")
 class MemoryCandidate(BaseModel):
     """A possible durable-memory update, tracked but never written during chat."""
 
-    target: str = "copilot.md"
+    target: str = "copilot_profile.md"
     section: str = "General"
     candidate_update: str = ""
     evidence: str = ""
@@ -97,7 +97,7 @@ def clean_text(value: str | None) -> str:
 
 def candidate_key(candidate: MemoryCandidate) -> tuple[str, str]:
     return (
-        candidate.target.strip().lower(),
+        canonical_memory_target(candidate.target),
         " ".join(candidate.candidate_update.lower().split()),
     )
 
@@ -175,7 +175,7 @@ def teacher_preference_candidate(
     else:
         evidence = "Teacher preference was captured in typed workflow runtime state."
     return MemoryCandidate(
-        target="user.md",
+        target="teacher_profile.md",
         section="Communication",
         candidate_update=clean_text(preference),
         evidence=evidence[:1000],

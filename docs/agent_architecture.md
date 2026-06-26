@@ -172,7 +172,7 @@ The product uses tiered class memory.
    immediately without waiting for the weekly sweep.
    Update Memory also surfaces accumulated candidates after the teacher-approved
    lesson-memory commit, so subtle chat signals such as repeated communication
-   preferences can be reviewed for `user.md`, `copilot.md`,
+   preferences can be reviewed for `teacher_profile.md`, `copilot_profile.md`,
    `teaching_patterns.md`, `class_state.md`, `planning_brief.md`, or
    `taught_so_far.md`. `canonical_wiki` remains review-only in this path.
 
@@ -184,14 +184,24 @@ The product uses tiered class memory.
    working memory, not prompt-facing truth and not durable wiki memory.
 
    Memory Sweep is the slow consolidation layer from ledger evidence to curated
-   memory. It runs bounded packets by hard scope (`user.md`, `copilot.md`,
-   compact class memory, subject guides, and review-only wiki findings). Each
-   packet now uses a two-pass LLM lifecycle: an alignment pass first normalizes
-   every candidate exactly once into underlying durable claim groups, then a
-   card pass turns only validated groups into teacher-reviewable cards. Backend
-   validators enforce coverage, target/section consistency, operation mapping,
-   and exact `adjust` replacement. This keeps semantic judgment in the model and
-   write safety in deterministic code.
+   memory. It runs bounded packets by hard scope (`teacher_profile.md`,
+   `copilot_profile.md`, compact class memory, subject guides, and review-only
+   wiki findings). Each packet now uses a two-pass LLM lifecycle: an alignment
+   pass first normalizes every candidate exactly once into underlying durable
+   claim groups, then a card pass turns only validated groups into
+   teacher-reviewable cards. Backend validators enforce coverage,
+   target/section consistency, operation mapping, and exact `adjust`
+   replacement. This keeps semantic judgment in the model and write safety in
+   deterministic code.
+
+   The alignment prompt deliberately teaches the general operation rather than
+   the specific regression. It exposes `surface_labels`, `shared_attributes`,
+   `distinguishing_attributes`, and `merge_test` so semantic grouping can be
+   inspected and tested. Prompt examples use classroom cases such as redox
+   misconceptions, board-ready task wording, and concrete-before-formal
+   teaching sequences. The MBB/executive communication scenario remains a trace
+   and regression test, not a hardcoded system-prompt alias or backend synonym
+   rule.
 
 The wiki remains the source of truth. Compact memory is derived and rebuildable.
 Profiles should be small, stable, correctly scoped, and source-backed where

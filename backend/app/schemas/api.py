@@ -116,6 +116,10 @@ class MemorySweepCandidate(BaseModel):
     status: str = "captured"
     relationship: str = ""
     group_label: str = ""
+    surface_labels: list[str] = Field(default_factory=list)
+    shared_attributes: list[str] = Field(default_factory=list)
+    distinguishing_attributes: list[str] = Field(default_factory=list)
+    merge_test: str = ""
     public_rationale: str = ""
     operation: Literal[
         "add",
@@ -134,6 +138,8 @@ class MemorySweepCandidate(BaseModel):
     why_now: str = ""
     current_memory_excerpt: str = ""
     signal_count: int = 1
+    can_apply: bool = False
+    review_only_reason: str = ""
 
 
 class MemorySweepProposalResponse(BaseModel):

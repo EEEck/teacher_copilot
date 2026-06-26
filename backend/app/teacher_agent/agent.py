@@ -27,7 +27,7 @@ from app.teacher_agent.prompts import (
     LINT_SYSTEM,
     MEMORY_COMPACT_SYSTEM,
     MEMORY_SWEEP_ALIGNMENT_SYSTEM,
-    MEMORY_SWEEP_PROPOSAL_SYSTEM,
+    MEMORY_SWEEP_CARD_SYSTEM,
     PROFILE_PROPOSAL_SYSTEM,
     PLAN_OPENING_SYSTEM,
     PLAN_SYSTEM,
@@ -178,11 +178,11 @@ def build_profile_proposal_agent(model: str) -> Agent:
     )
 
 
-def build_memory_sweep_proposal_agent(model: str) -> Agent:
+def build_memory_sweep_card_agent(model: str) -> Agent:
     return Agent(
-        name="KlassenPilot Memory Sweep Proposal",
+        name="KlassenPilot Memory Sweep Card",
         instructions=apply_prompt(
-            MEMORY_SWEEP_PROPOSAL_SYSTEM,
+            MEMORY_SWEEP_CARD_SYSTEM,
             security_policy=TEACHER_AGENT_SECURITY_POLICY,
         ),
         model=model,

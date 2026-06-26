@@ -23,34 +23,7 @@ def _seed_rows(class_id: str, *, batch_id: str) -> list[str]:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH)
     try:
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS memory_candidates (
-              id TEXT PRIMARY KEY,
-              created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL,
-              class_id TEXT,
-              subject TEXT,
-              workflow TEXT NOT NULL,
-              session_id TEXT,
-              turn_index INTEGER NOT NULL DEFAULT 0,
-              channel TEXT NOT NULL,
-              target TEXT NOT NULL,
-              section TEXT NOT NULL,
-              candidate_update TEXT NOT NULL,
-              evidence_summary TEXT NOT NULL,
-              evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-              source TEXT NOT NULL,
-              basis TEXT NOT NULL,
-              confidence TEXT NOT NULL,
-              cluster_key TEXT,
-              status TEXT NOT NULL,
-              promoted_at TEXT,
-              review_batch_id TEXT,
-              rejection_reason TEXT
-            )
-            """
-        )
+        h.ensure_memory_candidates_table(con)
         rows = [
             (
                 f"{batch_id}_group_roles_1",

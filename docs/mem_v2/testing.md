@@ -31,8 +31,9 @@ Run the focused Memory Sweep suite from `backend/`:
   for repeated class-learning signals and sweep promotion/apply.
 - `scripts/trace_memory_mbb_executive_consolidation.py` - seeded ledger
   scenario with two MBB signals plus one executive-style signal. It records
-  whether the sweep proposer emits one consolidated `user.md / Communication`
-  card. Use `--current-memory none`, `--current-memory narrow-mbb`, and
+  whether the sweep proposer emits one consolidated
+  `teacher_profile.md / Communication` card. Use `--current-memory none`,
+  `--current-memory narrow-mbb`, and
   `--current-memory generalized` to check `add`, `adjust`, and
   `already_covered`.
 - `scripts/run_memory_sweep_44_trace_bundle.py` - section 4.4 scenario bundle
@@ -48,7 +49,7 @@ review card like:
 
 ```json
 {
-  "target": "user.md",
+  "target": "teacher_profile.md",
   "section": "Communication",
   "operation": "add",
   "status_recommendation": "promote",
@@ -63,3 +64,11 @@ with `replaces_content` copied exactly from the current memory excerpt. If
 current memory already covers the generalized preference, the expected
 operation is `already_covered` with the same represented evidence, not another
 duplicate wiki write.
+
+This scenario is a regression test, not a production prompt example. Prompt
+tests should assert that active Memory Sweep system prompts do not mention MBB,
+McKinsey, consulting-style, or executive-style communication. The production
+prompt should instead use domain-neutral classroom examples that teach the same
+operation: surface labels become observable alignment fields, shared attributes
+become one durable claim, and real distinguishing attributes become scope or
+conflict.
