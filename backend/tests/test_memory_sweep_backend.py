@@ -651,6 +651,123 @@ def test_memory_sweep_alignment_validation_rejects_duplicates_unknowns_and_bad_l
         validate_alignment_output(packet, bad_label)
 
 
+def test_memory_sweep_alignment_rejects_already_covered_when_memory_is_narrower(
+    tmp_path,
+):
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    ledger.add_many(
+        [
+            _teacher_behavior_row(
+                "covered_mbb",
+                update="Use MBB-style communication for planning summaries.",
+                evidence="Teacher asked for MBB style.",
+                created_at="2026-06-22T09:00:00Z",
+            ),
+            _teacher_behavior_row(
+                "covered_exec",
+                update="Use executive-style communication with clear recommendations.",
+                evidence="Teacher asked for executive style.",
+                created_at="2026-06-22T09:05:00Z",
+            ),
+        ]
+    )
+    grouped = build_sweep_proposals(ledger.list_candidates())
+    narrow_excerpts = {
+        "teacher_profile.md": "## Communication\n- Teacher prefers MBB-style framing.\n"
+    }
+    packet = build_sweep_packets(grouped, narrow_excerpts)[0]
+    output = MemorySweepAlignmentOutput(
+        alignment_groups=[
+            MemorySweepAlignmentGroupOutput(
+                group_id="covered_group",
+                target="teacher_profile.md",
+                section="Communication",
+                ledger_candidate_ids=["covered_mbb", "covered_exec"],
+                relationship="already_covered",
+                decision="already_covered",
+                surface_labels=[
+                    "MBB-style communication",
+                    "executive-style communication",
+                ],
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="does not cover all surface_labels"):
+        validate_alignment_output(packet, output)
+
+    generalized_packet = build_sweep_packets(
+        grouped,
+        {
+            "teacher_profile.md": (
+                "## Communication\n"
+                "- Teacher prefers concise executive-style communication, "
+                "including MBB/McKinsey-style framing when useful.\n"
+            )
+        },
+    )[0]
+
+    groups = validate_alignment_output(generalized_packet, output)
+
+    assert groups[0].decision == "already_covered"
+
+
+def test_memory_sweep_alignment_rejects_adjust_without_current_bullet(tmp_path):
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    ledger.add_many(
+        [
+            _teacher_behavior_row(
+                "adjust_mbb",
+                update="Use MBB-style communication for planning summaries.",
+                evidence="Teacher asked for MBB style.",
+                created_at="2026-06-22T09:00:00Z",
+            ),
+            _teacher_behavior_row(
+                "adjust_exec",
+                update="Use executive-style communication with clear recommendations.",
+                evidence="Teacher asked for executive style.",
+                created_at="2026-06-22T09:05:00Z",
+            ),
+        ]
+    )
+    grouped = build_sweep_proposals(ledger.list_candidates())
+    output = MemorySweepAlignmentOutput(
+        alignment_groups=[
+            MemorySweepAlignmentGroupOutput(
+                group_id="adjust_group",
+                target="teacher_profile.md",
+                section="Communication",
+                ledger_candidate_ids=["adjust_mbb", "adjust_exec"],
+                relationship="broadens_existing_memory",
+                decision="adjust_existing",
+                surface_labels=[
+                    "MBB-style communication",
+                    "executive-style communication",
+                ],
+            )
+        ]
+    )
+    empty_packet = build_sweep_packets(grouped, {"teacher_profile.md": ""})[0]
+
+    with pytest.raises(ValueError, match="has no bullet overlapping"):
+        validate_alignment_output(empty_packet, output)
+
+    narrow_packet = build_sweep_packets(
+        grouped,
+        {
+            "teacher_profile.md": (
+                "## Communication\n- Teacher prefers MBB-style framing.\n"
+            )
+        },
+    )[0]
+
+    groups = validate_alignment_output(narrow_packet, output)
+
+    assert groups[0].decision == "adjust_existing"
+
+
 def test_memory_sweep_card_validation_requires_group_match(tmp_path, wiki: WikiStore):
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()

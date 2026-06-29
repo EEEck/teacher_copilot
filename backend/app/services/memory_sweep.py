@@ -195,9 +195,13 @@ async def propose_memory_sweep_review(
     )
     grouped = build_sweep_proposals(candidates)
     if not grouped:
-        return MemorySweepResult(class_id=class_id, subject=cls.subject, cards_by_queue={})
+        return MemorySweepResult(
+            class_id=class_id, subject=cls.subject, cards_by_queue={}
+        )
 
-    target_excerpts = memory_sweep_target_excerpts(wiki, class_id, sweep_targets(grouped))
+    target_excerpts = memory_sweep_target_excerpts(
+        wiki, class_id, sweep_targets(grouped)
+    )
     packets = build_sweep_packets(grouped, target_excerpts)
     all_cards: list[MemorySweepReviewCard] = []
     warnings: list[str] = []
@@ -450,7 +454,9 @@ def validate_alignment_output(
         raise ValueError("alignment output contained no groups")
 
     for index, raw_group in enumerate(raw_groups):
-        group_id = str(getattr(raw_group, "group_id", "") or f"group_{index + 1}").strip()
+        group_id = str(
+            getattr(raw_group, "group_id", "") or f"group_{index + 1}"
+        ).strip()
         if not group_id:
             raise ValueError("alignment group is missing group_id")
         if group_id in seen_group_ids:
@@ -463,7 +469,9 @@ def validate_alignment_output(
             if str(candidate_id).strip()
         ]
         if len(raw_ids) != len(set(raw_ids)):
-            raise ValueError(f"alignment group {group_id} assigned duplicate candidate ids")
+            raise ValueError(
+                f"alignment group {group_id} assigned duplicate candidate ids"
+            )
         ids = _unique(raw_ids)
         if not ids:
             raise ValueError(f"alignment group {group_id} has no ledger_candidate_ids")
@@ -490,7 +498,9 @@ def validate_alignment_output(
                 f"alignment group {group_id} used unsupported decision: {decision}"
             )
         if not is_supported_runtime_target(target):
-            raise ValueError(f"alignment group {group_id} used unsupported target: {target}")
+            raise ValueError(
+                f"alignment group {group_id} used unsupported target: {target}"
+            )
         if target != packet.target:
             raise ValueError(
                 f"alignment group {group_id} changed packet target from {packet.target} to {target}"
@@ -510,6 +520,31 @@ def validate_alignment_output(
                     f"alignment group {group_id} section does not match candidate {candidate_id}"
                 )
 
+        surface_labels = _clean_string_list(
+            getattr(raw_group, "surface_labels", []) or []
+        )
+        if decision == "already_covered" and surface_labels:
+            if not _current_memory_covers_surface_labels(
+                packet.current_memory_excerpt,
+                surface_labels,
+            ):
+                raise ValueError(
+                    f"alignment group {group_id} marked already_covered but current "
+                    "memory does not cover all surface_labels"
+                )
+        if (
+            decision == "adjust_existing"
+            and surface_labels
+            and not _current_memory_has_surface_label_bullet(
+                packet.current_memory_excerpt,
+                surface_labels,
+            )
+        ):
+            raise ValueError(
+                f"alignment group {group_id} marked adjust_existing but current "
+                "memory has no bullet overlapping its surface_labels"
+            )
+
         assigned_ids.extend(ids)
         groups.append(
             MemorySweepAlignmentGroup(
@@ -519,15 +554,15 @@ def validate_alignment_output(
                 ledger_candidate_ids=ids,
                 matched_memory_item_ids=[
                     str(value).strip()
-                    for value in (getattr(raw_group, "matched_memory_item_ids", []) or [])
+                    for value in (
+                        getattr(raw_group, "matched_memory_item_ids", []) or []
+                    )
                     if str(value).strip()
                 ],
                 relationship=relationship,
                 decision=decision,
                 group_label=str(getattr(raw_group, "group_label", "") or "").strip(),
-                surface_labels=_clean_string_list(
-                    getattr(raw_group, "surface_labels", []) or []
-                ),
+                surface_labels=surface_labels,
                 shared_attributes=_clean_string_list(
                     getattr(raw_group, "shared_attributes", []) or []
                 ),
@@ -547,11 +582,15 @@ def validate_alignment_output(
     if assigned_set != input_ids:
         missing = sorted(input_ids - assigned_set)
         extra = sorted(assigned_set - input_ids)
-        raise ValueError(f"invalid alignment coverage: missing={missing}, extra={extra}")
+        raise ValueError(
+            f"invalid alignment coverage: missing={missing}, extra={extra}"
+        )
     return groups
 
 
-def alignment_groups_payload(groups: list[MemorySweepAlignmentGroup]) -> list[dict[str, Any]]:
+def alignment_groups_payload(
+    groups: list[MemorySweepAlignmentGroup],
+) -> list[dict[str, Any]]:
     return [
         {
             "group_id": group.group_id,
@@ -589,9 +628,13 @@ def validate_cards_against_alignment(
     for raw_card in getattr(output, "cards", []) or []:
         group = _card_alignment_group(raw_card, alignment_groups)
         if group is None:
-            raise ValueError("card missing source_group_id or exact group candidate_ids")
+            raise ValueError(
+                "card missing source_group_id or exact group candidate_ids"
+            )
         if group.group_id not in remaining_group_ids:
-            raise ValueError(f"duplicate or unknown card source_group_id: {group.group_id}")
+            raise ValueError(
+                f"duplicate or unknown card source_group_id: {group.group_id}"
+            )
         remaining_group_ids.remove(group.group_id)
 
         card_ids = _card_candidate_ids(raw_card)
@@ -602,9 +645,13 @@ def validate_cards_against_alignment(
         target = _card_target(raw_card, group.target, warnings)
         section = (getattr(raw_card, "section", "") or group.section).strip()
         if target != group.target:
-            raise ValueError(f"card {group.group_id} target does not match alignment group")
+            raise ValueError(
+                f"card {group.group_id} target does not match alignment group"
+            )
         if section != group.section:
-            raise ValueError(f"card {group.group_id} section does not match alignment group")
+            raise ValueError(
+                f"card {group.group_id} section does not match alignment group"
+            )
 
         expected_operation = DECISION_TO_OPERATION[group.decision]
         operation = _card_operation(raw_card, warnings)
@@ -626,7 +673,9 @@ def validate_cards_against_alignment(
         replaces_content = (getattr(raw_card, "replaces_content", "") or "").strip()
         if operation == "adjust":
             if not replaces_content:
-                raise ValueError(f"card {group.group_id} adjust missing replaces_content")
+                raise ValueError(
+                    f"card {group.group_id} adjust missing replaces_content"
+                )
             if not _excerpt_has_bullet(
                 _current_excerpt(target_excerpts, group.target),
                 replaces_content,
@@ -668,12 +717,16 @@ def validate_cards_against_alignment(
                 operation=operation,
                 replaces_content=replaces_content if operation == "adjust" else "",
                 status_recommendation=OPERATION_TO_STATUS_RECOMMENDATION[operation],
-                why_now=(getattr(raw_card, "why_now", "") or group.public_rationale).strip(),
+                why_now=(
+                    getattr(raw_card, "why_now", "") or group.public_rationale
+                ).strip(),
             )
         )
 
     if remaining_group_ids:
-        raise ValueError(f"missing cards for alignment groups: {sorted(remaining_group_ids)}")
+        raise ValueError(
+            f"missing cards for alignment groups: {sorted(remaining_group_ids)}"
+        )
     return cards, warnings
 
 
@@ -819,13 +872,17 @@ def _primary_sweep_row(rows: list[MemoryCandidateRow]) -> MemoryCandidateRow:
     )
 
 
-def _candidate_ids(primary: MemoryCandidateRow, rows: list[MemoryCandidateRow]) -> list[str]:
+def _candidate_ids(
+    primary: MemoryCandidateRow, rows: list[MemoryCandidateRow]
+) -> list[str]:
     ordered = [primary.id]
     ordered.extend(row.id for row in rows if row.id != primary.id)
     return ordered
 
 
-def _packet_proposal_lookup(packet: MemorySweepPacket) -> dict[str, MemorySweepProposal]:
+def _packet_proposal_lookup(
+    packet: MemorySweepPacket,
+) -> dict[str, MemorySweepProposal]:
     lookup: dict[str, MemorySweepProposal] = {}
     for proposal in packet.proposals:
         for candidate_id in proposal.candidate_ids:
@@ -883,6 +940,36 @@ def _existing_named_label_bullet(
         if any(_named_label_overlaps_bullet(label, bullet) for label in labels):
             return bullet
     return ""
+
+
+def _current_memory_covers_surface_labels(excerpt: str, labels: list[str]) -> bool:
+    labels_with_tokens = [label for label in labels if _label_tokens(label)]
+    if not labels_with_tokens:
+        return True
+    for line in (excerpt or "").splitlines():
+        if not line.strip().startswith("-"):
+            continue
+        bullet = _normalize_bullet_text(line)
+        if all(
+            _named_label_overlaps_bullet(label, bullet) for label in labels_with_tokens
+        ):
+            return True
+    return False
+
+
+def _current_memory_has_surface_label_bullet(excerpt: str, labels: list[str]) -> bool:
+    labels_with_tokens = [label for label in labels if _label_tokens(label)]
+    if not labels_with_tokens:
+        return True
+    for line in (excerpt or "").splitlines():
+        if not line.strip().startswith("-"):
+            continue
+        bullet = _normalize_bullet_text(line)
+        if any(
+            _named_label_overlaps_bullet(label, bullet) for label in labels_with_tokens
+        ):
+            return True
+    return False
 
 
 _LABEL_STOPWORDS = {
@@ -947,7 +1034,9 @@ def _field_was_provided(card: Any, field_name: str) -> bool:
 
 
 def _card_target(card: Any, fallback: str, warnings: list[str]) -> str:
-    target = canonical_memory_target(str(getattr(card, "target", "") or fallback).strip())
+    target = canonical_memory_target(
+        str(getattr(card, "target", "") or fallback).strip()
+    )
     if is_supported_runtime_target(target):
         return target
     warnings.append(f"ignored unsupported Memory Sweep target: {target}")
@@ -1075,6 +1164,8 @@ def _clean_string_list(values: Iterable[Any]) -> list[str]:
     return _unique(str(value).strip() for value in values if str(value).strip())
 
 
-def _chunks(values: list[MemorySweepProposal], size: int) -> Iterable[list[MemorySweepProposal]]:
+def _chunks(
+    values: list[MemorySweepProposal], size: int
+) -> Iterable[list[MemorySweepProposal]]:
     for index in range(0, len(values), size):
         yield values[index : index + size]
