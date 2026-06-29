@@ -108,9 +108,19 @@ cd ..
 .\backend\.venv\Scripts\python .\scripts\trace_memory_mbb_executive_consolidation.py --run-name manual-mbb-executive-merge
 ```
 
-The trace should pass with one consolidated `teacher_profile.md /
-Communication` card representing all three seeded MBB/executive candidate IDs.
-It is intentionally a live-model drift check; the deterministic prompt tests
+Run all current-memory variants through pytest when intentionally checking live
+model drift:
+
+```powershell
+cd backend
+$env:RUN_LIVE_MEMORY_SWEEP_TRACE="1"
+.\.venv\Scripts\python -m pytest tests\test_live_memory_sweep_mbb_trace.py -q
+```
+
+The three variants should pass with one consolidated `teacher_profile.md /
+Communication` card: no current memory -> `add`, narrow current memory ->
+`adjust`, generalized current memory -> `already_covered`. It is intentionally a
+live-model drift check; normal pytest skips it, and deterministic prompt tests
 assert the production system prompts do not hardcode those labels.
 
 **Run live chat evals (real OpenAI Agents SDK + LLM judge):**

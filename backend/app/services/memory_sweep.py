@@ -523,6 +523,22 @@ def validate_alignment_output(
         surface_labels = _clean_string_list(
             getattr(raw_group, "surface_labels", []) or []
         )
+        if decision in {"already_covered", "adjust_existing"} and not surface_labels:
+            raise ValueError(
+                f"alignment group {group_id} marked {decision} but has no surface_labels"
+            )
+        if (
+            decision == "merge"
+            and surface_labels
+            and _current_memory_has_surface_label_bullet(
+                packet.current_memory_excerpt,
+                surface_labels,
+            )
+        ):
+            raise ValueError(
+                f"alignment group {group_id} marked merge but current memory has "
+                "a bullet overlapping its surface_labels"
+            )
         if decision == "already_covered" and surface_labels:
             if not _current_memory_covers_surface_labels(
                 packet.current_memory_excerpt,

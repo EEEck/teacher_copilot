@@ -713,6 +713,111 @@ def test_memory_sweep_alignment_rejects_already_covered_when_memory_is_narrower(
     assert groups[0].decision == "already_covered"
 
 
+def test_memory_sweep_alignment_rejects_covered_or_adjust_without_surface_labels(
+    tmp_path,
+):
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    ledger.add_many(
+        [
+            _teacher_behavior_row(
+                "missing_labels_mbb",
+                update="Use MBB-style communication for planning summaries.",
+                evidence="Teacher asked for MBB style.",
+                created_at="2026-06-22T09:00:00Z",
+            ),
+            _teacher_behavior_row(
+                "missing_labels_exec",
+                update="Use executive-style communication with clear recommendations.",
+                evidence="Teacher asked for executive style.",
+                created_at="2026-06-22T09:05:00Z",
+            ),
+        ]
+    )
+    grouped = build_sweep_proposals(ledger.list_candidates())
+    packet = build_sweep_packets(
+        grouped,
+        {
+            "teacher_profile.md": (
+                "## Communication\n"
+                "- Teacher prefers concise executive-style communication, "
+                "including MBB/McKinsey-style framing when useful.\n"
+            )
+        },
+    )[0]
+
+    for decision, relationship in (
+        ("already_covered", "already_covered"),
+        ("adjust_existing", "broadens_existing_memory"),
+    ):
+        output = MemorySweepAlignmentOutput(
+            alignment_groups=[
+                MemorySweepAlignmentGroupOutput(
+                    group_id=f"missing_labels_{decision}",
+                    target="teacher_profile.md",
+                    section="Communication",
+                    ledger_candidate_ids=["missing_labels_mbb", "missing_labels_exec"],
+                    relationship=relationship,
+                    decision=decision,
+                )
+            ]
+        )
+
+        with pytest.raises(ValueError, match="has no surface_labels"):
+            validate_alignment_output(packet, output)
+
+
+def test_memory_sweep_alignment_rejects_merge_when_current_bullet_overlaps_labels(
+    tmp_path,
+):
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    ledger.add_many(
+        [
+            _teacher_behavior_row(
+                "overlap_mbb",
+                update="Use MBB-style communication for planning summaries.",
+                evidence="Teacher asked for MBB style.",
+                created_at="2026-06-22T09:00:00Z",
+            ),
+            _teacher_behavior_row(
+                "overlap_exec",
+                update="Use executive-style communication with clear recommendations.",
+                evidence="Teacher asked for executive style.",
+                created_at="2026-06-22T09:05:00Z",
+            ),
+        ]
+    )
+    grouped = build_sweep_proposals(ledger.list_candidates())
+    packet = build_sweep_packets(
+        grouped,
+        {
+            "teacher_profile.md": (
+                "## Communication\n- Teacher prefers MBB-style framing.\n"
+            )
+        },
+    )[0]
+    output = MemorySweepAlignmentOutput(
+        alignment_groups=[
+            MemorySweepAlignmentGroupOutput(
+                group_id="overlap_merge",
+                target="teacher_profile.md",
+                section="Communication",
+                ledger_candidate_ids=["overlap_mbb", "overlap_exec"],
+                relationship="new_semantic_claim",
+                decision="merge",
+                surface_labels=[
+                    "MBB-style communication",
+                    "executive-style communication",
+                ],
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="marked merge but current memory"):
+        validate_alignment_output(packet, output)
+
+
 def test_memory_sweep_alignment_rejects_adjust_without_current_bullet(tmp_path):
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()
@@ -916,6 +1021,10 @@ def test_memory_sweep_card_validation_preserves_adjust_operation(tmp_path, wiki:
                     ledger_candidate_ids=["adjust_mbb_1", "adjust_exec_1"],
                     relationship="broadens_existing_memory",
                     decision="adjust_existing",
+                    surface_labels=[
+                        "MBB-style communication",
+                        "executive-style communication",
+                    ],
                 )
             ]
         ),
@@ -1021,6 +1130,7 @@ def test_memory_sweep_card_validation_rejects_invalid_operation_and_adjust_missi
                     ledger_candidate_ids=["bad_operation_1"],
                     relationship="broadens_existing_memory",
                     decision="adjust_existing",
+                    surface_labels=["MBB-style communication"],
                 )
             ]
         ),
@@ -1084,7 +1194,6 @@ def test_memory_sweep_card_validation_rejects_add_when_named_label_matches_exist
                     ledger_candidate_ids=["existing_label_1", "existing_label_2"],
                     relationship="new_semantic_claim",
                     decision="merge",
-                    surface_labels=["named-style communication", "recommendation-led"],
                     shared_attributes=["named-style framing", "clear recommendations"],
                 )
             ]
@@ -1727,7 +1836,7 @@ def test_memory_sweep_api_merges_mbb_and_executive_communication(
                 alignment_groups=[
                     MemorySweepAlignmentGroupOutput(
                         group_id="executive_structured_communication",
-                            target="teacher_profile.md",
+                        target="teacher_profile.md",
                         section="Communication",
                         ledger_candidate_ids=ids,
                         relationship="new_semantic_claim",
@@ -1764,7 +1873,7 @@ def test_memory_sweep_api_merges_mbb_and_executive_communication(
                         signal_count=len(ids),
                         review_queue=first["review_queue"],
                         channel=first["channel"],
-                            target="teacher_profile.md",
+                        target="teacher_profile.md",
                         section="Communication",
                         content=(
                             "Teacher prefers concise executive-style communication, "
@@ -1882,6 +1991,9 @@ async def test_memory_sweep_retries_alignment_when_card_validation_reveals_bad_a
                         ),
                         decision="merge" if retrying_after_bad_adjust else "adjust_existing",
                         group_label="teacher_style",
+                        surface_labels=(
+                            [] if retrying_after_bad_adjust else ["named-style communication"]
+                        ),
                     )
                 ]
             )
@@ -1949,6 +2061,10 @@ async def test_memory_sweep_retries_alignment_when_card_validation_reveals_bad_a
             ),
         ]
     )
+    wiki.add_user_profile_conclusion(
+        "Communication",
+        "Teacher prefers named-style communication.",
+    )
     agents = BadAdjustThenMergeAgent(wiki)
 
     result = await propose_memory_sweep_review(
@@ -1998,12 +2114,16 @@ def test_memory_sweep_api_repeated_mbb_preamble_is_already_covered(
                 alignment_groups=[
                     MemorySweepAlignmentGroupOutput(
                         group_id="covered_executive_structured_communication",
-                            target="teacher_profile.md",
+                        target="teacher_profile.md",
                         section="Communication",
                         ledger_candidate_ids=ids,
                         relationship="already_covered",
                         decision="already_covered",
                         group_label="executive_structured_communication",
+                        surface_labels=[
+                            "MBB-style communication",
+                            "executive-style communication",
+                        ],
                         public_rationale="Current memory already captures the preference.",
                     )
                 ]
@@ -2036,7 +2156,7 @@ def test_memory_sweep_api_repeated_mbb_preamble_is_already_covered(
                         signal_count=len(ids),
                         review_queue=first["review_queue"],
                         channel=first["channel"],
-                            target="teacher_profile.md",
+                        target="teacher_profile.md",
                         section="Communication",
                         content=(
                             "Teacher prefers concise executive-style communication, "

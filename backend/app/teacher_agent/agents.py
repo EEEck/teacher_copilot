@@ -798,7 +798,13 @@ class AgentRunner:
 
         field_cap = get_context_limits().profile_propose_field_chars
         retry_block = (
-            f"\nPrevious validation error:\n{validation_error}\n\n"
+            "\nPrevious validation error:\n"
+            f"{validation_error}\n"
+            "Revise the alignment for the failing group instead of repeating the "
+            "same decision. If merge/add overlaps current memory, use "
+            "adjust_existing when the current excerpt has a narrower bullet for "
+            "the same compatible claim, already_covered when it fully covers the "
+            "claim, or needs_decision if the relationship is unclear.\n\n"
             if validation_error
             else ""
         )
