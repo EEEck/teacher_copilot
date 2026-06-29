@@ -33,7 +33,13 @@ MEMORY_INTENTS = (
     "improve_memory",
     "unsupported",
 )
-TARGET_KINDS = ("unknown", "planned_lesson", "taught_lesson", "new_lesson", "class_memory")
+TARGET_KINDS = (
+    "unknown",
+    "planned_lesson",
+    "taught_lesson",
+    "new_lesson",
+    "class_memory",
+)
 TARGET_SOURCES = ("", "teacher_explicit", "timeline_hint", "agent_inferred")
 CONFIDENCE = ("low", "medium", "high")
 
@@ -175,7 +181,9 @@ def _patch_has_values(patch: MemoryStatePatch | None) -> bool:
     return any(bool(value) for value in data.values())
 
 
-def _apply_target_patch(state: MemoryTargetState, patch: MemoryTargetPatch) -> MemoryTargetState:
+def _apply_target_patch(
+    state: MemoryTargetState, patch: MemoryTargetPatch
+) -> MemoryTargetState:
     data = state.model_dump()
     if patch.intent in MEMORY_INTENTS:
         data["intent"] = patch.intent
@@ -201,7 +209,10 @@ def _apply_target_patch(state: MemoryTargetState, patch: MemoryTargetPatch) -> M
         if value is not None:
             data[field_name] = value
     if data["target_confirmed"] and data["target_kind"] == "unknown":
-        if data["existing_results_loaded"] or data["intent"] == "correct_existing_results":
+        if (
+            data["existing_results_loaded"]
+            or data["intent"] == "correct_existing_results"
+        ):
             data["target_kind"] = "taught_lesson"
         elif data["plan_loaded"] or data["intent"] == "update_missing_results":
             data["target_kind"] = "planned_lesson"
@@ -212,7 +223,9 @@ def _apply_target_patch(state: MemoryTargetState, patch: MemoryTargetPatch) -> M
     return MemoryTargetState(**data)
 
 
-def _apply_session_patch(state: MemorySessionState, patch: MemorySessionPatch) -> MemorySessionState:
+def _apply_session_patch(
+    state: MemorySessionState, patch: MemorySessionPatch
+) -> MemorySessionState:
     data = state.model_dump()
     if patch.phase in MEMORY_PHASES:
         data["phase"] = patch.phase
@@ -250,7 +263,9 @@ def _apply_lesson_result_patch(
 
 def apply_memory_state_patch(runtime: MemoryRuntime, patch: MemoryStatePatch) -> None:
     runtime.target = _apply_target_patch(runtime.target, patch.target)
-    runtime.session_state = _apply_session_patch(runtime.session_state, patch.session_state)
+    runtime.session_state = _apply_session_patch(
+        runtime.session_state, patch.session_state
+    )
     runtime.lesson_result_state = _apply_lesson_result_patch(
         runtime.lesson_result_state, patch.lesson_result_state
     )

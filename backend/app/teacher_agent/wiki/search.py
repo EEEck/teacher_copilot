@@ -3,39 +3,15 @@
 from __future__ import annotations
 
 import re
-import uuid
 import math
 from collections import Counter
-from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 
-from app.schemas.api import (
-    ApprovedWikiUpdate,
-    ClassMemorySnapshot,
-    ClassSummary,
-    ClassTimeline,
-    CompletenessChecklist,
-    CompletenessItem,
-    LessonDetail,
-    RollupExcerpt,
-    TimelineEntry,
-    WikiUpdateProposal,
-)
 
 from app.teacher_agent.wiki.constants import (
-    CLASS_REGISTRY,
-    DIARY_SECTION_HEADINGS,
     INDEX_WIKI_PATH_RE,
-    LESSON_RESULTS_SECTIONS,
-    LOG_HEADER_LEGACY_RE,
-    LOG_HEADER_RE,
-    ROLLUP_LABELS,
-    STUDENT_ID_RE,
-    dedupe_wiki_proposals,
 )
-
-from app.teacher_agent.wiki import parsing
 
 
 _SEARCH_STOPWORDS = {
@@ -187,7 +163,13 @@ def build_class_relevance_corpus(store, class_id: str) -> dict[str, Any]:
             path = match.group(1)
             if not path.startswith(f"wiki/classes/{class_id}/"):
                 continue
-            kind = "lesson" if "/lessons/" in path else "memory" if "/memory/" in path else "index"
+            kind = (
+                "lesson"
+                if "/lessons/" in path
+                else "memory"
+                if "/memory/" in path
+                else "index"
+            )
             add_doc(
                 path=path,
                 kind=kind,
@@ -240,9 +222,7 @@ def list_class_pages(
 
     if "rollups" in kinds:
         for key, path in store.roll_up_paths(class_id).items():
-            pages.append(
-                {"kind": "rollup", "id": key, "path": store.rel_wiki(path)}
-            )
+            pages.append({"kind": "rollup", "id": key, "path": store.rel_wiki(path)})
         for name in ("timeline.md", "class_config.md"):
             p = base / name
             if p.exists():
@@ -293,10 +273,9 @@ def list_class_pages(
         raw_root = store.root / "raw" / "classes" / class_id
         if raw_root.exists():
             for p in sorted(raw_root.glob("*.md")):
-                pages.append(
-                    {"kind": "raw", "id": p.stem, "path": store.rel_wiki(p)}
-                )
+                pages.append({"kind": "raw", "id": p.stem, "path": store.rel_wiki(p)})
     return pages
+
 
 def find_in_memory(
     store, class_id: str, query: str, max_results: int = 5
@@ -364,6 +343,7 @@ def find_in_memory(
     )
     return ranked[: max(1, min(max_results or 5, 20))]
 
+
 def search_wiki(
     store, class_id: str, query: str, max_results: int = 15
 ) -> list[dict[str, str]]:
@@ -372,6 +352,7 @@ def search_wiki(
         {"path": h["path"], "snippet": h["snippet"]}
         for h in store.find_in_memory(class_id, query, max_results)
     ]
+
 
 def is_class_memory_path(store, class_id: str, relative_path: str) -> bool:
     """True if path is readable class-scoped wiki (chat read_memory_page guard)."""

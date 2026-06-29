@@ -2,63 +2,42 @@
 
 from __future__ import annotations
 
-import re
-import uuid
-from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
-
-from app.schemas.api import (
-    ApprovedWikiUpdate,
-    ClassMemorySnapshot,
-    ClassSummary,
-    ClassTimeline,
-    CompletenessChecklist,
-    CompletenessItem,
-    LessonDetail,
-    RollupExcerpt,
-    TimelineEntry,
-    WikiUpdateProposal,
-)
-
-from app.teacher_agent.wiki.constants import (
-    CLASS_REGISTRY,
-    DIARY_SECTION_HEADINGS,
-    INDEX_WIKI_PATH_RE,
-    LESSON_RESULTS_SECTIONS,
-    LOG_HEADER_LEGACY_RE,
-    LOG_HEADER_RE,
-    ROLLUP_LABELS,
-    STUDENT_ID_RE,
-    dedupe_wiki_proposals,
-)
-
+from typing import Optional
 
 
 def class_dir(store, class_id: str) -> Path:
     return store.root / "wiki" / "classes" / class_id
 
+
 def lesson_dir(store, class_id: str, lesson_date: str) -> Path:
     return store.class_dir(class_id) / "lessons" / lesson_date
 
+
 def students_dir(store, class_id: str) -> Path:
     return store.class_dir(class_id) / "students"
+
 
 def student_path(store, class_id: str, student_id: str) -> Path:
     sid = student_id.upper()
     return store.students_dir(class_id) / f"{sid}.md"
 
+
 def timeline_path(store, class_id: str) -> Path:
     return store.class_dir(class_id) / "timeline.md"
+
 
 def class_config_path(store, class_id: str) -> Path:
     return store.class_dir(class_id) / "class_config.md"
 
+
 def index_path(store) -> Path:
     return store.root / "index.md"
 
+
 def log_path(store) -> Path:
     return store.root / "log.md"
+
 
 def roll_up_paths(store, class_id: str) -> dict[str, Path]:
     base = store.class_dir(class_id)
@@ -69,20 +48,24 @@ def roll_up_paths(store, class_id: str) -> dict[str, Path]:
         "open_loops": base / "open_loops.md",
     }
 
+
 def rel_wiki(store, path: Path) -> str:
     try:
         return path.relative_to(store.root).as_posix()
     except ValueError:
         return path.as_posix()
 
+
 def read_text(store, path: Path) -> str:
     if path.exists():
         return path.read_text(encoding="utf-8")
     return ""
 
+
 def write_text(store, path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
 
 def resolve_path(store, relative_path: str) -> Path:
     """Resolve a wiki-relative path; reject escapes outside root."""
@@ -95,6 +78,7 @@ def resolve_path(store, relative_path: str) -> Path:
         raise ValueError(f"Path outside wiki root: {relative_path}")
     return full
 
+
 def read_wiki_page(store, relative_path: str, max_chars: int = 12000) -> str:
     path = store.resolve_path(relative_path)
     text = store.read_text(path)
@@ -102,17 +86,19 @@ def read_wiki_page(store, relative_path: str, max_chars: int = 12000) -> str:
         return text[: max_chars - 20] + "\n\n… [truncated]"
     return text
 
+
 def read_wiki_index(store, class_id: Optional[str] = None) -> str:
     text = store.read_text(store.index_path)
     if not class_id:
         return text
     marker = f"## Class: {class_id}"
-    alt = f"## Class —"
     if marker in text:
         start = text.index(marker)
         rest = text[start + len(marker) :]
         next_class = rest.find("\n## Class")
-        section = text[start : start + len(marker) + (next_class if next_class >= 0 else len(rest))]
+        section = text[
+            start : start + len(marker) + (next_class if next_class >= 0 else len(rest))
+        ]
         if next_class >= 0:
             section = text[start : start + len(marker) + next_class]
         return section

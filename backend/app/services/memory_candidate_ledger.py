@@ -40,6 +40,7 @@ VALID_STATUSES = {
 
 OPEN_STATUSES = ("captured", "grouped", "proposed", "snoozed")
 
+
 def default_memory_candidate_ledger_path(wiki_root: str | Path) -> Path:
     return Path(wiki_root) / "workflow" / "memory_candidates.sqlite"
 
@@ -217,7 +218,9 @@ class MemoryCandidateLedger:
             sql += " WHERE " + " AND ".join(where)
         sql += " ORDER BY created_at, id"
         with self._connect() as conn:
-            return [MemoryCandidateRow.from_sqlite(row) for row in conn.execute(sql, params)]
+            return [
+                MemoryCandidateRow.from_sqlite(row) for row in conn.execute(sql, params)
+            ]
 
     def propose_for_sweep(
         self,
@@ -449,4 +452,9 @@ def _cluster_key(
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )

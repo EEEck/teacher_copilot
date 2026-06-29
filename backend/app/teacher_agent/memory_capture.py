@@ -13,7 +13,10 @@ from typing import Any, Iterable
 from pydantic import BaseModel, Field
 
 from app.context_limits import get_context_limits
-from app.teacher_agent.memory_targets import canonical_memory_target, is_supported_runtime_target
+from app.teacher_agent.memory_targets import (
+    canonical_memory_target,
+    is_supported_runtime_target,
+)
 
 MEMORY_TARGETS = (
     "class_state.md",

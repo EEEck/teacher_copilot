@@ -22,7 +22,10 @@ from app.schemas.api import (
     SavePlanRequest,
     SavePlanResponse,
 )
-from app.services.artifact_session_service import ArtifactSession, ArtifactSessionService
+from app.services.artifact_session_service import (
+    ArtifactSession,
+    ArtifactSessionService,
+)
 from app.services.memory_candidate_ledger import MemoryCandidateLedger
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.planning_state import (
@@ -115,7 +118,9 @@ class PlanService:
         runtime = session.runtime
         runtime_payload = planning_api_payload(runtime) if runtime else {}
         teacher_context = self.wiki.build_teacher_context_trace()["text"]
-        active_class_core = self.wiki.build_active_class_core_context_trace(class_id)["text"]
+        active_class_core = self.wiki.build_active_class_core_context_trace(class_id)[
+            "text"
+        ]
         prompt_stack = {
             "teacher_context": teacher_context,
             "active_class_core": active_class_core,
@@ -131,7 +136,9 @@ class PlanService:
             if runtime
             else "",
             "current_lessonplan_md": session.partial_markdown,
-            "evidence_briefs": render_briefs(runtime.evidence_briefs) if runtime else "",
+            "evidence_briefs": render_briefs(runtime.evidence_briefs)
+            if runtime
+            else "",
         }
         return PlanTraceResponse(
             class_id=class_id,

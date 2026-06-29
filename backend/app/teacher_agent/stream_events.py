@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.schemas.api import CompletenessChecklist
 
@@ -173,7 +173,11 @@ def translate_sdk_event(
             if summary:
                 parts = []
                 for block in summary:
-                    t = getattr(block, "text", None) if not isinstance(block, dict) else block.get("text")
+                    t = (
+                        getattr(block, "text", None)
+                        if not isinstance(block, dict)
+                        else block.get("text")
+                    )
                     if t:
                         parts.append(str(t))
                 text = "\n".join(parts)

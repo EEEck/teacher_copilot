@@ -150,7 +150,9 @@ class MemorySweepProposalResponse(BaseModel):
 
 
 class MemoryCandidateStatusRequest(BaseModel):
-    status: Literal["proposed", "approved", "applied", "rejected", "snoozed", "deleted", "expired"]
+    status: Literal[
+        "proposed", "approved", "applied", "rejected", "snoozed", "deleted", "expired"
+    ]
     rejection_reason: str | None = None
     review_batch_id: str | None = None
 
@@ -299,7 +301,9 @@ class IngestSession(BaseModel):
     class_id: str
     status: IngestSessionStatus
     messages: list[ChatMessage] = Field(default_factory=list)
-    completeness: CompletenessChecklist = Field(default_factory=lambda: CompletenessChecklist(items=[]))
+    completeness: CompletenessChecklist = Field(
+        default_factory=lambda: CompletenessChecklist(items=[])
+    )
     memory_state: Optional[dict] = None
     memory_candidates: list[dict] = Field(default_factory=list)
 
@@ -486,7 +490,9 @@ class LessonPlan(BaseModel):
             "## Lesson flow",
         ]
         for phase in self.lesson_flow:
-            lines.append(f"- **{phase.phase}** ({phase.minutes} min): {phase.description}")
+            lines.append(
+                f"- **{phase.phase}** ({phase.minutes} min): {phase.description}"
+            )
         lines.extend(
             [
                 "",
@@ -504,7 +510,19 @@ class LessonPlan(BaseModel):
             ]
         )
         if self.addresses_open_loops:
-            lines.extend(["", "## Addresses open loops", *[f"- {x}" for x in self.addresses_open_loops]])
+            lines.extend(
+                [
+                    "",
+                    "## Addresses open loops",
+                    *[f"- {x}" for x in self.addresses_open_loops],
+                ]
+            )
         if self.addresses_misconceptions:
-            lines.extend(["", "## Addresses misconceptions", *[f"- {x}" for x in self.addresses_misconceptions]])
+            lines.extend(
+                [
+                    "",
+                    "## Addresses misconceptions",
+                    *[f"- {x}" for x in self.addresses_misconceptions],
+                ]
+            )
         return "\n".join(lines) + "\n"

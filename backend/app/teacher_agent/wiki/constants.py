@@ -39,7 +39,9 @@ LOG_HEADER_LEGACY_RE = re.compile(
 INDEX_WIKI_PATH_RE = re.compile(r"(wiki/classes/[^\s|)]+?\.md)", re.I)
 
 
-def dedupe_wiki_proposals(proposals: list[WikiUpdateProposal]) -> list[WikiUpdateProposal]:
+def dedupe_wiki_proposals(
+    proposals: list[WikiUpdateProposal],
+) -> list[WikiUpdateProposal]:
     """Keep first proposal per wiki_path (compile used to emit the student index twice)."""
     seen: set[str] = set()
     unique: list[WikiUpdateProposal] = []

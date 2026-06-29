@@ -21,14 +21,19 @@ from app.teacher_agent.planning_state import (
 
 
 class CompileOutput(BaseModel):
-    diary_markdown: str = Field(description="Full lesson results markdown with all sections")
+    diary_markdown: str = Field(
+        description="Full lesson results markdown with all sections"
+    )
 
 
 class IngestTurnOutput(BaseModel):
     reply: str = Field(description="Conversational reply to the teacher")
-    diary_markdown: str = Field(description="Updated full lesson results markdown with all sections")
+    diary_markdown: str = Field(
+        description="Updated full lesson results markdown with all sections"
+    )
     last_change_summary: str = Field(
-        default="", description="One-line summary of what changed in the lesson-results draft"
+        default="",
+        description="One-line summary of what changed in the lesson-results draft",
     )
     state_patch: MemoryStatePatch = Field(
         default_factory=MemoryStatePatch,
@@ -71,7 +76,9 @@ class PlanTurnOutput(BaseModel):
     # Compatibility fallback while older stubs/outputs are migrated. New prompts
     # ask for state_patch, not full authoritative snapshots.
     session_state: SessionState = Field(default_factory=SessionState)
-    lesson_planning_state: LessonPlanningState = Field(default_factory=LessonPlanningState)
+    lesson_planning_state: LessonPlanningState = Field(
+        default_factory=LessonPlanningState
+    )
     new_evidence_briefs: list[EvidenceBrief] = Field(
         default_factory=list,
         description="Compact briefs for tool/search/material results used this turn",
@@ -171,7 +178,9 @@ class MemorySweepAlignmentGroupOutput(BaseModel):
             "merge | adjust_existing | already_covered | needs_decision | reject_low_signal"
         ),
     )
-    group_label: str = Field(default="", description="Short semantic label for the claim")
+    group_label: str = Field(
+        default="", description="Short semantic label for the claim"
+    )
     surface_labels: list[str] = Field(
         default_factory=list,
         description="Surface phrasings or labels used by the raw ledger rows in this group.",
@@ -195,7 +204,9 @@ class MemorySweepAlignmentGroupOutput(BaseModel):
 
 
 class MemorySweepAlignmentOutput(BaseModel):
-    alignment_groups: list[MemorySweepAlignmentGroupOutput] = Field(default_factory=list)
+    alignment_groups: list[MemorySweepAlignmentGroupOutput] = Field(
+        default_factory=list
+    )
     warnings: list[str] = Field(default_factory=list)
 
 

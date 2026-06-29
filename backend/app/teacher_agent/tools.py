@@ -27,7 +27,9 @@ class WikiToolContext:
     memory: Optional[MemoryRuntime] = None
 
 
-def _capture(planning: Optional[PlanRuntime | MemoryRuntime], kind: str, payload: str) -> str:
+def _capture(
+    planning: Optional[PlanRuntime | MemoryRuntime], kind: str, payload: str
+) -> str:
     """Stash a raw tool output under a raw_ref and prefix the ref for the model."""
     if planning is None:
         return payload
@@ -35,7 +37,9 @@ def _capture(planning: Optional[PlanRuntime | MemoryRuntime], kind: str, payload
     return f"raw_ref: {raw_ref}\n{payload}"
 
 
-def lookup_raw_evidence(planning: Optional[PlanRuntime | MemoryRuntime], raw_ref: str) -> str:
+def lookup_raw_evidence(
+    planning: Optional[PlanRuntime | MemoryRuntime], raw_ref: str
+) -> str:
     """Return the captured raw output for a raw_ref (progressive exposure)."""
     if planning is None:
         return "Error: no evidence store for this session."
@@ -74,9 +78,7 @@ def _lesson_matches_topic(entry, topic: str) -> bool:
     return q in haystack
 
 
-def _lesson_body_matches_topic(
-    wiki: WikiStore, paths: list[str], topic: str
-) -> bool:
+def _lesson_body_matches_topic(wiki: WikiStore, paths: list[str], topic: str) -> bool:
     q = topic.strip().lower()
     if not q:
         return True
@@ -270,7 +272,9 @@ def create_memory_update_tools(ctx: WikiToolContext) -> list:
                 for lesson in payload.get("lessons", [])
                 if lesson.get("status") == wanted
             ]
-        return _capture(ctx.memory, "list_memory_targets", json.dumps(payload, indent=2))
+        return _capture(
+            ctx.memory, "list_memory_targets", json.dumps(payload, indent=2)
+        )
 
     @function_tool
     def read_memory_target(lesson_date: date) -> str:
@@ -282,7 +286,9 @@ def create_memory_update_tools(ctx: WikiToolContext) -> list:
         """
         try:
             payload = _lesson_detail_payload(wiki, class_id, lesson_date.isoformat())
-            return _capture(ctx.memory, "read_memory_target", json.dumps(payload, indent=2))
+            return _capture(
+                ctx.memory, "read_memory_target", json.dumps(payload, indent=2)
+            )
         except KeyError as e:
             return f"Error: {e}"
 
@@ -410,7 +416,9 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
             "lessons": lessons,
             "warnings": listed.get("warnings", []),
         }
-        return _capture(ctx.planning, "read_lesson_range", json.dumps(payload, indent=2))
+        return _capture(
+            ctx.planning, "read_lesson_range", json.dumps(payload, indent=2)
+        )
 
     @function_tool
     def search_memory(query: str, max_results: int = 8) -> str:

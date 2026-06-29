@@ -15,7 +15,11 @@ from app.teacher_agent.wiki_store import WikiStore
 def _resolved_wiki_root() -> Path:
     root = Path(get_settings().wiki_root)
     local_root = Path(__file__).resolve().parents[2] / "teacher_wiki"
-    if root.as_posix() == "/data/teacher_wiki" and not root.exists() and local_root.exists():
+    if (
+        root.as_posix() == "/data/teacher_wiki"
+        and not root.exists()
+        and local_root.exists()
+    ):
         return local_root
     return root
 

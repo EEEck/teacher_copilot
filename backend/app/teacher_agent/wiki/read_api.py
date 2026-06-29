@@ -3,38 +3,21 @@
 from __future__ import annotations
 
 import re
-import uuid
-from datetime import date, datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from datetime import datetime
 
 from app.schemas.api import (
-    ApprovedWikiUpdate,
     ClassMemorySnapshot,
-    ClassSummary,
     ClassTimeline,
-    CompletenessChecklist,
-    CompletenessItem,
     LessonDetail,
     RollupExcerpt,
     TimelineEntry,
-    WikiUpdateProposal,
 )
 
 from app.teacher_agent.wiki.constants import (
-    CLASS_REGISTRY,
-    DIARY_SECTION_HEADINGS,
-    INDEX_WIKI_PATH_RE,
-    LESSON_RESULTS_SECTIONS,
-    LOG_HEADER_LEGACY_RE,
-    LOG_HEADER_RE,
     ROLLUP_LABELS,
-    STUDENT_ID_RE,
-    dedupe_wiki_proposals,
 )
 
 from app.teacher_agent.wiki import parsing
-
 
 
 def get_timeline(store, class_id: str) -> ClassTimeline:
@@ -56,7 +39,9 @@ def get_timeline(store, class_id: str) -> ClassTimeline:
                 covered = parsing.extract_section_bullets(text, "What was covered")
                 homework = parsing.extract_homework(text)
                 raw_path = parsing.extract_raw_link(text)
-                summary, highlights, issues, follow_ups = parsing.build_timeline_summary(text)
+                summary, highlights, issues, follow_ups = (
+                    parsing.build_timeline_summary(text)
+                )
                 entries.append(
                     TimelineEntry(
                         date=lesson_date,
@@ -96,6 +81,7 @@ def get_timeline(store, class_id: str) -> ClassTimeline:
     months = sorted({e.month_key for e in entries if e.month_key}, reverse=True)
     return ClassTimeline(class_id=class_id, entries=entries, months=months)
 
+
 def get_snapshot(store, class_id: str) -> ClassMemorySnapshot:
     cls = store.get_class(class_id)
     timeline = store.get_timeline(class_id)
@@ -130,6 +116,7 @@ def get_snapshot(store, class_id: str) -> ClassMemorySnapshot:
         recent_lessons=recent,
     )
 
+
 def get_lesson_detail(store, class_id: str, lesson_date: str) -> LessonDetail:
     store.get_class(class_id)
     results_path = store.lesson_dir(class_id, lesson_date) / "lesson_results.md"
@@ -159,7 +146,11 @@ def get_lesson_detail(store, class_id: str, lesson_date: str) -> LessonDetail:
     raw_md = ""
     raw_link = parsing.extract_raw_link(primary)
     if raw_link:
-        rel = raw_link.replace("../../../", "") if raw_link.startswith("../../../") else raw_link
+        rel = (
+            raw_link.replace("../../../", "")
+            if raw_link.startswith("../../../")
+            else raw_link
+        )
         raw_path = store.root / rel
         if raw_path.exists():
             raw_md = store.read_text(raw_path)
@@ -185,19 +176,33 @@ def get_lesson_detail(store, class_id: str, lesson_date: str) -> LessonDetail:
         rollup_excerpts=excerpts,
     )
 
-def revise_lesson(store, class_id: str, lesson_date: str, diary_md: str) -> tuple[TimelineEntry, list[str]]:
+
+def revise_lesson(
+    store, class_id: str, lesson_date: str, diary_md: str
+) -> tuple[TimelineEntry, list[str]]:
     cls = store.get_class(class_id)
-    title = parsing.extract_title(diary_md) or parsing.extract_title(
-        store.read_text(store.lesson_dir(class_id, lesson_date) / "lesson_results.md")
-    ) or "Lesson"
-    if parsing.extract_date_from_diary(diary_md) and parsing.extract_date_from_diary(diary_md) != lesson_date:
+    title = (
+        parsing.extract_title(diary_md)
+        or parsing.extract_title(
+            store.read_text(
+                store.lesson_dir(class_id, lesson_date) / "lesson_results.md"
+            )
+        )
+        or "Lesson"
+    )
+    if (
+        parsing.extract_date_from_diary(diary_md)
+        and parsing.extract_date_from_diary(diary_md) != lesson_date
+    ):
         diary_md = re.sub(
             r"Lesson Results\s*—\s*\d{4}-\d{2}-\d{2}",
             f"Lesson Results — {lesson_date}",
             diary_md,
             count=1,
         )
-    lesson_results = store._format_lesson_results(class_id, cls.subject, diary_md, lesson_date, title)
+    lesson_results = store._format_lesson_results(
+        class_id, cls.subject, diary_md, lesson_date, title
+    )
     results_path = store.lesson_dir(class_id, lesson_date) / "lesson_results.md"
     store.write_text(results_path, lesson_results)
 
@@ -215,25 +220,32 @@ def revise_lesson(store, class_id: str, lesson_date: str, diary_md: str) -> tupl
 
     covered = parsing.extract_section_body(diary_md, "What was covered")
     didnt = parsing.extract_section_body(diary_md, "What didn't go well")
-    students = parsing.extract_section_body(diary_md, "Student observations")
     followups = parsing.extract_section_body(diary_md, "Homework & follow-ups")
     paths = store.roll_up_paths(class_id)
 
-    unit_line = covered.split("\n")[0].strip().lstrip("- ") if covered.strip() else "See latest lesson"
+    unit_line = (
+        covered.split("\n")[0].strip().lstrip("- ")
+        if covered.strip()
+        else "See latest lesson"
+    )
     new_state = store._upsert_course_state(
         store.read_text(paths["course_state"]), lesson_date, title, unit_line, followups
     )
     store.write_text(paths["course_state"], new_state)
     applied.append(store.rel_wiki(paths["course_state"]))
 
-    misc = parsing.remove_date_section(store.read_text(paths["misconceptions"]), lesson_date)
+    misc = parsing.remove_date_section(
+        store.read_text(paths["misconceptions"]), lesson_date
+    )
     store.write_text(
         paths["misconceptions"],
         store._append_bullets(misc, parsing.lines_to_bullets(didnt), lesson_date),
     )
     applied.append(store.rel_wiki(paths["misconceptions"]))
 
-    loops = parsing.remove_date_section(store.read_text(paths["open_loops"]), lesson_date)
+    loops = parsing.remove_date_section(
+        store.read_text(paths["open_loops"]), lesson_date
+    )
     store.write_text(
         paths["open_loops"],
         store._append_bullets(loops, parsing.lines_to_bullets(followups), lesson_date),

@@ -41,7 +41,9 @@ def install_error_handlers(app: FastAPI) -> None:
         return _envelope("http_error", str(exc.detail), status=exc.status_code)
 
     @app.exception_handler(RequestValidationError)
-    async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+    async def _validation_error(
+        _: Request, exc: RequestValidationError
+    ) -> JSONResponse:
         return _envelope(
             "validation_error",
             "Request validation failed",
@@ -51,9 +53,7 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _unhandled_error(request: Request, exc: Exception) -> JSONResponse:
-        logger.exception(
-            "Unhandled error on %s %s", request.method, request.url.path
-        )
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
         return _envelope(
             type(exc).__name__,
             str(exc) or "Internal server error",

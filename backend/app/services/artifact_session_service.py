@@ -86,7 +86,9 @@ class ArtifactSessionService:
             status=spec.chatting_status,
             messages=messages,
             partial_markdown=spec.empty_template(self.wiki),
-            completeness=spec.completeness_of(self.wiki, spec.empty_template(self.wiki)),
+            completeness=spec.completeness_of(
+                self.wiki, spec.empty_template(self.wiki)
+            ),
             opening_message=opening,
             runtime=spec.runtime_factory() if spec.runtime_factory else None,
         )
@@ -325,7 +327,9 @@ class ArtifactSessionService:
         spec = self.specs[session.mode]
         if not spec.stream_turn or not spec.final_event_to_turn_result:
             yield sse_encode(
-                SseError(message="Workflow streaming is not configured.", code="config_error")
+                SseError(
+                    message="Workflow streaming is not configured.", code="config_error"
+                )
             )
             return
         stream = spec.stream_turn(

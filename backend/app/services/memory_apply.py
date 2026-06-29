@@ -164,7 +164,9 @@ def _apply_adjust_item(wiki, class_id: str, item, subject_target: str) -> str:
         path = wiki.memory_paths(class_id)[compact_key]
         page_key = compact_key
     elif target == subject_target:
-        path = wiki.root / "wiki" / "subjects" / f"{wiki.get_class(class_id).subject}.md"
+        path = (
+            wiki.root / "wiki" / "subjects" / f"{wiki.get_class(class_id).subject}.md"
+        )
         page_key = "subject_guide"
     else:
         return ""

@@ -49,6 +49,8 @@ EVIDENCE_TYPES = (
     "textbook_lookup",
     "web_search",
 )
+
+
 class SessionState(BaseModel):
     """Keeps the chat oriented (phase, goals, decisions, open questions)."""
 
@@ -142,7 +144,9 @@ class PlanRuntime:
     """Per-session persisted runtime memory (server RAM, like ArtifactSession)."""
 
     session_state: SessionState = field(default_factory=SessionState)
-    lesson_planning_state: LessonPlanningState = field(default_factory=LessonPlanningState)
+    lesson_planning_state: LessonPlanningState = field(
+        default_factory=LessonPlanningState
+    )
     evidence_briefs: list[EvidenceBrief] = field(default_factory=list)
     raw_store: dict[str, str] = field(default_factory=dict)
     memory_candidates: list[MemoryCandidate] = field(default_factory=list)
@@ -244,7 +248,9 @@ def _apply_lesson_patch(
 
 def apply_state_patch(runtime: PlanRuntime, patch: StatePatch) -> None:
     """Apply a model-proposed patch to backend-owned runtime state."""
-    runtime.session_state = _apply_session_patch(runtime.session_state, patch.session_state)
+    runtime.session_state = _apply_session_patch(
+        runtime.session_state, patch.session_state
+    )
     runtime.lesson_planning_state = _apply_lesson_patch(
         runtime.lesson_planning_state, patch.lesson_planning_state
     )

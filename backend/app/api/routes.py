@@ -28,7 +28,6 @@ from app.schemas.api import (
     IngestSessionStartRequest,
     LessonDetail,
     LessonPlan,
-    MemoryApplyItem,
     MemoryApplyRequest,
     MemoryApplyResponse,
     MemoryCandidateStatusRequest,
@@ -73,7 +72,12 @@ router = APIRouter(prefix="/api")
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def _memory_sweep_api_queues(grouped_cards) -> dict[str, list[MemorySweepCandidate]]:
@@ -167,7 +171,9 @@ def revise_lesson(
 
 
 @router.get("/classes/{class_id}/snapshot", response_model=ClassMemorySnapshot)
-def get_snapshot(class_id: str, wiki: WikiStore = Depends(get_wiki)) -> ClassMemorySnapshot:
+def get_snapshot(
+    class_id: str, wiki: WikiStore = Depends(get_wiki)
+) -> ClassMemorySnapshot:
     try:
         return wiki.get_snapshot(class_id)
     except KeyError as e:
@@ -184,7 +190,9 @@ def get_wiki_file(
         wiki.get_class(class_id)
         rel = path.strip().lstrip("/")
         if not rel:
-            raise HTTPException(status_code=400, detail="path query parameter is required")
+            raise HTTPException(
+                status_code=400, detail="path query parameter is required"
+            )
         full = wiki.resolve_path(rel)
         if not full.exists():
             raise HTTPException(status_code=404, detail=f"Wiki file not found: {rel}")
@@ -262,7 +270,9 @@ def apply_compact_memory_proposal(
     try:
         wiki.get_class(class_id)
         if not body.pages:
-            raise HTTPException(status_code=400, detail="No compact memory pages provided")
+            raise HTTPException(
+                status_code=400, detail="No compact memory pages provided"
+            )
         applied, log_id = wiki.commit_memory_compaction(
             class_id,
             body.pages,
@@ -382,7 +392,10 @@ def apply_memory(
 
     applied, skipped, warnings = apply_memory_items(wiki, class_id, body.items)
     return MemoryApplyResponse(
-        class_id=class_id, applied_wiki_paths=applied, skipped=skipped, warnings=warnings
+        class_id=class_id,
+        applied_wiki_paths=applied,
+        skipped=skipped,
+        warnings=warnings,
     )
 
 
@@ -432,7 +445,9 @@ def apply_memory_sweep(
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     if not body.decisions:
-        raise HTTPException(status_code=400, detail="No Memory Sweep decisions provided")
+        raise HTTPException(
+            status_code=400, detail="No Memory Sweep decisions provided"
+        )
 
     open_rows = ledger.list_candidates(
         class_id=class_id,
@@ -458,8 +473,8 @@ def apply_memory_sweep(
     warnings: list[str] = []
     successful_apply_indexes: list[int] = []
     if any(decision.action == "apply" for decision in body.decisions):
-        applied, skipped, warnings, successful_apply_indexes = apply_memory_sweep_decisions(
-            wiki, class_id, body.decisions
+        applied, skipped, warnings, successful_apply_indexes = (
+            apply_memory_sweep_decisions(wiki, class_id, body.decisions)
         )
 
     successful_apply_index_set = set(successful_apply_indexes)

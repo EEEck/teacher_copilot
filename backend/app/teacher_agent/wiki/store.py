@@ -153,7 +153,9 @@ class WikiStore:
     def search_personal_memory(self, class_id, query, max_results=5):
         return memory.search_personal_memory(self, class_id, query, max_results)
 
-    def build_memory_compaction_source_packet(self, class_id, start_date=None, end_date=None):
+    def build_memory_compaction_source_packet(
+        self, class_id, start_date=None, end_date=None
+    ):
         return memory.build_memory_compaction_source_packet(
             self, class_id, start_date, end_date
         )
@@ -223,13 +225,17 @@ class WikiStore:
         return parsing.extract_date_from_diary(text)
 
     def _format_lesson_results(self, class_id, subject, diary_md, lesson_date, title):
-        return rollups._format_lesson_results(self, class_id, subject, diary_md, lesson_date, title)
+        return rollups._format_lesson_results(
+            self, class_id, subject, diary_md, lesson_date, title
+        )
 
     def _compile_rollups(self, class_id, diary_md, lesson_date, title):
         return rollups._compile_rollups(self, class_id, diary_md, lesson_date, title)
 
     def _upsert_course_state(self, current, lesson_date, title, unit, followups):
-        return rollups._upsert_course_state(self, current, lesson_date, title, unit, followups)
+        return rollups._upsert_course_state(
+            self, current, lesson_date, title, unit, followups
+        )
 
     def _append_bullets(self, existing, new_bullets, lesson_date):
         return rollups._append_bullets(self, existing, new_bullets, lesson_date)
@@ -238,22 +244,30 @@ class WikiStore:
         return parsing.parse_student_observations(students_block)
 
     def _upsert_student_entity(self, class_id, student_id, lesson_date, bullets):
-        return rollups._upsert_student_entity(self, class_id, student_id, lesson_date, bullets)
+        return rollups._upsert_student_entity(
+            self, class_id, student_id, lesson_date, bullets
+        )
 
     def _rebuild_students_index(self, class_id, previews):
         return rollups._rebuild_students_index(self, class_id, previews)
 
     def _compile_timeline_entry(self, class_id, lesson_date, title, diary_md):
-        return rollups._compile_timeline_entry(self, class_id, lesson_date, title, diary_md)
+        return rollups._compile_timeline_entry(
+            self, class_id, lesson_date, title, diary_md
+        )
 
     def _upsert_timeline_md(self, class_id, lesson_date, title, diary_md):
         return rollups._upsert_timeline_md(self, class_id, lesson_date, title, diary_md)
 
     def _compile_students_and_timeline(self, class_id, diary_md, lesson_date, title):
-        return rollups._compile_students_and_timeline(self, class_id, diary_md, lesson_date, title)
+        return rollups._compile_students_and_timeline(
+            self, class_id, diary_md, lesson_date, title
+        )
 
     def _finalize_lesson_writes(self, class_id, diary_md, lesson_date, title, applied):
-        return rollups._finalize_lesson_writes(self, class_id, diary_md, lesson_date, title, applied)
+        return rollups._finalize_lesson_writes(
+            self, class_id, diary_md, lesson_date, title, applied
+        )
 
     def _lines_to_bullets(self, text):
         return parsing.lines_to_bullets(text)
@@ -286,7 +300,9 @@ class WikiStore:
         return parsing.build_timeline_summary(lesson_results)
 
     def _diary_body_from_lesson_results(self, lesson_results, lesson_date, title):
-        return parsing.diary_body_from_lesson_results(lesson_results, lesson_date, title)
+        return parsing.diary_body_from_lesson_results(
+            lesson_results, lesson_date, title
+        )
 
     def _extract_date_section(self, text, lesson_date):
         return parsing.extract_date_section(text, lesson_date)
@@ -319,4 +335,3 @@ class WikiStore:
     @property
     def log_path(self) -> Path:
         return paths_io.log_path(self)
-

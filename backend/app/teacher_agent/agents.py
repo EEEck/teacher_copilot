@@ -15,7 +15,12 @@ from agents.exceptions import AgentsException, MaxTurnsExceeded
 from openai import OpenAI
 
 from app.config import Settings
-from app.schemas.api import ChatAttachment, ChatMessage, CompletenessChecklist, LessonPlan
+from app.schemas.api import (
+    ChatAttachment,
+    ChatMessage,
+    CompletenessChecklist,
+    LessonPlan,
+)
 from app.teacher_agent.agent import (
     build_memory_sweep_alignment_agent,
     build_memory_compact_agent,
@@ -55,10 +60,16 @@ from app.teacher_agent.planning_state import (
     planning_api_payload,
 )
 from app.teacher_agent.tools import WikiToolContext
-from app.teacher_agent.stream_events import SseError, SseEvent, SseFinal, translate_sdk_event
+from app.teacher_agent.stream_events import (
+    SseError,
+    SseEvent,
+    SseFinal,
+    translate_sdk_event,
+)
 from app.teacher_agent.wiki_store import WikiStore
 
 logger = logging.getLogger("klassenpilot.agents")
+
 
 class AgentTurnLimitError(RuntimeError):
     """Agent used too many tool/reasoning steps in one turn."""
@@ -70,6 +81,7 @@ class _PreparedAgentTurn:
     current_draft: str
     agent: Any
     user_input: str
+
 
 _TURN_LIMIT_REPLY = (
     "I needed more steps than allowed to finish this turn. "
@@ -121,9 +133,7 @@ def _pseudonymize_known_students(text: str, roster_md: str) -> str:
     return out
 
 
-def _trim_to_last_user_turns(
-    messages: list[ChatMessage], n: int
-) -> list[ChatMessage]:
+def _trim_to_last_user_turns(messages: list[ChatMessage], n: int) -> list[ChatMessage]:
     """Keep only the last ``n`` user turns (and everything after the earliest).
 
     Durable context lives in injected state, so trimming the verbatim window is
@@ -586,7 +596,9 @@ class AgentRunner:
         try:
             context = self.wiki.build_plan_context_slim(class_id)
             agent = build_plan_opening_agent(context, self.model)
-            out = await self._run_structured(agent, "Open the planning session for this class.")
+            out = await self._run_structured(
+                agent, "Open the planning session for this class."
+            )
             text = out if isinstance(out, str) else str(out)
             return text.strip() or self._plan_opening_fallback(class_id)
         except Exception:
@@ -610,7 +622,11 @@ class AgentRunner:
         except AgentTurnLimitError as exc:
             return str(exc), turn.current_draft, False
         if not isinstance(parsed, PlanTurnOutput):
-            return "I had trouble processing that — could you try again?", current_draft, False
+            return (
+                "I had trouble processing that — could you try again?",
+                current_draft,
+                False,
+            )
         finalized = self._finalize_plan_turn(
             parsed,
             current_draft,
@@ -618,7 +634,11 @@ class AgentRunner:
             teacher_message=messages[-1].content if messages else "",
         )
         if finalized is None:
-            return "I had trouble processing that â€” could you try again?", current_draft, False
+            return (
+                "I had trouble processing that â€” could you try again?",
+                current_draft,
+                False,
+            )
         return finalized
 
     async def ingest_chat(

@@ -118,7 +118,9 @@ def build_plan_opening_agent(context: str, model: str) -> Agent:
         name="KlassenPilot Plan Opening",
         instructions=apply_prompt(
             PLAN_OPENING_SYSTEM,
-            context=apply_char_limit(context, get_context_limits().plan_opening_context_chars),
+            context=apply_char_limit(
+                context, get_context_limits().plan_opening_context_chars
+            ),
         ),
         model=model,
     )

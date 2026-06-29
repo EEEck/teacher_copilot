@@ -72,7 +72,9 @@ def memory_paths(store, class_id: str) -> dict[str, Any]:
     return {key: base / filename for key, filename in COMPACT_MEMORY_FILES.items()}
 
 
-def compact_memory_excerpts(store, class_id: str, max_chars: int = 1600) -> list[tuple[str, str]]:
+def compact_memory_excerpts(
+    store, class_id: str, max_chars: int = 1600
+) -> list[tuple[str, str]]:
     excerpts: list[tuple[str, str]] = []
     for key, path in memory_paths(store, class_id).items():
         text = store.read_text(path).strip()
@@ -385,7 +387,8 @@ def build_memory_compaction_source_packet(
         return True
 
     lesson_entries = [
-        e for e in sorted(timeline.entries, key=lambda entry: entry.date)
+        e
+        for e in sorted(timeline.entries, key=lambda entry: entry.date)
         if e.status == "taught" and in_range(e.date)
     ]
     if not lesson_entries:
@@ -407,7 +410,9 @@ def build_memory_compaction_source_packet(
     if subject_path.exists():
         rel = store.rel_wiki(subject_path)
         source_paths.append(rel)
-        parts.extend([f"## Subject guide ({rel})", store.read_text(subject_path)[:2000], ""])
+        parts.extend(
+            [f"## Subject guide ({rel})", store.read_text(subject_path)[:2000], ""]
+        )
 
     existing = compact_memory_excerpts(store, class_id, max_chars=2200)
     if existing:

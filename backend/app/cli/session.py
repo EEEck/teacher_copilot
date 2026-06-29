@@ -48,7 +48,9 @@ class CliSession:
             return self.agents.ingest_chat_stream
         return self.agents.plan_chat_stream
 
-    async def run_turn(self, user_message: str) -> tuple[list[SseEvent], SseFinal | None, SseError | None]:
+    async def run_turn(
+        self, user_message: str
+    ) -> tuple[list[SseEvent], SseFinal | None, SseError | None]:
         await self.ensure_plan_opening()
         self.messages.append(ChatMessage(role="user", content=user_message))
         events: list[SseEvent] = []

@@ -23,7 +23,10 @@ from app.schemas.api import (
     IngestSessionStatus,
     MemoryTraceResponse,
 )
-from app.services.artifact_session_service import ArtifactSession, ArtifactSessionService
+from app.services.artifact_session_service import (
+    ArtifactSession,
+    ArtifactSessionService,
+)
 from app.services.memory_candidate_ledger import MemoryCandidateLedger
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.memory_update_state import (
@@ -184,9 +187,7 @@ class IngestService:
         decisions = []
         open_questions = []
         if resolved.target_confirmed:
-            decisions.append(
-                f"Use {resolved.lesson_date} as the update-memory target."
-            )
+            decisions.append(f"Use {resolved.lesson_date} as the update-memory target.")
         else:
             open_questions.append(
                 f"Confirm whether {resolved.lesson_date} is the lesson to update."
@@ -210,7 +211,11 @@ class IngestService:
                     phase=resolved.phase,
                     teacher_goal=(
                         f"Update lesson results for {resolved.lesson_date}"
-                        + (f" ({resolved.lesson_title})" if resolved.lesson_title else "")
+                        + (
+                            f" ({resolved.lesson_title})"
+                            if resolved.lesson_title
+                            else ""
+                        )
                     ),
                     decisions=decisions,
                     open_questions=open_questions,
@@ -248,7 +253,9 @@ class IngestService:
         attachments: list[ChatAttachment] | None = None,
     ) -> ChatResponse:
         result = await self.core.chat(session_id, message, diary_markdown, attachments)
-        completeness = result.completeness or self.wiki.checklist_from_diary(result.markdown)
+        completeness = result.completeness or self.wiki.checklist_from_diary(
+            result.markdown
+        )
         return ChatResponse(
             reply=result.reply,
             diary_markdown=result.markdown,
@@ -284,7 +291,9 @@ class IngestService:
         session = self.core.get_session(session_id)
         diary_md = session.partial_markdown
         if not diary_md.strip():
-            diary_md = await self.agents.compile_diary(session.class_id, session.messages)
+            diary_md = await self.agents.compile_diary(
+                session.class_id, session.messages
+            )
         draft = self.core.update_draft(session_id, diary_md)
         self.core.set_status(session_id, IngestSessionStatus.reviewing.value)
         assert isinstance(draft, IngestDraft)
@@ -306,11 +315,15 @@ class IngestService:
         session = self.core.get_session(session_id)
         if session.class_id != class_id:
             raise KeyError("Session class mismatch")
-        runtime = session.runtime if isinstance(session.runtime, MemoryRuntime) else None
+        runtime = (
+            session.runtime if isinstance(session.runtime, MemoryRuntime) else None
+        )
         runtime_payload = memory_api_payload(runtime) if runtime else {}
         prompt_stack = {
             "teacher_context": self.wiki.build_teacher_context_trace()["text"],
-            "active_class_core": self.wiki.build_active_class_core_context_trace(class_id)["text"],
+            "active_class_core": self.wiki.build_active_class_core_context_trace(
+                class_id
+            )["text"],
             "ingest_context": self.wiki.build_ingest_context_slim(class_id),
             "memory_target_state": render_memory_target_state(runtime.target)
             if runtime
@@ -318,15 +331,15 @@ class IngestService:
             "memory_session_state": render_memory_session_state(runtime.session_state)
             if runtime
             else "",
-            "lesson_result_state": render_lesson_result_state(runtime.lesson_result_state)
+            "lesson_result_state": render_lesson_result_state(
+                runtime.lesson_result_state
+            )
             if runtime
             else "",
             "memory_evidence_briefs": render_memory_briefs(runtime.evidence_briefs)
             if runtime
             else "",
-            "memory_runtime": render_memory_runtime(runtime)
-            if runtime
-            else "",
+            "memory_runtime": render_memory_runtime(runtime) if runtime else "",
             "current_diary_markdown": session.partial_markdown,
         }
         return MemoryTraceResponse(
@@ -351,7 +364,8 @@ class IngestService:
     def commit(self, req: CommitIngestRequest) -> CommitIngestResponse:
         session = self.core.get_session(req.session_id)
         lesson_date = (
-            self.wiki.extract_date_from_diary(req.diary_markdown) or date.today().isoformat()
+            self.wiki.extract_date_from_diary(req.diary_markdown)
+            or date.today().isoformat()
         )
         title = self.wiki.extract_title(req.diary_markdown) or "Lesson"
         raw_path, applied, log_id = self.wiki.commit_ingest(
