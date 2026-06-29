@@ -232,7 +232,7 @@ def test_durable_preference_state_patch_promotes_memory_candidate():
 
     assert len(rt.memory_candidates) == 1
     candidate = rt.memory_candidates[0]
-    assert candidate.target == "user.md"
+    assert candidate.target == "teacher_profile.md"
     assert candidate.section == "Communication"
     assert candidate.source == "teacher_explicit"
     assert candidate.basis == "explicit"
@@ -250,7 +250,7 @@ def test_durable_preference_state_patch_promotes_memory_candidate():
     assert len(rows) == 1
     assert rows[0].class_id is None
     assert rows[0].channel == "teacher_behavior"
-    assert rows[0].target == "user.md"
+    assert rows[0].target == "teacher_profile.md"
 
 
 def test_lesson_scoped_preference_state_patch_does_not_promote_memory_candidate():
@@ -420,7 +420,7 @@ def test_plan_chat_repairs_state_only_preference_to_api_and_ledger(
     body = chat.json()
     assert len(body["memory_candidates"]) == 1
     candidate = body["memory_candidates"][0]
-    assert candidate["target"] == "user.md"
+    assert candidate["target"] == "teacher_profile.md"
     assert candidate["section"] == "Communication"
     assert candidate["basis"] == "explicit"
     assert candidate["confidence"] == "high"
@@ -431,7 +431,7 @@ def test_plan_chat_repairs_state_only_preference_to_api_and_ledger(
         -1
     ]
     stream_candidate = stream_final["memory_candidates"][0]
-    assert stream_candidate["target"] == "user.md"
+    assert stream_candidate["target"] == "teacher_profile.md"
     assert stream_candidate["section"] == "Communication"
     assert "MBB-style communication" in stream_candidate["candidate_update"]
 
@@ -440,7 +440,7 @@ def test_plan_chat_repairs_state_only_preference_to_api_and_ledger(
     assert {row.session_id for row in rows} == {session_id, stream_session_id}
     assert all(row.class_id is None for row in rows)
     assert all(row.channel == "teacher_behavior" for row in rows)
-    assert all(row.target == "user.md" for row in rows)
+    assert all(row.target == "teacher_profile.md" for row in rows)
     assert {path: wiki.read_text(path) for path in _profile_paths(wiki)} == before
 
 

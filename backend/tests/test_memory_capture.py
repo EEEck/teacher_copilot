@@ -140,7 +140,7 @@ def test_durable_preference_repair_requires_typed_state_signal():
     )
 
     assert len(candidates) == 1
-    assert candidates[0].target == "user.md"
+    assert candidates[0].target == "teacher_profile.md"
     assert candidates[0].section == "Communication"
     assert candidates[0].basis == "explicit"
     assert one_off == []

@@ -336,7 +336,7 @@ async def propose_profile(
     agents: AgentRunner = Depends(get_agents),
     wiki: WikiStore = Depends(get_wiki),
 ) -> ProfileProposalResponse:
-    """Propose user.md / copilot.md updates from a finished session (no writes)."""
+    """Propose teacher_profile.md / copilot_profile.md updates from a finished session."""
     try:
         req = body or ProfileProposalRequest()
         wiki.get_class(class_id)

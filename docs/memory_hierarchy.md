@@ -51,7 +51,8 @@ Updated by:
 
 - `POST /api/classes/{class_id}/memory/profile/propose` proposes updates after a
   finished planning session.
-- `POST /api/classes/{class_id}/memory/apply` writes approved `user.md` items
+- `POST /api/classes/{class_id}/memory/apply` writes approved `teacher_profile.md`
+  items
   through bounded backend helpers.
 
 Do not put here:
@@ -413,7 +414,7 @@ planning turn. `prompt-01-plan_opening-sections.md` is intentionally slimmer.
 
 After a plan is saved, profile/memory proposal can suggest:
 
-- `user.md`: stable global teacher preference
+- `teacher_profile.md` (`user.md` alias): stable global teacher preference
 - `copilot.md`: class-specific copilot behavior preference
 - `class_state.md`: updated current class state
 - `teaching_patterns.md`: stable class learning patterns seen across approved
@@ -426,7 +427,7 @@ After a plan is saved, profile/memory proposal can suggest:
 Examples:
 
 - Teacher says: "I always want plans in English."
-  - Target: `user.md`
+  - Target: `teacher_profile.md`
 - Teacher says: "For 9b, avoid starting too open-ended."
   - Target: `copilot.md`
 - The final plan establishes the next concrete class direction.

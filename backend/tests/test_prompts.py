@@ -183,6 +183,8 @@ def test_memory_sweep_prompt_requires_claim_level_consolidation():
     assert "without contradiction" in alignment_prompt
     assert "exact existing bullet" in alignment_prompt
     assert "do not choose broadens_existing_memory" in alignment_prompt
+    assert "must choose broadens_existing_memory" in alignment_prompt
+    assert "decision=\"adjust_existing\"" in alignment_prompt
     assert "named-label rule" in alignment_prompt
     assert "merge rule" in alignment_prompt
     assert "surface_labels" in alignment_prompt
@@ -197,10 +199,14 @@ def test_memory_sweep_prompt_requires_claim_level_consolidation():
     assert "validated alignment groups" in card_prompt
     assert "operation=\"adjust\"" in card_prompt
     assert "replaces_content" in card_prompt
+    assert "existing covered memory sentence" in card_prompt
     assert "candidate_ids must exactly match" in card_prompt
     assert "stand alone" in card_prompt
     assert "not only one label" in card_prompt
     assert "do not erase important named surface labels" in card_prompt
+    assert "content itself" in card_prompt
+    assert "not only surface_labels" in card_prompt
+    assert "every important compatible named surface label" in card_prompt
     assert "shared_attributes" in card_prompt
     assert "merge_test" in card_prompt
     assert "redox_oxidation_reduction_concept_confusion" in card_prompt

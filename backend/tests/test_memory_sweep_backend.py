@@ -16,6 +16,7 @@ from app.services.memory_candidate_ledger import (
 from app.services.memory_sweep import (
     build_sweep_packets,
     build_sweep_proposals,
+    propose_memory_sweep_review,
     validate_alignment_output,
     validate_cards_against_alignment,
     memory_sweep_target_excerpts,
@@ -929,6 +930,72 @@ def test_memory_sweep_card_validation_rejects_invalid_operation_and_adjust_missi
         validate_cards_against_alignment(packet, output, adjust_alignment, target_excerpts)
 
 
+def test_memory_sweep_card_validation_rejects_add_when_named_label_matches_existing_bullet(
+    tmp_path,
+):
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    ledger.add_many(
+        [
+            _teacher_behavior_row(
+                "existing_label_1",
+                update="Use named-style communication.",
+                evidence="Teacher asked for named-style communication.",
+                created_at="2026-06-22T09:00:00Z",
+            ),
+            _teacher_behavior_row(
+                "existing_label_2",
+                update="Use concise recommendation-led communication.",
+                evidence="Teacher asked for concise recommendations.",
+                created_at="2026-06-22T09:05:00Z",
+            ),
+        ]
+    )
+    grouped = build_sweep_proposals(ledger.list_candidates(class_id=CLASS_ID, subject="chemie"))
+    target_excerpts = {
+        "teacher_profile.md": "## Communication\n- Teacher prefers named-style framing.\n"
+    }
+    packet = build_sweep_packets(grouped, target_excerpts)[0]
+    alignment = validate_alignment_output(
+        packet,
+        MemorySweepAlignmentOutput(
+            alignment_groups=[
+                MemorySweepAlignmentGroupOutput(
+                    group_id="existing_label_group",
+                    target="teacher_profile.md",
+                    section="Communication",
+                    ledger_candidate_ids=["existing_label_1", "existing_label_2"],
+                    relationship="new_semantic_claim",
+                    decision="merge",
+                    surface_labels=["named-style communication", "recommendation-led"],
+                    shared_attributes=["named-style framing", "clear recommendations"],
+                )
+            ]
+        ),
+    )
+    output = MemorySweepProposalOutput(
+        cards=[
+            MemorySweepCardOutput(
+                candidate_id="existing_label_1",
+                source_group_id="existing_label_group",
+                candidate_ids=["existing_label_1", "existing_label_2"],
+                review_queue="Teacher/Copilot Preferences",
+                channel="teacher_behavior",
+                target="teacher_profile.md",
+                section="Communication",
+                content=(
+                    "Teacher prefers named-style communication with concise "
+                    "recommendations."
+                ),
+                operation="add",
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="existing current-memory bullet"):
+        validate_cards_against_alignment(packet, output, alignment, target_excerpts)
+
+
 def test_memory_candidate_ledger_rejects_invalid_status(tmp_path):
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()
@@ -1660,6 +1727,126 @@ def test_memory_sweep_api_merges_mbb_and_executive_communication(
     }
     assert "executive-style communication" in card["content"]
     assert "MBB-style framing" in card["content"]
+
+
+@pytest.mark.anyio
+async def test_memory_sweep_retries_alignment_when_card_validation_reveals_bad_adjust(
+    tmp_path,
+    wiki: WikiStore,
+):
+    class BadAdjustThenMergeAgent(StubAgentRunner):
+        def __init__(self, wiki: WikiStore) -> None:
+            super().__init__(wiki)
+            self.alignment_errors: list[str] = []
+
+        async def align_memory_sweep_candidates(
+            self,
+            class_id: str,
+            subject: str,
+            grouped_candidates,
+            target_excerpts,
+            validation_error: str = "",
+        ):
+            self.alignment_errors.append(validation_error)
+            rows = [item for items in grouped_candidates.values() for item in items]
+            ids = [item["candidate_id"] for item in rows]
+            retrying_after_bad_adjust = "replaces_content not found" in validation_error
+            return MemorySweepAlignmentOutput(
+                alignment_groups=[
+                    MemorySweepAlignmentGroupOutput(
+                        group_id="teacher_style",
+                        target="teacher_profile.md",
+                        section="Communication",
+                        ledger_candidate_ids=ids,
+                        relationship=(
+                            "new_semantic_claim"
+                            if retrying_after_bad_adjust
+                            else "broadens_existing_memory"
+                        ),
+                        decision="merge" if retrying_after_bad_adjust else "adjust_existing",
+                        group_label="teacher_style",
+                    )
+                ]
+            )
+
+        async def propose_memory_sweep_cards(
+            self,
+            class_id: str,
+            subject: str,
+            grouped_candidates,
+            target_excerpts,
+            alignment_groups=None,
+            validation_error: str = "",
+        ):
+            rows = [item for items in grouped_candidates.values() for item in items]
+            ids = [item["candidate_id"] for item in rows]
+            group = (alignment_groups or [])[0]
+            operation = {
+                "merge": "add",
+                "adjust_existing": "adjust",
+            }[group["decision"]]
+            return MemorySweepProposalOutput(
+                cards=[
+                    MemorySweepCardOutput(
+                        candidate_id=ids[0],
+                        source_group_id=group["group_id"],
+                        candidate_ids=ids,
+                        signal_count=len(ids),
+                        review_queue=rows[0]["review_queue"],
+                        channel=rows[0]["channel"],
+                        target="teacher_profile.md",
+                        section="Communication",
+                        content=(
+                            "Teacher prefers concise named-style communication "
+                            "with clear recommendations."
+                        ),
+                        operation=operation,
+                        status_recommendation=(
+                            "promote" if operation == "add" else "promote"
+                        ),
+                        replaces_content=(
+                            "Teacher prefers missing narrower wording."
+                            if operation == "adjust"
+                            else ""
+                        ),
+                    )
+                ],
+                warnings=[],
+            )
+
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    ledger.add_many(
+        [
+            _teacher_behavior_row(
+                "bad_adjust_mbb",
+                update="Use named-style communication.",
+                evidence="Teacher asked for a named communication style.",
+                created_at="2026-06-22T09:00:00Z",
+            ),
+            _teacher_behavior_row(
+                "bad_adjust_exec",
+                update="Use concise executive communication.",
+                evidence="Teacher asked for concise executive communication.",
+                created_at="2026-06-22T09:05:00Z",
+            ),
+        ]
+    )
+    agents = BadAdjustThenMergeAgent(wiki)
+
+    result = await propose_memory_sweep_review(
+        wiki=wiki,
+        ledger=ledger,
+        agents=agents,
+        class_id=CLASS_ID,
+    )
+
+    cards = result.cards_by_queue["Teacher/Copilot Preferences"]
+    assert len(cards) == 1
+    assert cards[0].operation == "add"
+    assert set(cards[0].candidate_ids) == {"bad_adjust_mbb", "bad_adjust_exec"}
+    assert any("replaces_content not found" in error for error in agents.alignment_errors)
+    assert result.warnings == []
 
 
 def test_memory_sweep_api_repeated_mbb_preamble_is_already_covered(

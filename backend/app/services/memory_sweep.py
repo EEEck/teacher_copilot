@@ -8,6 +8,7 @@ into teacher-reviewable cards without writing memory.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
@@ -203,7 +204,6 @@ async def propose_memory_sweep_review(
     for packet in packets:
         packet_payload = sweep_packet_payloads([packet])
         packet_excerpts = {packet.target: packet.current_memory_excerpt}
-        alignment_groups: list[MemorySweepAlignmentGroup] = []
         validation_error = ""
         for attempt in range(2):
             try:
@@ -215,8 +215,6 @@ async def propose_memory_sweep_review(
                     validation_error=validation_error,
                 )
                 alignment_groups = validate_alignment_output(packet, alignment)
-                warnings.extend(alignment.warnings)
-                break
             except Exception as exc:
                 validation_error = str(exc)
                 if attempt == 1:
@@ -230,11 +228,8 @@ async def propose_memory_sweep_review(
                             validation_error,
                         )
                     )
-        if not alignment_groups:
-            continue
+                continue
 
-        card_validation_error = ""
-        for attempt in range(2):
             try:
                 packet_out = await agents.propose_memory_sweep_cards(
                     class_id,
@@ -242,7 +237,7 @@ async def propose_memory_sweep_review(
                     packet_payload,
                     packet_excerpts,
                     alignment_groups=alignment_groups_payload(alignment_groups),
-                    validation_error=card_validation_error,
+                    validation_error=validation_error,
                 )
                 packet_cards, packet_warnings = validate_cards_against_alignment(
                     packet,
@@ -251,20 +246,21 @@ async def propose_memory_sweep_review(
                     target_excerpts,
                 )
                 all_cards.extend(packet_cards)
+                warnings.extend(alignment.warnings)
                 warnings.extend(packet_warnings)
                 break
             except Exception as exc:
-                card_validation_error = str(exc)
+                validation_error = str(exc)
                 if attempt == 1:
                     warnings.append(
                         "Memory Sweep card generation unresolved for "
-                        f"{packet.packet_id}: {card_validation_error}"
+                        f"{packet.packet_id}: {validation_error}"
                     )
                     all_cards.extend(
                         unresolved_cards_from_packet(
                             packet,
                             target_excerpts,
-                            card_validation_error,
+                            validation_error,
                         )
                     )
 
@@ -306,32 +302,6 @@ def build_sweep_proposals(
         proposal = _proposal_from_rows(rows)
         grouped.setdefault(proposal.review_queue, []).append(proposal)
     return grouped
-
-
-def sweep_proposer_payload(
-    grouped: dict[str, list[MemorySweepProposal]],
-) -> dict[str, list[dict[str, Any]]]:
-    return {
-        queue: [
-            {
-                "candidate_id": p.candidate_id,
-                "candidate_ids": list(p.candidate_ids),
-                "signal_count": p.signal_count,
-                "review_queue": p.review_queue,
-                "channel": p.channel,
-                "target": p.target,
-                "section": p.section,
-                "content": p.content,
-                "evidence_summary": p.evidence_summary,
-                "evidence_refs": list(p.evidence_refs),
-                "confidence": p.confidence,
-                "basis": p.basis,
-                "status": p.status,
-            }
-            for p in proposals
-        ]
-        for queue, proposals in grouped.items()
-    }
 
 
 def build_sweep_packets(
@@ -642,6 +612,17 @@ def validate_cards_against_alignment(
             raise ValueError(
                 f"card {group.group_id} operation {operation} does not match decision {group.decision}"
             )
+        if operation == "add":
+            overlapping_bullet = _existing_named_label_bullet(
+                _current_excerpt(target_excerpts, group.target),
+                group,
+            )
+            if overlapping_bullet:
+                raise ValueError(
+                    "add card overlaps an existing current-memory bullet; "
+                    "use adjust_existing or already_covered instead: "
+                    f"{overlapping_bullet}"
+                )
         replaces_content = (getattr(raw_card, "replaces_content", "") or "").strip()
         if operation == "adjust":
             if not replaces_content:
@@ -888,6 +869,54 @@ def _excerpt_has_bullet(excerpt: str, bullet_content: str) -> bool:
         if _normalize_bullet_text(line) == wanted:
             return True
     return False
+
+
+def _existing_named_label_bullet(
+    excerpt: str,
+    group: MemorySweepAlignmentGroup,
+) -> str:
+    labels = [*group.surface_labels, *group.shared_attributes]
+    for line in (excerpt or "").splitlines():
+        if not line.strip().startswith("-"):
+            continue
+        bullet = _normalize_bullet_text(line)
+        if any(_named_label_overlaps_bullet(label, bullet) for label in labels):
+            return bullet
+    return ""
+
+
+_LABEL_STOPWORDS = {
+    "and",
+    "for",
+    "the",
+    "this",
+    "that",
+    "with",
+    "use",
+    "uses",
+    "using",
+    "teacher",
+    "prefers",
+    "preference",
+}
+
+
+def _named_label_overlaps_bullet(label: str, bullet: str) -> bool:
+    label_tokens = _label_tokens(label)
+    if not label_tokens:
+        return False
+    bullet_tokens = _label_tokens(bullet)
+    if not bullet_tokens:
+        return False
+    return len(label_tokens & bullet_tokens) >= 2
+
+
+def _label_tokens(value: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", (value or "").lower())
+        if len(token) >= 3 and token not in _LABEL_STOPWORDS
+    }
 
 
 def _normalize_bullet_text(value: str) -> str:

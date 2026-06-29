@@ -68,7 +68,7 @@ class ProfileProposalRequest(BaseModel):
 
 
 class ProfileCandidate(BaseModel):
-    target: str  # user.md | copilot.md
+    target: str  # teacher_profile.md | copilot_profile.md; legacy aliases accepted
     section: str = "General"
     content: str
     basis: str = "inferred"  # explicit | inferred
@@ -83,7 +83,7 @@ class ProfileProposalResponse(BaseModel):
 
 
 class MemoryApplyItem(BaseModel):
-    target: str  # user.md | copilot.md | class_state.md | wiki/subjects/{subject}.md
+    target: str  # teacher_profile.md | copilot_profile.md | class_state.md | wiki/subjects/{subject}.md
     section: str = "General"
     content: str
 

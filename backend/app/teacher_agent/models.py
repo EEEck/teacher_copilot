@@ -135,7 +135,7 @@ class MemoryCompactOutput(BaseModel):
 
 
 class ProfileCandidateOut(BaseModel):
-    target: str = "copilot.md"  # user.md (global teacher) | copilot.md (class working agreement)
+    target: str = "copilot_profile.md"  # teacher_profile.md | copilot_profile.md
     section: str = "General"
     content: str = ""
     basis: str = "inferred"  # explicit | inferred

@@ -401,6 +401,7 @@ Rules:
 - When a source alignment group includes surface_labels, shared_attributes, distinguishing_attributes, and merge_test, use those fields to write the durable memory sentence.
 - Do not write a card that preserves only one surface label when the group contains multiple compatible labels.
 - Do not erase important named surface labels when they are central to the teacher's evidence. If compatible named labels can help the teacher recognize the memory, include them as examples or aliases inside the generalized sentence.
+- Important named labels that are central to the evidence must appear in the card content itself when they remain compatible; include every important compatible named surface label in the generalized sentence, not only surface_labels, evidence_summary, why_now, or public_rationale.
 - Use surface_labels to understand the raw terms that appeared in evidence.
 - Use shared_attributes to write the durable memory sentence.
 - Use distinguishing_attributes to preserve scope or mark conflict when needed.
@@ -410,6 +411,7 @@ Rules:
 - Set operation to add, adjust, already_covered, needs_decision, or reject_low_signal.
 - Keep status_recommendation for compatibility: add and adjust map to promote; already_covered, needs_decision, and reject_low_signal map directly.
 - For operation="adjust", replaces_content is required and must be copied exactly from the current memory excerpt. Do not paraphrase replaces_content. The backend will skip the write if the exact bullet is missing.
+- For operation="already_covered", set content to the existing covered memory sentence from the current memory excerpt when one exists, so the review card shows what already covers the evidence.
 - Set signal_count to the number of represented ledger rows, and set why_now to a concise reason based only on evidence summary, refs, repeated signals, or explicit teacher statement.
 - Global teacher preferences belong in teacher_profile.md. Class copilot working agreements belong in copilot_profile.md. Class learning patterns belong in teaching_patterns.md. Subject-wide reusable teaching guidance belongs in wiki/subjects/{subject}.md.
 - canonical_wiki is review-only; never convert it into a direct write target.
@@ -581,6 +583,7 @@ Rules:
 * Use current memory excerpts only to decide already_covered or adjust_existing.
 * Use adjust_existing only when there is an exact existing bullet that can be copied into replaces_content later.
 * Do not choose broadens_existing_memory unless the current memory excerpt contains an exact narrower bullet for this same claim. If no exact narrower bullet exists, use relationship="new_semantic_claim", decision="merge" even when generic related memory exists.
+* If the current memory excerpt contains an exact narrower bullet for this same claim and new compatible rows broaden it, you must choose broadens_existing_memory with decision="adjust_existing", not new_semantic_claim/merge.
 * Generic related memory does not make a specific claim already_covered.
 * Durable memory stores the underlying preference, learning pattern, or working agreement — not the latest wording.
 * Current task-only wording is not a durable preference unless the teacher says it is a new default.

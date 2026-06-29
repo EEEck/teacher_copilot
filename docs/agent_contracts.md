@@ -150,8 +150,8 @@ Runtime context manager:
   teacher-approved action — see Memory Review/Apply Contract).
 - After a successful plan save, the UI should call the profile proposal flow
   with the final `lessonplan.md`, `session_state`, `lesson_planning_state`, and
-  accumulated `memory_candidates`. The returned `user.md` / `copilot.md`
-  proposals are reviewable suggestions only.
+  accumulated `memory_candidates`. The returned `teacher_profile.md` /
+  `copilot_profile.md` proposals are reviewable suggestions only.
 
 Allowed tools:
 
@@ -470,14 +470,14 @@ enforced at write AND inject time via `clamp_memory_page`):
 
 Plus one global, cross-class page:
 
-- `wiki/teacher_profile.md` (`user.md`) — agent-maintained global teacher
+- `wiki/teacher_profile.md` (`user.md` alias) — agent-maintained global teacher
   profile: communication style, stable preferences, default lesson structure.
   Bounded by `add_user_profile_conclusion`.
 
 Scope discipline (no cross-contamination):
 
-- Global teacher preferences → `user.md`. Class learning profile →
-  `teaching_patterns.md`. Copilot working agreement → `copilot.md`.
+- Global teacher preferences → `teacher_profile.md`. Class learning profile →
+  `teaching_patterns.md`. Copilot working agreement → `copilot_profile.md`.
 - Dedupe and REPLACE stale facts rather than appending; report stale/conflicting
   facts in the compaction `stale_report`.
 
@@ -503,7 +503,7 @@ Shared memory-capture rules:
   from broad raw-message keyword scraping.
 - If planning state carries a durable global teacher communication preference
   but top-level `memory_candidates` is empty, the backend may synthesize a
-  review-only `user.md` / `Communication` candidate with
+  review-only `teacher_profile.md` / `Communication` candidate with
   `source=teacher_explicit`, `basis=explicit`, and `confidence=high`.
 - Artifact-approved, session-end, pre-compaction, and Weekly Memory Sweep
   capture are lifecycle hooks around the shared candidate layer. They may add
@@ -524,7 +524,8 @@ Proposal (read-only, no writes):
 - After a successful teacher-approved ingest commit, the commit response may
   include the same proposal shape as `class_memory_proposal`. This is an
   immediate class-evolution review aid, not an automatic compact-memory write.
-- `POST /classes/{id}/memory/profile/propose` proposes `user.md` / `copilot.md`
+- `POST /classes/{id}/memory/profile/propose` proposes `teacher_profile.md` /
+  `copilot_profile.md`
   updates from a finished session, labeling each candidate `explicit` vs
   `inferred` with a confidence. It does not write.
 - Plan save returns the compact planning-state snapshot needed to call

@@ -757,7 +757,7 @@ class AgentRunner:
             f"{apply_char_limit(json.dumps(lesson_planning_state or {}, indent=2), field_cap)}\n\n"
             f"Memory candidates from the session:\n"
             f"{apply_char_limit(json.dumps(memory_candidates or [], indent=2), field_cap)}\n\n"
-            "Propose user.md and copilot.md updates now."
+            "Propose teacher_profile.md and copilot_profile.md updates now."
         )
         agent = build_profile_proposal_agent(self.fast_model)
         parsed = await self._run_structured(agent, prompt)
