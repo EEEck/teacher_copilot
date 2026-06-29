@@ -53,7 +53,7 @@ def clamp_memory_page(key: str, text: str) -> str:
     text = (text or "").rstrip()
     if len(text) <= budget:
         return text + ("\n" if text else "")
-    marker = "\n\n_… trimmed to size budget._\n"
+    marker = "\n\n_... trimmed to size budget._\n"
     keep = max(0, budget - len(marker))
     clipped = text[:keep]
     nl = clipped.rfind("\n")
@@ -109,6 +109,40 @@ def _ensure_profile_header(text: str, class_id: str) -> str:
     )
 
 
+def _add_section_entry(
+    text: str,
+    *,
+    section: str,
+    clean_content: str,
+    entry: str,
+    section_limit: int,
+) -> tuple[str, bool]:
+    """Add or replace one bullet in a markdown section."""
+    if entry in text:
+        return text, False
+
+    sec = _normalize_profile_section(section)
+    heading = f"## {sec}"
+    if heading not in text:
+        return text.rstrip() + f"\n\n{heading}\n{entry}\n", True
+
+    pattern = rf"(^##\s+{re.escape(sec)}\s*\n)(.*?)(?=^##\s+|\Z)"
+    match = re.search(pattern, text, flags=re.M | re.S)
+    if not match:
+        return text.rstrip() + f"\n\n{heading}\n{entry}\n", True
+
+    existing_lines = [
+        ln for ln in match.group(2).splitlines() if ln.strip().startswith("-")
+    ]
+    existing_lines = [ln for ln in existing_lines if clean_content not in ln]
+    existing_lines.append(entry)
+    if len(existing_lines) > section_limit:
+        existing_lines = existing_lines[-section_limit:]
+    replacement = match.group(1) + "\n".join(existing_lines).rstrip() + "\n\n"
+    updated = text[: match.start()] + replacement + text[match.end() :]
+    return updated, True
+
+
 def add_profile_conclusion(
     store,
     class_id: str,
@@ -131,32 +165,19 @@ def add_profile_conclusion(
     if source_path and not store.is_class_memory_path(class_id, source_path):
         raise ValueError(f"source_path must be under wiki/classes/{class_id}/")
 
-    sec = _normalize_profile_section(section)
     path = memory_paths(store, class_id)["copilot_profile"]
     text = _ensure_profile_header(store.read_text(path), class_id)
-    heading = f"## {sec}"
     entry = f"- {clean}" + (f" (source: `{source_path}`)" if source_path else "")
 
-    if entry in text:
+    text, changed = _add_section_entry(
+        text,
+        section=section,
+        clean_content=clean,
+        entry=entry,
+        section_limit=PROFILE_SECTION_LIMIT,
+    )
+    if not changed:
         return store.rel_wiki(path)
-
-    if heading not in text:
-        text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
-    else:
-        pattern = rf"(^##\s+{re.escape(sec)}\s*\n)(.*?)(?=^##\s+|\Z)"
-        match = re.search(pattern, text, flags=re.M | re.S)
-        if not match:
-            text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
-        else:
-            existing_lines = [
-                ln for ln in match.group(2).splitlines() if ln.strip().startswith("-")
-            ]
-            existing_lines = [ln for ln in existing_lines if clean not in ln]
-            existing_lines.append(entry)
-            if len(existing_lines) > PROFILE_SECTION_LIMIT:
-                existing_lines = existing_lines[-PROFILE_SECTION_LIMIT:]
-            replacement = match.group(1) + "\n".join(existing_lines).rstrip() + "\n\n"
-            text = text[: match.start()] + replacement + text[match.end() :]
 
     store.write_text(path, clamp_memory_page("copilot_profile", text))
     return store.rel_wiki(path)
@@ -189,32 +210,19 @@ def add_user_profile_conclusion(
             f"user profile conclusion must be <= {USER_PROFILE_ENTRY_LIMIT} chars"
         )
 
-    sec = _normalize_profile_section(section)
     path = user_profile_path(store)
     text = _ensure_user_profile_header(store.read_text(path))
-    heading = f"## {sec}"
     entry = f"- {clean}"
 
-    if entry in text:
+    text, changed = _add_section_entry(
+        text,
+        section=section,
+        clean_content=clean,
+        entry=entry,
+        section_limit=USER_PROFILE_SECTION_LIMIT,
+    )
+    if not changed:
         return store.rel_wiki(path)
-
-    if heading not in text:
-        text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
-    else:
-        pattern = rf"(^##\s+{re.escape(sec)}\s*\n)(.*?)(?=^##\s+|\Z)"
-        match = re.search(pattern, text, flags=re.M | re.S)
-        if not match:
-            text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
-        else:
-            existing_lines = [
-                ln for ln in match.group(2).splitlines() if ln.strip().startswith("-")
-            ]
-            existing_lines = [ln for ln in existing_lines if clean not in ln]
-            existing_lines.append(entry)
-            if len(existing_lines) > USER_PROFILE_SECTION_LIMIT:
-                existing_lines = existing_lines[-USER_PROFILE_SECTION_LIMIT:]
-            replacement = match.group(1) + "\n".join(existing_lines).rstrip() + "\n\n"
-            text = text[: match.start()] + replacement + text[match.end() :]
 
     store.write_text(path, clamp_memory_page("user", text))
     return store.rel_wiki(path)
@@ -246,29 +254,16 @@ def add_subject_guide_conclusion(
     else:
         text = text.rstrip() + "\n"
 
-    sec = _normalize_profile_section(section)
-    heading = f"## {sec}"
     entry = f"- {clean}"
-    if entry in text:
+    text, changed = _add_section_entry(
+        text,
+        section=section,
+        clean_content=clean,
+        entry=entry,
+        section_limit=SUBJECT_GUIDE_SECTION_LIMIT,
+    )
+    if not changed:
         return store.rel_wiki(path)
-
-    if heading not in text:
-        text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
-    else:
-        pattern = rf"(^##\s+{re.escape(sec)}\s*\n)(.*?)(?=^##\s+|\Z)"
-        match = re.search(pattern, text, flags=re.M | re.S)
-        if not match:
-            text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
-        else:
-            existing_lines = [
-                ln for ln in match.group(2).splitlines() if ln.strip().startswith("-")
-            ]
-            existing_lines = [ln for ln in existing_lines if clean not in ln]
-            existing_lines.append(entry)
-            if len(existing_lines) > SUBJECT_GUIDE_SECTION_LIMIT:
-                existing_lines = existing_lines[-SUBJECT_GUIDE_SECTION_LIMIT:]
-            replacement = match.group(1) + "\n".join(existing_lines).rstrip() + "\n\n"
-            text = text[: match.start()] + replacement + text[match.end() :]
 
     store.write_text(path, clamp_memory_page("subject_guide", text))
     return store.rel_wiki(path)
@@ -314,29 +309,16 @@ def add_compact_memory_conclusion(
     else:
         text = text.rstrip() + "\n"
 
-    sec = _normalize_profile_section(section)
-    heading = f"## {sec}"
     entry = f"- {clean}" + (f" (source: `{source_path}`)" if source_path else "")
-    if entry in text:
+    text, changed = _add_section_entry(
+        text,
+        section=section,
+        clean_content=clean,
+        entry=entry,
+        section_limit=PROFILE_SECTION_LIMIT,
+    )
+    if not changed:
         return store.rel_wiki(path)
-
-    if heading not in text:
-        text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
-    else:
-        pattern = rf"(^##\s+{re.escape(sec)}\s*\n)(.*?)(?=^##\s+|\Z)"
-        match = re.search(pattern, text, flags=re.M | re.S)
-        if not match:
-            text = text.rstrip() + f"\n\n{heading}\n{entry}\n"
-        else:
-            existing_lines = [
-                ln for ln in match.group(2).splitlines() if ln.strip().startswith("-")
-            ]
-            existing_lines = [ln for ln in existing_lines if clean not in ln]
-            existing_lines.append(entry)
-            if len(existing_lines) > PROFILE_SECTION_LIMIT:
-                existing_lines = existing_lines[-PROFILE_SECTION_LIMIT:]
-            replacement = match.group(1) + "\n".join(existing_lines).rstrip() + "\n\n"
-            text = text[: match.start()] + replacement + text[match.end() :]
 
     store.write_text(path, clamp_memory_page(key, text))
     return store.rel_wiki(path)
