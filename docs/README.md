@@ -17,6 +17,8 @@ follow the local README closest to the code you are changing.
 - `memory_hierarchy.md` - file-by-file memory scope and update rules.
 - `context_management.md` - prompt assembly and context-limit policy.
 - `agent_learning_guide.md` - optional learning/reference notes.
+- `student_learning_copilot_v2.md` - researched V2 expansion note for a
+  student-facing formative learning copilot with separate student memory.
 - `mem_v2/` - Memory V2 design, backend/frontend maps, tests, traces, and bug
   reports.
 
