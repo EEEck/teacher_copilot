@@ -14,15 +14,20 @@ from agents import Runner
 from agents.exceptions import AgentsException, MaxTurnsExceeded
 from openai import OpenAI
 
-logger = logging.getLogger("klassenpilot.agents")
-
 from app.config import Settings
-from app.schemas.api import ChatAttachment, ChatMessage, CompletenessChecklist, LessonPlan
+from app.schemas.api import (
+    ChatAttachment,
+    ChatMessage,
+    CompletenessChecklist,
+    LessonPlan,
+)
 from app.teacher_agent.agent import (
+    build_memory_sweep_alignment_agent,
     build_memory_compact_agent,
     build_compile_agent,
     build_ingest_agent,
     build_lint_agent,
+    build_memory_sweep_card_agent,
     build_plan_chat_agent,
     build_plan_lesson_agent,
     build_plan_opening_agent,
@@ -32,6 +37,8 @@ from app.teacher_agent.models import (
     CompileOutput,
     IngestTurnOutput,
     MemoryCompactOutput,
+    MemorySweepAlignmentOutput,
+    MemorySweepProposalOutput,
     PlanOutput,
     PlanTurnOutput,
     ProfileProposalOutput,
@@ -53,8 +60,16 @@ from app.teacher_agent.planning_state import (
     planning_api_payload,
 )
 from app.teacher_agent.tools import WikiToolContext
-from app.teacher_agent.stream_events import SseError, SseEvent, SseFinal, translate_sdk_event
+from app.teacher_agent.stream_events import (
+    SseError,
+    SseEvent,
+    SseFinal,
+    translate_sdk_event,
+)
 from app.teacher_agent.wiki_store import WikiStore
+
+logger = logging.getLogger("klassenpilot.agents")
+
 
 class AgentTurnLimitError(RuntimeError):
     """Agent used too many tool/reasoning steps in one turn."""
@@ -66,6 +81,7 @@ class _PreparedAgentTurn:
     current_draft: str
     agent: Any
     user_input: str
+
 
 _TURN_LIMIT_REPLY = (
     "I needed more steps than allowed to finish this turn. "
@@ -117,9 +133,7 @@ def _pseudonymize_known_students(text: str, roster_md: str) -> str:
     return out
 
 
-def _trim_to_last_user_turns(
-    messages: list[ChatMessage], n: int
-) -> list[ChatMessage]:
+def _trim_to_last_user_turns(messages: list[ChatMessage], n: int) -> list[ChatMessage]:
     """Keep only the last ``n`` user turns (and everything after the earliest).
 
     Durable context lives in injected state, so trimming the verbatim window is
@@ -302,6 +316,7 @@ class AgentRunner:
             runtime,
             state_patch=parsed.state_patch,
             new_evidence_briefs=parsed.new_evidence_briefs,
+            memory_candidates=parsed.memory_candidates,
             last_change_summary=parsed.last_change_summary,
             unsupported_intent_reason=parsed.unsupported_intent_reason,
             diary_changed=diary_changed,
@@ -324,6 +339,7 @@ class AgentRunner:
             ready=ready,
             completeness=checklist,
             last_change_summary=payload["last_change_summary"],
+            memory_candidates=payload["memory_candidates"],
             memory_state=payload,
         )
 
@@ -580,7 +596,9 @@ class AgentRunner:
         try:
             context = self.wiki.build_plan_context_slim(class_id)
             agent = build_plan_opening_agent(context, self.model)
-            out = await self._run_structured(agent, "Open the planning session for this class.")
+            out = await self._run_structured(
+                agent, "Open the planning session for this class."
+            )
             text = out if isinstance(out, str) else str(out)
             return text.strip() or self._plan_opening_fallback(class_id)
         except Exception:
@@ -604,7 +622,11 @@ class AgentRunner:
         except AgentTurnLimitError as exc:
             return str(exc), turn.current_draft, False
         if not isinstance(parsed, PlanTurnOutput):
-            return "I had trouble processing that — could you try again?", current_draft, False
+            return (
+                "I had trouble processing that — could you try again?",
+                current_draft,
+                False,
+            )
         finalized = self._finalize_plan_turn(
             parsed,
             current_draft,
@@ -612,7 +634,11 @@ class AgentRunner:
             teacher_message=messages[-1].content if messages else "",
         )
         if finalized is None:
-            return "I had trouble processing that â€” could you try again?", current_draft, False
+            return (
+                "I had trouble processing that â€” could you try again?",
+                current_draft,
+                False,
+            )
         return finalized
 
     async def ingest_chat(
@@ -751,10 +777,83 @@ class AgentRunner:
             f"{apply_char_limit(json.dumps(lesson_planning_state or {}, indent=2), field_cap)}\n\n"
             f"Memory candidates from the session:\n"
             f"{apply_char_limit(json.dumps(memory_candidates or [], indent=2), field_cap)}\n\n"
-            "Propose user.md and copilot.md updates now."
+            "Propose teacher_profile.md and copilot_profile.md updates now."
         )
         agent = build_profile_proposal_agent(self.fast_model)
         parsed = await self._run_structured(agent, prompt)
         if not isinstance(parsed, ProfileProposalOutput):
             raise RuntimeError("Failed to propose profile updates")
+        return parsed
+
+    async def propose_memory_sweep_cards(
+        self,
+        class_id: str,
+        subject: str,
+        grouped_candidates: dict[str, list[dict]],
+        target_excerpts: dict[str, str],
+        alignment_groups: list[dict] | None = None,
+        validation_error: str = "",
+    ) -> MemorySweepProposalOutput:
+        import json
+
+        field_cap = get_context_limits().profile_propose_field_chars
+        retry_block = (
+            "\nPrevious validation error:\n"
+            f"{validation_error}\n"
+            "Revise the alignment for the failing group instead of repeating the "
+            "same decision. If merge/add overlaps current memory, use "
+            "adjust_existing when the current excerpt has a narrower bullet for "
+            "the same compatible claim, already_covered when it fully covers the "
+            "claim, or needs_decision if the relationship is unclear.\n\n"
+            if validation_error
+            else ""
+        )
+        prompt = (
+            f"Class: {class_id}\n"
+            f"Subject: {subject}\n\n"
+            f"{retry_block}"
+            "Validated alignment groups:\n"
+            f"{apply_char_limit(json.dumps(alignment_groups or [], indent=2), field_cap * 3)}\n\n"
+            "Grouped candidate ledger rows:\n"
+            f"{apply_char_limit(json.dumps(grouped_candidates, indent=2), field_cap * 4)}\n\n"
+            "Current target memory excerpts:\n"
+            f"{apply_char_limit(json.dumps(target_excerpts, indent=2), field_cap * 3)}\n\n"
+            "Return review cards for the teacher. Do not write memory."
+        )
+        agent = build_memory_sweep_card_agent(self.fast_model)
+        parsed = await self._run_structured(agent, prompt)
+        if not isinstance(parsed, MemorySweepProposalOutput):
+            raise RuntimeError("Failed to propose Memory Sweep cards")
+        return parsed
+
+    async def align_memory_sweep_candidates(
+        self,
+        class_id: str,
+        subject: str,
+        grouped_candidates: dict[str, list[dict]],
+        target_excerpts: dict[str, str],
+        validation_error: str = "",
+    ) -> MemorySweepAlignmentOutput:
+        import json
+
+        field_cap = get_context_limits().profile_propose_field_chars
+        retry_block = (
+            f"\nPrevious validation error:\n{validation_error}\n\n"
+            if validation_error
+            else ""
+        )
+        prompt = (
+            f"Class: {class_id}\n"
+            f"Subject: {subject}\n\n"
+            f"{retry_block}"
+            "Grouped candidate ledger rows:\n"
+            f"{apply_char_limit(json.dumps(grouped_candidates, indent=2), field_cap * 4)}\n\n"
+            "Current target memory excerpts:\n"
+            f"{apply_char_limit(json.dumps(target_excerpts, indent=2), field_cap * 3)}\n\n"
+            "Return validated-ready alignment groups. Do not generate review cards."
+        )
+        agent = build_memory_sweep_alignment_agent(self.fast_model)
+        parsed = await self._run_structured(agent, prompt)
+        if not isinstance(parsed, MemorySweepAlignmentOutput):
+            raise RuntimeError("Failed to align Memory Sweep candidates")
         return parsed

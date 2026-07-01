@@ -24,6 +24,19 @@ from app.teacher_agent.runtime_render import (
     render_evidence_briefs,
     render_scalar,
 )
+from app.teacher_agent.memory_capture import (
+    BASIS as BASIS,
+    CONFIDENCE as CONFIDENCE,
+    MEMORY_SOURCES as MEMORY_SOURCES,
+    MEMORY_TARGETS as MEMORY_TARGETS,
+    MemoryCandidate as MemoryCandidate,
+    candidate_key,
+    clean_text,
+    durable_preference_candidates_from_state_values,
+    has_teacher_preference_candidate,
+    merge_memory_candidates,
+    render_memory_candidates as render_shared_memory_candidates,
+)
 
 PLAN_PHASES = ("requirements_discussion", "lesson_refinement", "finalize")
 
@@ -36,14 +49,6 @@ EVIDENCE_TYPES = (
     "textbook_lookup",
     "web_search",
 )
-MEMORY_TARGETS = ("class_state.md", "copilot.md", "user.md", "canonical_wiki")
-MEMORY_SOURCES = (
-    "teacher_explicit",
-    "inferred_from_session",
-    "final_lesson",
-    "tool_result",
-)
-CONFIDENCE = ("low", "medium", "high")
 
 
 class SessionState(BaseModel):
@@ -86,17 +91,6 @@ class EvidenceBrief(BaseModel):
     source_refs: list[str] = Field(default_factory=list)
     raw_ref: str = ""
     confidence: str = "medium"
-
-
-class MemoryCandidate(BaseModel):
-    """A possible durable-memory update, tracked but never written during chat."""
-
-    target: str = "copilot.md"
-    candidate_update: str = ""
-    evidence: str = ""
-    source: str = "inferred_from_session"
-    confidence: str = "low"
-    requires_teacher_approval: bool = True
 
 
 class SessionStatePatch(BaseModel):
@@ -150,7 +144,9 @@ class PlanRuntime:
     """Per-session persisted runtime memory (server RAM, like ArtifactSession)."""
 
     session_state: SessionState = field(default_factory=SessionState)
-    lesson_planning_state: LessonPlanningState = field(default_factory=LessonPlanningState)
+    lesson_planning_state: LessonPlanningState = field(
+        default_factory=LessonPlanningState
+    )
     evidence_briefs: list[EvidenceBrief] = field(default_factory=list)
     raw_store: dict[str, str] = field(default_factory=dict)
     memory_candidates: list[MemoryCandidate] = field(default_factory=list)
@@ -177,7 +173,7 @@ class PlanRuntime:
 
 
 def _candidate_key(c: MemoryCandidate) -> tuple[str, str]:
-    return (c.target.strip().lower(), " ".join(c.candidate_update.lower().split()))
+    return candidate_key(c)
 
 
 def _patch_has_values(patch: StatePatch | None) -> bool:
@@ -188,7 +184,7 @@ def _patch_has_values(patch: StatePatch | None) -> bool:
 
 
 def _clean_text(value: str | None) -> str:
-    return " ".join((value or "").split())
+    return clean_text(value)
 
 
 def _append_unique(existing: list[str], updates: list[str] | None) -> list[str]:
@@ -220,8 +216,8 @@ def _apply_session_patch(state: SessionState, patch: SessionStatePatch) -> Sessi
         step = _clean_text(patch.agent_next_step)
         if step:
             data["agent_next_step"] = step
-    for field in ("milestones", "decisions", "open_questions", "superseded"):
-        data[field] = _append_unique(data[field], getattr(patch, field))
+    for field_name in ("milestones", "decisions", "open_questions", "superseded"):
+        data[field_name] = _append_unique(data[field_name], getattr(patch, field_name))
     return SessionState(**data)
 
 
@@ -229,15 +225,15 @@ def _apply_lesson_patch(
     state: LessonPlanningState, patch: LessonPlanningStatePatch
 ) -> LessonPlanningState:
     data = state.model_dump()
-    for field in ("lesson_topic", "lesson_goal", "target_class"):
-        value = getattr(patch, field)
+    for field_name in ("lesson_topic", "lesson_goal", "target_class"):
+        value = getattr(patch, field_name)
         if value is not None:
             text = _clean_text(value)
             if text:
-                data[field] = text
+                data[field_name] = text
     if patch.duration_minutes and patch.duration_minutes > 0:
         data["duration_minutes"] = patch.duration_minutes
-    for field in (
+    for field_name in (
         "success_criteria",
         "teacher_preferences_for_this_lesson",
         "constraints",
@@ -246,13 +242,15 @@ def _apply_lesson_patch(
         "accepted_plan_elements",
         "needs_revision",
     ):
-        data[field] = _append_unique(data[field], getattr(patch, field))
+        data[field_name] = _append_unique(data[field_name], getattr(patch, field_name))
     return LessonPlanningState(**data)
 
 
 def apply_state_patch(runtime: PlanRuntime, patch: StatePatch) -> None:
     """Apply a model-proposed patch to backend-owned runtime state."""
-    runtime.session_state = _apply_session_patch(runtime.session_state, patch.session_state)
+    runtime.session_state = _apply_session_patch(
+        runtime.session_state, patch.session_state
+    )
     runtime.lesson_planning_state = _apply_lesson_patch(
         runtime.lesson_planning_state, patch.lesson_planning_state
     )
@@ -314,11 +312,22 @@ def apply_plan_phase_auto_advance(
         runtime.lesson_planning_state.needs_revision = []
 
 
-def _candidate_is_allowed(c: MemoryCandidate) -> bool:
-    return (
-        c.target in MEMORY_TARGETS
-        and c.source in MEMORY_SOURCES
-        and c.confidence in CONFIDENCE
+def _state_patch_preference_candidates(
+    state_patch: StatePatch | None,
+    *,
+    teacher_message: str,
+) -> list[MemoryCandidate]:
+    """Promote durable preference signals already found by the planner.
+
+    This is a contract repair, not raw-message memory extraction: the model must
+    have put the preference into structured state first. The backend only
+    ensures a cross-session preference does not disappear before review.
+    """
+    if state_patch is None:
+        return []
+    return durable_preference_candidates_from_state_values(
+        state_patch.lesson_planning_state.teacher_preferences_for_this_lesson,
+        teacher_message=teacher_message,
     )
 
 
@@ -375,20 +384,21 @@ def merge_turn_into_runtime(
         runtime.evidence_briefs = runtime.evidence_briefs[-briefs_cap:]
 
     # Memory candidates: accumulate with dedupe by (target, normalized update).
-    seen = {_candidate_key(c) for c in runtime.memory_candidates}
-    for cand in memory_candidates:
-        if not _candidate_is_allowed(cand):
-            continue
-        if not cand.candidate_update.strip():
-            continue
-        key = _candidate_key(cand)
-        if key in seen:
-            continue
-        seen.add(key)
-        runtime.memory_candidates.append(cand)
-    candidates_cap = get_context_limits().candidates_cap
-    if len(runtime.memory_candidates) > candidates_cap:
-        runtime.memory_candidates = runtime.memory_candidates[-candidates_cap:]
+    all_memory_candidates = list(memory_candidates)
+    if not has_teacher_preference_candidate(
+        [*runtime.memory_candidates, *all_memory_candidates]
+    ):
+        all_memory_candidates.extend(
+            _state_patch_preference_candidates(
+                state_patch,
+                teacher_message=teacher_message,
+            )
+        )
+    runtime.memory_candidates = merge_memory_candidates(
+        runtime.memory_candidates,
+        all_memory_candidates,
+        cap=get_context_limits().candidates_cap,
+    )
 
     if plan_changed:
         runtime.plan_version += 1
@@ -462,11 +472,4 @@ def planning_api_payload(rt: PlanRuntime) -> dict:
 
 
 def render_memory_candidates(cands: list[MemoryCandidate]) -> str:
-    if not cands:
-        return "- None proposed yet."
-    parts = []
-    for c in cands:
-        parts.append(
-            f"- ({c.target}, {c.source}, {c.confidence}) {c.candidate_update[:200]}"
-        )
-    return "\n".join(parts)
+    return render_shared_memory_candidates(cands, max_chars=200)

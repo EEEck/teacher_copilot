@@ -36,10 +36,16 @@ prompt trace diagnostics.
   wiki/profile writes happen through separate save/apply flows.
 - Memory compaction/profile proposal agents propose bounded updates; backend
   code validates scope and persistence.
+- Memory Sweep uses two isolated agents: alignment normalizes raw ledger rows
+  into durable claim groups, then card generation turns validated groups into
+  teacher-reviewable proposals.
 
 ## Boundaries
 
 - Tools are read-only during chat.
+- Memory Sweep agents never write memory. They return structured alignment/card
+  outputs; backend validators own coverage, target consistency, operation
+  mapping, and exact replacement checks.
 - Planning and Update Memory raw tool outputs are stored behind raw refs and
   summarized into compact evidence briefs.
 - Update Memory has one free-agent runtime. Timeline/detail entry points may
@@ -64,3 +70,4 @@ prompt trace diagnostics.
 - `../../../docs/agent_architecture.md`
 - `../../../docs/memory_hierarchy.md`
 - `../../../docs/context_management.md`
+- `../../../docs/mem_v2/backend.md`

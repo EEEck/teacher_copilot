@@ -3,38 +3,15 @@
 from __future__ import annotations
 
 import re
-import uuid
-from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
-from app.schemas.api import (
-    ApprovedWikiUpdate,
-    ClassMemorySnapshot,
-    ClassSummary,
-    ClassTimeline,
-    CompletenessChecklist,
-    CompletenessItem,
-    LessonDetail,
-    RollupExcerpt,
-    TimelineEntry,
-    WikiUpdateProposal,
-)
 
 from app.teacher_agent.wiki.constants import (
-    CLASS_REGISTRY,
-    DIARY_SECTION_HEADINGS,
-    INDEX_WIKI_PATH_RE,
-    LESSON_RESULTS_SECTIONS,
-    LOG_HEADER_LEGACY_RE,
-    LOG_HEADER_RE,
-    ROLLUP_LABELS,
     STUDENT_ID_RE,
-    dedupe_wiki_proposals,
 )
 
 from app.teacher_agent.wiki import parsing
-
 
 
 def _format_lesson_results(
@@ -52,14 +29,12 @@ def _format_lesson_results(
         body = re.sub(r"^#\s+.+\n+", "", body, count=1)
     return header + body.strip() + "\n"
 
+
 def _compile_rollups(
     store, class_id: str, diary_md: str, lesson_date: str, title: str
 ) -> list[tuple[str, str, str]]:
     covered = parsing.extract_section_body(diary_md, "What was covered")
-    participation = parsing.extract_section_body(diary_md, "Student participation")
-    went_well = parsing.extract_section_body(diary_md, "What went well")
     didnt = parsing.extract_section_body(diary_md, "What didn't go well")
-    students = parsing.extract_section_body(diary_md, "Student observations")
     followups = parsing.extract_section_body(diary_md, "Homework & follow-ups")
 
     paths = store.roll_up_paths(class_id)
@@ -67,9 +42,17 @@ def _compile_rollups(
 
     # course_state
     current = store.read_text(paths["course_state"])
-    unit_line = covered.split("\n")[0].strip().lstrip("- ") if covered.strip() else "See latest lesson"
-    new_state = store._upsert_course_state(current, lesson_date, title, unit_line, followups)
-    results.append(("course_state", new_state, "Update rolling course state from latest lesson."))
+    unit_line = (
+        covered.split("\n")[0].strip().lstrip("- ")
+        if covered.strip()
+        else "See latest lesson"
+    )
+    new_state = store._upsert_course_state(
+        current, lesson_date, title, unit_line, followups
+    )
+    results.append(
+        ("course_state", new_state, "Update rolling course state from latest lesson.")
+    )
 
     # misconceptions
     misc = store.read_text(paths["misconceptions"])
@@ -80,10 +63,13 @@ def _compile_rollups(
 
     # open_loops
     loops = store.read_text(paths["open_loops"])
-    new_loops = store._append_bullets(loops, parsing.lines_to_bullets(followups), lesson_date)
+    new_loops = store._append_bullets(
+        loops, parsing.lines_to_bullets(followups), lesson_date
+    )
     results.append(("open_loops", new_loops, "Add follow-ups from this lesson."))
 
     return results
+
 
 def _upsert_course_state(
     store, current: str, lesson_date: str, title: str, unit: str, followups: str
@@ -101,6 +87,7 @@ def _upsert_course_state(
         f"## Overall status\n- Updated {lesson_date}\n"
     )
 
+
 def _student_display_name(text: str, fallback: str) -> str:
     for line in text.splitlines():
         line = line.strip()
@@ -110,7 +97,10 @@ def _student_display_name(text: str, fallback: str) -> str:
                 return name
     return fallback
 
-def _append_bullets(store, existing: str, new_bullets: list[str], lesson_date: str) -> str:
+
+def _append_bullets(
+    store, existing: str, new_bullets: list[str], lesson_date: str
+) -> str:
     if not new_bullets:
         return existing or "# Notes\n\n"
     header = existing.strip() if existing.strip() else "# Notes\n"
@@ -121,6 +111,7 @@ def _append_bullets(store, existing: str, new_bullets: list[str], lesson_date: s
         lines.append(f"- {b}")
     lines.append("")
     return "\n".join(lines)
+
 
 def _parse_student_observations(store, students_block: str) -> dict[str, list[str]]:
     """Map S-### -> observation bullets from diary section."""
@@ -150,6 +141,7 @@ def _parse_student_observations(store, students_block: str) -> dict[str, list[st
                 by_student.setdefault(sid, []).append(line.lstrip("- ").strip())
     return by_student
 
+
 def _upsert_student_entity(
     store, class_id: str, student_id: str, lesson_date: str, bullets: list[str]
 ) -> Path:
@@ -171,6 +163,7 @@ def _upsert_student_entity(
     lines.append("")
     store.write_text(path, "\n".join(lines))
     return path
+
 
 def _rebuild_students_index(
     store, class_id: str, previews: Optional[dict[str, str]] = None
@@ -202,6 +195,7 @@ def _rebuild_students_index(
         lines.append(f"| {sid} | {name} | {note} | [students/{sid}.md]({rel}) |")
     return "\n".join(lines).rstrip() + "\n"
 
+
 def _compile_timeline_entry(
     store,
     class_id: str,
@@ -221,14 +215,11 @@ def _compile_timeline_entry(
         )
     summary, highlights, _, _ = parsing.build_timeline_summary(lesson_results)
     lesson_link = f"lessons/{lesson_date}/lesson_results.md"
-    block = (
-        f"## {lesson_date} — {title}\n"
-        f"- [{title}]({lesson_link})\n"
-        f"- {summary}\n"
-    )
+    block = f"## {lesson_date} — {title}\n- [{title}]({lesson_link})\n- {summary}\n"
     if highlights:
         block += f"- Highlight: {highlights[0]}\n"
     return block
+
 
 def _upsert_timeline_md(
     store, class_id: str, lesson_date: str, title: str, diary_md: str
@@ -248,6 +239,7 @@ def _upsert_timeline_md(
     dated = [s for s in sections[1:] if s.strip()]
     dated.sort(key=lambda s: s.split("—")[0].replace("##", "").strip(), reverse=True)
     return header.rstrip() + "\n\n" + "\n\n".join(dated).rstrip() + "\n"
+
 
 def _compile_students_and_timeline(
     store,
@@ -321,6 +313,7 @@ def _compile_students_and_timeline(
         )
     )
     return outputs
+
 
 def _finalize_lesson_writes(
     store,

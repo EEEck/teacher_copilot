@@ -2,51 +2,37 @@
 
 from __future__ import annotations
 
-import re
-import uuid
 from datetime import date, datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from app.schemas.api import (
     ApprovedWikiUpdate,
-    ClassMemorySnapshot,
-    ClassSummary,
-    ClassTimeline,
-    CompletenessChecklist,
-    CompletenessItem,
-    LessonDetail,
-    RollupExcerpt,
-    TimelineEntry,
     WikiUpdateProposal,
 )
 
 from app.teacher_agent.wiki.constants import (
-    CLASS_REGISTRY,
-    DIARY_SECTION_HEADINGS,
-    INDEX_WIKI_PATH_RE,
-    LESSON_RESULTS_SECTIONS,
-    LOG_HEADER_LEGACY_RE,
-    LOG_HEADER_RE,
-    ROLLUP_LABELS,
-    STUDENT_ID_RE,
     dedupe_wiki_proposals,
 )
 
 from app.teacher_agent.wiki import parsing
 
 
-
 def compile_from_diary(
     store, class_id: str, diary_md: str, lesson_date: Optional[str] = None
 ) -> tuple[str, list[WikiUpdateProposal]]:
     """Return (lesson_date, wiki proposals)."""
-    lesson_date = lesson_date or parsing.extract_date_from_diary(diary_md) or date.today().isoformat()
+    lesson_date = (
+        lesson_date
+        or parsing.extract_date_from_diary(diary_md)
+        or date.today().isoformat()
+    )
     title = parsing.extract_title(diary_md) or "Lesson"
     cls = store.get_class(class_id)
 
     lesson_results_path = store.lesson_dir(class_id, lesson_date) / "lesson_results.md"
-    lesson_results_content = store._format_lesson_results(class_id, cls.subject, diary_md, lesson_date, title)
+    lesson_results_content = store._format_lesson_results(
+        class_id, cls.subject, diary_md, lesson_date, title
+    )
 
     proposals: list[WikiUpdateProposal] = [
         WikiUpdateProposal(
@@ -94,6 +80,7 @@ def compile_from_diary(
 
     return lesson_date, dedupe_wiki_proposals(proposals)
 
+
 def commit_ingest(
     store,
     class_id: str,
@@ -104,13 +91,7 @@ def commit_ingest(
     lesson_date = parsing.extract_date_from_diary(diary_md) or date.today().isoformat()
     title = parsing.extract_title(diary_md) or "lesson"
     slug = parsing.slugify(title)
-    raw_path = (
-        store.root
-        / "raw"
-        / "classes"
-        / class_id
-        / f"{lesson_date}-{slug}.md"
-    )
+    raw_path = store.root / "raw" / "classes" / class_id / f"{lesson_date}-{slug}.md"
     raw_rel = store.rel_wiki(raw_path)
 
     approved_writes = [u for u in approved if u.approved]
@@ -136,7 +117,12 @@ def commit_ingest(
 
     log_id = store._append_log(class_id, lesson_date, title, applied, kind="ingest")
     store.rebuild_index()
-    return raw_rel if raw_rel in applied else (applied[0] if applied else raw_rel), applied, log_id
+    return (
+        raw_rel if raw_rel in applied else (applied[0] if applied else raw_rel),
+        applied,
+        log_id,
+    )
+
 
 def save_lesson_plan(store, class_id: str, lesson_date: str, content: str) -> str:
     path = store.lesson_dir(class_id, lesson_date) / "lesson_plan.md"

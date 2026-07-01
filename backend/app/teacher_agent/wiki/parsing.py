@@ -45,7 +45,11 @@ def extract_section_body(text: str, heading: str) -> str:
 
 def extract_section_bullets(text: str, heading: str) -> list[str]:
     body = extract_section_body(text, heading)
-    return [ln.lstrip("- ").strip() for ln in body.splitlines() if ln.strip().startswith("-")]
+    return [
+        ln.lstrip("- ").strip()
+        for ln in body.splitlines()
+        if ln.strip().startswith("-")
+    ]
 
 
 def extract_homework(text: str) -> Optional[str]:
@@ -106,7 +110,9 @@ def build_timeline_summary(
     lesson_results: str,
 ) -> tuple[str, list[str], list[str], list[str]]:
     covered = extract_section_bullets(lesson_results, "What was covered")
-    participation = one_line(extract_section_body(lesson_results, "Student participation"))
+    participation = one_line(
+        extract_section_body(lesson_results, "Student participation")
+    )
     went_well = one_line(extract_section_body(lesson_results, "What went well"))
     didnt = extract_section_bullets(lesson_results, "What didn't go well")
     students = one_line(extract_section_body(lesson_results, "Student observations"))
@@ -160,7 +166,11 @@ def remove_date_section(text: str, lesson_date: str) -> str:
     pattern = rf"\n?##\s*{re.escape(lesson_date)}\s*\n.*?(?=\n##\s|\Z)"
     cleaned = re.sub(pattern, "", text, flags=re.S).strip()
     if not cleaned:
-        return "# Notes\n\n" if "misconception" not in text.lower() else "# Misconceptions\n\n"
+        return (
+            "# Notes\n\n"
+            if "misconception" not in text.lower()
+            else "# Misconceptions\n\n"
+        )
     return cleaned + "\n"
 
 

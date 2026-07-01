@@ -18,6 +18,11 @@ from app.teacher_agent.runtime_render import (
     render_evidence_briefs,
     render_scalar,
 )
+from app.teacher_agent.memory_capture import (
+    MemoryCandidate,
+    merge_memory_candidates,
+    render_memory_candidates as render_shared_memory_candidates,
+)
 
 MEMORY_PHASES = ("identify_target", "collect_results", "review_draft", "unsupported")
 MEMORY_INTENTS = (
@@ -28,7 +33,13 @@ MEMORY_INTENTS = (
     "improve_memory",
     "unsupported",
 )
-TARGET_KINDS = ("unknown", "planned_lesson", "taught_lesson", "new_lesson", "class_memory")
+TARGET_KINDS = (
+    "unknown",
+    "planned_lesson",
+    "taught_lesson",
+    "new_lesson",
+    "class_memory",
+)
 TARGET_SOURCES = ("", "teacher_explicit", "timeline_hint", "agent_inferred")
 CONFIDENCE = ("low", "medium", "high")
 
@@ -121,6 +132,7 @@ class MemoryRuntime:
     session_state: MemorySessionState = field(default_factory=MemorySessionState)
     lesson_result_state: LessonResultState = field(default_factory=LessonResultState)
     evidence_briefs: list[MemoryEvidenceBrief] = field(default_factory=list)
+    memory_candidates: list[MemoryCandidate] = field(default_factory=list)
     raw_store: dict[str, str] = field(default_factory=dict)
     diary_version: int = 0
     last_change_summary: str = ""
@@ -169,7 +181,9 @@ def _patch_has_values(patch: MemoryStatePatch | None) -> bool:
     return any(bool(value) for value in data.values())
 
 
-def _apply_target_patch(state: MemoryTargetState, patch: MemoryTargetPatch) -> MemoryTargetState:
+def _apply_target_patch(
+    state: MemoryTargetState, patch: MemoryTargetPatch
+) -> MemoryTargetState:
     data = state.model_dump()
     if patch.intent in MEMORY_INTENTS:
         data["intent"] = patch.intent
@@ -195,7 +209,10 @@ def _apply_target_patch(state: MemoryTargetState, patch: MemoryTargetPatch) -> M
         if value is not None:
             data[field_name] = value
     if data["target_confirmed"] and data["target_kind"] == "unknown":
-        if data["existing_results_loaded"] or data["intent"] == "correct_existing_results":
+        if (
+            data["existing_results_loaded"]
+            or data["intent"] == "correct_existing_results"
+        ):
             data["target_kind"] = "taught_lesson"
         elif data["plan_loaded"] or data["intent"] == "update_missing_results":
             data["target_kind"] = "planned_lesson"
@@ -206,7 +223,9 @@ def _apply_target_patch(state: MemoryTargetState, patch: MemoryTargetPatch) -> M
     return MemoryTargetState(**data)
 
 
-def _apply_session_patch(state: MemorySessionState, patch: MemorySessionPatch) -> MemorySessionState:
+def _apply_session_patch(
+    state: MemorySessionState, patch: MemorySessionPatch
+) -> MemorySessionState:
     data = state.model_dump()
     if patch.phase in MEMORY_PHASES:
         data["phase"] = patch.phase
@@ -244,7 +263,9 @@ def _apply_lesson_result_patch(
 
 def apply_memory_state_patch(runtime: MemoryRuntime, patch: MemoryStatePatch) -> None:
     runtime.target = _apply_target_patch(runtime.target, patch.target)
-    runtime.session_state = _apply_session_patch(runtime.session_state, patch.session_state)
+    runtime.session_state = _apply_session_patch(
+        runtime.session_state, patch.session_state
+    )
     runtime.lesson_result_state = _apply_lesson_result_patch(
         runtime.lesson_result_state, patch.lesson_result_state
     )
@@ -302,6 +323,7 @@ def merge_memory_turn(
     *,
     state_patch: MemoryStatePatch | None,
     new_evidence_briefs: list[MemoryEvidenceBrief],
+    memory_candidates: list[MemoryCandidate] | None = None,
     last_change_summary: str,
     unsupported_intent_reason: str,
     diary_changed: bool,
@@ -325,6 +347,13 @@ def merge_memory_turn(
     cap = get_context_limits().briefs_store_cap
     if len(runtime.evidence_briefs) > cap:
         runtime.evidence_briefs = runtime.evidence_briefs[-cap:]
+
+    runtime.memory_candidates = merge_memory_candidates(
+        runtime.memory_candidates,
+        memory_candidates,
+        cap=get_context_limits().candidates_cap,
+    )
+
     if diary_changed:
         runtime.diary_version += 1
     apply_memory_phase_auto_advance(
@@ -342,6 +371,7 @@ def memory_api_payload(runtime: MemoryRuntime) -> dict:
         "session_state": runtime.session_state.model_dump(),
         "lesson_result_state": runtime.lesson_result_state.model_dump(),
         "evidence_briefs": [b.model_dump() for b in runtime.evidence_briefs],
+        "memory_candidates": [c.model_dump() for c in runtime.memory_candidates],
         "diary_version": runtime.diary_version,
         "last_change_summary": runtime.last_change_summary,
         "unsupported_intent_reason": runtime.unsupported_intent_reason,
@@ -410,6 +440,14 @@ def render_memory_briefs(briefs: list[MemoryEvidenceBrief]) -> str:
     )
 
 
+def render_memory_candidates(cands: list[MemoryCandidate]) -> str:
+    return render_shared_memory_candidates(
+        cands,
+        title="## Memory candidates",
+        max_chars=220,
+    )
+
+
 def render_memory_runtime(runtime: MemoryRuntime) -> str:
     """Legacy combined renderer; prefer split renderers for prompt assembly."""
     return "\n\n".join(
@@ -418,5 +456,6 @@ def render_memory_runtime(runtime: MemoryRuntime) -> str:
             render_memory_session_state(runtime.session_state),
             render_lesson_result_state(runtime.lesson_result_state),
             render_memory_briefs(runtime.evidence_briefs),
+            render_memory_candidates(runtime.memory_candidates),
         ]
     )

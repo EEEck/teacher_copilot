@@ -16,5 +16,6 @@ Small shared utilities and API helpers.
 ## Conventions
 
 - Keep network shape changes in sync with `backend/app/schemas/api.py`.
+- Keep Memory Sweep types aligned with `../../../docs/mem_v2/frontend.md`.
 - Keep frontend hint union types aligned with backend literal schema values.
 - Add focused tests for parser/utility behavior when the logic is not trivial.

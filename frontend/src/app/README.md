@@ -24,3 +24,5 @@ state, and composing domain components.
 - Treat query params for Update Memory as hints only. The memory page should
   display backend `memory_state` so the teacher can see whether the target was
   confirmed or still needs confirmation.
+- Memory Sweep pages should follow the batch review/apply contract in
+  `../../../docs/mem_v2/frontend.md`.

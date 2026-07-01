@@ -281,6 +281,50 @@ Validation:
 
 ---
 
+## v2 - Student Learning Copilot
+
+**Theme:** Extend the class-memory foundation into student-facing formative
+learning.
+
+**What it enables:** Students can use a strict student-visible lens over class
+memory and materials to repair wrong answers, prepare for exams, and build
+spaced practice without accessing teacher-private wiki memory.
+
+Primary items:
+
+| Item | Engineering notes |
+|---|---|
+| **Student-visible class wiki lens** | Derived, read-only view over teacher-approved class memory, lecture materials, worksheets, concept scope, and source cards. Never expose teacher-private notes, raw diary data, other students, or traces. |
+| **Per-student learning memory** | Separate class-scoped and global student memory for attempts, misconception repairs, concept mastery signals, feedback history, and review schedules. |
+| **Pset repair workflow** | Student uploads returned work or marks wrong answers; the copilot diagnoses concepts, guides retries, gives formative feedback, and schedules review. Not official grading. |
+| **Exam-prep workflow** | Generate a practice pathway from taught scope, materials, student weaknesses, and upcoming assessment scope. |
+| **Spaced repetition / active recall** | Evaluate FSRS/Anki-style scheduling and retrieval-practice patterns for concepts, mistake types, and problem templates. |
+| **Learning best-practices library** | Productize retrieval practice, distributed practice, feedback quality, interleaving, and knowledge-tracing ideas as tutor policies. |
+| **Teacher controls and analytics** | Start with publish/withhold controls and aggregate misconception signals. Individual progress visibility needs a separate privacy decision. |
+
+Non-goals:
+
+- official grading or grade recommendations
+- exposing teacher-private wiki memory
+- letting students mutate teacher/class wiki
+- cross-student memory sharing
+- unsupported broad tutoring outside course scope
+- high-stakes decisions such as placement, diagnosis, discipline, admission, or
+  accommodations
+
+Validation:
+
+- A student can work through returned wrong answers, explain the corrected
+  concept, solve a related problem, and receive a scheduled follow-up review.
+- The system can generate an exam-prep pathway grounded in taught class scope
+  and the student's own mistake history.
+- The teacher can trust that student activity does not mutate or leak teacher
+  memory.
+
+Research and product note: [`docs/student_learning_copilot_v2.md`](../docs/student_learning_copilot_v2.md).
+
+---
+
 ## Cross-Cutting Platform Track
 
 These can land alongside product versions when needed, but should not displace

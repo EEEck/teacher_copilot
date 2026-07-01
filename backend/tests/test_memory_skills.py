@@ -106,6 +106,11 @@ def test_memory_apply_writes_only_approved(client: TestClient, wiki: WikiStore):
                     "section": "Planning Patterns",
                     "content": "Draft early, then refine the markdown directly.",
                 },
+                {
+                    "target": "teaching_patterns.md",
+                    "section": "What Worked",
+                    "content": "Short diagnostic checks surfaced misconceptions early.",
+                },
                 {"target": "canonical_wiki", "content": "Should be skipped."},
             ]
         },
@@ -123,6 +128,10 @@ def test_memory_apply_writes_only_approved(client: TestClient, wiki: WikiStore):
     assert (
         "Draft early, then refine the markdown directly."
         in wiki.read_copilot_profile(CLASS_ID)
+    )
+    assert (
+        "Short diagnostic checks surfaced misconceptions early."
+        in wiki.read_text(wiki.memory_paths(CLASS_ID)["teaching_patterns"])
     )
 
 

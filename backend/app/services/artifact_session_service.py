@@ -23,6 +23,8 @@ from app.teacher_agent.stream_events import (
     sse_encode,
 )
 from app.services.artifact_spec import ArtifactSpec, TurnResult, default_specs
+from app.services.memory_candidate_ledger import MemoryCandidateLedger
+from app.teacher_agent.memory_capture import runtime_candidates_to_ledger_rows
 from app.services.output_safety import (
     SAFE_INTERNAL_DATA_REPLY,
     OutputSafetyFinding,
@@ -60,10 +62,12 @@ class ArtifactSessionService:
         wiki: WikiStore,
         agents: AgentRunner,
         specs: dict[str, ArtifactSpec] | None = None,
+        memory_candidate_ledger: MemoryCandidateLedger | None = None,
     ) -> None:
         self.wiki = wiki
         self.agents = agents
         self.specs = specs or default_specs()
+        self.memory_candidate_ledger = memory_candidate_ledger
         self.sessions: dict[str, ArtifactSession] = {}
         self.drafts: dict[str, object] = {}
 
@@ -82,7 +86,9 @@ class ArtifactSessionService:
             status=spec.chatting_status,
             messages=messages,
             partial_markdown=spec.empty_template(self.wiki),
-            completeness=spec.completeness_of(self.wiki, spec.empty_template(self.wiki)),
+            completeness=spec.completeness_of(
+                self.wiki, spec.empty_template(self.wiki)
+            ),
             opening_message=opening,
             runtime=spec.runtime_factory() if spec.runtime_factory else None,
         )
@@ -211,6 +217,24 @@ class ArtifactSessionService:
             session, event, previous_markdown, findings
         )
 
+    def _persist_memory_candidates(self, session: ArtifactSession) -> None:
+        if self.memory_candidate_ledger is None or session.runtime is None:
+            return
+        candidates = getattr(session.runtime, "memory_candidates", [])
+        if not candidates:
+            return
+        subject = self.wiki.get_class(session.class_id).subject
+        turn_index = sum(1 for msg in session.messages if msg.role == "user")
+        rows = runtime_candidates_to_ledger_rows(
+            candidates,
+            class_id=session.class_id,
+            subject=subject,
+            workflow=session.mode,
+            session_id=session.session_id,
+            turn_index=turn_index,
+        )
+        self.memory_candidate_ledger.add_many(rows)
+
     async def chat(
         self,
         session_id: str,
@@ -246,6 +270,7 @@ class ArtifactSessionService:
         )
         if result.ready:
             session.status = spec.ready_status
+        self._persist_memory_candidates(session)
         return result
 
     def _apply_turn_result(self, session: ArtifactSession, result: TurnResult) -> None:
@@ -259,6 +284,7 @@ class ArtifactSessionService:
         )
         if result.ready:
             session.status = spec.ready_status
+        self._persist_memory_candidates(session)
 
     def _record_debug_event(self, session: ArtifactSession, event: SseEvent) -> None:
         if isinstance(event, SseReasoningDelta):
@@ -301,7 +327,9 @@ class ArtifactSessionService:
         spec = self.specs[session.mode]
         if not spec.stream_turn or not spec.final_event_to_turn_result:
             yield sse_encode(
-                SseError(message="Workflow streaming is not configured.", code="config_error")
+                SseError(
+                    message="Workflow streaming is not configured.", code="config_error"
+                )
             )
             return
         stream = spec.stream_turn(

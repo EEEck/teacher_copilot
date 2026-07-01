@@ -25,6 +25,7 @@
 
 | Date | Title | Summary | Plan | Path |
 |------|-------|---------|------|------|
+| 2027-02-03 | Lesson Results | Lesson logged. | no | wiki/classes/chemie_9b_2026_27/lessons/2027-02-03/lesson_results.md |
 | 2026-05-29 | Lesson Results - 2026-05-29 - Anions and Oxidation State Review | Covered: Reviewed chloride, oxide, and phosphate as common anions. · - The clas… | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-05-29/lesson_results.md |
 | 2026-05-25 | Lesson Results - 2026-05-25 - Redox Reactions with Metals | Covered: Explored metal displacement as a redox example. · - Most students were… | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-05-25/lesson_results.md |
 | 2026-05-21 | Lesson Results - 2026-05-21 - Introduction to Redox | Covered: Introduced oxidation and reduction as electron transfer. · - The class… | yes | wiki/classes/chemie_9b_2026_27/lessons/2026-05-21/lesson_results.md |
@@ -55,3 +56,4 @@
 - [2026-05-21-introduction-to-redox.md](raw/classes/chemie_9b_2026_27/2026-05-21-introduction-to-redox.md)
 - [2026-05-25-redox-reactions-with-metals.md](raw/classes/chemie_9b_2026_27/2026-05-25-redox-reactions-with-metals.md)
 - [2026-05-29-anions-and-oxidation-state-review.md](raw/classes/chemie_9b_2026_27/2026-05-29-anions-and-oxidation-state-review.md)
+- [2027-02-03-lesson-results.md](raw/classes/chemie_9b_2026_27/2027-02-03-lesson-results.md)

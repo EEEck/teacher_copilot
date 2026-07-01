@@ -18,7 +18,7 @@ describe("splitDocsMarkdown", () => {
     );
     expect(important).toBeDefined();
     if (important?.kind === "callout") {
-      expect(important.content).toContain("never saves class memory");
+      expect(important.content).toContain("Nothing becomes durable class memory");
       expect(important.content).not.toContain("[!important]");
     }
   });
@@ -30,7 +30,7 @@ describe("splitDocsMarkdown", () => {
     );
     expect(betaSection?.kind).toBe("markdown");
     if (betaSection?.kind === "markdown") {
-      expect(betaSection.content).toContain("> Can you update class memory");
+      expect(betaSection.content).toContain("> Can a teacher update class memory");
     }
   });
 

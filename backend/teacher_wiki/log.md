@@ -157,3 +157,14 @@
 - Updated: wiki/classes/chemie_9b_2026_27/memory/planning_brief.md
 - Updated: wiki/classes/chemie_9b_2026_27/memory/teaching_patterns.md
 - Updated: wiki/classes/chemie_9b_2026_27/memory/copilot_profile.md
+
+## [2026-06-22T05:16:40] ingest | 2027-02-03 — Lesson Results (id:8e7daeb3)
+> Class: chemie_9b_2026_27
+> Lesson date: 2027-02-03
+- Updated: wiki/classes/chemie_9b_2026_27/lessons/2027-02-03/lesson_results.md
+- Updated: wiki/classes/chemie_9b_2026_27/course_state.md
+- Updated: wiki/classes/chemie_9b_2026_27/misconceptions.md
+- Updated: wiki/classes/chemie_9b_2026_27/open_loops.md
+- Updated: wiki/classes/chemie_9b_2026_27/students.md
+- Updated: wiki/classes/chemie_9b_2026_27/timeline.md
+- Updated: raw/classes/chemie_9b_2026_27/2027-02-03-lesson-results.md

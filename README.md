@@ -28,8 +28,9 @@ concrete implementation plans only.
   optional learning guide for agent concepts, reference repos, and best practices.
 
 For common agent debug motions, use the trace bundle scripts documented in
-[`backend/README.md`](backend/README.md): FCKW lesson planning and the
-three-turn Update Memory lesson-results scenario.
+[`backend/README.md`](backend/README.md): FCKW lesson planning, the three-turn
+Update Memory lesson-results scenario, and the Memory Sweep MBB/executive merge
+trace that checks the core backend memory-consolidation behavior.
 
 ## Architecture
 

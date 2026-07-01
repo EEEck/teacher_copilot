@@ -199,6 +199,52 @@ The plan and memory trace bundle scripts currently share a lot of behavior
 artifact workflows are added, consolidate them into one scenario-driven trace
 runner before adding another near-copy script.
 
+## Memory Sweep merge trace
+
+Use this when changing Memory Sweep prompts, alignment/card contracts, target
+canonicalization, ledger status handling, or the `/memory/sweep/propose` and
+`/memory/sweep/apply` routes. It seeds three temporary ledger rows into the
+local backend: two MBB-style planning-communication signals and one
+executive-style communication signal. The expected result is one consolidated
+`teacher_profile.md / Communication` review card, not one card per row.
+
+PowerShell from repo root:
+
+```powershell
+.\backend\.venv\Scripts\python .\scripts\trace_memory_mbb_executive_consolidation.py `
+  --run-name manual-mbb-executive-merge
+```
+
+Run the current-memory variants when touching `adjust` or `already_covered`
+behavior:
+
+```powershell
+.\backend\.venv\Scripts\python .\scripts\trace_memory_mbb_executive_consolidation.py `
+  --current-memory none `
+  --run-name manual-mbb-executive-add
+
+.\backend\.venv\Scripts\python .\scripts\trace_memory_mbb_executive_consolidation.py `
+  --current-memory narrow-mbb `
+  --run-name manual-mbb-executive-adjust
+
+.\backend\.venv\Scripts\python .\scripts\trace_memory_mbb_executive_consolidation.py `
+  --current-memory generalized `
+  --run-name manual-mbb-executive-covered
+```
+
+Passing shape:
+
+- `passed=true`
+- `full_merge_cards=1`
+- one card represents all three seeded candidate IDs
+- expected operation is `add`, `adjust`, or `already_covered` depending on
+  `--current-memory`
+
+The trace is a live-model drift signal and writes a run bundle under
+`backend/runs/`. The active production prompts should still avoid hardcoded
+MBB/McKinsey/executive communication examples; deterministic prompt tests cover
+that contract.
+
 ## Wiki memory
 
 The class wiki now includes compact memory pages under `wiki/classes/{class_id}/memory/`:

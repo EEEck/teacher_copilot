@@ -8,11 +8,20 @@ All offline against the stub agent + a tmp copy of the seed wiki.
 
 from __future__ import annotations
 
+import json
 import inspect
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.api import deps
+from app.main import app
+from app.services.ingest_service import IngestService
+from app.services.memory_candidate_ledger import (
+    MemoryCandidateLedger,
+    rows_from_runtime_candidates,
+)
+from app.services.plan_service import PlanService
 from app.schemas.api import ChatMessage
 from app.teacher_agent.agents import (
     AgentRunner,
@@ -20,12 +29,12 @@ from app.teacher_agent.agents import (
     _trim_to_last_user_turns,
 )
 from app.context_limits import get_context_limits
+from app.teacher_agent.memory_capture import MemoryCandidate
 from app.teacher_agent.prompt_assembly import build_ingest_user_input_assembly
 from app.teacher_agent.planning_state import (
     EvidenceBrief,
     LessonPlanningState,
     LessonPlanningStatePatch,
-    MemoryCandidate,
     PlanRuntime,
     SessionState,
     SessionStatePatch,
@@ -39,7 +48,16 @@ from app.teacher_agent.planning_state import (
 from app.teacher_agent.tools import _capture, lookup_raw_evidence
 from app.teacher_agent.wiki import memory as wiki_memory
 from app.teacher_agent.wiki_store import WikiStore
-from tests.conftest import CLASS_ID
+from tests.conftest import CLASS_ID, StubAgentRunner
+
+
+def _parse_sse(body: str) -> list[dict]:
+    events = []
+    for block in body.split("\n\n"):
+        for line in block.split("\n"):
+            if line.startswith("data:"):
+                events.append(json.loads(line[5:].strip()))
+    return events
 
 
 # --- state round-trip + persistence (API level) ----------------------------
@@ -181,6 +199,249 @@ def test_state_patch_dedupes_lists_and_rejects_invalid_phase():
         "Exit ticket",
         "Differentiated homework",
     ]
+
+
+def test_durable_preference_state_patch_promotes_memory_candidate():
+    rt = PlanRuntime()
+    teacher_message = (
+        "From now on, please use MBB-style communication for plan summaries. "
+        "This is a general communication preference, not just for this lesson."
+    )
+    merge_turn_into_runtime(
+        rt,
+        state_patch=StatePatch(
+            session_state=SessionStatePatch(
+                decisions=[
+                    "Use MBB-style communication for future lesson-planning summaries."
+                ],
+            ),
+            lesson_planning_state=LessonPlanningStatePatch(
+                teacher_preferences_for_this_lesson=[
+                    "Use MBB-style communication for future planning summaries."
+                ],
+            ),
+        ),
+        session_state=SessionState(),
+        lesson_planning_state=LessonPlanningState(),
+        new_evidence_briefs=[],
+        memory_candidates=[],
+        last_change_summary="Captured communication preference.",
+        plan_changed=False,
+        teacher_message=teacher_message,
+    )
+
+    assert len(rt.memory_candidates) == 1
+    candidate = rt.memory_candidates[0]
+    assert candidate.target == "teacher_profile.md"
+    assert candidate.section == "Communication"
+    assert candidate.source == "teacher_explicit"
+    assert candidate.basis == "explicit"
+    assert candidate.confidence == "high"
+    assert "MBB-style communication" in candidate.candidate_update
+
+    rows = rows_from_runtime_candidates(
+        rt.memory_candidates,
+        class_id=CLASS_ID,
+        subject="chemie",
+        workflow="plan",
+        session_id="session-1",
+        turn_index=2,
+    )
+    assert len(rows) == 1
+    assert rows[0].class_id is None
+    assert rows[0].channel == "teacher_behavior"
+    assert rows[0].target == "teacher_profile.md"
+
+
+def test_lesson_scoped_preference_state_patch_does_not_promote_memory_candidate():
+    rt = PlanRuntime()
+    merge_turn_into_runtime(
+        rt,
+        state_patch=StatePatch(
+            lesson_planning_state=LessonPlanningStatePatch(
+                teacher_preferences_for_this_lesson=[
+                    "Use a quieter individual worksheet phase today."
+                ],
+            ),
+        ),
+        session_state=SessionState(),
+        lesson_planning_state=LessonPlanningState(),
+        new_evidence_briefs=[],
+        memory_candidates=[],
+        last_change_summary="Captured lesson preference.",
+        plan_changed=False,
+        teacher_message="For today's redox lesson, use a quieter worksheet phase.",
+    )
+
+    assert rt.memory_candidates == []
+
+
+def test_existing_explicit_user_candidate_prevents_state_repair_duplicate():
+    rt = PlanRuntime()
+    existing = MemoryCandidate(
+        target="user.md",
+        section="Communication",
+        candidate_update=(
+            "Use MBB-style communication in all lesson-planning summaries: "
+            "recommendation, reasons, next steps."
+        ),
+        source="teacher_explicit",
+        basis="explicit",
+        confidence="high",
+    )
+    merge_turn_into_runtime(
+        rt,
+        state_patch=StatePatch(),
+        session_state=SessionState(),
+        lesson_planning_state=LessonPlanningState(),
+        new_evidence_briefs=[],
+        memory_candidates=[existing],
+        last_change_summary="Captured preference.",
+        plan_changed=False,
+    )
+    merge_turn_into_runtime(
+        rt,
+        state_patch=StatePatch(
+            lesson_planning_state=LessonPlanningStatePatch(
+                teacher_preferences_for_this_lesson=[
+                    "Use MBB-style communication for future planning summaries."
+                ],
+            ),
+        ),
+        session_state=SessionState(),
+        lesson_planning_state=LessonPlanningState(),
+        new_evidence_briefs=[],
+        memory_candidates=[],
+        last_change_summary="Retained preference in state.",
+        plan_changed=False,
+        teacher_message=(
+            "From now on, for all lesson-planning summaries, use MBB-style "
+            "communication. This is a general communication preference."
+        ),
+    )
+
+    assert rt.memory_candidates == [existing]
+
+
+def test_plan_chat_repairs_state_only_preference_to_api_and_ledger(
+    tmp_path: Path,
+    wiki: WikiStore,
+):
+    class StateOnlyPreferenceRunner(StubAgentRunner):
+        def _emit_plan_state(
+            self,
+            planning: PlanRuntime,
+            messages: list[ChatMessage],
+            plan_md: str,
+            partial_plan: str,
+            *,
+            phase: str = "lesson_refinement",
+        ) -> None:
+            latest = messages[-1].content if messages else ""
+            merge_turn_into_runtime(
+                planning,
+                state_patch=StatePatch(
+                    session_state=SessionStatePatch(
+                        phase=phase,
+                        teacher_goal=latest[:80],
+                        decisions=[
+                            "Use MBB-style communication for future lesson-planning summaries."
+                        ],
+                    ),
+                    lesson_planning_state=LessonPlanningStatePatch(
+                        lesson_topic="FCKW redox",
+                        duration_minutes=45,
+                        teacher_preferences_for_this_lesson=[
+                            "Use MBB-style communication for future planning summaries."
+                        ],
+                    ),
+                ),
+                session_state=SessionState(),
+                lesson_planning_state=LessonPlanningState(),
+                new_evidence_briefs=[],
+                memory_candidates=[],
+                last_change_summary="Captured communication preference in state.",
+                plan_changed=plan_md.strip() != (partial_plan or "").strip(),
+                teacher_message=latest,
+            )
+            planning.session_state.phase = phase
+
+    before = {path: wiki.read_text(path) for path in _profile_paths(wiki)}
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    agents = StateOnlyPreferenceRunner(wiki)
+    ingest = IngestService(
+        wiki=wiki,
+        agents=agents,
+        memory_candidate_ledger=ledger,
+    )
+    plan = PlanService(
+        wiki=wiki,
+        agents=agents,
+        memory_candidate_ledger=ledger,
+    )
+
+    app.dependency_overrides[deps.get_wiki] = lambda: wiki
+    app.dependency_overrides[deps.get_agents] = lambda: agents
+    app.dependency_overrides[deps.get_memory_candidate_ledger] = lambda: ledger
+    app.dependency_overrides[deps.get_ingest_service] = lambda: ingest
+    app.dependency_overrides[deps.get_plan_service] = lambda: plan
+    try:
+        with TestClient(app, raise_server_exceptions=False) as local_client:
+            base = f"/api/classes/{CLASS_ID}/plan"
+            session_id = local_client.post(f"{base}/sessions").json()["session_id"]
+            chat = local_client.post(
+                f"{base}/sessions/{session_id}/chat",
+                json={
+                    "message": (
+                        "Please plan FCKW redox. From now on, for all "
+                        "lesson-planning summaries, use MBB-style communication. "
+                        "This is a general communication preference, not just this lesson."
+                    )
+                },
+            )
+            stream_session_id = local_client.post(f"{base}/sessions").json()[
+                "session_id"
+            ]
+            stream = local_client.post(
+                f"{base}/sessions/{stream_session_id}/chat/stream",
+                json={
+                    "message": (
+                        "Please plan FCKW redox. From now on, for all "
+                        "lesson-planning summaries, use MBB-style communication. "
+                        "This is a general communication preference, not just this lesson."
+                    )
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert chat.status_code == 200, chat.text
+    body = chat.json()
+    assert len(body["memory_candidates"]) == 1
+    candidate = body["memory_candidates"][0]
+    assert candidate["target"] == "teacher_profile.md"
+    assert candidate["section"] == "Communication"
+    assert candidate["basis"] == "explicit"
+    assert candidate["confidence"] == "high"
+    assert "MBB-style communication" in candidate["candidate_update"]
+
+    assert stream.status_code == 200, stream.text
+    stream_final = [event for event in _parse_sse(stream.text) if event["type"] == "final"][
+        -1
+    ]
+    stream_candidate = stream_final["memory_candidates"][0]
+    assert stream_candidate["target"] == "teacher_profile.md"
+    assert stream_candidate["section"] == "Communication"
+    assert "MBB-style communication" in stream_candidate["candidate_update"]
+
+    rows = ledger.list_candidates(class_id=CLASS_ID)
+    assert len(rows) == 2
+    assert {row.session_id for row in rows} == {session_id, stream_session_id}
+    assert all(row.class_id is None for row in rows)
+    assert all(row.channel == "teacher_behavior" for row in rows)
+    assert all(row.target == "teacher_profile.md" for row in rows)
+    assert {path: wiki.read_text(path) for path in _profile_paths(wiki)} == before
 
 
 def test_plan_finalize_signal_requires_acceptance_or_direct_save_intent():

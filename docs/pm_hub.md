@@ -212,6 +212,19 @@ Primary bets:
 - class content organization
 - multi-week lesson sequence planning
 
+### v2 - Student Learning Copilot
+
+Extend the class-memory foundation into a student-facing formative learning
+assistant. Students see a strict student-visible lens over class memory and
+materials, maintain separate per-student learning memory, work through wrong
+answers after returned problem sets, and prepare for exams through active
+recall, spaced repetition, and adaptive problem pathways.
+
+This is a strategic expansion after the teacher-side memory loop is proven. It
+must not expose teacher-private wiki memory, let students mutate the teacher
+wiki, or make official grading/high-stakes decisions. See
+`student_learning_copilot_v2.md`.
+
 ## Product Guardrails
 
 - Do not add autonomous wiki writes.

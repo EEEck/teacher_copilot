@@ -2,39 +2,16 @@
 
 from __future__ import annotations
 
-import re
-import uuid
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
-from app.schemas.api import (
-    ApprovedWikiUpdate,
-    ClassMemorySnapshot,
-    ClassSummary,
-    ClassTimeline,
-    CompletenessChecklist,
-    CompletenessItem,
-    LessonDetail,
-    RollupExcerpt,
-    TimelineEntry,
-    WikiUpdateProposal,
-)
 
 from app.context_limits import apply_char_limit, get_context_limits
 from app.teacher_agent.wiki.constants import (
-    CLASS_REGISTRY,
-    DIARY_SECTION_HEADINGS,
-    INDEX_WIKI_PATH_RE,
     LESSON_RESULTS_SECTIONS,
-    LOG_HEADER_LEGACY_RE,
-    LOG_HEADER_RE,
     ROLLUP_LABELS,
-    STUDENT_ID_RE,
-    dedupe_wiki_proposals,
 )
-
-from app.teacher_agent.wiki import parsing
 
 
 def _recent_taught_entries(store, class_id: str, limit: int = 2):
@@ -42,7 +19,9 @@ def _recent_taught_entries(store, class_id: str, limit: int = 2):
     return entries[:limit]
 
 
-def _compact_memory_section(store, class_id: str, *, max_chars: int = 1400) -> list[str]:
+def _compact_memory_section(
+    store, class_id: str, *, max_chars: int = 1400
+) -> list[str]:
     excerpts = store.compact_memory_excerpts(class_id, max_chars=max_chars)
     if not excerpts:
         return [
@@ -66,8 +45,7 @@ def _memory_page_excerpt(store, class_id: str, key: str, max_chars: int = 1200) 
 def _lesson_sequence_lines(store, class_id: str, limit: int = 6) -> list[str]:
     entries = [e for e in store.get_timeline(class_id).entries if e.status == "taught"]
     return [
-        f"- {entry.date}: {entry.title} - {entry.summary}"
-        for entry in entries[:limit]
+        f"- {entry.date}: {entry.title} - {entry.summary}" for entry in entries[:limit]
     ]
 
 
@@ -180,7 +158,9 @@ def build_base_class_context(store, class_id: str) -> str:
     """Small class-scoped context shared by workflow packages."""
     snapshot = store.get_snapshot(class_id)
     cls = store.get_class(class_id)
-    subject_guide = store.read_text(store.root / "wiki" / "subjects" / f"{cls.subject}.md")
+    subject_guide = store.read_text(
+        store.root / "wiki" / "subjects" / f"{cls.subject}.md"
+    )
     parts = [
         f"# Base class context - {snapshot.label} ({class_id})",
         f"Subject: {cls.subject}",
@@ -222,7 +202,6 @@ def build_context_package(store, class_id: str, mode: str) -> str:
     raise ValueError(f"Unknown context package mode: {mode}")
 
 
-
 def _trace_section(
     *,
     name: str,
@@ -247,13 +226,10 @@ def build_teacher_context_trace(store) -> dict:
 
     path = _mem.user_profile_path(store)
     text = store.read_text(path).strip()
-    rendered = (
-        "# Teacher context (global)\n"
-        + (
-            _mem.clamp_memory_page("user", text).rstrip()
-            if text
-            else "- No teacher profile yet."
-        )
+    rendered = "# Teacher context (global)\n" + (
+        _mem.clamp_memory_page("user", text).rstrip()
+        if text
+        else "- No teacher profile yet."
     )
     return {
         "function": "build_teacher_context_trace",
@@ -304,7 +280,9 @@ def _active_memory_files(store, class_id: str) -> list[Path]:
             for path in sorted(memory_root.glob("*.md"))
             if path.name not in known_names
         ]
-    order = {filename: idx for idx, filename in enumerate(_mem.COMPACT_MEMORY_FILES.values())}
+    order = {
+        filename: idx for idx, filename in enumerate(_mem.COMPACT_MEMORY_FILES.values())
+    }
     return sorted(
         known + extras,
         key=lambda path: (order.get(path.name, 999), path.name),
@@ -427,7 +405,11 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
         add_section(
             "Compact class memory",
             f"wiki/classes/{class_id}/memory/",
-            ["", "## Compact class memory", "- No compact class memory pages found yet."],
+            [
+                "",
+                "## Compact class memory",
+                "- No compact class memory pages found yet.",
+            ],
         )
 
     rendered = "\n".join(parts)
@@ -475,7 +457,9 @@ def build_ingest_task_context_trace(store, class_id: str) -> dict:
         "",
     ]
 
-    def add_section(name: str, source: str, lines: list[str], included: bool = True) -> None:
+    def add_section(
+        name: str, source: str, lines: list[str], included: bool = True
+    ) -> None:
         text = "\n".join(lines)
         sections.append(
             _trace_section(
@@ -547,7 +531,7 @@ def build_ingest_task_context_trace(store, class_id: str) -> dict:
                             detail.lesson_plan_markdown, lim.ingest_saved_plan_chars
                         ),
                         "",
-                    ]
+                    ],
                 )
                 break
 
@@ -564,7 +548,9 @@ def build_ingest_context_slim_trace(store, class_id: str) -> dict:
     """Return the shared class core plus small Update Memory task context."""
     core = build_active_class_core_context_trace(store, class_id)
     task = build_ingest_task_context_trace(store, class_id)
-    rendered = "\n\n".join(part for part in (core["text"], task["text"]) if part.strip())
+    rendered = "\n\n".join(
+        part for part in (core["text"], task["text"]) if part.strip()
+    )
     return {
         "function": "build_ingest_context_slim",
         "chars": len(rendered),
@@ -613,7 +599,13 @@ def build_plan_context(store, class_id: str) -> str:
     parts.append("")
 
     if snapshot.recent_lessons:
-        parts.extend(["## Recent lessons (titles)", *[f"- {line}" for line in snapshot.recent_lessons], ""])
+        parts.extend(
+            [
+                "## Recent lessons (titles)",
+                *[f"- {line}" for line in snapshot.recent_lessons],
+                "",
+            ]
+        )
 
     parts.extend([build_planning_query_pack(store, class_id), ""])
 
@@ -661,10 +653,13 @@ def build_plan_context(store, class_id: str) -> str:
             store.read_text(store.root / "wiki" / "teacher_profile.md")[:1200],
             "",
             f"## Subject guide: {cls.subject} (excerpt)",
-            store.read_text(store.root / "wiki" / "subjects" / f"{cls.subject}.md")[:1200],
+            store.read_text(store.root / "wiki" / "subjects" / f"{cls.subject}.md")[
+                :1200
+            ],
         ]
     )
     return "\n".join(parts)
+
 
 def build_ingest_context(store, class_id: str) -> str:
     """Memory pack for logging today's lesson — student IDs, prior lesson, light rollups."""
@@ -733,6 +728,7 @@ def build_ingest_context(store, class_id: str) -> str:
         parts.append("- None listed yet")
     return "\n".join(parts)
 
+
 def empty_plan_template(store, lesson_date: Optional[str] = None) -> str:
     d = lesson_date or date.today().isoformat()
     return (
@@ -750,10 +746,12 @@ def empty_plan_template(store, lesson_date: Optional[str] = None) -> str:
         "## Teacher notes\n\n"
     )
 
+
 def is_plan_ready(store, plan_md: str) -> bool:
     required = ("## Learning goals", "## Lesson flow", "## Warmup")
     text = plan_md.lower()
     return all(h.lower() in text for h in required) and len(plan_md.strip()) > 200
+
 
 def load_index_context(
     store, class_id: str, max_chars: int = 4000, *, for_tool_loop: bool = False
@@ -777,6 +775,7 @@ def load_index_context(
         store.read_text(store.roll_up_paths(class_id)["open_loops"])[:1000],
     ]
     return "\n".join(parts)
+
 
 def empty_diary_template(store, lesson_date: Optional[str] = None) -> str:
     d = lesson_date or date.today().isoformat()

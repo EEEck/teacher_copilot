@@ -51,6 +51,7 @@ from app.teacher_agent.planning_state import (
     planning_api_payload,
 )
 from app.services.ingest_service import IngestService
+from app.services.memory_candidate_ledger import MemoryCandidateLedger
 from app.services.plan_service import PlanService
 from app.teacher_agent.stream_events import (
     SseFinal,
@@ -344,6 +345,22 @@ class StubAgentRunner:
             ]
             if scenario_0529
             else [],
+            memory_candidates=[
+                MemoryCandidate(
+                    target="teaching_patterns.md",
+                    section="What Worked",
+                    candidate_update=(
+                        "Short diagnostic checks surfaced misconceptions early."
+                    ),
+                    evidence=f"Update-memory session for {lesson_date}.",
+                    evidence_refs=[
+                        f"wiki/classes/{CLASS_ID}/lessons/{lesson_date}/lesson_results.md"
+                    ],
+                    source="inferred_from_session",
+                    basis="inferred",
+                    confidence="medium",
+                )
+            ],
             last_change_summary="Updated lesson results.",
             unsupported_intent_reason="",
             diary_changed=True,
@@ -476,6 +493,119 @@ class StubAgentRunner:
             ],
             warnings=[],
         )
+
+    async def propose_memory_sweep_cards(
+        self,
+        class_id: str,
+        subject: str,
+        grouped_candidates,
+        target_excerpts,
+        alignment_groups=None,
+        validation_error: str = "",
+    ):
+        from app.teacher_agent.models import MemorySweepCardOutput, MemorySweepProposalOutput
+
+        cards = []
+        if alignment_groups:
+            lookup = {
+                item["candidate_id"]: item
+                for proposals in grouped_candidates.values()
+                for item in proposals
+            }
+            for group in alignment_groups:
+                first_id = group["ledger_candidate_ids"][0]
+                item = lookup[first_id]
+                cards.append(
+                    MemorySweepCardOutput(
+                        candidate_id=first_id,
+                        card_id=item.get("card_id", ""),
+                        source_group_id=group["group_id"],
+                        candidate_ids=group["ledger_candidate_ids"],
+                        review_queue=item["review_queue"],
+                        channel=item["channel"],
+                        target=group["target"],
+                        section=group["section"],
+                        content=item["content"],
+                        evidence_summary=item.get("evidence_summary", ""),
+                        evidence_refs=item.get("evidence_refs", []),
+                        confidence=item.get("confidence", "low"),
+                        basis=item.get("basis", "inferred"),
+                        status=item.get("status", "captured"),
+                        relationship=group.get("relationship", ""),
+                        group_label=group.get("group_label", ""),
+                        public_rationale=group.get("public_rationale", ""),
+                        operation={
+                            "merge": "add",
+                            "adjust_existing": "adjust",
+                            "already_covered": "already_covered",
+                            "needs_decision": "needs_decision",
+                            "reject_low_signal": "reject_low_signal",
+                        }.get(group.get("decision", "merge"), "add"),
+                        status_recommendation=item.get(
+                            "status_recommendation", "promote"
+                        ),
+                        why_now="Stub isolated sweep review.",
+                        signal_count=len(group["ledger_candidate_ids"]),
+                    )
+                )
+            return MemorySweepProposalOutput(cards=cards, warnings=[])
+        for proposals in grouped_candidates.values():
+            for item in proposals:
+                cards.append(
+                    MemorySweepCardOutput(
+                        candidate_id=item["candidate_id"],
+                        card_id=item.get("card_id", ""),
+                        candidate_ids=item.get("candidate_ids", [item["candidate_id"]]),
+                        review_queue=item["review_queue"],
+                        channel=item["channel"],
+                        target=item["target"],
+                        section=item["section"],
+                        content=item["content"],
+                        evidence_summary=item.get("evidence_summary", ""),
+                        evidence_refs=item.get("evidence_refs", []),
+                        confidence=item.get("confidence", "low"),
+                        basis=item.get("basis", "inferred"),
+                        status=item.get("status", "captured"),
+                        status_recommendation=item.get(
+                            "status_recommendation", "promote"
+                        ),
+                        why_now="Stub isolated sweep review.",
+                        signal_count=item.get("signal_count", 1),
+                    )
+                )
+        return MemorySweepProposalOutput(cards=cards, warnings=[])
+
+    async def align_memory_sweep_candidates(
+        self,
+        class_id: str,
+        subject: str,
+        grouped_candidates,
+        target_excerpts,
+        validation_error: str = "",
+    ):
+        from app.teacher_agent.models import (
+            MemorySweepAlignmentGroupOutput,
+            MemorySweepAlignmentOutput,
+        )
+
+        groups = []
+        for proposals in grouped_candidates.values():
+            for item in proposals:
+                groups.append(
+                    MemorySweepAlignmentGroupOutput(
+                        group_id=f"group_{item['candidate_id']}",
+                        target=item["target"],
+                        section=item["section"],
+                        ledger_candidate_ids=item.get(
+                            "candidate_ids", [item["candidate_id"]]
+                        ),
+                        relationship="new_semantic_claim",
+                        decision="merge",
+                        group_label="stub_group",
+                        public_rationale="Stub alignment.",
+                    )
+                )
+        return MemorySweepAlignmentOutput(alignment_groups=groups, warnings=[])
 
     async def ingest_chat_stream(
         self,
@@ -674,12 +804,34 @@ def agents(wiki: WikiStore) -> StubAgentRunner:
 
 
 @pytest.fixture
-def client(wiki: WikiStore, agents: StubAgentRunner) -> Iterator[TestClient]:
-    ingest = IngestService(wiki=wiki, agents=agents)
-    plan = PlanService(wiki=wiki, agents=agents)
+def memory_candidate_ledger(tmp_path: Path) -> MemoryCandidateLedger:
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    return ledger
+
+
+@pytest.fixture
+def client(
+    wiki: WikiStore,
+    agents: StubAgentRunner,
+    memory_candidate_ledger: MemoryCandidateLedger,
+) -> Iterator[TestClient]:
+    ingest = IngestService(
+        wiki=wiki,
+        agents=agents,
+        memory_candidate_ledger=memory_candidate_ledger,
+    )
+    plan = PlanService(
+        wiki=wiki,
+        agents=agents,
+        memory_candidate_ledger=memory_candidate_ledger,
+    )
 
     app.dependency_overrides[deps.get_wiki] = lambda: wiki
     app.dependency_overrides[deps.get_agents] = lambda: agents
+    app.dependency_overrides[deps.get_memory_candidate_ledger] = (
+        lambda: memory_candidate_ledger
+    )
     app.dependency_overrides[deps.get_ingest_service] = lambda: ingest
     app.dependency_overrides[deps.get_plan_service] = lambda: plan
     try:

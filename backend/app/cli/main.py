@@ -34,7 +34,9 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Max chars per tool result/args (default: unlimited)",
     )
-    chat.add_argument("--trace", type=Path, default=None, help="Append JSONL trace file")
+    chat.add_argument(
+        "--trace", type=Path, default=None, help="Append JSONL trace file"
+    )
     chat.add_argument(
         "--trace-reasoning",
         action="store_true",

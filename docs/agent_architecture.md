@@ -144,13 +144,13 @@ The product uses tiered class memory.
 
    `MemoryRuntime` (in `memory_update_state.py`) applies the same pattern to
    Update Memory: target/date identification, intent, phase, lesson-result
-   category progress, compact evidence briefs, and raw refs live on the session
-   until the teacher approves the normal memory commit. Its model-facing context
-   is rendered as separate `Memory target state`, `Memory session state`,
-   `Lesson result state`, and `Memory evidence briefs` sections. This keeps the
-   workflow free-agent from the teacher's perspective while preserving
-   backend-owned validation and no hidden wiki writes. Timeline/detail entry
-   points can pass a
+   category progress, compact evidence briefs, raw refs, and accumulated
+   `MemoryCandidate`s live on the session until the teacher approves the normal
+   memory commit. Its model-facing context is rendered as separate `Memory
+   target state`, `Memory session state`, `Lesson result state`, `Memory
+   evidence briefs`, and `Memory candidates` sections. This keeps the workflow
+   free-agent from the teacher's perspective while preserving backend-owned
+   validation and no hidden wiki writes. Timeline/detail entry points can pass a
    structured date/intent hint into the same ingest session start call; the
    backend seeds the target and draft from canonical lesson detail when a
    planned or taught lesson is found. Unknown hinted dates may seed a dated
@@ -167,6 +167,41 @@ The product uses tiered class memory.
    Lesson-plan save surfaces the current runtime state and accumulated memory
    candidates so the UI can call the profile-proposal skill after the plan is
    saved, then present suggested `user.md` / `copilot.md` updates for approval.
+   After an approved Update Memory commit, the backend returns a
+   `class_memory_proposal` so class evolution can be reviewed and applied
+   immediately without waiting for the weekly sweep.
+   Update Memory also surfaces accumulated candidates after the teacher-approved
+   lesson-memory commit, so subtle chat signals such as repeated communication
+   preferences can be reviewed for `teacher_profile.md`, `copilot_profile.md`,
+   `teaching_patterns.md`, `class_state.md`, `planning_brief.md`, or
+   `taught_so_far.md`. `canonical_wiki` remains review-only in this path.
+
+6. **Candidate ledger and Memory Sweep**
+   Planning and Update Memory chats can emit review-only `memory_candidates`.
+   Backend capture code validates target/source/basis/confidence, dedupes within
+   runtime state, repairs typed durable-state misses, and persists accepted
+   candidates into a SQLite ledger as raw evidence. The ledger is episodic
+   working memory, not prompt-facing truth and not durable wiki memory.
+
+   Memory Sweep is the slow consolidation layer from ledger evidence to curated
+   memory. It runs bounded packets by hard scope (`teacher_profile.md`,
+   `copilot_profile.md`, compact class memory, subject guides, and review-only
+   wiki findings). Each packet now uses a two-pass LLM lifecycle: an alignment
+   pass first normalizes every candidate exactly once into underlying durable
+   claim groups, then a card pass turns only validated groups into
+   teacher-reviewable cards. Backend validators enforce coverage,
+   target/section consistency, operation mapping, and exact `adjust`
+   replacement. This keeps semantic judgment in the model and write safety in
+   deterministic code.
+
+   The alignment prompt deliberately teaches the general operation rather than
+   the specific regression. It exposes `surface_labels`, `shared_attributes`,
+   `distinguishing_attributes`, and `merge_test` so semantic grouping can be
+   inspected and tested. Prompt examples use classroom cases such as redox
+   misconceptions, board-ready task wording, and concrete-before-formal
+   teaching sequences. The MBB/executive communication scenario remains a trace
+   and regression test, not a hardcoded system-prompt alias or backend synonym
+   rule.
 
 The wiki remains the source of truth. Compact memory is derived and rebuildable.
 Profiles should be small, stable, correctly scoped, and source-backed where
@@ -274,6 +309,17 @@ should receive enough context to start well and use tools for the long tail.
   conversation state, guardrails for automatic validation, human review for
   side-effecting tool calls, and traces/evals for behavior inspection. Do not
   add them just because they exist.
+- Use candidate-led durable memory updates. Active chat/session state can catch
+  subtle behavior changes, but durable memory promotion should happen as a
+  separate teacher-reviewed step after the artifact save or memory commit.
+  This matches the OpenAI SDK separation between resumable conversation state
+  and distilled reusable memory, and the Hermes pattern of small curated memory
+  files rather than transcript stuffing.
+- Treat raw memory signals and curated memory as different lifecycle phases:
+  observe into ledger evidence, normalize into claim groups, stage review cards,
+  consolidate with teacher approval, then inject only relevant curated memory.
+  Do not collapse these phases back into transcript replay or one-row/one-card
+  promotion.
 
 ## Deliberate Non-Goals
 
@@ -306,6 +352,9 @@ should receive enough context to start well and use tools for the long tail.
 - Wiki retrieval: `backend/app/teacher_agent/wiki/search.py`
 - Context packs (incl. `build_plan_context_slim` / `build_ingest_context_slim`): `backend/app/teacher_agent/wiki/context_packs.py`
 - Compact memory + budgets/clamp + bounded profile writers: `backend/app/teacher_agent/wiki/memory.py`
+- Shared memory candidate capture: `backend/app/teacher_agent/memory_capture.py`
+- Memory candidate ledger: `backend/app/services/memory_candidate_ledger.py`
+- Two-pass Memory Sweep consolidation: `backend/app/services/memory_sweep.py`
 - Memory refresh/propose/apply endpoints: `backend/app/api/routes.py`
 - Wiki schema rules: `backend/teacher_wiki/AGENTS.md`
 

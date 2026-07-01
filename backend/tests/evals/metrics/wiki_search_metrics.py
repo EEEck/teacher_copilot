@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase

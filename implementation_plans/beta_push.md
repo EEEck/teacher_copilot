@@ -43,7 +43,8 @@ Non-goals for beta:
 - Persistence visible to testers: no polished saved chat-history product UX.
 - Persistence for operator/research: transcripts, events, artifacts, memory
   states, wiki diffs, and errors are stored for analysis.
-- Cloud: keep the provider decision open, but choose from AWS, GCP, or Azure.
+- Cloud: **AWS only** — frontend and backend in one account/region (default
+  `eu-central-1` if testers are in Germany).
 - Test duration: 2 weeks active testing.
 - Retention: keep beta data for 2 additional weeks after testing, then export
   or delete according to the final research decision.
@@ -271,7 +272,7 @@ Risks:
 
 ### Option B - File wiki plus Postgres
 
-Best AWS/GCP beta default.
+Best AWS beta default.
 
 - Per-tester wiki roots live on persistent shared storage.
 - Postgres stores testers, sessions, and telemetry events.
@@ -292,7 +293,7 @@ Risks:
 
 Defer unless file persistence becomes a blocker.
 
-- Store every wiki file in S3/GCS instead of local filesystem paths.
+- Store every wiki file in S3 instead of local filesystem paths.
 - Requires a storage facade refactor around `WikiStore`.
 
 Pros:
@@ -308,78 +309,110 @@ Risks:
 Recommendation: use **Option B** if shipping to external testers in the cloud;
 use **Option A** only for a tiny founder-led pilot.
 
-## Cloud Deployment Options
+## AWS Deployment
 
-Provider decision is deliberately deferred. Choose from AWS, GCP, or Azure once
-the workspace-isolation implementation is clear.
+Ship frontend and backend on AWS. Use **dev-sized** resources (single-AZ,
+minimal redundancy) unless the beta scope grows.
 
-### AWS Option
+### Stack
 
-Candidate stack:
+| Layer | Service | Role |
+|-------|---------|------|
+| Frontend | **Amplify Hosting** | Next.js app, HTTPS, custom beta domain |
+| API | **ECS Fargate + ALB** | FastAPI, SSE chat streams |
+| Wiki | **EFS** | Per-workspace markdown wiki roots (filesystem semantics) |
+| Telemetry | **RDS Postgres** or Aurora Serverless v2 | Testers, workspaces, sessions, events |
+| Exports | **S3** | Wiki snapshots, trace bundles, operator exports |
+| Secrets | **Secrets Manager** | `OPENAI_API_KEY`, DB URL, invite pepper |
+| Logs | **CloudWatch** | Container and ALB access logs |
 
-```text
-Frontend: Vercel
-Backend: AWS ECS Fargate
-Wiki files: AWS EFS mounted into backend task
-Metadata/events: AWS RDS Postgres
-Artifacts/backups: S3
-Logs: CloudWatch
-Secrets: AWS Secrets Manager or SSM Parameter Store
+Why this stack:
+
+- Fargate fits long-running FastAPI and agent turns up to ~4 minutes.
+- EFS keeps the current `WikiStore` filesystem model with limited code change.
+- Postgres holds beta telemetry without overloading the wiki.
+- Amplify is the natural AWS home for the existing Next.js frontend.
+
+### Architecture
+
+```mermaid
+flowchart TB
+  subgraph users [Beta testers]
+    Teacher[Browser]
+  end
+
+  subgraph aws [AWS]
+    Amplify[Amplify Hosting]
+    ALB[ALB HTTPS]
+    ECS[ECS Fargate backend]
+    EFS[EFS wiki volume]
+    RDS[(Postgres)]
+    S3[S3 exports]
+    SM[Secrets Manager]
+  end
+
+  OpenAI[OpenAI API]
+
+  Teacher --> Amplify
+  Amplify -->|HTTPS API and SSE| ALB
+  ALB --> ECS
+  ECS --> EFS
+  ECS --> RDS
+  ECS --> S3
+  ECS --> SM
+  ECS --> OpenAI
 ```
 
-Why AWS is the provisional technical favorite:
+### Request path
 
-- The backend is already container-friendly.
-- Fargate supports long-running FastAPI, streaming/SSE, and EFS mounts.
-- EFS lets the existing filesystem wiki keep working with limited code change.
-- RDS gives durable telemetry without overloading the wiki.
+```mermaid
+sequenceDiagram
+  participant T as Teacher browser
+  participant A as Amplify
+  participant L as ALB
+  participant B as Fargate backend
+  participant W as EFS wiki
+  participant D as Postgres
+  participant O as OpenAI
 
-### GCP Option
-
-Candidate stack:
-
-```text
-Frontend: Vercel
-Backend: Cloud Run
-Wiki files: Cloud Run volume mount or a small object-storage refactor
-Metadata/events: Cloud SQL Postgres
-Artifacts/backups: GCS
-Logs: Cloud Logging
-Secrets: Secret Manager
+  T->>A: Load class UI
+  T->>L: POST chat/stream
+  L->>B: SSE proxy
+  B->>W: Read wiki evidence
+  B->>O: Agent turn
+  B-->>T: Streamed reply and artifact
+  T->>L: Approve memory commit
+  B->>W: Write approved wiki files
+  B->>D: Append telemetry event
 ```
 
-GCP is attractive if operational simplicity matters most, but the file-wiki
-persistence model needs more scrutiny before choosing it.
+### Beta constraints
 
-### Azure Option
+- **One Fargate task** for the first cut — avoids multi-writer EFS issues and
+  keeps SSE session handling simple.
+- **ALB idle timeout ≥ 300s** — agent turns can run up to 240s
+  (`agent_timeout_seconds`).
+- **`APP_ENV=production`** — enables stream/output safety guards in the backend.
+- **`cors_origins`** — must include the Amplify beta domain only.
+- **`NEXT_PUBLIC_API_BASE_URL`** — set at Amplify build time to the ALB HTTPS URL.
+- **OpenAI key** — backend Secrets Manager only; never Amplify client env.
+- **Region** — prefer `eu-central-1` for German testers; confirm OpenAI data
+  handling separately.
 
-Candidate stack:
+### Infra deliverables (before invite)
 
-```text
-Frontend: Vercel
-Backend: Azure Container Apps
-Wiki files: Azure Files volume mount
-Metadata/events: Azure Database for PostgreSQL
-Artifacts/backups: Blob Storage
-Logs: Azure Monitor / Log Analytics
-Secrets: Key Vault
-```
+- Production `backend/Dockerfile` (no `--reload`).
+- CDK or CloudFormation stack: VPC, ALB, ECS, EFS, RDS, S3, secrets, IAM.
+- Amplify app wired to the repo `frontend/` directory.
+- Smoke test: class list, Update Memory SSE, commit, plan save, event export,
+  backend restart with wiki and telemetry intact.
 
-Azure is viable because Container Apps can mount Azure Files, but it is not the
-default unless the surrounding deployment/account setup is already easier for
-the team.
+### Cost-conscious beta note
 
-### Frontend On Vercel
-
-Vercel frontend is reasonable with any backend provider if:
-
-- `NEXT_PUBLIC_API_BASE_URL` points to the backend API URL.
-- Backend CORS allows only the Vercel beta domain.
-- SSE streaming is tested end to end through the deployed path.
-
-Recommendation today: keep AWS, GCP, and Azure open, but use AWS as the
-planning baseline because EFS best matches the current filesystem wiki with the
-least code change.
+Fixed monthly drivers at dev scale: ALB (~$16–20), NAT Gateway (~$32 if tasks
+use private subnets), Fargate 0.5 vCPU/1GB (~$15–25), RDS minimum tier
+(~$15–50), EFS/S3/CloudWatch usually small at 2–3 testers. For a private mock-data
+beta only, a public-subnet Fargate task avoids NAT cost at weaker network isolation.
 
 ## Backend Implementation Plan
 
@@ -521,11 +554,13 @@ Actions:
 - Ensure API calls include credentials or workspace header as chosen.
 - Add small tester-facing labels when using a seeded mock class.
 - Keep teacher workflow UI mostly unchanged.
+- Configure Amplify build: `NEXT_PUBLIC_API_BASE_URL` → ALB HTTPS URL; validate
+  SSE chat end-to-end from the deployed domain.
 
 Acceptance:
 
-- Tester opens a Vercel URL, enters invite code, lands in their isolated class
-  workspace, and can complete memory update and planning.
+- Tester opens the Amplify beta URL, enters invite code, lands in their isolated
+  class workspace, and can complete memory update and planning.
 
 ## Security And Privacy Boundary
 
@@ -537,27 +572,27 @@ For beta:
 - Do not expose trace endpoints publicly unless protected.
 - Keep admin exports private.
 - Log enough for product learning, not hidden reasoning traces or secrets.
-- Store OpenAI keys only in backend secrets, never Vercel client env.
+- Store OpenAI keys only in backend Secrets Manager, never Amplify client env.
 
 ## Deployment Steps
 
-Provider-agnostic checklist:
+AWS checklist:
 
-1. Build backend Docker image.
-2. Create persistent wiki storage for `/data/klassenpilot`.
-3. Create Postgres or beta SQLite-on-persistent-disk only for a tiny private test.
-4. Deploy backend with persistent wiki storage and secrets.
-5. Put backend behind an HTTPS load balancer.
-6. Configure CORS for the Vercel beta domain.
-7. Deploy frontend to Vercel with `NEXT_PUBLIC_API_BASE_URL`.
+1. Build backend production Docker image and push to ECR.
+2. Provision EFS at `/data/klassenpilot` for per-workspace wiki roots.
+3. Provision RDS Postgres (or Aurora Serverless v2) for beta telemetry.
+4. Deploy ECS Fargate service with EFS mount, secrets, and `APP_ENV=production`.
+5. Put the service behind an HTTPS ALB (idle timeout ≥ 300s).
+6. Configure `cors_origins` for the Amplify beta domain.
+7. Deploy `frontend/` to Amplify with `NEXT_PUBLIC_API_BASE_URL` → ALB URL.
 8. Create one or two beta workspaces from the mock wiki.
 9. Run smoke tests:
    - class list
-   - Update Memory chat
+   - Update Memory chat (SSE end-to-end)
    - proposal/commit
    - plan chat/save
    - event export
-   - backend restart and data still present
+   - backend restart and wiki + telemetry still present
 
 ## Testing
 
@@ -584,8 +619,8 @@ Answered for first beta:
 1. Use only the mock/seeded Chemie 9b wiki.
 2. One class per tester is enough.
 3. Persist transcripts operator-side only.
-4. Keep provider decision open across AWS, GCP, and Azure; AWS remains the
-   planning baseline unless deployment constraints point elsewhere.
+4. AWS for frontend and backend; default region `eu-central-1` unless constraints
+   say otherwise.
 5. Run testers for 2 weeks and retain data for 2 additional weeks.
 
 Still open:
@@ -600,12 +635,11 @@ Still open:
 
 For the first beta push:
 
-- Vercel frontend.
-- Backend on AWS, GCP, or Azure; use AWS ECS Fargate as the default planning
-  baseline until the provider call is made.
-- Persistent per-workspace markdown wiki roots.
-- Postgres for tester/session/event metadata.
-- Object storage export/backups.
+- **Amplify Hosting** for the Next.js frontend.
+- **ECS Fargate + ALB** for the FastAPI backend.
+- **EFS** for persistent per-workspace markdown wiki roots.
+- **Postgres** for tester/session/event metadata.
+- **S3** for export/backups.
 - Simple invite-code access.
 - CLI operator export instead of an admin dashboard.
 

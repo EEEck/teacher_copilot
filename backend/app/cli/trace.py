@@ -83,7 +83,11 @@ class TracePrinter:
                 self.stream.write(self._c(_GRAY, f"  {line}\n"))
             if self.last_turn_tools:
                 name, args, _ = self.last_turn_tools[-1]
-                self.last_turn_tools[-1] = (name, args, body[:200] + "…" if len(body) > 200 else body)
+                self.last_turn_tools[-1] = (
+                    name,
+                    args,
+                    body[:200] + "…" if len(body) > 200 else body,
+                )
             else:
                 self.last_turn_tools.append((event.name or "tool", "", body[:200]))
             self.stream.flush()
@@ -130,7 +134,9 @@ class TracePrinter:
                 short = args if len(args) <= 80 else args[:80] + "…"
                 self.stream.write(f" ({short})")
             if preview:
-                self.stream.write(f" → {preview[:60]}…" if len(preview) > 60 else f" → {preview}")
+                self.stream.write(
+                    f" → {preview[:60]}…" if len(preview) > 60 else f" → {preview}"
+                )
             self.stream.write("\n")
 
 

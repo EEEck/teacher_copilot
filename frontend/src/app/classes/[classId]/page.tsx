@@ -72,6 +72,7 @@ export default async function ClassHomePage({
           Update memory
         </ActionLink>
         <ActionLink href={`/classes/${classId}/plan`}>Create lesson plan</ActionLink>
+        <ActionLink href={`/classes/${classId}/memory-sweep`}>Memory Sweep</ActionLink>
       </div>
 
       <Card>

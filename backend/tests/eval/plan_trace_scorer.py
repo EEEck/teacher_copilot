@@ -107,7 +107,6 @@ def score_startup_context(trace: dict[str, Any]) -> ScoreResult:
     top_sections = assembly.get("sections") or []
 
     included_class = _section_names(class_sections, included_only=True)
-    included_profiles = _section_names(profile_sections, included_only=True)
     included_class_or_profile = _section_names(
         [*class_sections, *profile_sections], included_only=True
     )
