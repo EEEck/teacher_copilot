@@ -36,6 +36,7 @@ from app.teacher_agent.planning_state import (
 )
 from app.teacher_agent.prompt_trace import build_plan_chat_prompt_trace
 from app.teacher_agent.wiki_store import WikiStore
+from app.teacher_agent.memory_capture import runtime_candidates_to_ledger_rows
 
 MODE = "plan"
 
@@ -170,11 +171,22 @@ class PlanService:
         title = self.wiki.extract_title(req.plan_markdown) or "Lesson plan"
         path = self.wiki.save_lesson_plan(class_id, lesson_date, req.plan_markdown)
         self.core.set_status(req.session_id, PlanSessionStatus.saved.value)
-        candidates = (
-            [c.model_dump() for c in session.runtime.memory_candidates]
-            if session.runtime
-            else []
-        )
+        candidates: list[dict] = []
+        if session.runtime:
+            subject = self.wiki.get_class(class_id).subject
+            turn_index = sum(1 for msg in session.messages if msg.role == "user")
+            rows = runtime_candidates_to_ledger_rows(
+                session.runtime.memory_candidates,
+                class_id=class_id,
+                subject=subject,
+                workflow=session.mode,
+                session_id=session.session_id,
+                turn_index=turn_index,
+            )
+            for candidate, row in zip(session.runtime.memory_candidates, rows):
+                payload = candidate.model_dump()
+                payload["candidate_id"] = row.id
+                candidates.append(payload)
         planning = planning_api_payload(session.runtime) if session.runtime else {}
         return SavePlanResponse(
             lesson_date=lesson_date,

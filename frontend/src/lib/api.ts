@@ -11,6 +11,11 @@ function getApiBase(): string {
 }
 
 export type ClassSummary = { id: string; label: string; subject: string };
+export type BetaIdentity = {
+  tester_id: string;
+  workspace_id: string;
+  role: string;
+};
 export type TimelineEntry = {
   date: string;
   title: string;
@@ -139,6 +144,7 @@ export type PlanChatResponse = {
   memory_candidates?: MemoryCandidate[];
 };
 export type MemoryCandidate = {
+  candidate_id?: string;
   target: string;
   section?: string;
   candidate_update: string;
@@ -317,6 +323,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetch(`${getApiBase()}${path}`, {
       ...init,
       cache: "no-store",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         ...init?.headers,
@@ -351,6 +358,7 @@ async function apiStreamPost(path: string, body: object, signal?: AbortSignal): 
     res = await fetch(`${getApiBase()}${path}`, {
       method: "POST",
       cache: "no-store",
+      credentials: "include",
       signal,
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify(body),
@@ -419,6 +427,13 @@ function normalizeTimeline(raw: Partial<ClassTimeline> & { class_id: string }): 
 }
 
 export const client = {
+  betaLogin: (inviteCode: string) =>
+    api<BetaIdentity>("/api/beta/login", {
+      method: "POST",
+      body: JSON.stringify({ invite_code: inviteCode }),
+    }),
+  betaLogout: () => api<{ status: string }>("/api/beta/logout", { method: "POST" }),
+  betaMe: () => api<BetaIdentity>("/api/beta/me"),
   getClasses: () => api<{ classes: ClassSummary[] }>("/api/classes"),
   getTimeline: async (classId: string) => {
     const raw = await api<Partial<ClassTimeline> & { class_id: string }>(

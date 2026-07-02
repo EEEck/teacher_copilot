@@ -1,19 +1,44 @@
+"use client";
+
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { client, ClassSummary } from "@/lib/api";
+import { Card, CardContent } from "@/components/ui/card";
+import { client, type ClassSummary } from "@/lib/api";
 
-export const dynamic = "force-dynamic";
+export default function HomePage() {
+  const [classes, setClasses] = useState<ClassSummary[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-export default async function HomePage() {
-  let classes: ClassSummary[] = [];
-  let error: string | null = null;
-  try {
-    const data = await client.getClasses();
-    classes = data.classes;
-  } catch (e) {
-    error = e instanceof Error ? e.message : "Failed to load classes";
-  }
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    client
+      .getClasses()
+      .then((data) => {
+        if (!cancelled) {
+          setClasses(data.classes);
+          setError(null);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load classes");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const needsLogin = error?.includes("API 401");
 
   return (
     <div>
@@ -27,27 +52,50 @@ export default async function HomePage() {
       {error && (
         <Alert className="mb-6 border-border bg-muted text-foreground">
           <AlertDescription>
-            Backend not reachable: {error}. Start the API with{" "}
-            <code className="rounded bg-accent px-1 text-accent-foreground">uvicorn app.main:app --reload</code>
+            {needsLogin ? (
+              <>
+                Beta login required.{" "}
+                <Link href="/beta/login" className="text-primary hover:underline">
+                  Enter invite code
+                </Link>
+              </>
+            ) : (
+              <>
+                Backend not reachable: {error}. Start the API with{" "}
+                <code className="rounded bg-accent px-1 text-accent-foreground">
+                  uvicorn app.main:app --reload
+                </code>
+              </>
+            )}
           </AlertDescription>
         </Alert>
       )}
 
       <div className="grid gap-4">
-        {classes.map((c) => (
-          <Link
-            key={c.id}
-            href={`/classes/${c.id}`}
-            className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-          >
-            <Card className="transition hover:border-primary/30 hover:shadow-md">
-              <CardContent className="p-6">
-                <h2 className="text-xl font-semibold">{c.label}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Subject: {c.subject}</p>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+        {loading && (
+          <Card>
+            <CardContent className="p-6 text-sm text-muted-foreground">
+              Loading classes...
+            </CardContent>
+          </Card>
+        )}
+        {!loading &&
+          classes.map((c) => (
+            <Link
+              key={c.id}
+              href={`/classes/${c.id}`}
+              className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <Card className="transition hover:border-primary/30 hover:shadow-md">
+                <CardContent className="p-6">
+                  <h2 className="text-xl font-semibold">{c.label}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Subject: {c.subject}
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
       </div>
     </div>
   );

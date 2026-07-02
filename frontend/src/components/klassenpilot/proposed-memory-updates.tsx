@@ -23,6 +23,83 @@ const APPLICABLE = new Set([
   "teaching_patterns.md",
 ]);
 
+const COPILOT_PROFILE_LABELS = new Set([
+  "avoid",
+  "copilot",
+  "copilot profile",
+  "copilot working agreement",
+  "planning pattern",
+  "planning patterns",
+  "practice task",
+  "practice tasks",
+]);
+
+const TEACHER_PROFILE_LABELS = new Set([
+  "communication",
+  "lesson style",
+  "teacher",
+  "teacher profile",
+]);
+
+function cleanTargetLabel(value: string): string {
+  return value.trim().toLowerCase().replaceAll("_", " ").replace(/\s+/g, " ");
+}
+
+function canonicalMemoryTarget(target: string): string {
+  const normalized = target.trim().toLowerCase();
+  if (normalized === "user.md") return "teacher_profile.md";
+  if (normalized === "copilot.md") return "copilot_profile.md";
+  return normalized;
+}
+
+function normalizeApplyTarget(target: string): string {
+  const canonical = canonicalMemoryTarget(target);
+  if (APPLICABLE.has(canonical) || canonical.startsWith("wiki/subjects/")) {
+    return canonical;
+  }
+  const label = cleanTargetLabel(target);
+  if (TEACHER_PROFILE_LABELS.has(label)) return "teacher_profile.md";
+  if (COPILOT_PROFILE_LABELS.has(label)) return "copilot_profile.md";
+  return "copilot_profile.md";
+}
+
+export function toApplicableMemoryCandidate(c: MemoryCandidate): {
+  candidate: MemoryCandidate;
+  canApply: boolean;
+  originalTarget: string;
+} {
+  const target = normalizeApplyTarget(c.target);
+  return {
+    candidate: { ...c, target },
+    canApply: APPLICABLE.has(target) || target.startsWith("wiki/subjects/"),
+    originalTarget: c.target,
+  };
+}
+
+function isImmediateApplyCandidate(c: MemoryCandidate): boolean {
+  return (
+    c.source === "teacher_explicit" &&
+    c.basis === "explicit" &&
+    (c.confidence === "medium" || c.confidence === "high")
+  );
+}
+
+export function splitPostSaveMemoryCandidates(candidates: MemoryCandidate[]): {
+  immediate: MemoryCandidate[];
+  signals: MemoryCandidate[];
+} {
+  const immediate: MemoryCandidate[] = [];
+  const signals: MemoryCandidate[] = [];
+  for (const candidate of candidates) {
+    if (isImmediateApplyCandidate(candidate)) {
+      immediate.push(candidate);
+    } else {
+      signals.push(candidate);
+    }
+  }
+  return { immediate, signals };
+}
+
 /**
  * Review surface for durable-memory updates the copilot proposed during a
  * planning session. Nothing is written until the teacher approves and applies
@@ -41,14 +118,17 @@ export function ProposedMemoryUpdates({
   onContinue?: () => void;
   continueLabel?: string;
 }) {
+  const normalizedCandidates = candidates.map(toApplicableMemoryCandidate);
   const [approved, setApproved] = useState<Record<number, boolean>>(() =>
     Object.fromEntries(
-      candidates.map((c, i) => [i, APPLICABLE.has(c.target)]),
+      normalizedCandidates.map((c, i) => [i, c.canApply]),
     ),
   );
 
   if (!candidates.length) return null;
-  const approvedList = candidates.filter((_, i) => approved[i]);
+  const approvedList = normalizedCandidates
+    .filter((_, i) => approved[i])
+    .map((c) => c.candidate);
 
   return (
     <Card variant="highlight" size="sm">
@@ -61,8 +141,7 @@ export function ProposedMemoryUpdates({
       </CardHeader>
       <CardContent>
         <ul className="flex flex-col gap-2">
-          {candidates.map((c, i) => {
-            const canApply = APPLICABLE.has(c.target);
+          {normalizedCandidates.map(({ candidate: c, canApply, originalTarget }, i) => {
             return (
               <li key={i} className="flex items-start gap-2">
                 <input
@@ -79,6 +158,7 @@ export function ProposedMemoryUpdates({
                     <span className="rounded bg-accent px-1.5 py-0.5 font-medium text-accent-foreground">
                       {c.target}
                     </span>
+                    {originalTarget !== c.target && <span>from {originalTarget}</span>}
                     {c.section && <span>{c.section}</span>}
                     {c.source && <span>{c.source}</span>}
                     {c.basis && <span>{c.basis}</span>}
@@ -109,6 +189,80 @@ export function ProposedMemoryUpdates({
             {continueLabel}
           </Button>
         )}
+      </CardFooter>
+    </Card>
+  );
+}
+
+export function MemorySignalsReview({
+  candidates,
+  saving,
+  onContinue,
+}: {
+  candidates: MemoryCandidate[];
+  saving?: boolean;
+  onContinue: (kept: MemoryCandidate[], removed: MemoryCandidate[]) => void;
+}) {
+  const [kept, setKept] = useState<Record<number, boolean>>(() =>
+    Object.fromEntries(candidates.map((_, i) => [i, true])),
+  );
+
+  if (!candidates.length) return null;
+
+  const keptList = candidates.filter((_, i) => kept[i]);
+  const removedList = candidates.filter((_, i) => !kept[i]);
+
+  return (
+    <Card variant="highlight" size="sm">
+      <CardHeader>
+        <CardTitle>Memory signals captured</CardTitle>
+        <CardDescription>
+          These are saved as signals for Memory Sweep, not written to persistent
+          class memory now. Uncheck anything that should not be kept for later
+          review.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="flex flex-col gap-2">
+          {candidates.map((c, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={!!kept[i]}
+                disabled={saving}
+                onChange={(e) =>
+                  setKept((prev) => ({ ...prev, [i]: e.target.checked }))
+                }
+              />
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="rounded bg-accent px-1.5 py-0.5 font-medium text-accent-foreground">
+                    {c.target}
+                  </span>
+                  {c.section && <span>{c.section}</span>}
+                  {c.source && <span>{c.source}</span>}
+                  {c.basis && <span>{c.basis}</span>}
+                  {c.confidence && <span>· {c.confidence} confidence</span>}
+                </div>
+                <p className="text-sm">{c.candidate_update}</p>
+                {c.evidence && (
+                  <p className="text-xs text-muted-foreground">{c.evidence}</p>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+      <CardFooter className="gap-3">
+        <Button
+          onClick={() => onContinue(keptList, removedList)}
+          disabled={saving}
+        >
+          {saving
+            ? "Saving…"
+            : `Keep ${keptList.length} signal(s) and continue`}
+        </Button>
       </CardFooter>
     </Card>
   );

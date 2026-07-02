@@ -273,12 +273,15 @@ class IngestService:
         diary_markdown: str | None = None,
         attachments: list[ChatAttachment] | None = None,
     ) -> AsyncIterator[str]:
-        async for line in self.core.chat_stream(
-            session_id, message, diary_markdown, attachments
-        ):
-            yield line
+        stream = self.core.chat_stream(session_id, message, diary_markdown, attachments)
+        try:
+            async for line in stream:
+                yield line
+        finally:
+            await stream.aclose()
 
     def update_draft(self, session_id: str, diary_markdown: str) -> IngestDraft:
+        self.core.require_latest_turn_complete(session_id, "update the draft")
         draft = self.core.update_draft(session_id, diary_markdown)
         assert isinstance(draft, IngestDraft)
         session = self.core.get_session(session_id)
@@ -289,6 +292,7 @@ class IngestService:
 
     async def propose(self, session_id: str) -> IngestDraft:
         session = self.core.get_session(session_id)
+        self.core.require_latest_turn_complete(session_id, "prepare wiki updates")
         diary_md = session.partial_markdown
         if not diary_md.strip():
             diary_md = await self.agents.compile_diary(
@@ -363,6 +367,7 @@ class IngestService:
 
     def commit(self, req: CommitIngestRequest) -> CommitIngestResponse:
         session = self.core.get_session(req.session_id)
+        self.core.require_latest_turn_complete(req.session_id, "save memory")
         lesson_date = (
             self.wiki.extract_date_from_diary(req.diary_markdown)
             or date.today().isoformat()

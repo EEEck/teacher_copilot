@@ -71,3 +71,45 @@ def test_commit_requires_lesson_results_approved(tmp_path: Path):
         assert "lesson_results" in str(e)
     else:
         raise AssertionError("expected ValueError when lesson_results not approved")
+
+
+def test_repeated_commit_replaces_date_keyed_rollup_sections(tmp_path: Path):
+    root = tmp_path / "wiki"
+    shutil.copytree(SEED_WIKI, root)
+    wiki = WikiStore(root=root)
+
+    _, first_proposals = wiki.compile_from_diary(CLASS_ID, DIARY)
+    wiki.commit_ingest(
+        CLASS_ID,
+        DIARY,
+        [
+            ApprovedWikiUpdate(
+                wiki_path=p.wiki_path,
+                content=p.proposed_content,
+                approved=True,
+            )
+            for p in first_proposals
+        ],
+        "first-session",
+    )
+
+    _, second_proposals = wiki.compile_from_diary(CLASS_ID, DIARY)
+    wiki.commit_ingest(
+        CLASS_ID,
+        DIARY,
+        [
+            ApprovedWikiUpdate(
+                wiki_path=p.wiki_path,
+                content=p.proposed_content,
+                approved=True,
+            )
+            for p in second_proposals
+        ],
+        "second-session",
+    )
+
+    misconceptions = wiki.read_text(wiki.roll_up_paths(CLASS_ID)["misconceptions"])
+    open_loops = wiki.read_text(wiki.roll_up_paths(CLASS_ID)["open_loops"])
+
+    assert misconceptions.count("## 2026-10-01") == 1
+    assert open_loops.count("## 2026-10-01") == 1

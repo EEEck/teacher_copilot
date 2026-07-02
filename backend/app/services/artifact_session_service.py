@@ -50,6 +50,8 @@ class ArtifactSession:
     partial_markdown: str = ""
     completeness: CompletenessChecklist | None = None
     opening_message: str = ""
+    turn_in_progress: bool = False
+    latest_turn_complete: bool = True
     # Optional mode-specific runtime state. Plan mode uses this for structured
     # planning state, evidence briefs, raw refs, and memory candidates.
     runtime: object | None = None
@@ -99,6 +101,30 @@ class ArtifactSessionService:
         if session_id not in self.sessions:
             raise KeyError(f"Unknown session: {session_id}")
         return self.sessions[session_id]
+
+    def require_latest_turn_complete(self, session_id: str, action: str) -> None:
+        session = self.get_session(session_id)
+        if session.latest_turn_complete:
+            return
+        raise ValueError(
+            f"Cannot {action}: the latest chat turn has not been incorporated "
+            "into the draft yet. Wait for the assistant response, or send the "
+            "forgotten note again."
+        )
+
+    def _begin_turn(self, session: ArtifactSession) -> None:
+        if session.turn_in_progress:
+            raise ValueError(
+                "Cannot start a new chat turn: another chat turn is still running."
+            )
+        session.turn_in_progress = True
+        session.latest_turn_complete = False
+
+    def _complete_turn(self, session: ArtifactSession) -> None:
+        session.latest_turn_complete = True
+
+    def _end_turn(self, session: ArtifactSession) -> None:
+        session.turn_in_progress = False
 
     async def _ensure_lazy_opening(self, session: ArtifactSession) -> None:
         spec = self.specs[session.mode]
@@ -248,30 +274,35 @@ class ArtifactSessionService:
             session.partial_markdown = markdown
 
         await self._ensure_lazy_opening(session)
+        self._begin_turn(session)
         session.messages.append(ChatMessage(role="user", content=message))
-        stage = "plan_chat" if session.mode == "plan" else f"{session.mode}_chat"
-        self._record_prompt_assembly(session, stage, attachments or [])
-        previous_markdown = session.partial_markdown
-        result = await spec.run_turn(
-            self.agents,
-            session.class_id,
-            session.messages,
-            session.partial_markdown,
-            attachments or [],
-            session.runtime,
-        )
-        result = self._guard_turn_result(session, result, previous_markdown)
-        session.messages.append(ChatMessage(role="assistant", content=result.reply))
-        session.partial_markdown = result.markdown
-        if result.completeness is not None:
-            session.completeness = result.completeness
-        self.drafts[session_id] = spec.build_draft(
-            self.wiki, session.class_id, result.markdown
-        )
-        if result.ready:
-            session.status = spec.ready_status
-        self._persist_memory_candidates(session)
-        return result
+        try:
+            stage = "plan_chat" if session.mode == "plan" else f"{session.mode}_chat"
+            self._record_prompt_assembly(session, stage, attachments or [])
+            previous_markdown = session.partial_markdown
+            result = await spec.run_turn(
+                self.agents,
+                session.class_id,
+                session.messages,
+                session.partial_markdown,
+                attachments or [],
+                session.runtime,
+            )
+            result = self._guard_turn_result(session, result, previous_markdown)
+            session.messages.append(ChatMessage(role="assistant", content=result.reply))
+            session.partial_markdown = result.markdown
+            if result.completeness is not None:
+                session.completeness = result.completeness
+            self.drafts[session_id] = spec.build_draft(
+                self.wiki, session.class_id, result.markdown
+            )
+            if result.ready:
+                session.status = spec.ready_status
+            self._persist_memory_candidates(session)
+            self._complete_turn(session)
+            return result
+        finally:
+            self._end_turn(session)
 
     def _apply_turn_result(self, session: ArtifactSession, result: TurnResult) -> None:
         spec = self.specs[session.mode]
@@ -320,17 +351,21 @@ class ArtifactSessionService:
         if markdown is not None:
             session.partial_markdown = markdown
         await self._ensure_lazy_opening(session)
+        self._begin_turn(session)
         session.messages.append(ChatMessage(role="user", content=message))
         stage = "plan_chat" if session.mode == "plan" else f"{session.mode}_chat"
         self._record_prompt_assembly(session, stage, attachments or [])
 
         spec = self.specs[session.mode]
         if not spec.stream_turn or not spec.final_event_to_turn_result:
-            yield sse_encode(
-                SseError(
-                    message="Workflow streaming is not configured.", code="config_error"
+            try:
+                yield sse_encode(
+                    SseError(
+                        message="Workflow streaming is not configured.", code="config_error"
+                    )
                 )
-            )
+            finally:
+                self._end_turn(session)
             return
         stream = spec.stream_turn(
             self.agents,
@@ -343,20 +378,26 @@ class ArtifactSessionService:
         previous_markdown = session.partial_markdown
         sanitize_stream = get_settings().app_env == "production"
         stream_safety_state = StreamSafetyState()
-        async for event in stream:
-            if isinstance(event, SseFinal):
-                event = self._guard_final_event(session, event, previous_markdown)
-            elif sanitize_stream:
-                safe_event = sanitize_teacher_visible_stream_event(
-                    event, stream_safety_state
-                )
-                if safe_event is None:
-                    continue
-                event = safe_event
-            self._record_debug_event(session, event)
-            if isinstance(event, SseFinal):
-                self._apply_turn_result(session, spec.final_event_to_turn_result(event))
-            yield sse_encode(event)
+        try:
+            async for event in stream:
+                if isinstance(event, SseFinal):
+                    event = self._guard_final_event(session, event, previous_markdown)
+                elif sanitize_stream:
+                    safe_event = sanitize_teacher_visible_stream_event(
+                        event, stream_safety_state
+                    )
+                    if safe_event is None:
+                        continue
+                    event = safe_event
+                self._record_debug_event(session, event)
+                if isinstance(event, SseFinal):
+                    self._apply_turn_result(
+                        session, spec.final_event_to_turn_result(event)
+                    )
+                    self._complete_turn(session)
+                yield sse_encode(event)
+        finally:
+            self._end_turn(session)
 
     def update_draft(self, session_id: str, markdown: str) -> object:
         session = self.get_session(session_id)

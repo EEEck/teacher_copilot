@@ -15,24 +15,15 @@ import {
   fromPlanSave,
   MarkdownLineDiff,
 } from "@/components/klassenpilot/review";
-import { ProposedMemoryUpdates } from "@/components/klassenpilot/proposed-memory-updates";
+import {
+  MemorySignalsReview,
+  ProposedMemoryUpdates,
+  splitPostSaveMemoryCandidates,
+} from "@/components/klassenpilot/proposed-memory-updates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { client, type MemoryCandidate, type ProfileCandidate } from "@/lib/api";
-
-function profileCandidateToMemoryCandidate(c: ProfileCandidate): MemoryCandidate {
-  return {
-    target: c.target,
-    section: c.section,
-    candidate_update: c.content,
-    evidence: c.evidence,
-    source: c.basis,
-    basis: c.basis,
-    confidence: c.confidence,
-    requires_teacher_approval: true,
-  };
-}
+import { client, type MemoryCandidate } from "@/lib/api";
 
 function dedupeMemoryCandidates(candidates: MemoryCandidate[]): MemoryCandidate[] {
   const seen = new Set<string>();
@@ -155,7 +146,9 @@ function PlanWorkspace({
   const [approved, setApproved] = useState(true);
   const [loading, setLoading] = useState(false);
   const [proposedMemory, setProposedMemory] = useState<MemoryCandidate[] | null>(null);
+  const [memorySignals, setMemorySignals] = useState<MemoryCandidate[] | null>(null);
   const [applyingMemory, setApplyingMemory] = useState(false);
+  const [savingSignals, setSavingSignals] = useState(false);
 
   const goToLesson = useCallback(() => {
     router.push(`/classes/${classId}/lessons/${encodeURIComponent(lessonDate.trim())}`);
@@ -184,6 +177,33 @@ function PlanWorkspace({
     [classId, onError, goToLesson],
   );
 
+  const continueAfterSignals = useCallback(
+    async (_kept: MemoryCandidate[], removed: MemoryCandidate[]) => {
+      setSavingSignals(true);
+      onError(null);
+      try {
+        await Promise.all(
+          removed
+            .filter((candidate) => candidate.candidate_id)
+            .map((candidate) =>
+              client.memoryCandidateStatus(
+                classId,
+                candidate.candidate_id as string,
+                "deleted",
+                "Teacher removed this post-save signal.",
+              ),
+            ),
+        );
+        goToLesson();
+      } catch (e) {
+        onError(e instanceof Error ? e.message : "Could not update memory signals");
+      } finally {
+        setSavingSignals(false);
+      }
+    },
+    [classId, onError, goToLesson],
+  );
+
   const fileItem = useMemo(() => {
     if (!inReview || !lessonDate.trim()) return null;
     return fromPlanSave(classId, lessonDate.trim(), beforePlan, artifactMarkdown, approved);
@@ -197,30 +217,12 @@ function PlanWorkspace({
       const res = await runWithSessionRecovery((sessionId) =>
         client.planSave(classId, sessionId, lessonDate.trim(), artifactMarkdown),
       );
-      let candidates = res?.memory_candidates ?? [];
-      try {
-        const profile = await client.memoryProfilePropose(
-          classId,
-          artifactMarkdown,
-          res?.session_state,
-          res?.lesson_planning_state,
-          res?.memory_candidates ?? [],
-        );
-        candidates = dedupeMemoryCandidates([
-          ...candidates,
-          ...profile.candidates.map(profileCandidateToMemoryCandidate),
-        ]);
-      } catch (e) {
-        if (candidates.length) {
-          onError(
-            e instanceof Error
-              ? `Plan saved. Profile proposal failed: ${e.message}`
-              : "Plan saved. Profile proposal failed.",
-          );
-        }
-      }
-      if (candidates.length) {
-        setProposedMemory(candidates);
+      const candidates = dedupeMemoryCandidates(res?.memory_candidates ?? []);
+      const split = splitPostSaveMemoryCandidates(candidates);
+      if (split.immediate.length) {
+        setProposedMemory(split.immediate);
+      } else if (split.signals.length) {
+        setMemorySignals(split.signals);
       } else {
         goToLesson();
       }
@@ -260,6 +262,21 @@ function PlanWorkspace({
           applying={applyingMemory}
           onContinue={goToLesson}
           continueLabel="Skip and continue"
+        />
+      </div>
+    );
+  }
+
+  if (memorySignals) {
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 p-4">
+        <p className="text-sm text-muted-foreground">
+          Lesson plan saved for {lessonDate.trim()}.
+        </p>
+        <MemorySignalsReview
+          candidates={memorySignals}
+          saving={savingSignals}
+          onContinue={continueAfterSignals}
         />
       </div>
     );

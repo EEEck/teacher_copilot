@@ -214,6 +214,8 @@ def _append_bullets(
     header = existing.strip() if existing.strip() else "# Notes\n"
     if not header.startswith("#"):
         header = f"# Notes\n\n{header}"
+    date_section_pattern = rf"\n?##\s*{re.escape(lesson_date)}\s*\n.*?(?=\n##\s|\Z)"
+    header = re.sub(date_section_pattern, "", header, flags=re.S).rstrip()
     lines = [header.rstrip(), "", f"## {lesson_date}"]
     for b in new_bullets:
         lines.append(f"- {b}")

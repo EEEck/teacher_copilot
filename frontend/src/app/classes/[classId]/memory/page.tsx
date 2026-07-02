@@ -28,6 +28,7 @@ import {
   type MemoryProposalResponse,
   type WikiUpdateProposal,
 } from "@/lib/api";
+import { isMemoryReviewSaveDisabled } from "@/lib/memory-save-guards";
 
 type CommitResult = {
   lesson_date: string;
@@ -221,7 +222,11 @@ function MemoryWorkspace({
   onError: (message: string | null) => void;
 }) {
   const router = useRouter();
-  const { artifactMarkdown: diaryMarkdown, runWithSessionRecovery } = useArtifactSession();
+  const {
+    artifactMarkdown: diaryMarkdown,
+    isUpdating,
+    runWithSessionRecovery,
+  } = useArtifactSession();
   const [proposals, setProposals] = useState<WikiUpdateProposal[]>([]);
   const [loading, setLoading] = useState(false);
   const [inReview, setInReview] = useState(false);
@@ -259,8 +264,18 @@ function MemoryWorkspace({
   const viewerAllHref = commitResult
     ? `/classes/${classId}/wiki/view?paths=${encodeURIComponent(commitResult.applied_wiki_paths.join(","))}`
     : "";
+  const reviewActionsDisabled = loading || isUpdating;
+  const reviewSaveDisabled = isMemoryReviewSaveDisabled({
+    saving: loading,
+    isUpdating,
+    hasLessonResultsApproved,
+  });
 
   const handleReadyToSave = useCallback(async () => {
+    if (isUpdating) {
+      onError("Wait for the current chat turn to finish before preparing wiki updates.");
+      return;
+    }
     setLoading(true);
     onError(null);
     setCommitResult(null);
@@ -288,9 +303,13 @@ function MemoryWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [classId, diaryMarkdown, onError, runWithSessionRecovery, initFromProposals]);
+  }, [classId, diaryMarkdown, isUpdating, onError, runWithSessionRecovery, initFromProposals]);
 
   const commit = useCallback(async () => {
+    if (isUpdating) {
+      onError("Wait for the current chat turn to finish before saving memory.");
+      return;
+    }
     setLoading(true);
     onError(null);
     try {
@@ -318,7 +337,7 @@ function MemoryWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [classId, diaryMarkdown, getCommitPayload, clearReview, onError, router, runWithSessionRecovery]);
+  }, [classId, diaryMarkdown, getCommitPayload, clearReview, isUpdating, onError, router, runWithSessionRecovery]);
 
   const applyClassMemory = useCallback(
     async (pages: Record<string, string>) => {
@@ -422,8 +441,9 @@ function MemoryWorkspace({
               onUndoAll={undoAll}
               onKeepAll={keepAll}
               onSave={commit}
-              saving={loading}
-              saveDisabled={!hasLessonResultsApproved}
+              saving={reviewActionsDisabled}
+              actionsDisabled={reviewActionsDisabled}
+              saveDisabled={reviewSaveDisabled}
               saveLabel="Save selected files"
             />
           ) : null

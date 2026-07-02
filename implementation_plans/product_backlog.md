@@ -27,6 +27,9 @@ Shipped:
 - Class landing -> class home with timeline and memory snapshot.
 - **Update memory**: chat + diary draft -> teacher-approved wiki commit.
 - **Create lesson plan**: chat + plan draft -> save to a lesson date.
+- **Beta tester mode**: invite-code login, workspace-scoped wiki copies, and
+  local telemetry for app activity, visible conversations, draft snapshots, and
+  approved wiki diffs.
 - Timeline/detail shortcuts for adding results to planned lessons or correcting
   taught lessons.
 - Karpathy-style compiled wiki with compact class memory pages.
@@ -336,6 +339,7 @@ teacher-value work without a concrete blocker.
 | **Lean production images** | Before non-dev deployments. |
 | **`compose.prod.yaml`** | Before repeatable production-like installs. |
 | **SQLite/app session persistence** | When real users hit restart/history loss or multi-worker deploys. |
+| **Replace beta identity provider** | After tester validation: keep `RequestIdentity` but swap invite codes for Cognito, Auth.js, Clerk, Auth0, or equivalent OAuth-backed auth. |
 | **Generalized trace assemblies** | Before adding several more artifact/helper agents. |
 | **Typed index/search improvements** | When deterministic retrieval has measured failures. |
 | **Real-data privacy/security hardening** | Before real teacher/student data or non-local deployment: stronger pseudonymization/redaction, retention rules, access control for traces, output sanitization review, and EU/Germany legal checklist. |

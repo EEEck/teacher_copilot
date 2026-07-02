@@ -14,6 +14,16 @@ class HealthResponse(BaseModel):
     openai_configured: bool = False
 
 
+class BetaLoginRequest(BaseModel):
+    invite_code: str
+
+
+class BetaIdentityResponse(BaseModel):
+    tester_id: str
+    workspace_id: str
+    role: str
+
+
 class ClassSummary(BaseModel):
     id: str
     label: str

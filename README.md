@@ -204,9 +204,35 @@ teacher_wiki/
 | `OPENAI_FAST_MODEL` | `backend/.env` | Compile/lint/opening; default `gpt-4o-mini` |
 | `OPENAI_REASONING_EFFORT` | `backend/.env` | `none`, `low`, `medium`, `high`, `xhigh` - hidden thinking tokens (billed as output). Default `medium`; use `none` or `low` to save cost |
 | `WIKI_ROOT` | `backend/.env` | Path to `teacher_wiki` (Docker: set in `compose.yaml` as `/data/teacher_wiki`) |
+| `BETA_ENABLED` | `backend/.env` | Enables invite-code beta auth and workspace-scoped wiki roots. Default `false` |
+| `BETA_DATA_ROOT` | `backend/.env` | Local SQLite telemetry DB and per-workspace wiki copies. Default `beta_data` |
+| `BETA_COOKIE_NAME` | `backend/.env` | HTTP-only session cookie name. Default `kp_beta_session` |
+| `BETA_SESSION_DAYS` | `backend/.env` | Session cookie/token lifetime in days. Default `30` |
+| `BETA_COOKIE_SECURE` | `backend/.env` | Set `true` behind HTTPS. Keep `false` for localhost |
 | `NEXT_PUBLIC_API_BASE_URL` | `frontend/.env.local` | Backend URL for browser (default `http://localhost:8010`) |
 | `APP_ENV` | `backend/.env` / Compose | `development` keeps raw local stream diagnostics; `production` strips streamed reasoning text, tool args, and tool outputs before they reach the browser. |
 | `INTERNAL_API_BASE_URL` | Docker / SSR only | Server-side fetches in frontend container (`http://backend:8010` in Compose) |
+
+### Beta testers
+
+Beta mode keeps one app process but resolves each request to a separate
+`tester_id`, `workspace_id`, and copied wiki root. The login page is
+`/beta/login`; the backend sets an opaque HTTP-only cookie, so a browser refresh
+keeps the tester session.
+
+Provision invite codes from a backend shell for now:
+
+```powershell
+docker compose exec backend python -m app.services.beta_cli `
+  --tester-id t_anna `
+  --workspace-id w_anna_chem9b `
+  --invite-code replace-with-random-code `
+  --display-label Anna
+```
+
+Telemetry is stored in `beta.sqlite3`: app sessions, visible user/assistant
+messages, draft snapshots, app events, and per-file wiki diffs for approved
+writes.
 
 ### OpenAI API key (required for chat & plan)
 

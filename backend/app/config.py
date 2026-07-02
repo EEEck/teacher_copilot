@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     wiki_root: Path = Path(__file__).resolve().parent.parent / "teacher_wiki"
     cors_origins: list[str] = ["http://localhost:3000"]
     app_env: Literal["development", "production"] = "development"
+    beta_enabled: bool = False
+    beta_data_root: Path = Path(__file__).resolve().parent.parent / "beta_data"
+    beta_cookie_name: str = "kp_beta_session"
+    beta_session_days: int = 30
+    beta_cookie_secure: bool = False
+    beta_dev_workspace_id: str = ""
     # Debug endpoints exposing prompt assemblies, session messages, and raw tool
     # evidence. Default: enabled outside production, disabled in production.
     agent_trace_enabled: bool | None = None

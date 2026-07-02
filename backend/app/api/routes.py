@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import json
+from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import (
     get_agents,
+    get_beta_auth_service,
     get_ingest_service,
     get_memory_candidate_ledger,
     get_plan_service,
@@ -15,6 +17,8 @@ from app.api.deps import (
 from app.config import get_settings
 from app.openai_bootstrap import is_openai_configured
 from app.schemas.api import (
+    BetaIdentityResponse,
+    BetaLoginRequest,
     ChatRequest,
     ChatResponse,
     ClassesResponse,
@@ -58,6 +62,7 @@ from app.schemas.api import (
     WikiFileResponse,
     WikiLintResponse,
 )
+from app.services.beta import BetaAuthService
 from app.services.ingest_service import IngestService
 from app.services.memory_apply import apply_memory_items, apply_memory_sweep_decisions
 from app.services.memory_candidate_ledger import MemoryCandidateLedger, OPEN_STATUSES
@@ -68,9 +73,27 @@ from app.services.memory_sweep import (
 )
 from app.services.plan_service import PlanService
 from app.teacher_agent.agents import AgentRunner
+from app.teacher_agent.memory_targets import canonical_memory_target, compact_key_for_target
 from app.teacher_agent.wiki_store import WikiStore
 
 router = APIRouter(prefix="/api")
+
+_COPILOT_PROFILE_LABELS = {
+    "avoid",
+    "copilot",
+    "copilot profile",
+    "copilot working agreement",
+    "planning pattern",
+    "planning patterns",
+    "practice task",
+    "practice tasks",
+}
+_TEACHER_PROFILE_LABELS = {
+    "communication",
+    "lesson style",
+    "teacher",
+    "teacher profile",
+}
 
 
 def _utc_now() -> str:
@@ -118,12 +141,263 @@ def _resolve_memory_sweep_statuses(body: MemorySweepApplyRequest) -> dict[str, s
     return resolved
 
 
+def _read_wiki_rel(wiki: WikiStore, rel_path: str) -> str:
+    try:
+        return wiki.read_text(wiki.resolve_path(rel_path))
+    except FileNotFoundError:
+        return ""
+
+
+def _memory_apply_candidate_paths(wiki: WikiStore, class_id: str, items) -> list[str]:
+    paths: list[str] = []
+    cls = wiki.get_class(class_id)
+    subject_target = f"wiki/subjects/{cls.subject}.md"
+    for item in items:
+        target = canonical_memory_target(item.target)
+        compact_key = compact_key_for_target(target)
+        rel = ""
+        if target == "teacher_profile.md":
+            rel = "wiki/teacher_profile.md"
+        elif target == "copilot_profile.md":
+            rel = wiki.rel_wiki(wiki.memory_paths(class_id)["copilot_profile"])
+        elif compact_key:
+            rel = wiki.rel_wiki(wiki.memory_paths(class_id)[compact_key])
+        elif target == subject_target:
+            rel = subject_target
+        if rel and rel not in paths:
+            paths.append(rel)
+    return paths
+
+
+def _record_beta_wiki_diff(
+    request: Request,
+    beta_auth: BetaAuthService,
+    wiki: WikiStore,
+    *,
+    class_id: str,
+    app_session_id: str | None,
+    mode: str,
+    action: str,
+    before_by_path: dict[str, str],
+    changed_paths: list[str],
+    metadata: dict | None = None,
+) -> None:
+    identity = getattr(request.state, "identity", None)
+    if identity is None or getattr(identity, "workspace_id", "local") == "local":
+        return
+    changed_files = [
+        (path, before_by_path.get(path, ""), _read_wiki_rel(wiki, path))
+        for path in changed_paths
+    ]
+    beta_auth.telemetry.record_wiki_commit(
+        identity,
+        app_session_id=app_session_id,
+        class_id=class_id,
+        mode=mode,
+        action=action,
+        changed_files=changed_files,
+        metadata=metadata,
+    )
+
+
+def _record_beta_app_session(
+    request: Request,
+    beta_auth: BetaAuthService,
+    *,
+    app_session_id: str,
+    class_id: str,
+    mode: str,
+    status: str,
+) -> None:
+    identity = getattr(request.state, "identity", None)
+    if identity is None or getattr(identity, "workspace_id", "local") == "local":
+        return
+    beta_auth.telemetry.record_app_session(
+        identity,
+        app_session_id=app_session_id,
+        class_id=class_id,
+        mode=mode,
+        status=status,
+    )
+
+
+def _record_beta_event(
+    request: Request,
+    beta_auth: BetaAuthService,
+    *,
+    event_type: str,
+    class_id: str,
+    app_session_id: str | None,
+    mode: str,
+    payload: dict | None = None,
+) -> None:
+    identity = getattr(request.state, "identity", None)
+    if identity is None or getattr(identity, "workspace_id", "local") == "local":
+        return
+    beta_auth.telemetry.record_event(
+        identity,
+        event_type=event_type,
+        class_id=class_id,
+        app_session_id=app_session_id,
+        mode=mode,
+        payload=payload,
+    )
+
+
+def _record_beta_artifact_snapshot(
+    request: Request,
+    beta_auth: BetaAuthService,
+    *,
+    app_session_id: str,
+    class_id: str,
+    mode: str,
+    artifact_kind: str,
+    markdown: str,
+) -> None:
+    identity = getattr(request.state, "identity", None)
+    if identity is None or getattr(identity, "workspace_id", "local") == "local":
+        return
+    beta_auth.telemetry.record_artifact_snapshot(
+        identity,
+        app_session_id=app_session_id,
+        class_id=class_id,
+        mode=mode,
+        artifact_kind=artifact_kind,
+        markdown=markdown,
+    )
+
+
+def _record_beta_message(
+    request: Request,
+    beta_auth: BetaAuthService,
+    *,
+    app_session_id: str,
+    class_id: str,
+    mode: str,
+    role: str,
+    content: str,
+) -> None:
+    identity = getattr(request.state, "identity", None)
+    if identity is None or getattr(identity, "workspace_id", "local") == "local":
+        return
+    beta_auth.telemetry.record_message(
+        identity,
+        app_session_id=app_session_id,
+        class_id=class_id,
+        mode=mode,
+        role=role,
+        content=content,
+    )
+
+
+def _sse_final_payload(line: str) -> dict | None:
+    if not line.startswith("data:"):
+        return None
+    try:
+        payload = json.loads(line.removeprefix("data:").strip())
+    except json.JSONDecodeError:
+        return None
+    if payload.get("type") != "final":
+        return None
+    return payload
+
+
+def _compact_page_paths(
+    wiki: WikiStore, class_id: str, pages: dict[str, str]
+) -> list[str]:
+    memory_paths = wiki.memory_paths(class_id)
+    paths: list[str] = []
+    for key in pages:
+        if key not in memory_paths:
+            continue
+        rel = wiki.rel_wiki(memory_paths[key])
+        if rel not in paths:
+            paths.append(rel)
+    return paths
+
+
+def _normalize_profile_candidate_target(target: str) -> str:
+    normalized = canonical_memory_target(target)
+    if normalized in {
+        "teacher_profile.md",
+        "copilot_profile.md",
+        "class_state.md",
+        "planning_brief.md",
+        "taught_so_far.md",
+        "teaching_patterns.md",
+    } or normalized.startswith("wiki/subjects/"):
+        return normalized
+    label = " ".join((target or "").strip().lower().replace("_", " ").split())
+    if label in _TEACHER_PROFILE_LABELS:
+        return "teacher_profile.md"
+    if label in _COPILOT_PROFILE_LABELS:
+        return "copilot_profile.md"
+    return "copilot_profile.md"
+
+
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     settings = get_settings()
     return HealthResponse(
         agent_max_turns=settings.agent_max_turns,
         openai_configured=is_openai_configured(settings),
+    )
+
+
+@router.post("/beta/login", response_model=BetaIdentityResponse)
+def beta_login(
+    body: BetaLoginRequest,
+    response: Response,
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> BetaIdentityResponse:
+    login = beta_auth.login(body.invite_code)
+    if login is None:
+        raise HTTPException(status_code=401, detail="Invalid invite code")
+    response.set_cookie(
+        beta_auth.cookie_name,
+        login.session_token,
+        max_age=beta_auth.session_days * 24 * 60 * 60,
+        httponly=True,
+        secure=beta_auth.cookie_secure,
+        samesite="lax",
+        path="/",
+    )
+    return BetaIdentityResponse(
+        tester_id=login.tester_id,
+        workspace_id=login.workspace_id,
+        role=login.role,
+    )
+
+
+@router.post("/beta/logout")
+def beta_logout(
+    request: Request,
+    response: Response,
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> dict[str, str]:
+    token = request.cookies.get(beta_auth.cookie_name)
+    if token:
+        beta_auth.revoke_session_token(token)
+    response.delete_cookie(beta_auth.cookie_name, path="/")
+    return {"status": "ok"}
+
+
+@router.get("/beta/me", response_model=BetaIdentityResponse)
+def beta_me(
+    request: Request,
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> BetaIdentityResponse:
+    token = request.cookies.get(beta_auth.cookie_name)
+    if not token:
+        raise HTTPException(status_code=401, detail="Beta login required")
+    try:
+        identity = beta_auth.resolve_session_token(token)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    return BetaIdentityResponse(
+        tester_id=identity.tester_id,
+        workspace_id=identity.workspace_id,
+        role=identity.role,
     )
 
 
@@ -162,11 +436,29 @@ def revise_lesson(
     class_id: str,
     lesson_date: str,
     body: ReviseLessonRequest,
+    request: Request,
     wiki: WikiStore = Depends(get_wiki),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> ReviseLessonResponse:
     try:
         wiki.get_class(class_id)
+        rel_path = wiki.rel_wiki(
+            wiki.lesson_dir(class_id, lesson_date) / "lesson_results.md"
+        )
+        before_by_path = {rel_path: _read_wiki_rel(wiki, rel_path)}
         entry, applied = wiki.revise_lesson(class_id, lesson_date, body.diary_markdown)
+        _record_beta_wiki_diff(
+            request,
+            beta_auth,
+            wiki,
+            class_id=class_id,
+            app_session_id=None,
+            mode="memory",
+            action="lesson_revised",
+            before_by_path=before_by_path,
+            changed_paths=applied,
+            metadata={"lesson_date": lesson_date},
+        )
         return ReviseLessonResponse(entry=entry, applied_wiki_paths=applied)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -227,9 +519,11 @@ async def lint_wiki(
 @router.post("/classes/{class_id}/memory/compact", response_model=MemoryCompactResponse)
 async def compact_memory(
     class_id: str,
+    request: Request,
     body: MemoryCompactRequest | None = None,
     agents: AgentRunner = Depends(get_agents),
     wiki: WikiStore = Depends(get_wiki),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> MemoryCompactResponse:
     try:
         req = body or MemoryCompactRequest()
@@ -240,8 +534,22 @@ async def compact_memory(
             end_date=req.end_date,
         )
         pages = _compaction_pages(output)
+        candidate_paths = _compact_page_paths(wiki, class_id, pages)
+        before_by_path = {path: _read_wiki_rel(wiki, path) for path in candidate_paths}
         applied, log_id = wiki.commit_memory_compaction(
             class_id, pages, source_paths=source_paths
+        )
+        _record_beta_wiki_diff(
+            request,
+            beta_auth,
+            wiki,
+            class_id=class_id,
+            app_session_id=None,
+            mode="memory",
+            action="memory_compact",
+            before_by_path=before_by_path,
+            changed_paths=applied,
+            metadata={"source_paths": source_paths, "warnings": warnings},
         )
         return MemoryCompactResponse(
             class_id=class_id,
@@ -266,7 +574,9 @@ async def compact_memory(
 def apply_compact_memory_proposal(
     class_id: str,
     body: MemoryCompactApplyRequest,
+    request: Request,
     wiki: WikiStore = Depends(get_wiki),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> MemoryCompactResponse:
     """Write teacher-reviewed compact memory pages exactly as approved."""
     try:
@@ -275,10 +585,24 @@ def apply_compact_memory_proposal(
             raise HTTPException(
                 status_code=400, detail="No compact memory pages provided"
             )
+        candidate_paths = _compact_page_paths(wiki, class_id, body.pages)
+        before_by_path = {path: _read_wiki_rel(wiki, path) for path in candidate_paths}
         applied, log_id = wiki.commit_memory_compaction(
             class_id,
             body.pages,
             source_paths=body.source_paths,
+        )
+        _record_beta_wiki_diff(
+            request,
+            beta_auth,
+            wiki,
+            class_id=class_id,
+            app_session_id=None,
+            mode="memory",
+            action="memory_compact_apply",
+            before_by_path=before_by_path,
+            changed_paths=applied,
+            metadata={"source_paths": body.source_paths},
         )
         return MemoryCompactResponse(
             class_id=class_id,
@@ -361,7 +685,7 @@ async def propose_profile(
         )
         candidates = [
             {
-                "target": c.target,
+                "target": _normalize_profile_candidate_target(c.target),
                 "section": c.section,
                 "content": c.content,
                 "basis": c.basis,
@@ -384,7 +708,9 @@ async def propose_profile(
 def apply_memory(
     class_id: str,
     body: MemoryApplyRequest,
+    request: Request,
     wiki: WikiStore = Depends(get_wiki),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> MemoryApplyResponse:
     """Write only teacher-approved memory items via the bounded helpers (HITL)."""
     try:
@@ -392,7 +718,21 @@ def apply_memory(
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
+    candidate_paths = _memory_apply_candidate_paths(wiki, class_id, body.items)
+    before_by_path = {path: _read_wiki_rel(wiki, path) for path in candidate_paths}
     applied, skipped, warnings = apply_memory_items(wiki, class_id, body.items)
+    _record_beta_wiki_diff(
+        request,
+        beta_auth,
+        wiki,
+        class_id=class_id,
+        app_session_id=None,
+        mode="memory",
+        action="memory_apply",
+        before_by_path=before_by_path,
+        changed_paths=applied,
+        metadata={"item_count": len(body.items), "skipped": skipped, "warnings": warnings},
+    )
     return MemoryApplyResponse(
         class_id=class_id,
         applied_wiki_paths=applied,
@@ -439,8 +779,10 @@ async def propose_memory_sweep(
 def apply_memory_sweep(
     class_id: str,
     body: MemorySweepApplyRequest,
+    request: Request,
     wiki: WikiStore = Depends(get_wiki),
     ledger: MemoryCandidateLedger = Depends(get_memory_candidate_ledger),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> MemorySweepApplyResponse:
     """Apply a teacher-reviewed sweep decision set, then update ledger status."""
     try:
@@ -476,9 +818,23 @@ def apply_memory_sweep(
     skipped: list[str] = []
     warnings: list[str] = []
     successful_apply_indexes: list[int] = []
+    candidate_paths = _memory_apply_candidate_paths(wiki, class_id, body.decisions)
+    before_by_path = {path: _read_wiki_rel(wiki, path) for path in candidate_paths}
     if any(decision.action == "apply" for decision in body.decisions):
         applied, skipped, warnings, successful_apply_indexes = (
             apply_memory_sweep_decisions(wiki, class_id, body.decisions)
+        )
+        _record_beta_wiki_diff(
+            request,
+            beta_auth,
+            wiki,
+            class_id=class_id,
+            app_session_id=None,
+            mode="memory",
+            action="memory_sweep_apply",
+            before_by_path=before_by_path,
+            changed_paths=applied,
+            metadata={"review_batch_id": body.review_batch_id, "skipped": skipped},
         )
 
     successful_apply_index_set = set(successful_apply_indexes)
@@ -563,15 +919,36 @@ def update_memory_candidate_status(
 @router.post("/classes/{class_id}/ingest/sessions", response_model=IngestSession)
 async def start_ingest_session(
     class_id: str,
+    request: Request,
     body: IngestSessionStartRequest | None = None,
     ingest: IngestService = Depends(get_ingest_service),
     wiki: WikiStore = Depends(get_wiki),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> IngestSession:
     try:
         wiki.get_class(class_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    return await ingest.start_session(class_id, body)
+    session = await ingest.start_session(class_id, body)
+    _record_beta_app_session(
+        request,
+        beta_auth,
+        app_session_id=session.session_id,
+        class_id=class_id,
+        mode="ingest",
+        status=session.status.value,
+    )
+    for message in session.messages:
+        _record_beta_message(
+            request,
+            beta_auth,
+            app_session_id=session.session_id,
+            class_id=class_id,
+            mode="ingest",
+            role=message.role,
+            content=message.content,
+        )
+    return session
 
 
 @router.post(
@@ -582,20 +959,70 @@ async def ingest_chat(
     class_id: str,
     session_id: str,
     body: ChatRequest,
+    request: Request,
     ingest: IngestService = Depends(get_ingest_service),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> ChatResponse:
     try:
         session = ingest.get_session(session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
-        return await ingest.chat(
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="chat_turn_started",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode="ingest",
+            payload={"attachments": len(body.attachments)},
+        )
+        _record_beta_message(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="ingest",
+            role="user",
+            content=body.message,
+        )
+        response = await ingest.chat(
             session_id, body.message, body.diary_markdown, attachments=body.attachments
         )
+        _record_beta_message(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="ingest",
+            role="assistant",
+            content=response.reply,
+        )
+        _record_beta_artifact_snapshot(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="ingest",
+            artifact_kind="diary",
+            markdown=response.diary_markdown,
+        )
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="chat_turn_completed",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode="ingest",
+            payload={"ready": response.ready_to_propose},
+        )
+        return response
     except KeyError as e:
         msg = e.args[0] if e.args else str(e)
         if isinstance(msg, str) and msg.startswith("Unknown session:"):
             raise HTTPException(status_code=404, detail=msg) from e
         raise  # unexpected KeyError -> global handler logs full traceback
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/classes/{class_id}/ingest/sessions/{session_id}/chat/stream")
@@ -603,12 +1030,32 @@ async def ingest_chat_stream(
     class_id: str,
     session_id: str,
     body: ChatRequest,
+    request: Request,
     ingest: IngestService = Depends(get_ingest_service),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ):
     try:
         session = ingest.get_session(session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="chat_turn_started",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode="ingest",
+            payload={"attachments": len(body.attachments), "stream": True},
+        )
+        _record_beta_message(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="ingest",
+            role="user",
+            content=body.message,
+        )
 
         async def event_generator():
             async for line in ingest.chat_stream(
@@ -617,6 +1064,35 @@ async def ingest_chat_stream(
                 body.diary_markdown,
                 attachments=body.attachments,
             ):
+                payload = _sse_final_payload(line)
+                if payload is not None:
+                    _record_beta_message(
+                        request,
+                        beta_auth,
+                        app_session_id=session_id,
+                        class_id=class_id,
+                        mode="ingest",
+                        role="assistant",
+                        content=payload.get("reply", ""),
+                    )
+                    _record_beta_artifact_snapshot(
+                        request,
+                        beta_auth,
+                        app_session_id=session_id,
+                        class_id=class_id,
+                        mode="ingest",
+                        artifact_kind="diary",
+                        markdown=payload.get("artifact_markdown", ""),
+                    )
+                    _record_beta_event(
+                        request,
+                        beta_auth,
+                        event_type="chat_turn_completed",
+                        class_id=class_id,
+                        app_session_id=session_id,
+                        mode="ingest",
+                        payload={"ready": payload.get("ready"), "stream": True},
+                    )
                 yield line
 
         return StreamingResponse(
@@ -629,6 +1105,8 @@ async def ingest_chat_stream(
         if isinstance(msg, str) and msg.startswith("Unknown session:"):
             raise HTTPException(status_code=404, detail=msg) from e
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.patch(
@@ -639,15 +1117,38 @@ def ingest_update_draft(
     class_id: str,
     session_id: str,
     body: UpdateDraftRequest,
+    request: Request,
     ingest: IngestService = Depends(get_ingest_service),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> IngestDraft:
     try:
         session = ingest.get_session(session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
-        return ingest.update_draft(session_id, body.diary_markdown)
+        draft = ingest.update_draft(session_id, body.diary_markdown)
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="draft_updated",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode="ingest",
+            payload={"artifact_chars": len(body.diary_markdown)},
+        )
+        _record_beta_artifact_snapshot(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="ingest",
+            artifact_kind="diary",
+            markdown=body.diary_markdown,
+        )
+        return draft
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post(
@@ -657,15 +1158,38 @@ def ingest_update_draft(
 async def ingest_propose(
     class_id: str,
     session_id: str,
+    request: Request,
     ingest: IngestService = Depends(get_ingest_service),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> IngestDraft:
     try:
         session = ingest.get_session(session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
-        return await ingest.propose(session_id)
+        draft = await ingest.propose(session_id)
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="review_proposed",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode="ingest",
+            payload={"proposal_count": len(draft.wiki_proposals)},
+        )
+        _record_beta_artifact_snapshot(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="ingest",
+            artifact_kind="diary",
+            markdown=draft.diary_markdown,
+        )
+        return draft
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get(
@@ -711,14 +1235,43 @@ def ingest_trace(
 async def ingest_commit(
     class_id: str,
     body: CommitIngestRequest,
+    request: Request,
     ingest: IngestService = Depends(get_ingest_service),
     agents: AgentRunner = Depends(get_agents),
+    wiki: WikiStore = Depends(get_wiki),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> CommitIngestResponse:
     try:
         session = ingest.get_session(body.session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
+        approved_paths = [
+            update.wiki_path
+            for update in body.approved_updates
+            if update.approved
+        ]
+        before_by_path = {
+            path: _read_wiki_rel(wiki, path)
+            for path in approved_paths
+        }
         response = ingest.commit(body)
+        _record_beta_wiki_diff(
+            request,
+            beta_auth,
+            wiki,
+            class_id=class_id,
+            app_session_id=body.session_id,
+            mode="ingest",
+            action="memory_committed",
+            before_by_path=before_by_path,
+            changed_paths=response.applied_wiki_paths,
+            metadata={
+                "raw_diary_path": response.raw_diary_path,
+                "log_entry_id": response.log_entry_id,
+                "lesson_date": response.lesson_date,
+                "approved_count": len(approved_paths),
+            },
+        )
         try:
             output, source_paths, warnings = await agents.compact_memory(class_id)
             response.class_memory_proposal = MemoryProposalResponse(
@@ -743,12 +1296,33 @@ async def ingest_commit(
 @router.post("/classes/{class_id}/plan/sessions", response_model=PlanSession)
 async def start_plan_session(
     class_id: str,
+    request: Request,
     plan_svc: PlanService = Depends(get_plan_service),
     wiki: WikiStore = Depends(get_wiki),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> PlanSession:
     try:
         wiki.get_class(class_id)
-        return await plan_svc.start_session(class_id)
+        session = await plan_svc.start_session(class_id)
+        _record_beta_app_session(
+            request,
+            beta_auth,
+            app_session_id=session.session_id,
+            class_id=class_id,
+            mode="plan",
+            status=session.status.value,
+        )
+        for message in session.messages:
+            _record_beta_message(
+                request,
+                beta_auth,
+                app_session_id=session.session_id,
+                class_id=class_id,
+                mode="plan",
+                role=message.role,
+                content=message.content,
+            )
+        return session
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except RuntimeError as e:
@@ -763,18 +1337,66 @@ async def plan_chat(
     class_id: str,
     session_id: str,
     body: PlanChatRequest,
+    request: Request,
     plan_svc: PlanService = Depends(get_plan_service),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> PlanChatResponse:
     try:
         session = plan_svc.get_session(session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
-        return await plan_svc.chat(
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="chat_turn_started",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode="plan",
+            payload={"attachments": len(body.attachments)},
+        )
+        _record_beta_message(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="plan",
+            role="user",
+            content=body.message,
+        )
+        response = await plan_svc.chat(
             session_id,
             body.message,
             body.plan_markdown,
             attachments=body.attachments,
         )
+        _record_beta_message(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="plan",
+            role="assistant",
+            content=response.reply,
+        )
+        _record_beta_artifact_snapshot(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="plan",
+            artifact_kind="plan",
+            markdown=response.plan_markdown,
+        )
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="chat_turn_completed",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode="plan",
+            payload={"ready": response.ready_to_save, "phase": response.phase},
+        )
+        return response
     except KeyError as e:
         msg = e.args[0] if e.args else str(e)
         if isinstance(msg, str) and msg.startswith("Unknown session:"):
@@ -787,12 +1409,32 @@ async def plan_chat_stream(
     class_id: str,
     session_id: str,
     body: PlanChatRequest,
+    request: Request,
     plan_svc: PlanService = Depends(get_plan_service),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ):
     try:
         session = plan_svc.get_session(session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="chat_turn_started",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode="plan",
+            payload={"attachments": len(body.attachments), "stream": True},
+        )
+        _record_beta_message(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="plan",
+            role="user",
+            content=body.message,
+        )
 
         async def event_generator():
             async for line in plan_svc.chat_stream(
@@ -801,6 +1443,39 @@ async def plan_chat_stream(
                 body.plan_markdown,
                 attachments=body.attachments,
             ):
+                payload = _sse_final_payload(line)
+                if payload is not None:
+                    _record_beta_message(
+                        request,
+                        beta_auth,
+                        app_session_id=session_id,
+                        class_id=class_id,
+                        mode="plan",
+                        role="assistant",
+                        content=payload.get("reply", ""),
+                    )
+                    _record_beta_artifact_snapshot(
+                        request,
+                        beta_auth,
+                        app_session_id=session_id,
+                        class_id=class_id,
+                        mode="plan",
+                        artifact_kind="plan",
+                        markdown=payload.get("artifact_markdown", ""),
+                    )
+                    _record_beta_event(
+                        request,
+                        beta_auth,
+                        event_type="chat_turn_completed",
+                        class_id=class_id,
+                        app_session_id=session_id,
+                        mode="plan",
+                        payload={
+                            "ready": payload.get("ready"),
+                            "phase": payload.get("phase"),
+                            "stream": True,
+                        },
+                    )
                 yield line
 
         return StreamingResponse(
@@ -859,13 +1534,34 @@ def plan_update_draft(
     class_id: str,
     session_id: str,
     body: UpdatePlanDraftRequest,
+    request: Request,
     plan_svc: PlanService = Depends(get_plan_service),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> PlanDraft:
     try:
         session = plan_svc.get_session(session_id)
         if session.class_id != class_id:
             raise HTTPException(status_code=404, detail="Session not found")
-        return plan_svc.update_draft(session_id, body.plan_markdown)
+        draft = plan_svc.update_draft(session_id, body.plan_markdown)
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="draft_updated",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode="plan",
+            payload={"artifact_chars": len(body.plan_markdown)},
+        )
+        _record_beta_artifact_snapshot(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="plan",
+            artifact_kind="plan",
+            markdown=body.plan_markdown,
+        )
+        return draft
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -874,12 +1570,35 @@ def plan_update_draft(
 def plan_save(
     class_id: str,
     body: SavePlanRequest,
+    request: Request,
     plan_svc: PlanService = Depends(get_plan_service),
     wiki: WikiStore = Depends(get_wiki),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> SavePlanResponse:
     try:
         wiki.get_class(class_id)
-        return plan_svc.save(class_id, body)
+        try:
+            lesson_date = date.fromisoformat(body.lesson_date).isoformat()
+        except ValueError as exc:
+            raise ValueError("lesson_date must be YYYY-MM-DD") from exc
+        rel_path = wiki.rel_wiki(
+            wiki.lesson_dir(class_id, lesson_date) / "lesson_plan.md"
+        )
+        before_by_path = {rel_path: _read_wiki_rel(wiki, rel_path)}
+        response = plan_svc.save(class_id, body)
+        _record_beta_wiki_diff(
+            request,
+            beta_auth,
+            wiki,
+            class_id=class_id,
+            app_session_id=body.session_id,
+            mode="plan",
+            action="plan_saved",
+            before_by_path=before_by_path,
+            changed_paths=[response.plan_path],
+            metadata={"lesson_date": response.lesson_date, "title": response.title},
+        )
+        return response
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
