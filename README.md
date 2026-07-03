@@ -224,6 +224,7 @@ Provision invite codes from a backend shell for now:
 
 ```powershell
 docker compose exec backend python -m app.services.beta_cli `
+  provision `
   --tester-id t_anna `
   --workspace-id w_anna_chem9b `
   --invite-code replace-with-random-code `
@@ -233,6 +234,16 @@ docker compose exec backend python -m app.services.beta_cli `
 Telemetry is stored in `beta.sqlite3`: app sessions, visible user/assistant
 messages, draft snapshots, app events, and per-file wiki diffs for approved
 writes.
+
+Generate a tester review report from telemetry and wiki diffs:
+
+```powershell
+docker compose exec backend python -m app.services.beta_cli `
+  report `
+  --tester t_anna `
+  --workspace w_anna_chem9b `
+  --out beta_data/reports/t_anna.md
+```
 
 ### OpenAI API key (required for chat & plan)
 
