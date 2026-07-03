@@ -62,7 +62,9 @@ from app.services.ingest_service import IngestService
 from app.services.memory_apply import apply_memory_items, apply_memory_sweep_decisions
 from app.services.memory_candidate_ledger import MemoryCandidateLedger, OPEN_STATUSES
 from app.services.memory_sweep import (
+    is_synthetic_student_summary_candidate_id,
     propose_memory_sweep_review,
+    synthetic_student_summary_candidate_ids,
 )
 from app.services.plan_service import PlanService
 from app.teacher_agent.agents import AgentRunner
@@ -420,6 +422,7 @@ async def propose_memory_sweep(
         ledger=ledger,
         agents=agents,
         class_id=class_id,
+        include_student_summaries=True,
     )
     return MemorySweepProposalResponse(
         class_id=result.class_id,
@@ -456,12 +459,13 @@ def apply_memory_sweep(
         include_global=True,
     )
     open_ids = {row.id for row in open_rows}
+    synthetic_ids = synthetic_student_summary_candidate_ids(wiki, class_id)
     requested_ids = {
         candidate_id
         for decision in body.decisions
         for candidate_id in decision.candidate_ids
     }
-    unknown_ids = sorted(requested_ids - open_ids)
+    unknown_ids = sorted(requested_ids - open_ids - synthetic_ids)
     if unknown_ids:
         raise HTTPException(
             status_code=422,
@@ -496,6 +500,8 @@ def apply_memory_sweep(
     updated_ids: list[str] = []
     try:
         for candidate_id, status in statuses.items():
+            if is_synthetic_student_summary_candidate_id(candidate_id):
+                continue
             rejection_reason = None
             for decision in body.decisions:
                 if candidate_id in decision.candidate_ids and decision.rejection_reason:

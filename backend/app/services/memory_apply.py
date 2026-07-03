@@ -13,6 +13,8 @@ from typing import Protocol
 from app.teacher_agent.memory_targets import (
     canonical_memory_target,
     compact_key_for_target,
+    is_student_page_target,
+    student_id_from_target,
 )
 from app.teacher_agent.wiki.memory import (
     PROFILE_ENTRY_LIMIT,
@@ -84,6 +86,20 @@ def apply_memory_sweep_decisions(
         if decision.action != "apply":
             continue
         operation = _normalize_operation(getattr(decision, "operation", "add"))
+        if is_student_page_target(decision.target):
+            if operation not in {"add", "adjust"}:
+                skipped.append(f"non-writing operation for apply: {operation}")
+                continue
+            try:
+                paths = _apply_student_summary_item(
+                    wiki, class_id, decision, operation
+                )
+            except ValueError as exc:
+                warnings.append(f"{decision.target}: {exc}")
+                continue
+            applied.extend(paths)
+            successful_indexes.append(index)
+            continue
         if operation == "add":
             path, skip, warning = _apply_add_item(
                 wiki, class_id, decision, subject_target
@@ -111,6 +127,37 @@ def apply_memory_sweep_decisions(
         skipped.append(f"non-writing operation for apply: {operation}")
 
     return applied, skipped, warnings, successful_indexes
+
+
+def _apply_student_summary_item(
+    wiki, class_id: str, item, operation: str
+) -> list[str]:
+    student_id = student_id_from_target(item.target)
+    if not student_id:
+        raise ValueError(f"unsupported target: {item.target}")
+    section = getattr(item, "section", "") or "Student Summary"
+    if section.strip().lower() != "student summary":
+        raise ValueError("student updates may only target Student Summary")
+    new_content = _clean_entry(item.content)
+    if not new_content:
+        raise ValueError("student summary content cannot be empty")
+
+    path = wiki.student_path(class_id, student_id)
+    existing = wiki.read_text(path)
+    if operation == "adjust":
+        old_content = _clean_entry(getattr(item, "replaces_content", ""))
+        if not old_content:
+            raise ValueError("adjust requires replaces_content")
+        current_summary = _clean_entry(wiki._student_summary_note(existing))
+        if _bullet_key(current_summary) != _bullet_key(old_content):
+            raise ValueError(
+                "replaces_content was not found exactly in target section"
+            )
+
+    wiki.write_text(path, wiki._set_student_summary(class_id, student_id, new_content))
+    students_path = wiki.roll_up_paths(class_id)["students"]
+    wiki.write_text(students_path, wiki._rebuild_students_index(class_id, previews={}))
+    return [wiki.rel_wiki(path), wiki.rel_wiki(students_path)]
 
 
 def _apply_add_item(wiki, class_id: str, item, subject_target: str):

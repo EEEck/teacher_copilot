@@ -13,6 +13,9 @@ from app.teacher_agent.wiki.constants import (
 
 from app.teacher_agent.wiki import parsing
 
+STUDENT_SUMMARY_HEADING = "Student Summary"
+STUDENT_SUMMARY_FALLBACK = "No approved summary yet."
+
 
 def _format_lesson_results(
     store, class_id: str, subject: str, diary_md: str, lesson_date: str, title: str
@@ -98,6 +101,111 @@ def _student_display_name(text: str, fallback: str) -> str:
     return fallback
 
 
+def _student_summary_note(text: str) -> str:
+    body = parsing.extract_section_body(text, STUDENT_SUMMARY_HEADING)
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("-"):
+            continue
+        note = stripped.lstrip("- ").strip()
+        if note:
+            return _first_sentence(note)
+    return STUDENT_SUMMARY_FALLBACK
+
+
+def _first_sentence(text: str) -> str:
+    cleaned = " ".join((text or "").strip().split())
+    if not cleaned:
+        return STUDENT_SUMMARY_FALLBACK
+    match = re.match(r"^(.+?[.!?])(?:\s+|$)", cleaned)
+    return match.group(1).strip() if match else cleaned
+
+
+def _student_header_and_body(text: str, class_id: str, student_id: str) -> tuple[str, str]:
+    existing = text.strip()
+    if not existing:
+        existing = f"# {student_id}\n\n> Class: {class_id}"
+    if not existing.startswith("#"):
+        existing = f"# {student_id}\n\n> Class: {class_id}\n\n{existing}"
+    match = re.search(r"^##\s+", existing, flags=re.M)
+    if not match:
+        return existing.rstrip(), ""
+    return existing[: match.start()].rstrip(), existing[match.start() :].strip()
+
+
+def _strip_student_summary_sections(body: str) -> str:
+    return re.sub(
+        rf"\n?##\s*{re.escape(STUDENT_SUMMARY_HEADING)}\s*\n.*?(?=\n##\s|\Z)",
+        "",
+        body,
+        flags=re.I | re.S,
+    ).strip()
+
+
+def _split_student_sections(body: str) -> tuple[list[str], list[tuple[str, str]]]:
+    other_sections: list[str] = []
+    dated_sections: list[tuple[str, str]] = []
+    for match in re.finditer(r"^##\s+(.+?)\s*\n(.*?)(?=^##\s+|\Z)", body, re.M | re.S):
+        heading = match.group(1).strip()
+        block = match.group(0).strip()
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", heading):
+            dated_sections.append((heading, block))
+        else:
+            other_sections.append(block)
+    return other_sections, dated_sections
+
+
+def _normalize_student_entity(
+    store,
+    class_id: str,
+    student_id: str,
+    text: str,
+    *,
+    summary: str | None = None,
+) -> str:
+    current_summary = summary or _student_summary_note(text)
+    if not current_summary:
+        current_summary = STUDENT_SUMMARY_FALLBACK
+    header, body = _student_header_and_body(text, class_id, student_id)
+    body = _strip_student_summary_sections(body)
+    other_sections, dated_sections = _split_student_sections(body)
+    dated_blocks = [
+        block
+        for _, block in sorted(
+            dated_sections,
+            key=lambda item: item[0],
+        )
+    ]
+    sections = [
+        header,
+        f"## {STUDENT_SUMMARY_HEADING}\n- {current_summary}",
+        *other_sections,
+        *dated_blocks,
+    ]
+    return "\n\n".join(section.strip() for section in sections if section.strip()) + "\n"
+
+
+def _set_student_summary(
+    store, class_id: str, student_id: str, summary: str
+) -> str:
+    path = store.student_path(class_id, student_id)
+    existing = store.read_text(path)
+    return _normalize_student_entity(
+        store,
+        class_id,
+        student_id,
+        existing,
+        summary=" ".join(summary.strip().split()) or STUDENT_SUMMARY_FALLBACK,
+    )
+
+
+def _student_sweep_excerpt(store, class_id: str, student_id: str) -> str:
+    text = store.read_text(store.student_path(class_id, student_id))
+    normalized = _normalize_student_entity(store, class_id, student_id, text)
+    _, body = _student_header_and_body(normalized, class_id, student_id)
+    return body[:1600]
+
+
 def _append_bullets(
     store, existing: str, new_bullets: list[str], lesson_date: str
 ) -> str:
@@ -147,8 +255,7 @@ def _upsert_student_entity(
 ) -> Path:
     path = store.student_path(class_id, student_id)
     existing = store.read_text(path)
-    if not existing.strip():
-        existing = f"# {student_id}\n\n> Class: {class_id}\n"
+    existing = _normalize_student_entity(store, class_id, student_id, existing)
     section_pattern = rf"##\s*{re.escape(lesson_date)}\s*\n"
     if re.search(section_pattern, existing):
         existing = re.sub(
@@ -161,7 +268,12 @@ def _upsert_student_entity(
     for b in bullets:
         lines.append(f"- {b}")
     lines.append("")
-    store.write_text(path, "\n".join(lines))
+    store.write_text(
+        path,
+        _normalize_student_entity(
+            store, class_id, student_id, "\n".join(lines)
+        ),
+    )
     return path
 
 
@@ -186,11 +298,7 @@ def _rebuild_students_index(
         if not text.strip():
             continue
         name = _student_display_name(text, sid)
-        note = ""
-        for ln in text.splitlines():
-            if ln.strip().startswith("- "):
-                note = ln.strip().lstrip("- ")[:120]
-                break
+        note = _student_summary_note(text)[:120]
         rel = f"students/{sid}.md"
         lines.append(f"| {sid} | {name} | {note} | [students/{sid}.md]({rel}) |")
     return "\n".join(lines).rstrip() + "\n"
@@ -257,9 +365,7 @@ def _compile_students_and_timeline(
         proposed_path = path
         content = store.read_text(path)
         if bullets:
-            preview = content
-            if not preview.strip():
-                preview = f"# {sid}\n\n> Class: {class_id}\n"
+            preview = _normalize_student_entity(store, class_id, sid, content)
             section_pattern = rf"##\s*{re.escape(lesson_date)}\s*\n"
             if not re.search(section_pattern, preview):
                 preview = (
@@ -269,6 +375,7 @@ def _compile_students_and_timeline(
                     + "\n".join(f"- {b}" for b in bullets)
                     + "\n"
                 )
+            preview = _normalize_student_entity(store, class_id, sid, preview)
             outputs.append(
                 (
                     proposed_path,
@@ -283,8 +390,7 @@ def _compile_students_and_timeline(
         path = store.student_path(class_id, sid)
         content = store.read_text(path)
         if bullets:
-            if not content.strip():
-                content = f"# {sid}\n\n> Class: {class_id}\n"
+            content = _normalize_student_entity(store, class_id, sid, content)
             if f"## {lesson_date}" not in content:
                 content = (
                     content.rstrip()
@@ -293,7 +399,7 @@ def _compile_students_and_timeline(
                     + "\n".join(f"- {b}" for b in bullets)
                     + "\n"
                 )
-            previews[sid] = content
+            previews[sid] = _normalize_student_entity(store, class_id, sid, content)
     index_content = store._rebuild_students_index(class_id, previews=previews)
     outputs.append(
         (

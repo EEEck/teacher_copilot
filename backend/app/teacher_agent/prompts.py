@@ -413,7 +413,9 @@ Rules:
 - For operation="adjust", replaces_content is required and must be copied exactly from the current memory excerpt. Do not paraphrase replaces_content. The backend will skip the write if the exact bullet is missing.
 - For operation="already_covered", set content to the existing covered memory sentence from the current memory excerpt when one exists, so the review card shows what already covers the evidence.
 - Set signal_count to the number of represented ledger rows, and set why_now to a concise reason based only on evidence summary, refs, repeated signals, or explicit teacher statement.
-- Global teacher preferences belong in teacher_profile.md. Class copilot working agreements belong in copilot_profile.md. Class learning patterns belong in teaching_patterns.md. Subject-wide reusable teaching guidance belongs in wiki/subjects/{subject}.md.
+- Global teacher preferences belong in teacher_profile.md. Class copilot working agreements belong in copilot_profile.md. Class learning patterns belong in teaching_patterns.md. Subject-wide reusable teaching guidance belongs in wiki/subjects/{subject}.md. Per-student durable summaries belong only in students/S-###.md section="Student Summary".
+- For Student Summary cards, write one neutral evidence-grounded sentence about the student's current learning trajectory and useful support pattern. Prefer newer dated observations when they are repeated or trajectory-changing, but do not overwrite the longer trajectory based on one or two isolated recent notes.
+- Student Summary content must avoid diagnosis, grading, placement, discipline, high-stakes recommendations, fixed ability labels, or claims not supported by the dated observations.
 - canonical_wiki is review-only; never convert it into a direct write target.
 - Return warnings for sparse evidence, possible target ambiguity, duplicates, or unsupported targets.
 
@@ -587,7 +589,9 @@ Rules:
 * Generic related memory does not make a specific claim already_covered.
 * Durable memory stores the underlying preference, learning pattern, or working agreement — not the latest wording.
 * Current task-only wording is not a durable preference unless the teacher says it is a new default.
-* Global teacher preferences belong in teacher_profile.md. Class copilot working agreements belong in copilot_profile.md. Class learning patterns belong in teaching_patterns.md. Subject-wide reusable teaching guidance belongs in wiki/subjects/{subject}.md.
+* Global teacher preferences belong in teacher_profile.md. Class copilot working agreements belong in copilot_profile.md. Class learning patterns belong in teaching_patterns.md. Subject-wide reusable teaching guidance belongs in wiki/subjects/{subject}.md. Per-student durable summaries belong only in students/S-###.md section="Student Summary".
+* For Student Summary groups, compare the current summary with all dated observations, weight newer observations more, and choose adjust_existing only when the summary should change based on repeated or trajectory-changing evidence.
+* Student Summary groups must stay neutral and avoid diagnosis, grading, placement, discipline, fixed ability labels, or claims beyond approved dated observations.
 * canonical_wiki is review-only; never convert it into a direct write target.
 
 Output requirements:

@@ -95,6 +95,13 @@ cd backend
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py tests/evals/test_klassenpilot_wiki_search.py tests/evals/test_klassenpilot_workflows_stub.py -v
 ```
 
+Student Summary judge golden:
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_student_summary_judge.py -v
+```
+
 ### Live agent chat + LLM judge (opt-in)
 
 Uses real `AgentRunner` (OpenAI Agents SDK) still **in-process** via
@@ -118,6 +125,13 @@ Disable LLM judge but keep live agent:
 
 ```powershell
 $env:RUN_LLM_CHAT_JUDGE="0"
+```
+
+Enable the optional LLM judge for the Student Summary golden:
+
+```powershell
+$env:RUN_LLM_STUDENT_SUMMARY_JUDGE="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_student_summary_judge.py -v
 ```
 
 ### Live API against running backend (secondary)
@@ -154,6 +168,7 @@ Additional deterministic goldens:
 | Wiki search - 9b/10c | `9b_misconception_charge_vs_oxidation`, `9b_redox_date_range_pathfinder`, `10c_subject_bound_search` | Source-bounded wiki pathfinding and class isolation |
 | Workflow E2E stub - 9b | `9b_plan_fckw_3turn_e2e`, `9b_memory_update_3turn_e2e` | Complete multi-turn workflow state, evidence, and final artifact |
 | Security chat - 9b | `security_plan_direct_prompt_injection`, `security_plan_upload_prompt_injection`, `security_plan_tool_output_injection`, `security_ingest_write_memory_now`, `security_plan_raw_trace_request`, `security_plan_high_stakes_student_decision` | Lightweight teacher-agent security contract: no hidden prompt/trace/raw-ref leakage, no hidden durable-write claims, and redirect for high-stakes student decisions |
+| Student Summary - 9b | `s045_balanced_learning_and_support_trajectory` | S-045 durable-summary trajectory: improving written notation/test performance plus recent disruption as a neutral support pattern, without high-stakes or fixed-trait language |
 
 Live GEval is intentionally limited to four chat goldens by default: two
 planning quality checks and two memory-update quality checks. The redox lesson

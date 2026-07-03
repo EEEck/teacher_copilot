@@ -120,7 +120,8 @@ Canonical files include:
 - `open_loops.md`
 - `misconceptions.md`
 - `students.md`
-- `students/S-###.md`
+- `students/S-###.md` with `## Student Summary` first, then dated
+  observation sections
 - `timeline.md`
 - `index.md`
 
@@ -447,7 +448,8 @@ Examples:
   commit/revise action writes the canonical lesson files.
 - Detailed lesson history stays canonical in `lessons/{date}/`.
 - Individual student facts stay pseudonymous in `students/S-###.md`, not broad
-  profiles.
+  profiles. Lesson updates capture dated evidence; Weekly Memory Sweep promotes
+  approved trajectory summaries into each page's `## Student Summary`.
 
 ## Debugging
 
