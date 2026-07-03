@@ -9,6 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   client,
   type MemorySweepCandidate,
   type MemorySweepDecision,
@@ -22,6 +27,8 @@ const MEMORY_SWEEP_QUEUES = [
   "Wiki Review",
   "Memory Sweep",
 ];
+const REVIEW_LATER_TOOLTIP =
+  "Hide for 7 days while the system waits for more evidence. It will appear again after that if it still needs review.";
 
 function canApply(candidate: MemorySweepCandidate): boolean {
   return Boolean(candidate.can_apply);
@@ -114,7 +121,11 @@ export default function MemorySweepPage() {
   const [loading, setLoading] = useState(true);
   const [loadingQueue, setLoadingQueue] = useState<string | null>(null);
   const [loadedQueueCount, setLoadedQueueCount] = useState(0);
+  const [loadingReason, setLoadingReason] = useState<"refresh" | "submit">(
+    "refresh",
+  );
   const [showAllWarnings, setShowAllWarnings] = useState(false);
+  const [showReviewHelp, setShowReviewHelp] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -128,8 +139,9 @@ export default function MemorySweepPage() {
   const warningCount = useMemo(() => uniqueWarningCount(warningItems), [warningItems]);
   const pendingCount = Object.keys(decisionsByCard).length;
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (reason: "refresh" | "submit" = "refresh") => {
     setLoading(true);
+    setLoadingReason(reason);
     setLoadingQueue(null);
     setLoadedQueueCount(0);
     setShowAllWarnings(false);
@@ -218,7 +230,7 @@ export default function MemorySweepPage() {
       setNotice(
         `Updated ${result.updated_candidate_ids.length} ledger row(s).${appliedText}${skippedText}`,
       );
-      await load();
+      await load("submit");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not submit sweep decisions");
@@ -245,6 +257,36 @@ export default function MemorySweepPage() {
           <Link href={`/classes/${classId}`}>Back to class</Link>
         </Button>
       </div>
+
+      {showReviewHelp && (
+        <Alert className="mb-4 border-amber-200 bg-amber-50 text-amber-950">
+          <AlertDescription>
+            <div className="flex gap-3">
+              <div className="flex-1 space-y-1">
+                <div className="text-sm font-semibold">How to review</div>
+                <p className="text-sm">
+                  Use <span className="font-medium">Add suggestions</span> to
+                  preselect suggestions the backend can safely write. Cards without
+                  an <span className="font-medium">Add memory</span> button still need
+                  a decision: already in memory, not needed, review later for 7
+                  days, or remove.
+                  After submit, only suggestions that still need action are shown again.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Dismiss review help"
+                className="shrink-0 text-base leading-none text-amber-900 hover:bg-amber-100/80 hover:text-amber-950"
+                onClick={() => setShowReviewHelp(false)}
+              >
+                ×
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {error && (
         <Alert className="mb-4 border-destructive/40">
@@ -298,7 +340,9 @@ export default function MemorySweepPage() {
       {loading && (
         <p className="text-sm text-muted-foreground">
           {loadingQueue
-            ? `Loaded ${loadedQueueCount} of ${MEMORY_SWEEP_QUEUES.length} queues · Loading ${loadingQueue}...`
+            ? loadingReason === "submit"
+              ? `Updating review list · Checked ${loadedQueueCount} of ${MEMORY_SWEEP_QUEUES.length} sections · Checking ${loadingQueue}...`
+              : `Loaded ${loadedQueueCount} of ${MEMORY_SWEEP_QUEUES.length} queues · Loading ${loadingQueue}...`
             : "Loading Memory Sweep queues..."}
         </p>
       )}
@@ -306,7 +350,7 @@ export default function MemorySweepPage() {
       {!loading && proposal && total === 0 && (
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">
-            No open memory candidates.
+            All caught up. There are no open memory suggestions to review.
           </CardContent>
         </Card>
       )}
@@ -327,7 +371,7 @@ export default function MemorySweepPage() {
                       onClick={() => setMany(candidates, "apply")}
                       disabled={busy}
                     >
-                      Select apply supported
+                      Add suggestions
                     </Button>
                   )}
                   <Button
@@ -336,16 +380,23 @@ export default function MemorySweepPage() {
                     onClick={() => setMany(candidates, "reject")}
                     disabled={busy}
                   >
-                    Select reject queue
+                    Mark all as not needed
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setMany(candidates, "snooze")}
-                    disabled={busy}
-                  >
-                    Select snooze queue
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setMany(candidates, "snooze")}
+                        disabled={busy}
+                      >
+                        Review all later
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-72">
+                      {REVIEW_LATER_TOOLTIP}
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
               <div className="grid gap-3">
@@ -413,7 +464,15 @@ export default function MemorySweepPage() {
                             />
                           </div>
                         ) : (
-                          <p className="text-sm">{candidate.content}</p>
+                          <div className="space-y-2">
+                            <p className="text-sm">{candidate.content}</p>
+                            <p className="text-xs text-muted-foreground">
+                              This suggestion cannot be added automatically. Choose
+                              whether it is already in memory, not needed, should be
+                              reviewed later for 7 days, or should be removed from the
+                              review list.
+                            </p>
+                          </div>
                         )}
                         {candidate.evidence_summary && (
                           <p className="text-xs text-muted-foreground">
@@ -477,28 +536,35 @@ export default function MemorySweepPage() {
                             onClick={() => setDecision(candidate, "already_covered")}
                             disabled={busy}
                           >
-                            Already covered
+                            Already in memory
                           </Button>
                           <Button
                             variant="outline"
                             onClick={() => setDecision(candidate, "reject")}
                             disabled={busy}
                           >
-                            Reject
+                            Not needed
                           </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => setDecision(candidate, "snooze")}
-                            disabled={busy}
-                          >
-                            Snooze
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                onClick={() => setDecision(candidate, "snooze")}
+                                disabled={busy}
+                              >
+                                Review later
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-72">
+                              {REVIEW_LATER_TOOLTIP}
+                            </TooltipContent>
+                          </Tooltip>
                           <Button
                             variant="outline"
                             onClick={() => setDecision(candidate, "delete")}
                             disabled={busy}
                           >
-                            Delete
+                            Remove
                           </Button>
                           {decision && (
                             <Button

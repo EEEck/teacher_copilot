@@ -245,6 +245,14 @@ docker compose exec backend python -m app.services.beta_cli `
   --out beta_data/reports/t_anna.md
 ```
 
+For the hosted beta path, keep this same `tester_id` / `workspace_id` identity
+contract and move the backing services to AWS: Amplify for the frontend,
+ECS/Fargate + ALB for the backend, EFS for per-workspace wiki roots,
+Postgres/Aurora for telemetry metadata, and S3 for exports/backups. Later
+production auth should replace only the invite-code resolver behind
+`RequestIdentity` with Cognito, Auth.js, Clerk, Auth0, or another OAuth/OIDC
+provider. See [`implementation_plans/beta_push.md`](implementation_plans/beta_push.md).
+
 ### OpenAI API key (required for chat & plan)
 
 Two layers read the key:

@@ -287,6 +287,65 @@ def test_memory_sweep_sqlite_groups_applies_and_preserves_boundaries(tmp_path, w
     assert "cand_subject_oxidation_sequence_1" in next_ids
 
 
+def test_memory_sweep_snoozed_candidates_reappear_after_seven_days(tmp_path):
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    active = _teacher_behavior_row(
+        "active_teacher_preference",
+        update="Use concise planning summaries.",
+        evidence="Teacher asked for concise planning summaries.",
+        created_at="2026-06-22T09:00:00Z",
+    )
+    snoozed = _teacher_behavior_row(
+        "snoozed_teacher_preference",
+        update="Use detailed planning summaries.",
+        evidence="Teacher deferred this preference for later review.",
+        created_at="2026-06-22T09:05:00Z",
+    )
+    ledger.add_many([active, snoozed])
+    ledger.update_status(
+        snoozed.id,
+        "snoozed",
+        updated_at="2026-06-22T09:10:00Z",
+        review_batch_id="sweep_snooze_test",
+    )
+
+    rows = {
+        row.id: row
+        for row in ledger.list_candidates(class_id=CLASS_ID, subject="chemie")
+    }
+    assert rows[snoozed.id].snoozed_until == "2026-06-29T09:10:00Z"
+
+    grouped = ledger.propose_for_sweep(
+        class_id=CLASS_ID,
+        subject="chemie",
+        now="2026-06-28T09:10:00Z",
+    )
+    candidate_ids = {
+        candidate_id
+        for proposals in grouped.values()
+        for proposal in proposals
+        for candidate_id in proposal.candidate_ids
+    }
+
+    assert active.id in candidate_ids
+    assert snoozed.id not in candidate_ids
+
+    grouped_after_snooze = ledger.propose_for_sweep(
+        class_id=CLASS_ID,
+        subject="chemie",
+        now="2026-06-29T09:10:00Z",
+    )
+    candidate_ids_after_snooze = {
+        candidate_id
+        for proposals in grouped_after_snooze.values()
+        for proposal in proposals
+        for candidate_id in proposal.candidate_ids
+    }
+
+    assert snoozed.id in candidate_ids_after_snooze
+
+
 def test_memory_sweep_consolidates_matching_cluster_key(tmp_path):
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()

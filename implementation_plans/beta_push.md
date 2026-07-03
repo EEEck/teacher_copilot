@@ -51,6 +51,16 @@ Non-goals for beta:
 
 ## Minimum Beta Scope
 
+Local status as of the first tester-prep pass:
+
+- **Shipped locally:** invite-code login, signed opaque HTTP-only session cookie,
+  request identity resolution, per-workspace wiki copies, local SQLite beta
+  telemetry, per-file wiki diffs for approved writes, Markdown beta report CLI,
+  and Memory Sweep review UX for accumulated memory signals.
+- **Still before external hosted beta:** move storage from local
+  `beta_data/` to persistent AWS resources, configure HTTPS/CORS/secrets, run
+  smoke tests after backend restarts, and document the operator beta routine.
+
 Ship these before inviting external testers:
 
 1. **Tester isolation**
@@ -58,6 +68,8 @@ Ship these before inviting external testers:
    - Each tester gets their own wiki root cloned from the mock seed wiki or a
      manually prepared starter wiki.
    - No tester can read or write another tester's wiki.
+   - Local implementation exists with `RequestIdentity`; hosted beta should keep
+     this boundary and only change storage/deployment plumbing.
 
 2. **Research persistence**
    - Persist chat messages, artifact drafts, final artifacts, memory runtime
@@ -65,6 +77,8 @@ Ship these before inviting external testers:
    - Persist wiki before/after snapshots or diffs for every memory commit.
    - Keep app sessions in memory if needed, but do not lose research data when
      a chat turn or commit completes.
+   - Local SQLite telemetry exists; AWS beta should promote metadata/events to
+     Postgres/Aurora and keep operator exports in S3.
 
 3. **Memory update trust**
    - Update Memory target/date/intent is visible.
@@ -81,6 +95,8 @@ Ship these before inviting external testers:
 5. **Operator review**
    - A developer/admin can inspect per-tester sessions, event logs, final
      artifacts, and wiki diffs after each testing day.
+   - Local Markdown report CLI exists; keep CLI-first until daily review proves
+     a dashboard is needed.
 
 6. **Small beta docs**
    - Tester-facing quickstart for the mock Chemie 9b beta.
@@ -313,6 +329,16 @@ use **Option A** only for a tiny founder-led pilot.
 
 Ship frontend and backend on AWS. Use **dev-sized** resources (single-AZ,
 minimal redundancy) unless the beta scope grows.
+
+The current local beta architecture maps directly to AWS:
+
+- `tester_id` and `workspace_id` remain the stable product identity shape.
+- The identity resolver can stay invite-code based for beta.
+- Workspace wiki roots move from `beta_data/workspaces/{workspace_id}` to EFS.
+- Local `beta.sqlite3` metadata/telemetry moves to Postgres/Aurora.
+- Report exports move to S3.
+- The FastAPI app still receives a `RequestIdentity`; routes should not depend
+  on Cognito/Auth.js/Clerk/Auth0-specific objects.
 
 ### Stack
 
@@ -593,6 +619,30 @@ AWS checklist:
    - plan chat/save
    - event export
    - backend restart and wiki + telemetry still present
+
+## Auth Evolution
+
+Keep beta auth intentionally small until tester pull is proven.
+
+Current beta:
+
+- Invite code -> opaque HTTP-only cookie.
+- Cookie resolves to `RequestIdentity(tester_id, workspace_id, role)`.
+- APIs and wiki-store dependencies use `RequestIdentity` to choose the wiki root.
+
+Production path:
+
+1. Keep the `RequestIdentity` contract as the boundary.
+2. Replace only the invite-code/session resolver with Cognito, Auth.js, Clerk,
+   Auth0, or another OAuth/OIDC-backed provider.
+3. Add durable user/account/workspace membership tables.
+4. Continue mapping the provider subject to `{ tester_id/user_id,
+   workspace_id, role }` before any route touches class data.
+5. Add school/team roles only after there is clear need; do not add them for the
+   first teacher beta.
+
+This preserves the current isolation model while avoiding a premature SaaS
+account system.
 
 ## Testing
 

@@ -15,7 +15,6 @@ from typing import Any, Iterable
 from app.services.memory_candidate_ledger import (
     MemoryCandidateLedger,
     MemoryCandidateRow,
-    OPEN_STATUSES,
 )
 from app.teacher_agent.memory_targets import (
     canonical_memory_target,
@@ -194,10 +193,9 @@ async def propose_memory_sweep_review(
     required contract of the sweep.
     """
     cls = wiki.get_class(class_id)
-    candidates = ledger.list_candidates(
+    candidates = ledger.list_review_candidates(
         class_id=class_id,
         subject=cls.subject,
-        statuses=OPEN_STATUSES,
         include_global=True,
     )
     grouped = build_sweep_proposals(candidates)

@@ -11,7 +11,7 @@ import json
 import hashlib
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
 
@@ -39,6 +39,8 @@ VALID_STATUSES = {
 }
 
 OPEN_STATUSES = ("captured", "grouped", "proposed", "snoozed")
+REVIEW_STATUSES = ("captured", "grouped", "proposed")
+SNOOZE_DAYS = 7
 
 
 def default_memory_candidate_ledger_path(wiki_root: str | Path) -> Path:
@@ -69,6 +71,7 @@ class MemoryCandidateRow:
     promoted_at: str | None = None
     review_batch_id: str | None = None
     rejection_reason: str | None = None
+    snoozed_until: str | None = None
 
     @classmethod
     def from_sqlite(cls, row: sqlite3.Row) -> "MemoryCandidateRow":
@@ -102,6 +105,7 @@ class MemoryCandidateRow:
             promoted_at=row["promoted_at"],
             review_batch_id=row["review_batch_id"],
             rejection_reason=row["rejection_reason"],
+            snoozed_until=row["snoozed_until"],
         )
 
 
@@ -138,10 +142,13 @@ class MemoryCandidateLedger:
                   status TEXT NOT NULL,
                   promoted_at TEXT,
                   review_batch_id TEXT,
-                  rejection_reason TEXT
+                  rejection_reason TEXT,
+                  snoozed_until TEXT
                 )
                 """
             )
+            self._ensure_column(conn, "snoozed_until", "TEXT")
+            self._backfill_snoozed_until(conn)
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_memory_candidates_scope_status
@@ -172,14 +179,14 @@ class MemoryCandidateLedger:
                   session_id, turn_index, channel, target, section,
                   candidate_update, evidence_summary, evidence_refs_json,
                   source, basis, confidence, cluster_key, status, promoted_at,
-                  review_batch_id, rejection_reason
+                  review_batch_id, rejection_reason, snoozed_until
                 ) VALUES (
                   :id, :created_at, :updated_at, :class_id, :subject,
                   :workflow, :session_id, :turn_index, :channel, :target,
                   :section, :candidate_update, :evidence_summary,
                   :evidence_refs_json, :source, :basis, :confidence,
                   :cluster_key, :status, :promoted_at, :review_batch_id,
-                  :rejection_reason
+                  :rejection_reason, :snoozed_until
                 )
                 ON CONFLICT(id) DO NOTHING
                 """,
@@ -222,20 +229,50 @@ class MemoryCandidateLedger:
                 MemoryCandidateRow.from_sqlite(row) for row in conn.execute(sql, params)
             ]
 
+    def list_review_candidates(
+        self,
+        *,
+        class_id: str | None = None,
+        subject: str | None = None,
+        include_global: bool = True,
+        now: str | None = None,
+    ) -> list[MemoryCandidateRow]:
+        review_now = now or _utc_now()
+        where = [
+            "(status IN (?, ?, ?) OR (status = ? AND snoozed_until IS NOT NULL AND snoozed_until <= ?))"
+        ]
+        params = [*REVIEW_STATUSES, "snoozed", review_now]
+        if class_id is not None:
+            if include_global:
+                where.append("(class_id = ? OR class_id IS NULL)")
+            else:
+                where.append("class_id = ?")
+            params.append(class_id)
+        if subject is not None:
+            where.append("(subject = ? OR subject IS NULL)")
+            params.append(subject)
+        sql = "SELECT * FROM memory_candidates WHERE " + " AND ".join(where)
+        sql += " ORDER BY created_at, id"
+        with self._connect() as conn:
+            return [
+                MemoryCandidateRow.from_sqlite(row) for row in conn.execute(sql, params)
+            ]
+
     def propose_for_sweep(
         self,
         *,
         class_id: str,
         subject: str | None = None,
+        now: str | None = None,
     ) -> dict[str, list["MemorySweepProposal"]]:
         """Compatibility adapter for Memory Sweep grouping."""
         from app.services.memory_sweep import build_sweep_proposals
 
-        candidates = self.list_candidates(
+        candidates = self.list_review_candidates(
             class_id=class_id,
             subject=subject,
-            statuses=OPEN_STATUSES,
             include_global=True,
+            now=now,
         )
         return build_sweep_proposals(candidates)
 
@@ -248,8 +285,13 @@ class MemoryCandidateLedger:
         rejection_reason: str | None = None,
         review_batch_id: str | None = None,
         promoted_at: str | None = None,
+        snoozed_until: str | None = None,
     ) -> None:
         self._validate_status(status)
+        if status == "snoozed" and snoozed_until is None:
+            snoozed_until = _add_days(updated_at, SNOOZE_DAYS)
+        if status != "snoozed":
+            snoozed_until = None
         with self._connect() as conn:
             cursor = conn.execute(
                 """
@@ -258,7 +300,8 @@ class MemoryCandidateLedger:
                     updated_at = ?,
                     rejection_reason = ?,
                     review_batch_id = COALESCE(?, review_batch_id),
-                    promoted_at = COALESCE(?, promoted_at)
+                    promoted_at = COALESCE(?, promoted_at),
+                    snoozed_until = ?
                 WHERE id = ?
                 """,
                 (
@@ -267,6 +310,7 @@ class MemoryCandidateLedger:
                     rejection_reason,
                     review_batch_id,
                     promoted_at,
+                    snoozed_until,
                     candidate_id,
                 ),
             )
@@ -277,6 +321,32 @@ class MemoryCandidateLedger:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    @staticmethod
+    def _ensure_column(conn: sqlite3.Connection, name: str, definition: str) -> None:
+        columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(memory_candidates)")
+        }
+        if name not in columns:
+            conn.execute(f"ALTER TABLE memory_candidates ADD COLUMN {name} {definition}")
+
+    @staticmethod
+    def _backfill_snoozed_until(conn: sqlite3.Connection) -> None:
+        rows = conn.execute(
+            """
+            SELECT id, updated_at FROM memory_candidates
+            WHERE status = 'snoozed' AND snoozed_until IS NULL
+            """
+        ).fetchall()
+        for row in rows:
+            conn.execute(
+                """
+                UPDATE memory_candidates
+                SET snoozed_until = ?
+                WHERE id = ?
+                """,
+                (_add_days(row["updated_at"], SNOOZE_DAYS), row["id"]),
+            )
 
     @staticmethod
     def _to_params(candidate: MemoryCandidateRow) -> dict[str, object]:
@@ -303,6 +373,7 @@ class MemoryCandidateLedger:
             "promoted_at": candidate.promoted_at,
             "review_batch_id": candidate.review_batch_id,
             "rejection_reason": candidate.rejection_reason,
+            "snoozed_until": candidate.snoozed_until,
         }
 
     @staticmethod
@@ -390,6 +461,19 @@ def rows_from_runtime_candidates(
             )
         )
     return rows
+
+
+def _parse_utc(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _add_days(value: str, days: int) -> str:
+    return (
+        (_parse_utc(value) + timedelta(days=days))
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def _field(candidate: Any, name: str) -> str:

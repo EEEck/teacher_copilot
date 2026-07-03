@@ -30,6 +30,9 @@ Shipped:
 - **Beta tester mode**: invite-code login, workspace-scoped wiki copies, and
   local telemetry for app activity, visible conversations, draft snapshots, and
   approved wiki diffs.
+- **Beta review tooling**: CLI Markdown reports over telemetry and wiki diffs,
+  plus Memory Sweep review UX with card warnings, stepwise loading, clearer
+  teacher-facing decisions, and seven-day deferral for uncertain signals.
 - Timeline/detail shortcuts for adding results to planned lessons or correcting
   taught lessons.
 - Karpathy-style compiled wiki with compact class memory pages.
@@ -67,10 +70,12 @@ Primary items:
 | **Wiki health check / lint** | Expose `LINT_SYSTEM` as a bounded teacher/admin action. Report only; no silent mutation. |
 | **Playwright smoke tests** | Cover ingest commit, plan save, and source/review UI paths. |
 | **Session persistence decision** | Add SQLite/app-owned persistence only if real testing shows restart/session loss hurts usage. |
+| **Hosted beta on AWS** | Move the current local beta shape to AWS without changing product scope: Amplify for frontend, ECS/Fargate + ALB for FastAPI, EFS for per-workspace wiki roots, Postgres/Aurora for telemetry and beta metadata, S3 for exports/backups. |
+| **Operator beta runbook** | Daily report generation, wiki-diff review, tester feedback notes, backup/export, and retention cleanup. Keep this CLI/docs-first unless a dashboard becomes clearly necessary. |
 
 Non-goals:
 
-- Postgres or school SaaS accounts.
+- School SaaS accounts or role hierarchy.
 - Voice/Telegram capture.
 - Docling ingestion.
 - Autonomous writes.
@@ -339,11 +344,13 @@ teacher-value work without a concrete blocker.
 | **Lean production images** | Before non-dev deployments. |
 | **`compose.prod.yaml`** | Before repeatable production-like installs. |
 | **SQLite/app session persistence** | When real users hit restart/history loss or multi-worker deploys. |
-| **Replace beta identity provider** | After tester validation: keep `RequestIdentity` but swap invite codes for Cognito, Auth.js, Clerk, Auth0, or equivalent OAuth-backed auth. |
+| **AWS beta hosting** | Next platform step before external testers: persistent `BETA_DATA_ROOT`, HTTPS, Secrets Manager, CloudWatch logs, backups, and restart-safe wiki/telemetry storage. See `implementation_plans/beta_push.md`. |
+| **Replace beta identity provider** | After tester validation: keep `RequestIdentity(tester_id, workspace_id, role)` and swap the invite-code resolver for Cognito, Auth.js, Clerk, Auth0, or equivalent OAuth-backed auth. The API and wiki-store access should continue consuming `RequestIdentity`, not provider-specific user objects. |
+| **Production auth/account model** | When moving beyond invited testers: introduce durable user/account/workspace tables, OAuth login, account recovery, secure cookie/session rotation, and explicit workspace membership. Avoid school/team roles until there is pull. |
 | **Generalized trace assemblies** | Before adding several more artifact/helper agents. |
 | **Typed index/search improvements** | When deterministic retrieval has measured failures. |
 | **Real-data privacy/security hardening** | Before real teacher/student data or non-local deployment: stronger pseudonymization/redaction, retention rules, access control for traces, output sanitization review, and EU/Germany legal checklist. |
-| **Postgres/object storage/accounts** | Only after multi-user or hosted deployment demand is clear. |
+| **Postgres/object storage/accounts** | Postgres is justified for hosted beta telemetry; broader account/product data should wait until multi-user demand is clear. |
 
 ---
 
