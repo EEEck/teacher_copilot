@@ -9,6 +9,7 @@ from app.api import deps
 from app.config import Settings
 from app.main import app
 from app.services.beta import BetaAuthService, BetaTelemetry, RequestIdentity
+from app.services.memory_candidate_ledger import MemoryCandidateLedger, MemoryCandidateRow
 
 SEED_WIKI = Path(__file__).resolve().parent.parent / "teacher_wiki"
 CLASS_ID = "chemie_9b_2026_27"
@@ -68,6 +69,21 @@ def test_invite_login_creates_persistent_opaque_session(tmp_path: Path):
         / "teacher_wiki",
     )
     assert (identity.wiki_root / "wiki" / "classes" / "chemie_9b_2026_27").exists()
+
+
+def test_provisioned_workspace_does_not_inherit_seed_workflow_runtime_data(
+    tmp_path: Path,
+):
+    service = _service(tmp_path)
+
+    identity = service.provision_tester(
+        tester_id="t_anna",
+        workspace_id="w_anna_chem9b",
+        invite_code="anna-invite",
+    )
+
+    assert (SEED_WIKI / "workflow" / "memory_candidates.sqlite").exists()
+    assert not (identity.wiki_root / "workflow").exists()
 
 
 def test_invalid_invite_code_is_rejected(tmp_path: Path):
@@ -334,5 +350,79 @@ def test_ingest_session_and_draft_are_recorded_as_telemetry(
         assert "session_started" in event_types
         assert "draft_updated" in event_types
         assert snapshot == ("diary", draft_markdown)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_memory_sweep_propose_records_beta_telemetry_with_warnings(
+    tmp_path: Path, monkeypatch
+):
+    class FailingSweepAgent:
+        async def align_memory_sweep_candidates(
+            self,
+            class_id: str,
+            subject: str,
+            grouped_candidates,
+            target_excerpts,
+            validation_error: str = "",
+        ):
+            raise RuntimeError("offline alignment")
+
+    service = _service(tmp_path)
+    service.provision_tester(
+        tester_id="t_anna",
+        workspace_id="w_anna_chem9b",
+        invite_code="anna-invite",
+    )
+    _enable_beta(monkeypatch, tmp_path, service)
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    ledger.add(
+        MemoryCandidateRow(
+            id="cand_sweep_warning",
+            created_at="2026-07-03T09:00:00Z",
+            updated_at="2026-07-03T09:00:00Z",
+            class_id=CLASS_ID,
+            subject="chemie",
+            workflow="ingest",
+            session_id="sess-1",
+            turn_index=1,
+            channel="class_learning_pattern",
+            target="teaching_patterns.md",
+            section="What Worked Well",
+            candidate_update="Use group roles before symbolic redox tasks.",
+            evidence_summary="Teacher repeated that group roles helped.",
+            evidence_refs=["trace:sess-1:turn1"],
+            source="teacher_explicit",
+            basis="explicit",
+            confidence="high",
+            cluster_key="class.group_roles",
+        )
+    )
+    app.dependency_overrides[deps.get_memory_candidate_ledger] = lambda: ledger
+    app.dependency_overrides[deps.get_agents] = lambda: FailingSweepAgent()
+
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            assert client.post(
+                "/api/beta/login", json={"invite_code": "anna-invite"}
+            ).status_code == 200
+            res = client.post(f"/api/classes/{CLASS_ID}/memory/sweep/propose")
+            assert res.status_code == 200, res.text
+            assert res.json()["warnings"]
+
+        with sqlite3.connect(tmp_path / "beta.sqlite3") as conn:
+            event = conn.execute(
+                """
+                select type, payload_json
+                from event
+                where type = 'memory_sweep_propose'
+                """
+            ).fetchone()
+
+        assert event is not None
+        assert event[0] == "memory_sweep_propose"
+        assert '"warning_count": 1' in event[1]
+        assert "offline alignment" in event[1]
     finally:
         app.dependency_overrides.clear()

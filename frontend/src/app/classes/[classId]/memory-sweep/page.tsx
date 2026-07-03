@@ -15,12 +15,24 @@ import {
   type MemorySweepProposalResponse,
 } from "@/lib/api";
 
+const MEMORY_SWEEP_QUEUES = [
+  "Class Evolution",
+  "Subject Concepts",
+  "Teacher/Copilot Preferences",
+  "Wiki Review",
+  "Memory Sweep",
+];
+
 function canApply(candidate: MemorySweepCandidate): boolean {
   return Boolean(candidate.can_apply);
 }
 
 function cardKey(candidate: MemorySweepCandidate): string {
   return candidate.card_id || candidate.candidate_id;
+}
+
+function cardDomId(candidate: MemorySweepCandidate): string {
+  return `memory-sweep-card-${cardKey(candidate).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
 function representedCandidateIds(candidate: MemorySweepCandidate): string[] {
@@ -32,6 +44,48 @@ function representedCandidateIds(candidate: MemorySweepCandidate): string[] {
 function countCandidates(proposal: MemorySweepProposalResponse | null): number {
   if (!proposal) return 0;
   return Object.values(proposal.queues).reduce((sum, queue) => sum + queue.length, 0);
+}
+
+function mergeProposal(
+  current: MemorySweepProposalResponse | null,
+  next: MemorySweepProposalResponse,
+): MemorySweepProposalResponse {
+  const queues = { ...(current?.queues ?? {}) };
+  for (const [queue, candidates] of Object.entries(next.queues)) {
+    queues[queue] = candidates;
+  }
+  return {
+    class_id: next.class_id || current?.class_id || "",
+    subject: next.subject || current?.subject || "",
+    queues,
+    warnings: [...(current?.warnings ?? []), ...(next.warnings ?? [])],
+  };
+}
+
+function warningCardLinks(proposal: MemorySweepProposalResponse | null): {
+  warning: string;
+  card: MemorySweepCandidate;
+}[] {
+  if (!proposal) return [];
+  const items: { warning: string; card: MemorySweepCandidate }[] = [];
+  const seen = new Set<string>();
+  for (const candidates of Object.values(proposal.queues)) {
+    for (const candidate of candidates) {
+      for (const warning of candidate.warnings ?? []) {
+        const key = `${cardKey(candidate)}:${warning}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push({ warning, card: candidate });
+      }
+    }
+  }
+  return items;
+}
+
+function uniqueWarningCount(
+  items: { warning: string; card: MemorySweepCandidate }[],
+): number {
+  return new Set(items.map((item) => item.warning)).size;
 }
 
 function buildDecision(
@@ -58,6 +112,9 @@ export default function MemorySweepPage() {
   const classId = params.classId as string;
   const [proposal, setProposal] = useState<MemorySweepProposalResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingQueue, setLoadingQueue] = useState<string | null>(null);
+  const [loadedQueueCount, setLoadedQueueCount] = useState(0);
+  const [showAllWarnings, setShowAllWarnings] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -67,19 +124,33 @@ export default function MemorySweepPage() {
   >({});
 
   const total = useMemo(() => countCandidates(proposal), [proposal]);
+  const warningItems = useMemo(() => warningCardLinks(proposal), [proposal]);
+  const warningCount = useMemo(() => uniqueWarningCount(warningItems), [warningItems]);
   const pendingCount = Object.keys(decisionsByCard).length;
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadingQueue(null);
+    setLoadedQueueCount(0);
+    setShowAllWarnings(false);
     setError(null);
+    setNotice(null);
+    setProposal(null);
+    setDraftByCard({});
+    setDecisionsByCard({});
     try {
-      const next = await client.memorySweepPropose(classId);
-      setProposal(next);
-      setDraftByCard({});
-      setDecisionsByCard({});
+      let merged: MemorySweepProposalResponse | null = null;
+      for (const [index, queue] of MEMORY_SWEEP_QUEUES.entries()) {
+        setLoadingQueue(queue);
+        const next = await client.memorySweepPropose(classId, { queue });
+        merged = mergeProposal(merged, next);
+        setProposal(merged);
+        setLoadedQueueCount(index + 1);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load Memory Sweep");
     } finally {
+      setLoadingQueue(null);
       setLoading(false);
     }
   }, [classId]);
@@ -185,13 +256,52 @@ export default function MemorySweepPage() {
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       )}
-      {proposal?.warnings?.map((warning) => (
-        <Alert key={warning} className="mb-4 border-border bg-muted">
-          <AlertDescription>{warning}</AlertDescription>
+      {warningItems.length > 0 && (
+        <Alert className="mb-4 border-border bg-muted">
+          <AlertDescription>
+            <div className="space-y-2">
+              <p>
+                {warningCount} Memory Sweep warning
+                {warningCount === 1 ? "" : "s"} affect
+                {" "}
+                {warningItems.length} card{warningItems.length === 1 ? "" : "s"}.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(showAllWarnings ? warningItems : warningItems.slice(0, 2)).map(({ warning, card }) => (
+                  <a
+                    key={`${cardKey(card)}:${warning}`}
+                    href={`#${cardDomId(card)}`}
+                    className="rounded border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted"
+                  >
+                    {card.target} / {card.section}
+                  </a>
+                ))}
+                {warningItems.length > 2 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-auto px-2 py-1 text-xs"
+                    onClick={() => setShowAllWarnings((current) => !current)}
+                  >
+                    {showAllWarnings
+                      ? "Show fewer"
+                      : `Show ${warningItems.length - 2} more`}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </AlertDescription>
         </Alert>
-      ))}
+      )}
 
-      {loading && <p className="text-sm text-muted-foreground">Loading candidates...</p>}
+      {loading && (
+        <p className="text-sm text-muted-foreground">
+          {loadingQueue
+            ? `Loaded ${loadedQueueCount} of ${MEMORY_SWEEP_QUEUES.length} queues · Loading ${loadingQueue}...`
+            : "Loading Memory Sweep queues..."}
+        </p>
+      )}
 
       {!loading && proposal && total === 0 && (
         <Card>
@@ -245,7 +355,7 @@ export default function MemorySweepPage() {
                   const draft = draftByCard[key] ?? candidate.content;
                   const decision = decisionsByCard[key];
                   return (
-                    <Card key={key}>
+                    <Card key={key} id={cardDomId(candidate)} className="scroll-mt-6">
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base">{candidate.target}</CardTitle>
                         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
@@ -315,6 +425,18 @@ export default function MemorySweepPage() {
                             Why now: {candidate.why_now}
                           </p>
                         )}
+                        {(candidate.warnings ?? []).map((warning) => (
+                          <Alert key={warning} className="border-border bg-muted">
+                            <AlertDescription>
+                              <div className="space-y-1">
+                                <div className="text-xs font-semibold text-foreground">
+                                  Warning
+                                </div>
+                                <p>{warning}</p>
+                              </div>
+                            </AlertDescription>
+                          </Alert>
+                        ))}
                         {candidate.public_rationale && (
                           <p className="text-xs text-muted-foreground">
                             Rationale: {candidate.public_rationale}

@@ -150,6 +150,7 @@ class MemorySweepCandidate(BaseModel):
     signal_count: int = 1
     can_apply: bool = False
     review_only_reason: str = ""
+    warnings: list[str] = Field(default_factory=list)
 
 
 class MemorySweepProposalResponse(BaseModel):

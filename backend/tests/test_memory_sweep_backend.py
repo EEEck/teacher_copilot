@@ -1655,6 +1655,42 @@ def test_memory_sweep_api_falls_back_when_isolated_proposer_unavailable(
     assert "Memory Sweep card generation unresolved" in body["warnings"][0]
     assert body["queues"]["Class Evolution"][0]["target"] == "teaching_patterns.md"
     assert body["queues"]["Class Evolution"][0]["operation"] == "needs_decision"
+    card_warnings = body["queues"]["Class Evolution"][0]["warnings"]
+    assert len(card_warnings) == 1
+    assert card_warnings[0] in body["warnings"]
+
+
+def test_memory_sweep_api_can_scope_proposal_to_one_queue(
+    tmp_path,
+    wiki: WikiStore,
+):
+    from app.api import deps
+    from app.main import app
+
+    ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
+    ledger.initialize()
+    _seed_memory_sweep_examples(ledger)
+    agents = StubAgentRunner(wiki)
+
+    app.dependency_overrides[deps.get_wiki] = lambda: wiki
+    app.dependency_overrides[deps.get_agents] = lambda: agents
+    app.dependency_overrides[deps.get_memory_candidate_ledger] = lambda: ledger
+    try:
+        with TestClient(app, raise_server_exceptions=False) as local_client:
+            res = local_client.post(
+                f"/api/classes/{CLASS_ID}/memory/sweep/propose"
+                "?queue=Teacher%2FCopilot%20Preferences"
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body["queues"]) == {"Teacher/Copilot Preferences"}
+    assert all(
+        item["review_queue"] == "Teacher/Copilot Preferences"
+        for item in body["queues"]["Teacher/Copilot Preferences"]
+    )
 
 
 def test_memory_sweep_api_accepts_model_consolidated_card(

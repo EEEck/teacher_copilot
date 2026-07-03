@@ -233,6 +233,7 @@ export type MemorySweepCandidate = {
   signal_count: number;
   can_apply: boolean;
   review_only_reason: string;
+  warnings: string[];
 };
 export type MemorySweepProposalResponse = {
   class_id: string;
@@ -596,10 +597,17 @@ export const client = {
       method: "POST",
       body: JSON.stringify({ items }),
     }),
-  memorySweepPropose: (classId: string) =>
-    api<MemorySweepProposalResponse>(`/api/classes/${classId}/memory/sweep/propose`, {
-      method: "POST",
-    }),
+  memorySweepPropose: (classId: string, options?: { queue?: string }) => {
+    const search = options?.queue
+      ? `?queue=${encodeURIComponent(options.queue)}`
+      : "";
+    return api<MemorySweepProposalResponse>(
+      `/api/classes/${classId}/memory/sweep/propose${search}`,
+      {
+        method: "POST",
+      },
+    );
+  },
   memoryCandidateStatus: (
     classId: string,
     candidateId: string,

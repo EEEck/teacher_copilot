@@ -413,7 +413,11 @@ class BetaAuthService(BetaStorage):
         wiki_root = self.data_root / "workspaces" / workspace_id / "teacher_wiki"
         if not wiki_root.exists():
             wiki_root.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(self.seed_wiki_root, wiki_root)
+            shutil.copytree(
+                self.seed_wiki_root,
+                wiki_root,
+                ignore=shutil.ignore_patterns("workflow"),
+            )
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 """

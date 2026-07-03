@@ -747,9 +747,12 @@ def apply_memory(
 )
 async def propose_memory_sweep(
     class_id: str,
+    request: Request,
+    queue: str | None = None,
     wiki: WikiStore = Depends(get_wiki),
     ledger: MemoryCandidateLedger = Depends(get_memory_candidate_ledger),
     agents: AgentRunner = Depends(get_agents),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> MemorySweepProposalResponse:
     """Return grouped Memory Sweep candidates without writing wiki files."""
     try:
@@ -763,6 +766,25 @@ async def propose_memory_sweep(
         agents=agents,
         class_id=class_id,
         include_student_summaries=True,
+        queue=queue,
+    )
+    queue_counts = {
+        queue: len(cards) for queue, cards in result.cards_by_queue.items()
+    }
+    _record_beta_event(
+        request,
+        beta_auth,
+        event_type="memory_sweep_propose",
+        class_id=class_id,
+        app_session_id=None,
+        mode="memory",
+        payload={
+            "card_count": sum(queue_counts.values()),
+            "queue_counts": queue_counts,
+            "warning_count": len(result.warnings),
+            "warnings": result.warnings,
+            "queue": queue,
+        },
     )
     return MemorySweepProposalResponse(
         class_id=result.class_id,

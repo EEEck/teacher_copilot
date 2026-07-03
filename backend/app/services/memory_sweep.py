@@ -140,6 +140,7 @@ class MemorySweepReviewCard:
     signal_count: int = 1
     can_apply: bool = False
     review_only_reason: str = ""
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -184,6 +185,7 @@ async def propose_memory_sweep_review(
     agents: Any,
     class_id: str,
     include_student_summaries: bool = False,
+    queue: str | None = None,
 ) -> MemorySweepResult:
     """Run the two-pass Memory Sweep proposal lifecycle.
 
@@ -200,10 +202,16 @@ async def propose_memory_sweep_review(
     )
     grouped = build_sweep_proposals(candidates)
     if include_student_summaries:
-        for queue, proposals in build_student_summary_sweep_proposals(
+        for student_queue, proposals in build_student_summary_sweep_proposals(
             wiki, class_id
         ).items():
-            grouped.setdefault(queue, []).extend(proposals)
+            grouped.setdefault(student_queue, []).extend(proposals)
+    if queue:
+        grouped = {
+            review_queue: proposals
+            for review_queue, proposals in grouped.items()
+            if review_queue == queue
+        }
     if not grouped:
         return MemorySweepResult(
             class_id=class_id, subject=cls.subject, cards_by_queue={}
@@ -232,14 +240,17 @@ async def propose_memory_sweep_review(
             except Exception as exc:
                 validation_error = str(exc)
                 if attempt == 1:
-                    warnings.append(
-                        f"Memory Sweep alignment unresolved for {packet.packet_id}: {validation_error}"
+                    warning = (
+                        f"Memory Sweep alignment unresolved for {packet.packet_id}: "
+                        f"{validation_error}"
                     )
+                    warnings.append(warning)
                     all_cards.extend(
                         unresolved_cards_from_packet(
                             packet,
                             target_excerpts,
                             validation_error,
+                            warnings=[warning],
                         )
                     )
                 continue
@@ -266,15 +277,17 @@ async def propose_memory_sweep_review(
             except Exception as exc:
                 validation_error = str(exc)
                 if attempt == 1:
-                    warnings.append(
+                    warning = (
                         "Memory Sweep card generation unresolved for "
                         f"{packet.packet_id}: {validation_error}"
                     )
+                    warnings.append(warning)
                     all_cards.extend(
                         unresolved_cards_from_packet(
                             packet,
                             target_excerpts,
                             validation_error,
+                            warnings=[warning],
                         )
                     )
 
@@ -831,6 +844,7 @@ def unresolved_cards_from_packet(
     packet: MemorySweepPacket,
     target_excerpts: dict[str, str],
     reason: str,
+    warnings: list[str] | None = None,
 ) -> list[MemorySweepReviewCard]:
     cards: list[MemorySweepReviewCard] = []
     for proposal in packet.proposals:
@@ -845,6 +859,7 @@ def unresolved_cards_from_packet(
                 group_label="unresolved_alignment",
                 public_rationale="Memory Sweep alignment could not be validated.",
                 why_now=f"Unresolved Memory Sweep alignment: {reason}",
+                warnings=warnings or [],
             )
         )
     return cards
@@ -880,6 +895,7 @@ def review_card_from_proposal(
     replaces_content: str = "",
     status_recommendation: str = "promote",
     why_now: str = "",
+    warnings: list[str] | None = None,
 ) -> MemorySweepReviewCard:
     candidate_ids = list(proposal.candidate_ids)
     final_target = target or proposal.target
@@ -914,6 +930,7 @@ def review_card_from_proposal(
         signal_count=proposal.signal_count,
         can_apply=can_apply,
         review_only_reason=review_only_reason,
+        warnings=warnings or [],
     )
 
 
