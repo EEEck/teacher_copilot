@@ -17,6 +17,7 @@ TARGET_ALIASES = {
     "user.md": "teacher_profile.md",
     "copilot.md": "copilot_profile.md",
 }
+STUDENT_PAGE_RE = re.compile(r"students/s-\d{3}\.md")
 
 
 def normalize_memory_target(target: str) -> str:
@@ -25,6 +26,9 @@ def normalize_memory_target(target: str) -> str:
 
 def canonical_memory_target(target: str) -> str:
     normalized = normalize_memory_target(target)
+    if STUDENT_PAGE_RE.fullmatch(normalized):
+        sid = normalized.removesuffix(".md").rsplit("/", 1)[-1].upper()
+        return f"students/{sid}.md"
     return TARGET_ALIASES.get(normalized, normalized)
 
 
@@ -33,6 +37,16 @@ def is_subject_guide_target(target: str) -> bool:
         re.fullmatch(r"wiki/subjects/[a-z0-9_-]+\.md", normalize_memory_target(target))
         is not None
     )
+
+
+def is_student_page_target(target: str) -> bool:
+    return STUDENT_PAGE_RE.fullmatch(normalize_memory_target(target)) is not None
+
+
+def student_id_from_target(target: str) -> str | None:
+    if not is_student_page_target(target):
+        return None
+    return normalize_memory_target(target).removesuffix(".md").rsplit("/", 1)[-1].upper()
 
 
 def is_global_teacher_target(target: str) -> bool:
@@ -51,6 +65,7 @@ def is_supported_runtime_target(target: str) -> bool:
         or normalized in COMPACT_TARGETS
         or normalized == CANONICAL_REVIEW_TARGET
         or is_subject_guide_target(normalized)
+        or is_student_page_target(normalized)
     )
 
 
@@ -64,6 +79,8 @@ def memory_channel_for_target(target: str) -> str:
         return "class_evolution"
     if is_subject_guide_target(normalized):
         return "subject_concept"
+    if is_student_page_target(normalized):
+        return "student_memory"
     if normalized == CANONICAL_REVIEW_TARGET:
         return "wiki_lint"
     return "memory_sweep"

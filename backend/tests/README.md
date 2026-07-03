@@ -52,7 +52,7 @@ vars, CI notes).
 Deterministic DeepEval goldens wrap the existing trace contract scorers. No OpenAI
 credits required for the committed suite.
 
-**Golden matrix (18 deterministic total):**
+**Golden matrix (19 deterministic total):**
 
 | Family | Goldens | What it checks |
 |--------|---------|----------------|
@@ -69,6 +69,7 @@ Additional deterministic goldens:
 | **Wiki search (stub, CI)** | `9b_misconception_charge_vs_oxidation`, `9b_redox_date_range_pathfinder`, `10c_subject_bound_search` | Source-bounded wiki pathfinding and class isolation |
 | **Workflow E2E (stub, CI)** | `9b_plan_fckw_3turn_e2e`, `9b_memory_update_3turn_e2e` | Complete multi-turn workflow state, evidence, and final artifact |
 | **Memory Sweep (stub, CI)** | `9b_memory_sweep_routes_channels`, `9b_memory_sweep_subject_vs_class_boundary`, `9b_memory_sweep_rejected_stays_rejected` | Candidate queue routing, class-vs-subject write boundaries, rejected-candidate suppression |
+| **Student Summary judge (stub, CI)** | `s045_balanced_learning_and_support_trajectory` | S-045 summary preserves improving written trajectory and recent disruption as a neutral support pattern |
 
 The chat-turn family also includes `9b_ingest_turn3_ready`, which checks final
 Update Memory readiness, review phase, and pseudonymized diary output.
@@ -92,6 +93,20 @@ Memory V2 deterministic evals:
 ```powershell
 cd backend
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_memory_sweep_stub.py -v
+```
+
+Student Summary judge golden:
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_student_summary_judge.py -v
+```
+
+Optional LLM judge for that golden:
+
+```powershell
+$env:RUN_LLM_STUDENT_SUMMARY_JUDGE="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_student_summary_judge.py -v
 ```
 
 Focused Memory Sweep backend contract:

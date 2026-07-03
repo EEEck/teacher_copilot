@@ -50,7 +50,9 @@ propose, but backend code validates scope and writes only after teacher approval
 - Current class state / likely next move -> `memory/class_state.md`.
 - Year-to-date taught sequence -> `memory/taught_so_far.md`.
 - Lesson facts -> `lessons/{YYYY-MM-DD}/lesson_results.md` through ingest HITL.
-- Student-specific facts -> `students/S-###.md`, pseudonymous only.
+- Student-specific facts -> `students/S-###.md`, pseudonymous only. Each student
+  page starts with `## Student Summary` and then keeps dated observation
+  sections below it.
 
 ## Directory layout
 
@@ -69,7 +71,7 @@ wiki/classes/{class_id}/
     session_summaries.md
   students.md           # class student index / roster
   timeline.md           # chronological narrative with links to lessons
-  students/S-###.md     # entity pages (compounding observations)
+  students/S-###.md     # entity pages (durable summary + dated observations)
   lessons/{YYYY-MM-DD}/
     lesson_results.md
     lesson_plan.md
@@ -98,6 +100,9 @@ wiki/classes/{class_id}/
 2. Chat -> update diary draft -> `compile_from_diary` proposes wiki diffs.
 3. Teacher approves per file in UI -> `commit_ingest` writes **only** approved paths plus log/index rebuild.
 4. Unchecked files, such as a student entity page, are not written. There is no bypass after commit.
+5. Ingest appends dated student observations only. It does not rewrite
+   `## Student Summary`; Weekly Memory Sweep proposes those durable summary
+   updates from approved dated evidence.
 
 ### Lesson revise (not ingest HITL)
 
@@ -121,3 +126,6 @@ wiki/classes/{class_id}/
 - **Never** write curated wiki on ingest without teacher approval (`commit_ingest` per-file checkboxes). Lesson revise is an explicit teacher action that re-applies all derived files for that date.
 - Student IDs: `S-001` ... `S-999` only.
 - Do not infer sensitive facts beyond what the teacher said.
+- Student summaries must be neutral, evidence-grounded learning-trajectory
+  notes. Avoid diagnosis, grading, placement, discipline, or fixed-trait
+  labels.

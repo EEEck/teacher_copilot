@@ -21,8 +21,10 @@ from app.teacher_agent.memory_targets import (
     canonical_memory_target,
     compact_key_for_target,
     is_supported_runtime_target,
+    is_student_page_target,
     is_subject_guide_target,
     memory_channel_for_target,
+    student_id_from_target,
 )
 from app.teacher_agent.wiki_store import WikiStore
 
@@ -32,6 +34,7 @@ QUEUE_BY_CHANNEL = {
     "class_evolution": "Class Evolution",
     "class_learning_pattern": "Class Evolution",
     "subject_concept": "Subject Concepts",
+    "student_memory": "Student Memory",
     "wiki_lint": "Wiki Review",
     "memory_sweep": "Memory Sweep",
 }
@@ -50,6 +53,7 @@ SWEEP_STATUS_RECOMMENDATIONS = {
     "reject_low_signal",
     "needs_decision",
 }
+SYNTHETIC_STUDENT_SUMMARY_PREFIX = "student_summary:"
 OPERATION_TO_STATUS_RECOMMENDATION = {
     "add": "promote",
     "adjust": "promote",
@@ -179,6 +183,7 @@ async def propose_memory_sweep_review(
     ledger: MemoryCandidateLedger,
     agents: Any,
     class_id: str,
+    include_student_summaries: bool = False,
 ) -> MemorySweepResult:
     """Run the two-pass Memory Sweep proposal lifecycle.
 
@@ -194,6 +199,11 @@ async def propose_memory_sweep_review(
         include_global=True,
     )
     grouped = build_sweep_proposals(candidates)
+    if include_student_summaries:
+        for queue, proposals in build_student_summary_sweep_proposals(
+            wiki, class_id
+        ).items():
+            grouped.setdefault(queue, []).extend(proposals)
     if not grouped:
         return MemorySweepResult(
             class_id=class_id, subject=cls.subject, cards_by_queue={}
@@ -409,6 +419,73 @@ def sweep_targets(grouped: dict[str, list[MemorySweepProposal]]) -> set[str]:
     return {p.target for proposals in grouped.values() for p in proposals}
 
 
+def build_student_summary_sweep_proposals(
+    wiki: WikiStore,
+    class_id: str,
+) -> dict[str, list[MemorySweepProposal]]:
+    """Build read-only weekly review proposals from dated student observations."""
+    proposals: list[MemorySweepProposal] = []
+    sdir = wiki.students_dir(class_id)
+    if not sdir.exists():
+        return {}
+    for path in sorted(sdir.glob("S-*.md")):
+        student_id = path.stem.upper()
+        excerpt = wiki._student_sweep_excerpt(class_id, student_id)
+        dates = sorted(
+            set(re.findall(r"^##\s+(\d{4}-\d{2}-\d{2})\s*$", excerpt, re.M))
+        )
+        if not dates:
+            continue
+        target = f"students/{student_id}.md"
+        candidate_id = synthetic_student_summary_candidate_id(class_id, student_id)
+        recent_dates = dates[-4:]
+        proposals.append(
+            MemorySweepProposal(
+                candidate_id=candidate_id,
+                candidate_ids=[candidate_id],
+                review_queue="Student Memory",
+                channel="student_memory",
+                target=target,
+                section="Student Summary",
+                content=(
+                    "Review the dated observations and propose one neutral "
+                    "Student Summary sentence using balanced trajectory with "
+                    "recency bias."
+                ),
+                evidence_summary=(
+                    f"{student_id} has dated observations through {recent_dates[-1]}; "
+                    f"recent dates: {', '.join(recent_dates)}."
+                ),
+                evidence_refs=[wiki.rel_wiki(path)],
+                confidence="medium",
+                basis="repeated_behavior" if len(dates) > 1 else "inferred",
+                status="captured",
+                signal_count=len(dates),
+                current_memory_excerpt=excerpt,
+            )
+        )
+    return {"Student Memory": proposals} if proposals else {}
+
+
+def synthetic_student_summary_candidate_id(class_id: str, student_id: str) -> str:
+    return f"{SYNTHETIC_STUDENT_SUMMARY_PREFIX}{class_id}:{student_id.upper()}"
+
+
+def synthetic_student_summary_candidate_ids(
+    wiki: WikiStore,
+    class_id: str,
+) -> set[str]:
+    return {
+        proposal.candidate_id
+        for proposals in build_student_summary_sweep_proposals(wiki, class_id).values()
+        for proposal in proposals
+    }
+
+
+def is_synthetic_student_summary_candidate_id(candidate_id: str) -> bool:
+    return (candidate_id or "").startswith(SYNTHETIC_STUDENT_SUMMARY_PREFIX)
+
+
 def memory_sweep_target_excerpts(
     wiki: WikiStore,
     class_id: str,
@@ -433,6 +510,10 @@ def memory_sweep_target_excerpts(
                 excerpts[target] = wiki.read_text(path)[:1600]
         elif target.startswith("wiki/subjects/"):
             excerpts[target] = wiki.read_wiki_page(target, max_chars=1600)
+        elif is_student_page_target(target):
+            student_id = student_id_from_target(target)
+            if student_id:
+                excerpts[target] = wiki._student_sweep_excerpt(class_id, student_id)
         elif target == "canonical_wiki":
             excerpts[target] = "(review-only canonical wiki issue)"
     return excerpts
@@ -851,6 +932,8 @@ def memory_sweep_apply_policy(target: str, operation: str) -> tuple[bool, str]:
     if compact_key_for_target(normalized):
         return True, ""
     if is_subject_guide_target(normalized):
+        return True, ""
+    if is_student_page_target(normalized):
         return True, ""
     return False, f"unsupported target: {target}"
 

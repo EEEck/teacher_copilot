@@ -248,6 +248,15 @@ class WikiStore:
             self, class_id, student_id, lesson_date, bullets
         )
 
+    def _student_summary_note(self, text):
+        return rollups._student_summary_note(text)
+
+    def _set_student_summary(self, class_id, student_id, summary):
+        return rollups._set_student_summary(self, class_id, student_id, summary)
+
+    def _student_sweep_excerpt(self, class_id, student_id):
+        return rollups._student_sweep_excerpt(self, class_id, student_id)
+
     def _rebuild_students_index(self, class_id, previews):
         return rollups._rebuild_students_index(self, class_id, previews)
 

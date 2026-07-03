@@ -242,8 +242,10 @@ Writes:
 
 - Only `diary_markdown` and backend-owned `MemoryRuntime` state during chat.
 - Wiki updates happen only after teacher approval through the commit flow.
-- Commit/revise may update student pages, `students.md`, and the other class
-  roll-ups for the affected lesson.
+- Commit/revise may update dated observation sections in student pages,
+  `students.md`, and the other class roll-ups for the affected lesson. Normal
+  Update Memory does not rewrite `## Student Summary`; it captures dated
+  evidence for later review.
 
 Runtime context manager:
 
@@ -342,8 +344,8 @@ Browsing policy:
 Purpose:
 
 - Help the teacher periodically review captured durable-memory candidates
-  across class evolution, teacher/copilot preferences, subject concepts, and
-  wiki-review queues.
+  across class evolution, teacher/copilot preferences, subject concepts,
+  student summaries, and wiki-review queues.
 - Keep slow memory promotion separate from normal lesson-planning and
   update-memory chat turns.
 - Make each review card understandable enough for a nontechnical teacher to
@@ -353,12 +355,18 @@ Reads:
 
 - Open rows from the application-owned memory candidate ledger.
 - Current excerpts from the target memory pages for comparison and dedupe.
+- Student-summary review packets are also derived read-only from approved
+  `students/S-###.md` dated observations so the weekly sweep can promote recent
+  event evidence into durable per-student summaries.
 
 Writes:
 
 - `/memory/sweep/propose` writes nothing.
 - `/memory/sweep/apply` accepts a teacher-reviewed decision set, applies
   approved memory writes first, then updates represented ledger rows.
+- Approved student-summary decisions update only `## Student Summary` in the
+  affected `students/S-###.md`, then rebuild `students.md` from those approved
+  summaries.
 - Candidate status changes write only ledger status and remain available for
   compatibility/debug operations.
 - Durable wiki memory writes only through deterministic, teacher-approved
@@ -369,6 +377,10 @@ Proposal behavior:
 - Backend Memory Sweep grouping owns candidate identity, channel, review queue,
   target, and status. The SQLite ledger stores evidence rows; the sweep service
   turns them into bounded target/scope packets.
+- Student Memory cards use targets shaped like `students/S-###.md` and section
+  `Student Summary`. Their content must be one neutral sentence about current
+  learning trajectory and useful support patterns, with recency bias balanced
+  against the longer observation trajectory.
 - A review card may represent multiple related ledger rows. In that case,
   `card_id` is the review-card identity, `candidate_id` is the primary row,
   `candidate_ids` lists all represented rows, and `signal_count` is the count
@@ -406,6 +418,9 @@ Proposal behavior:
   deterministic Memory Sweep grouping and returns unresolved warning cards.
 - `canonical_wiki` remains review-only; it is never converted into a direct
   write target by the proposer.
+- Student summaries must avoid sensitive or high-stakes profiling language:
+  no diagnosis, grading, placement, discipline, fixed ability labels, or claims
+  beyond approved dated observations.
 
 ## Tool Result Contract
 
