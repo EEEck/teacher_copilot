@@ -18,7 +18,9 @@ This folder contains the Next.js app and shared UI code.
 - `components/ui/` - generic primitives. Keep these domain-free.
 - `components/layout/` - page/app chrome.
 - `components/assistant-ui/` - chat runtime, thread UI, tool display, streaming
-  event handling; see `components/assistant-ui/README.md` for provenance.
+  event handling; adapted from
+  [`assistant-ui/assistant-ui`](https://github.com/assistant-ui/assistant-ui).
+  See `components/assistant-ui/README.md` for provenance and update notes.
 - `components/klassenpilot/` - domain-specific workflow components.
 
 ## Library Code
@@ -37,6 +39,9 @@ This folder contains the Next.js app and shared UI code.
 - Memory Sweep UI/API changes should also update
   `../../docs/mem_v2/frontend.md`.
 - Keep assistant-ui integration reusable across ingest/plan workflows.
+- When adding richer inline chat artifacts later, first inspect upstream
+  assistant-ui patterns and adapt them behind KlassenPilot's artifact/review
+  contracts instead of baking product behavior into vendor-style primitives.
 - Keep typed memory hint construction in page/domain code, not low-level UI
   primitives. The backend remains the source of truth for whether a hinted
   lesson target is confirmed.

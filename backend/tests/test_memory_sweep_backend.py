@@ -287,7 +287,9 @@ def test_memory_sweep_sqlite_groups_applies_and_preserves_boundaries(tmp_path, w
     assert "cand_subject_oxidation_sequence_1" in next_ids
 
 
-def test_memory_sweep_snoozed_candidates_reappear_after_seven_days(tmp_path):
+def test_memory_sweep_snoozed_candidates_reappear_after_new_evidence_or_seven_days(
+    tmp_path,
+):
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()
     active = _teacher_behavior_row(
@@ -330,6 +332,29 @@ def test_memory_sweep_snoozed_candidates_reappear_after_seven_days(tmp_path):
 
     assert active.id in candidate_ids
     assert snoozed.id not in candidate_ids
+
+    newer_evidence = _teacher_behavior_row(
+        "newer_teacher_preference_evidence",
+        update="Use compact planning summaries when the teacher asks for them.",
+        evidence="Teacher repeated the preference after the card was deferred.",
+        created_at="2026-06-25T09:10:00Z",
+    )
+    ledger.add(newer_evidence)
+
+    grouped_after_new_evidence = ledger.propose_for_sweep(
+        class_id=CLASS_ID,
+        subject="chemie",
+        now="2026-06-25T09:11:00Z",
+    )
+    candidate_ids_after_new_evidence = {
+        candidate_id
+        for proposals in grouped_after_new_evidence.values()
+        for proposal in proposals
+        for candidate_id in proposal.candidate_ids
+    }
+
+    assert newer_evidence.id in candidate_ids_after_new_evidence
+    assert snoozed.id in candidate_ids_after_new_evidence
 
     grouped_after_snooze = ledger.propose_for_sweep(
         class_id=CLASS_ID,

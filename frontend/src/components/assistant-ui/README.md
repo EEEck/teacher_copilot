@@ -1,6 +1,7 @@
 # Assistant UI Provenance
 
-This folder contains KlassenPilot's local chat UI shell. It is adapted from the
+This folder contains KlassenPilot's local chat UI shell. It is adapted from
+[`assistant-ui/assistant-ui`](https://github.com/assistant-ui/assistant-ui), the
 assistant-ui React/shadcn-style component registry, then customized for the
 KlassenPilot artifact sessions.
 
@@ -18,6 +19,9 @@ Maintenance notes:
 
 - Treat these files as adapted/vendor-style UI components, not as product
   behavior contracts.
+- For future inline chat artifacts, attachments, message actions, or richer
+  tool/result displays, inspect upstream assistant-ui examples first and adapt
+  the smallest useful pattern locally.
 - Keep KlassenPilot-specific session, artifact, safety, and SSE behavior in the
   local runtime integration files and backend stream policy.
 - Raw reasoning/tool panels are for development diagnostics. In production the

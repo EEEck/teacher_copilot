@@ -30,6 +30,18 @@ the browser.
 - The memory page displays the backend `memory_state` target/phase summary
   above the shared artifact workspace.
 
+## Assistant UI provenance
+
+The chat surface is built on [`assistant-ui/assistant-ui`](https://github.com/assistant-ui/assistant-ui)
+via `@assistant-ui/react`, `@assistant-ui/react-markdown`, and locally adapted
+shadcn-style components under `src/components/assistant-ui/`.
+
+Treat that folder as an adapted upstream component layer: useful for thread UI,
+streaming chat affordances, attachments, markdown rendering, tool panels, and
+future inline chat artifacts. Keep KlassenPilot-specific artifact state,
+review/apply behavior, stream sanitization, and backend contracts outside the
+vendor-style components so upstream patterns can still be borrowed later.
+
 ## Folder Map
 
 - `src/app/` - Next.js App Router pages and route-specific UI.

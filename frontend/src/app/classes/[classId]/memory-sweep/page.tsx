@@ -28,7 +28,7 @@ const MEMORY_SWEEP_QUEUES = [
   "Memory Sweep",
 ];
 const REVIEW_LATER_TOOLTIP =
-  "Hide for 7 days while the system waits for more evidence. It will appear again after that if it still needs review.";
+  "Hide while the system waits for more evidence. It returns when newer matching evidence arrives, or after 7 days if it still needs review.";
 
 function canApply(candidate: MemorySweepCandidate): boolean {
   return Boolean(candidate.can_apply);
@@ -268,8 +268,8 @@ export default function MemorySweepPage() {
                   Use <span className="font-medium">Add suggestions</span> to
                   preselect suggestions the backend can safely write. Cards without
                   an <span className="font-medium">Add memory</span> button still need
-                  a decision: already in memory, not needed, review later for 7
-                  days, or remove.
+                  a decision: already in memory, not needed, review later while
+                  more evidence accumulates, or remove.
                   After submit, only suggestions that still need action are shown again.
                 </p>
               </div>
@@ -469,8 +469,8 @@ export default function MemorySweepPage() {
                             <p className="text-xs text-muted-foreground">
                               This suggestion cannot be added automatically. Choose
                               whether it is already in memory, not needed, should be
-                              reviewed later for 7 days, or should be removed from the
-                              review list.
+                              reviewed later while more evidence accumulates, or should
+                              be removed from the review list.
                             </p>
                           </div>
                         )}

@@ -53,6 +53,52 @@ workflow runtime object. Planning uses `PlanRuntime`; Update Memory uses
 runtime, prompt trace, stream, final-event, and trace-contract hooks instead of
 adding mode-specific branches to the session core.
 
+## Beta identity, telemetry, and workspace roots
+
+Beta mode keeps one FastAPI app process but resolves each request to a
+`RequestIdentity(tester_id, workspace_id, role, wiki_root)`. In local beta,
+invite-code login writes an opaque HTTP-only session cookie; the API dependency
+resolves that cookie to a workspace-scoped wiki root under `BETA_DATA_ROOT`.
+
+Current beta storage shape:
+
+- `beta.sqlite3` stores testers, workspaces, sessions, visible chat messages,
+  app events, artifact snapshots, and wiki commit/diff metadata.
+- `workspaces/{workspace_id}/teacher_wiki/` stores the tester's copied markdown
+  wiki.
+- `app.services.beta_cli` provisions testers and renders Markdown operator
+  reports.
+- Route handlers record telemetry at workflow boundaries, but durable wiki
+  writes still go only through teacher-approved apply/commit endpoints.
+
+The production path should preserve the `RequestIdentity` boundary. AWS hosting
+can move workspace roots to EFS, metadata/telemetry to Postgres/Aurora, and
+exports to S3 without changing route-level access patterns. Later OAuth/OIDC
+providers such as Cognito, Auth.js, Clerk, or Auth0 should replace only the
+invite-code/session resolver, then map provider users back into
+`RequestIdentity` before class data is accessed.
+
+## Memory Sweep review contract
+
+Memory Sweep is the slow consolidation layer between captured session signals
+and durable wiki memory. Captured candidates live in the SQLite candidate
+ledger; the sweep proposer groups active candidates into teacher-reviewable
+cards and never writes wiki files directly.
+
+Decision semantics:
+
+- `Add memory` writes supported targets, then marks represented rows `applied`.
+- `Already in memory` marks rows `applied` without a file write.
+- `Not needed` marks rows `rejected`.
+- `Remove` marks rows `deleted`.
+- `Review later` marks rows `snoozed` and sets `snoozed_until` to seven days
+  after review.
+
+Normal sweep proposals include active rows plus snoozed rows only when either
+their `snoozed_until` time has passed or a newer candidate appears in the same
+memory lane after the snooze. This keeps the review loop short after submit
+while still letting deferred signals compound when more evidence arrives.
+
 ## Agent debug CLI
 
 Interactive multi-turn chat against the real `AgentRunner` (no FastAPI). Shows reasoning, wiki tool calls, and **full** tool results (not capped like browser SSE).

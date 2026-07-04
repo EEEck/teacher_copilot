@@ -238,10 +238,28 @@ class MemoryCandidateLedger:
         now: str | None = None,
     ) -> list[MemoryCandidateRow]:
         review_now = now or _utc_now()
+        active_statuses = REVIEW_STATUSES
+        active_placeholders = ", ".join("?" for _ in active_statuses)
         where = [
-            "(status IN (?, ?, ?) OR (status = ? AND snoozed_until IS NOT NULL AND snoozed_until <= ?))"
+            f"""(
+              status IN ({active_placeholders})
+              OR (status = ? AND snoozed_until IS NOT NULL AND snoozed_until <= ?)
+              OR (
+                status = ?
+                AND EXISTS (
+                  SELECT 1 FROM memory_candidates newer
+                  WHERE newer.status IN ({active_placeholders})
+                    AND newer.created_at > memory_candidates.updated_at
+                    AND COALESCE(newer.class_id, '') = COALESCE(memory_candidates.class_id, '')
+                    AND COALESCE(newer.subject, '') = COALESCE(memory_candidates.subject, '')
+                    AND newer.channel = memory_candidates.channel
+                    AND newer.target = memory_candidates.target
+                    AND newer.section = memory_candidates.section
+                )
+              )
+            )"""
         ]
-        params = [*REVIEW_STATUSES, "snoozed", review_now]
+        params = [*active_statuses, "snoozed", review_now, "snoozed", *active_statuses]
         if class_id is not None:
             if include_global:
                 where.append("(class_id = ? OR class_id IS NULL)")
