@@ -10,8 +10,10 @@ contract still lives in `../agent_contracts.md`; Memory V2 background is in
 
 1. `design.md` — why V3 exists, what V2 got right and wrong (with beta
    evidence), the V3 architecture, and the borrowed-code table.
-2. `implementation_plan.md` — phased build plan with file-level touchpoints.
-3. `testing.md` — test-driven approach: offline fixtures from real beta
+2. `learnings.md` — post-implementation key learnings: what the beta round
+   taught us, what only live runs revealed, and which lessons generalize.
+3. `implementation_plan.md` — phased build plan with file-level touchpoints.
+4. `testing.md` — test-driven approach: offline fixtures from real beta
    ledger data, DeepEval goldens, and live drift traces.
 
 ## One-Paragraph Summary

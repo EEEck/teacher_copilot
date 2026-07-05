@@ -275,6 +275,14 @@ ledger, then feed only reviewed candidates into memory apply.
 
 ## Memory Sweep Lessons From The MBB/Executive Failure
 
+> Historical note (2026-07): this section describes the Memory V2 two-pass
+> sweep. The two-pass machinery was retired in Memory V3 after the first beta
+> round — see "Memory V3: Why The Two-Pass Sweep Was Retired" below and
+> `mem_v3/learnings.md` for the full post-mortem. The *lessons* in this
+> section (normalization as a first-class contract, observable abstractions,
+> teach-the-contract prompts) survived; the specific two-pass implementation
+> did not.
+
 The 2026 SOTA pattern for agent memory is:
 
 > observe -> normalize -> stage -> consolidate -> inject only when relevant.
@@ -382,6 +390,69 @@ The broader architecture lesson is:
 
 > Use the model for semantic grouping, but force the grouping to be observable,
 > validated, and testable before it can affect memory.
+
+## Memory V3: Why The Two-Pass Sweep Was Retired
+
+The first beta round (July 2026) stress-tested the two-pass sweep with real
+teacher behavior and it failed in production despite passing its tests. One
+day of testing produced ~12 ledger rows encoding ~4 claims, which became 6+
+review cards plus 4 raw internal warnings — several cards unresolvable. The
+full post-mortem lives in `mem_v3/learnings.md`; the compressed lessons:
+
+1. **The dedup LLM never saw the duplicates together.** Packets were keyed on
+   `(queue, target, section)`, but `section` was a free-form string invented
+   by the capture LLM. The same claim landed in `class_learning_profile`,
+   `organic_chemistry`, and `what_worked_well` — three isolated alignment
+   calls that could not merge what they could not see. An alignment pass is
+   only as good as its context window's contents.
+
+2. **Deterministic semantic validators created unsatisfiable states.** The
+   token-overlap gates (merge forbidden when labels overlap an existing
+   bullet; adjust/already_covered *require* overlap) deadlocked on class-state
+   transitions, where the new claim by definition shares no words with the
+   old bullet. Live traces showed the model flip-flopping between two
+   decisions that were both rejected. Validators should check structure
+   (coverage, id existence, exact quotes); semantics belong to the model,
+   with teacher review as the net.
+
+3. **Failure handling amplified the problem.** A failed packet emitted one
+   `needs_decision` card per candidate with raw internal ids — one
+   over-constrained rejection became four zombie cards. Failures must
+   collapse, not multiply.
+
+4. **Capture had a gas pedal and no brake.** The V2 fix for the lost-MBB bug
+   over-corrected into per-turn re-emission with no cross-session awareness.
+   V3 added the brakes: teacher-words-only grounding, silence as the default,
+   backend downgrade of unscoped "explicit" claims, insert-time folding, a
+   reinforcement gate, and silent decay.
+
+5. **Token economics were the hidden architect.** Packets, per-section
+   splitting, and the two-pass structure all existed to control context size
+   — for a sweep that runs about once a week on a teacher click. Pricing the
+   actual call frequency dissolved most of the architecture: one big
+   high-reasoning call over everything replaced both passes, and the mem0
+   ID-referencing contract (enumerate current bullets, operations must
+   reference input ids) made validation mechanical.
+
+6. **Model strength is part of the contract.** Control-tested live: the mini
+   model repurposes unrelated bullets as "updates" even with a tightened
+   prompt; the strong model passes the full MBB/executive trace. Both sweep
+   passes had silently been running on the fast model. Consolidation quality
+   is bounded by the model, not just the prompt — pin `OPENAI_SWEEP_MODEL`.
+
+7. **Live runs catch what offline tests cannot.** Two defects surfaced only
+   against the real model: unrelated-bullet repurposing and no-change student
+   summary "updates". Each got a deterministic guard plus a prompt rule. The
+   recorded beta ledger is now the offline fixture, and telemetry
+   (`memory_sweep_propose` card/warning counts) is the production metric.
+
+The V2 lesson still holds — semantic judgment in the model, write safety in
+deterministic code — but V3 sharpened where the line sits:
+
+> Deterministic code owns structure, budgets, and history (folding, gates,
+> id checks, no-op demotion). The model owns meaning — given one context
+> that actually contains everything it must reconcile, and enough model to
+> reconcile it.
 
 This mirrors the OpenClaw-style "working notes -> consolidation -> reviewed
 memory" pattern and the Hermes-style discipline of bounded curated memory. The
