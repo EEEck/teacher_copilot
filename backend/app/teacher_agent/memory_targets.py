@@ -69,6 +69,73 @@ def is_supported_runtime_target(target: str) -> bool:
     )
 
 
+# Mem V3: fixed section vocabulary per target (docs/mem_v3/design.md lane 1).
+# Capture LLMs invent section names freely; free-form sections fragment
+# cluster keys and sweep grouping, so ledger inserts normalize onto this
+# vocabulary. First entry per target is the default bucket.
+SECTION_VOCABULARY: dict[str, tuple[str, ...]] = {
+    "class_state.md": (
+        "class_notes",
+        "current_unit",
+        "student_participation",
+        "next_focus",
+    ),
+    "teaching_patterns.md": (
+        "class_learning_profile",
+        "what_worked_well",
+        "what_didnt_work",
+    ),
+    "copilot_profile.md": (
+        "planning_patterns",
+        "avoid_rules",
+        "structuring_lessons",
+        "communication",
+    ),
+    "teacher_profile.md": (
+        "communication",
+        "lesson_style",
+        "language",
+    ),
+    "planning_brief.md": ("planning_notes",),
+    "taught_so_far.md": ("sequence",),
+}
+
+_SECTION_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
+def _section_tokens(value: str) -> set[str]:
+    return {
+        token
+        for token in _SECTION_TOKEN_RE.findall((value or "").lower())
+        if len(token) >= 3
+    }
+
+
+def normalize_section(target: str, section: str) -> str:
+    """Map a free-form section name onto the target's fixed vocabulary.
+
+    Exact (snake-normalized) matches win; otherwise the vocabulary entry with
+    the largest token overlap; otherwise the target's default bucket.
+    Targets without a vocabulary keep their snake-normalized section.
+    """
+    canonical_target = canonical_memory_target(target)
+    snake = "_".join(_SECTION_TOKEN_RE.findall((section or "").lower()))
+    vocabulary = SECTION_VOCABULARY.get(canonical_target)
+    if not vocabulary:
+        return snake or "notes"
+    if snake in vocabulary:
+        return snake
+    tokens = _section_tokens(snake)
+    best: tuple[int, str] | None = None
+    for entry in vocabulary:
+        overlap = len(tokens & _section_tokens(entry))
+        if overlap > 0 and (best is None or overlap > best[0]):
+            best = (overlap, entry)
+    if best is not None:
+        return best[1]
+    return vocabulary[0]
+
+
 def memory_channel_for_target(target: str) -> str:
     normalized = canonical_memory_target(target)
     if normalized in TEACHER_PROFILE_TARGETS or normalized in COPILOT_PROFILE_TARGETS:

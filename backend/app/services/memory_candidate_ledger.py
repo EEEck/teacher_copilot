@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -20,6 +21,7 @@ from app.teacher_agent.memory_targets import (
     is_global_teacher_target,
     is_supported_runtime_target,
     memory_channel_for_target,
+    normalize_section,
 )
 
 if TYPE_CHECKING:
@@ -36,6 +38,10 @@ VALID_STATUSES = {
     "snoozed",
     "deleted",
     "expired",
+    # Mem V3 insert-time folding outcomes (docs/mem_v3/design.md lane 1):
+    "duplicate",  # exact re-capture of an open claim; kept for audit only
+    "suppressed",  # re-capture of a teacher-rejected claim (non-explicit)
+    "already_covered",  # re-capture of an already-applied claim
 }
 
 OPEN_STATUSES = ("captured", "grouped", "proposed", "snoozed")
@@ -560,3 +566,149 @@ def _utc_now() -> str:
         .isoformat()
         .replace("+00:00", "Z")
     )
+
+
+# --- Mem V3 insert-time folding (docs/mem_v3/design.md lane 1) --------------
+#
+# Deterministic, no LLM: rephrasings of an open claim join its cluster,
+# re-captures of applied/rejected claims are neutralized on arrival, so the
+# sweep only ever sees one open cluster per underlying claim.
+
+# Calibrated on the recorded beta over-capture fixture
+# (tests/fixtures/mem_v3/organic_chemistry_ledger.json): with stemmed content
+# tokens and the overlap coefficient, rephrasings of the same claim score
+# 0.56–1.00 while genuinely different claims score 0.10–0.25.
+NEAR_DUPLICATE_OVERLAP = 0.55
+
+_CONTENT_STOPWORDS = {
+    "the", "and", "for", "with", "that", "this", "into", "from", "are",
+    "was", "were", "has", "have", "had", "does", "not", "but", "when",
+    "should", "must", "can", "will", "more", "than", "very", "also",
+    "only", "all", "its", "their", "them", "they", "she", "him", "her",
+    "his", "you", "your", "our", "out", "use", "used", "using",
+}
+
+_STEM_SUFFIXES = ("ing", "es", "ed", "s")
+
+
+def _stem(token: str) -> str:
+    for suffix in _STEM_SUFFIXES:
+        if token.endswith(suffix) and len(token) - len(suffix) >= 3:
+            return token[: len(token) - len(suffix)]
+    return token
+
+
+def _content_tokens(text: str) -> frozenset[str]:
+    return frozenset(
+        _stem(token)
+        for token in re.findall(r"[a-z0-9]+", (text or "").lower())
+        if len(token) >= 3 and token not in _CONTENT_STOPWORDS
+    )
+
+
+def _normalized_update(text: str) -> str:
+    return " ".join((text or "").strip().lower().split())
+
+
+def _content_similarity(a: frozenset[str], b: frozenset[str]) -> float:
+    """Overlap coefficient — robust when one phrasing is much longer."""
+    if not a or not b:
+        return 0.0
+    return len(a & b) / min(len(a), len(b))
+
+
+def _same_scope(a: MemoryCandidateRow, b: MemoryCandidateRow) -> bool:
+    if is_global_teacher_target(a.target):
+        return True
+    return (a.class_id or a.subject or "global") == (
+        b.class_id or b.subject or "global"
+    )
+
+
+def insert_with_folding(
+    ledger: MemoryCandidateLedger, candidate: MemoryCandidateRow
+) -> MemoryCandidateRow:
+    """Store a candidate with deterministic dedup against ledger history.
+
+    Outcomes (by precedence):
+    - matches an ``applied`` row     -> stored as ``already_covered``
+    - matches a ``rejected`` row     -> stored as ``suppressed`` unless the
+      new capture is an explicit teacher ask (``source=teacher_explicit``)
+    - exact text match to an open row -> stored as ``duplicate``
+    - near-duplicate of an open row  -> stored open, adopting the matched
+      row's cluster_key (reinforcement: the cluster grows instead of a new
+      claim appearing)
+    - otherwise                      -> stored as-is (new claim)
+
+    Sections are normalized onto the per-target vocabulary first so
+    free-form LLM section names cannot fragment clusters.
+    """
+    from dataclasses import replace as _replace
+
+    candidate = _replace(
+        candidate,
+        section=normalize_section(candidate.target, candidate.section),
+    )
+    canonical_target = canonical_memory_target(candidate.target)
+    new_norm = _normalized_update(candidate.candidate_update)
+    new_tokens = _content_tokens(candidate.candidate_update)
+    explicit = candidate.source == "teacher_explicit"
+
+    existing = [
+        row
+        for row in ledger.list_candidates()
+        if canonical_memory_target(row.target) == canonical_target
+        and _same_scope(candidate, row)
+    ]
+
+    applied_match: MemoryCandidateRow | None = None
+    rejected_match: MemoryCandidateRow | None = None
+    open_exact: MemoryCandidateRow | None = None
+    open_near: MemoryCandidateRow | None = None
+    for row in sorted(existing, key=lambda r: r.created_at, reverse=True):
+        exact = _normalized_update(row.candidate_update) == new_norm
+        similar = exact or (
+            _content_similarity(new_tokens, _content_tokens(row.candidate_update))
+            >= NEAR_DUPLICATE_OVERLAP
+        )
+        if not similar:
+            continue
+        if row.status == "applied" and applied_match is None:
+            applied_match = row
+        elif row.status == "rejected" and rejected_match is None:
+            rejected_match = row
+        elif row.status in OPEN_STATUSES:
+            if exact and open_exact is None:
+                open_exact = row
+            elif open_near is None:
+                open_near = row
+
+    if applied_match is not None:
+        candidate = _replace(
+            candidate,
+            status="already_covered",
+            cluster_key=applied_match.cluster_key or candidate.cluster_key,
+            rejection_reason=f"auto: duplicate of applied candidate {applied_match.id}",
+        )
+    elif rejected_match is not None and not explicit:
+        candidate = _replace(
+            candidate,
+            status="suppressed",
+            cluster_key=rejected_match.cluster_key or candidate.cluster_key,
+            rejection_reason=f"auto: matches rejected candidate {rejected_match.id}",
+        )
+    elif open_exact is not None:
+        candidate = _replace(
+            candidate,
+            status="duplicate",
+            cluster_key=open_exact.cluster_key or candidate.cluster_key,
+            rejection_reason=f"auto: exact duplicate of {open_exact.id}",
+        )
+    elif open_near is not None:
+        candidate = _replace(
+            candidate,
+            cluster_key=open_near.cluster_key or candidate.cluster_key,
+        )
+
+    ledger.add(candidate)
+    return candidate
