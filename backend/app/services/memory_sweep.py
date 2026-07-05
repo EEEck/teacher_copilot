@@ -1283,3 +1283,192 @@ def _chunks(
 ) -> Iterable[list[MemorySweepProposal]]:
     for index in range(0, len(values), size):
         yield values[index : index + size]
+
+
+# --- Mem V3 single-call consolidation contract (docs/mem_v3/design.md lane 3)
+#
+# The sweep's one high-reasoning call returns ID-referenced operations
+# against the enumerated current-memory bullets (mem0-style
+# ADD/UPDATE/DELETE/NONE, Apache-2.0 pattern). Validation here is
+# STRUCTURAL ONLY, restoring the docs/2sweep_idea.md §7 contract: no
+# lexical token-overlap second-guessing of the model's semantics — the
+# teacher review is the safety net.
+
+CONSOLIDATION_OPERATIONS = {"add", "update", "delete", "none"}
+
+
+@dataclass(frozen=True)
+class ConsolidationOp:
+    """One validated consolidation decision from the sweep call."""
+
+    claim_ids: list[str]
+    operation: str  # add | update | delete | none
+    target: str
+    section: str
+    memory_id: str | None = None
+    new_text: str = ""
+    rationale: str = ""
+
+
+@dataclass(frozen=True)
+class ConsolidationFailureNotice:
+    """Single teacher-facing notice replacing per-candidate zombie cards."""
+
+    message: str
+    claim_count: int
+
+
+def _op_field(op: Any, name: str, default: Any = None) -> Any:
+    if isinstance(op, dict):
+        return op.get(name, default)
+    return getattr(op, name, default)
+
+
+def validate_consolidation_ops(
+    ops: Iterable[Any],
+    memory_index: dict[str, str],
+    claim_ids: set[str],
+) -> list[ConsolidationOp]:
+    """Structurally validate the single-call sweep output.
+
+    Checks: known operations; update/delete reference an existing memory id
+    from the enumerated index; update/add carry new_text; every input claim
+    id is accounted for exactly once across operations. Raises ValueError
+    with an actionable message (fed back to the model for one retry).
+    """
+    validated: list[ConsolidationOp] = []
+    assigned: list[str] = []
+    for op in ops or []:
+        operation = str(_op_field(op, "operation", "") or "").strip().lower()
+        if operation not in CONSOLIDATION_OPERATIONS:
+            raise ValueError(f"unsupported consolidation operation: {operation!r}")
+        op_claims = [
+            str(cid).strip()
+            for cid in (_op_field(op, "claim_ids", []) or [])
+            if str(cid).strip()
+        ]
+        if not op_claims:
+            raise ValueError(f"{operation} operation lists no claim_ids")
+        memory_id_raw = _op_field(op, "memory_id")
+        memory_id = str(memory_id_raw).strip() if memory_id_raw else None
+        new_text = str(_op_field(op, "new_text", "") or "").strip()
+
+        if operation in {"update", "delete"}:
+            if not memory_id:
+                raise ValueError(f"{operation} operation requires a memory_id")
+            if memory_id not in memory_index:
+                raise ValueError(
+                    f"unknown memory id {memory_id}: reference input memory ids only"
+                )
+        if operation in {"update", "add"} and not new_text:
+            raise ValueError(f"{operation} operation requires new_text")
+
+        assigned.extend(op_claims)
+        validated.append(
+            ConsolidationOp(
+                claim_ids=op_claims,
+                operation=operation,
+                target=str(_op_field(op, "target", "") or "").strip(),
+                section=str(_op_field(op, "section", "") or "").strip(),
+                memory_id=memory_id,
+                new_text=new_text,
+                rationale=str(_op_field(op, "rationale", "") or "").strip(),
+            )
+        )
+
+    if len(assigned) != len(set(assigned)):
+        raise ValueError("a claim id was assigned to more than one operation")
+    assigned_set = set(assigned)
+    if assigned_set != set(claim_ids):
+        missing = sorted(set(claim_ids) - assigned_set)
+        extra = sorted(assigned_set - set(claim_ids))
+        raise ValueError(
+            f"invalid claim coverage: missing={missing}, extra={extra}"
+        )
+    return validated
+
+
+def consolidation_failure_notice(
+    reason: str, claim_count: int
+) -> ConsolidationFailureNotice:
+    """One plain-language notice for a failed consolidation run.
+
+    Raw internal reasons (validator errors, card ids) go to logs, never to
+    the teacher-facing payload.
+    """
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "Memory Sweep consolidation unresolved (%d claims): %s", claim_count, reason
+    )
+    return ConsolidationFailureNotice(
+        message=(
+            f"The sweep could not consolidate {claim_count} suggestions in "
+            "this run. Nothing was lost — run the sweep again, or review "
+            "them later once more evidence has accumulated."
+        ),
+        claim_count=claim_count,
+    )
+
+
+def enumerate_memory_bullets(markdown: str, *, prefix: str = "M") -> dict[str, str]:
+    """Enumerate a memory file's bullets with ephemeral call-time ids.
+
+    No file-format change: ids exist only for one consolidation call so the
+    model can reference bullets precisely (UPDATE/DELETE by id) and the
+    backend can validate references mechanically.
+    """
+    index: dict[str, str] = {}
+    counter = 0
+    for line in (markdown or "").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            continue
+        text = stripped[2:].strip()
+        if not text:
+            continue
+        counter += 1
+        index[f"{prefix}{counter}"] = text
+    return index
+
+
+def claims_from_clusters(
+    clusters: list[list[MemoryCandidateRow]],
+    now: Any,
+) -> list[dict[str, Any]]:
+    """Turn gate-passing ledger clusters into the sweep call's claim payload.
+
+    One claim per cluster: the most recent phrasing represents the claim,
+    reinforcement metadata (signal/session counts, first/last seen) gives the
+    model the evidence weight, and candidate ids keep apply/status updates
+    traceable back to ledger rows.
+    """
+    from app.services.memory_gate import cluster_score
+
+    claims: list[dict[str, Any]] = []
+    for position, cluster in enumerate(clusters, start=1):
+        if not cluster:
+            continue
+        newest = max(cluster, key=lambda row: row.created_at)
+        claims.append(
+            {
+                "claim_id": f"C{position}",
+                "cluster_key": newest.cluster_key or newest.id,
+                "target": canonical_memory_target(newest.target),
+                "section": newest.section,
+                "text": newest.candidate_update,
+                "evidence_summary": newest.evidence_summary,
+                "signal_count": len(cluster),
+                "session_count": len(
+                    {row.session_id for row in cluster if row.session_id}
+                ),
+                "first_seen": min(row.created_at for row in cluster),
+                "last_seen": newest.created_at,
+                "explicit": any(
+                    row.source == "teacher_explicit" for row in cluster
+                ),
+                "score": round(cluster_score(cluster, now), 3),
+                "candidate_ids": [row.id for row in cluster],
+            }
+        )
+    return claims
