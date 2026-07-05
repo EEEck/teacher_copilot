@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
+import { MemorySweepBrief } from "@/components/klassenpilot/memory-sweep-brief";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -113,6 +114,175 @@ function buildDecision(
   };
 }
 
+function CandidateCard({
+  candidate,
+  draft,
+  decision,
+  busy,
+  onDraftChange,
+  onDecision,
+  onClear,
+}: {
+  candidate: MemorySweepCandidate;
+  draft: string;
+  decision: MemorySweepDecision | undefined;
+  busy: boolean;
+  onDraftChange: (value: string) => void;
+  onDecision: (action: MemorySweepDecision["action"]) => void;
+  onClear: () => void;
+}) {
+  const applicable = canApply(candidate);
+  return (
+    <Card id={cardDomId(candidate)} className="scroll-mt-6">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">{candidate.target}</CardTitle>
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <span>{candidate.section}</span>
+          <span>{candidate.channel}</span>
+          <span>{candidate.basis}</span>
+          <span>{candidate.confidence} confidence</span>
+          <span>{candidate.operation ?? "add"}</span>
+          {candidate.group_label && <span>{candidate.group_label}</span>}
+          <span>{candidate.status_recommendation}</span>
+          {candidate.signal_count > 1 && (
+            <span>{candidate.signal_count} signals</span>
+          )}
+          {!applicable && (
+            <span>{candidate.review_only_reason || "review only"}</span>
+          )}
+          {decision && <span>selected: {decision.action}</span>}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {applicable ? (
+          <div className="space-y-3">
+            {(candidate.operation ?? "add") === "adjust" && (
+              <div className="rounded border bg-muted/40 p-3 text-xs">
+                <div className="mb-1 font-medium text-foreground">Replace</div>
+                <p className="whitespace-pre-wrap text-muted-foreground">
+                  {candidate.replaces_content || "Missing replacement source"}
+                </p>
+                <div className="mb-1 mt-3 font-medium text-foreground">With</div>
+              </div>
+            )}
+            <Textarea
+              value={draft}
+              onChange={(e) => onDraftChange(e.target.value)}
+              disabled={busy}
+              className="min-h-24 text-sm"
+            />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm">{candidate.content}</p>
+            <p className="text-xs text-muted-foreground">
+              This suggestion cannot be added automatically. Choose whether it
+              is already in memory, not needed, should be reviewed later while
+              more evidence accumulates, or should be removed from the review
+              list.
+            </p>
+          </div>
+        )}
+        {candidate.evidence_summary && (
+          <p className="text-xs text-muted-foreground">
+            {candidate.evidence_summary}
+          </p>
+        )}
+        {candidate.why_now && (
+          <p className="text-xs text-muted-foreground">
+            Why now: {candidate.why_now}
+          </p>
+        )}
+        {(candidate.warnings ?? []).map((warning) => (
+          <Alert key={warning} className="border-border bg-muted">
+            <AlertDescription>
+              <div className="space-y-1">
+                <div className="text-xs font-semibold text-foreground">
+                  Warning
+                </div>
+                <p>{warning}</p>
+              </div>
+            </AlertDescription>
+          </Alert>
+        ))}
+        {candidate.public_rationale && (
+          <p className="text-xs text-muted-foreground">
+            Rationale: {candidate.public_rationale}
+          </p>
+        )}
+        {candidate.current_memory_excerpt && (
+          <div className="rounded border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <div className="mb-1 font-medium text-foreground">
+              Current memory excerpt
+            </div>
+            <p className="whitespace-pre-wrap">
+              {candidate.current_memory_excerpt}
+            </p>
+          </div>
+        )}
+        {candidate.evidence_refs.length > 0 && (
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            {candidate.evidence_refs.map((ref) => (
+              <span key={ref} className="rounded bg-muted px-2 py-1">
+                {ref}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {applicable && (
+            <Button onClick={() => onDecision("apply")} disabled={busy}>
+              {(candidate.operation ?? "add") === "adjust"
+                ? "Apply adjustment"
+                : "Add memory"}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => onDecision("already_covered")}
+            disabled={busy}
+          >
+            Already in memory
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => onDecision("reject")}
+            disabled={busy}
+          >
+            Not needed
+          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                onClick={() => onDecision("snooze")}
+                disabled={busy}
+              >
+                Review later
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-72">
+              {REVIEW_LATER_TOOLTIP}
+            </TooltipContent>
+          </Tooltip>
+          <Button
+            variant="outline"
+            onClick={() => onDecision("delete")}
+            disabled={busy}
+          >
+            Remove
+          </Button>
+          {decision && (
+            <Button variant="outline" onClick={onClear} disabled={busy}>
+              Clear
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function MemorySweepPage() {
   const params = useParams();
   const router = useRouter();
@@ -133,7 +303,14 @@ export default function MemorySweepPage() {
   const [decisionsByCard, setDecisionsByCard] = useState<
     Record<string, MemorySweepDecision>
   >({});
+  const [showDetailed, setShowDetailed] = useState(false);
+  const inflightLoadRef = useRef<Promise<void> | null>(null);
 
+  const allCandidates = useMemo(
+    () =>
+      proposal ? Object.values(proposal.queues).flat() : ([] as MemorySweepCandidate[]),
+    [proposal],
+  );
   const total = useMemo(() => countCandidates(proposal), [proposal]);
   const warningItems = useMemo(() => warningCardLinks(proposal), [proposal]);
   const warningCount = useMemo(() => uniqueWarningCount(warningItems), [warningItems]);
@@ -168,7 +345,13 @@ export default function MemorySweepPage() {
   }, [classId]);
 
   useEffect(() => {
-    void load();
+    // StrictMode runs this effect twice in dev; share the in-flight load so
+    // each page open triggers the (LLM-backed) propose calls exactly once.
+    if (!inflightLoadRef.current) {
+      inflightLoadRef.current = load().finally(() => {
+        inflightLoadRef.current = null;
+      });
+    }
   }, [load]);
 
   const setDecision = useCallback(
@@ -211,6 +394,37 @@ export default function MemorySweepPage() {
     });
   }, []);
 
+  const updateDraft = useCallback(
+    (candidate: MemorySweepCandidate, value: string) => {
+      const key = cardKey(candidate);
+      setDraftByCard((current) => ({ ...current, [key]: value }));
+      setDecisionsByCard((current) => {
+        const selected = current[key];
+        if (!selected || selected.action !== "apply") return current;
+        return { ...current, [key]: { ...selected, content: value } };
+      });
+    },
+    [],
+  );
+
+  const renderCandidateCard = useCallback(
+    (candidate: MemorySweepCandidate) => {
+      const key = cardKey(candidate);
+      return (
+        <CandidateCard
+          candidate={candidate}
+          draft={draftByCard[key] ?? candidate.content}
+          decision={decisionsByCard[key]}
+          busy={busy}
+          onDraftChange={(value) => updateDraft(candidate, value)}
+          onDecision={(action) => setDecision(candidate, action)}
+          onClear={() => clearDecision(candidate)}
+        />
+      );
+    },
+    [busy, clearDecision, decisionsByCard, draftByCard, setDecision, updateDraft],
+  );
+
   const submit = useCallback(async () => {
     const decisions = Object.values(decisionsByCard);
     if (!decisions.length) {
@@ -250,8 +464,12 @@ export default function MemorySweepPage() {
         <Button onClick={() => void load()} disabled={loading || busy}>
           {loading ? "Refreshing..." : "Refresh"}
         </Button>
-        <Button onClick={() => void submit()} disabled={busy || pendingCount === 0}>
-          {busy ? "Submitting..." : `Submit ${pendingCount} decision(s)`}
+        <Button
+          variant="outline"
+          onClick={() => setShowDetailed((current) => !current)}
+          disabled={loading}
+        >
+          {showDetailed ? "Show brief" : "Show detailed cards"}
         </Button>
         <Button variant="outline" asChild>
           <Link href={`/classes/${classId}`}>Back to class</Link>
@@ -265,12 +483,12 @@ export default function MemorySweepPage() {
               <div className="flex-1 space-y-1">
                 <div className="text-sm font-semibold">How to review</div>
                 <p className="text-sm">
-                  Use <span className="font-medium">Add suggestions</span> to
-                  preselect suggestions the backend can safely write. Cards without
-                  an <span className="font-medium">Add memory</span> button still need
-                  a decision: already in memory, not needed, review later while
-                  more evidence accumulates, or remove.
-                  After submit, only suggestions that still need action are shown again.
+                  Each line is one suggestion: <span className="font-medium">+</span>{" "}
+                  adds it to memory, <span className="font-medium">×</span> dismisses
+                  it, and the clock postpones it until more evidence arrives.
+                  Anything explicitly requested in chat is pinned at the top.
+                  Open <span className="font-medium">details</span> (or the detailed
+                  cards view) to edit wording or see evidence before you submit.
                 </p>
               </div>
               <Button
@@ -355,235 +573,86 @@ export default function MemorySweepPage() {
         </Card>
       )}
 
-      <div className="space-y-6">
-        {proposal &&
-          Object.entries(proposal.queues).map(([queue, candidates]) => (
-            <section key={queue} className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold uppercase tracking-normal text-muted-foreground">
-                  {queue}
-                </h2>
-                <div className="flex flex-wrap gap-2">
-                  {candidates.some(canApply) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setMany(candidates, "apply")}
-                      disabled={busy}
-                    >
-                      Add suggestions
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setMany(candidates, "reject")}
-                    disabled={busy}
-                  >
-                    Mark all as not needed
-                  </Button>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
+      {!loading && !showDetailed && allCandidates.length > 0 && (
+        <MemorySweepBrief
+          candidates={allCandidates}
+          decisions={decisionsByCard}
+          busy={busy}
+          onDecision={setDecision}
+          onClear={clearDecision}
+          onBulk={setMany}
+          onSubmit={() => void submit()}
+          renderDetail={renderCandidateCard}
+        />
+      )}
+
+      {showDetailed && (
+        <div className="space-y-6">
+          {proposal &&
+            Object.entries(proposal.queues).map(([queue, candidates]) => (
+              <section key={queue} className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-sm font-semibold uppercase tracking-normal text-muted-foreground">
+                    {queue}
+                  </h2>
+                  <div className="flex flex-wrap gap-2">
+                    {candidates.some(canApply) && (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setMany(candidates, "snooze")}
+                        onClick={() => setMany(candidates, "apply")}
                         disabled={busy}
                       >
-                        Review all later
+                        Add suggestions
                       </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-72">
-                      {REVIEW_LATER_TOOLTIP}
-                    </TooltipContent>
-                  </Tooltip>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setMany(candidates, "reject")}
+                      disabled={busy}
+                    >
+                      Mark all as not needed
+                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMany(candidates, "snooze")}
+                          disabled={busy}
+                        >
+                          Review all later
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-72">
+                        {REVIEW_LATER_TOOLTIP}
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                 </div>
-              </div>
-              <div className="grid gap-3">
-                {candidates.map((candidate) => {
-                  const key = cardKey(candidate);
-                  const applicable = canApply(candidate);
-                  const draft = draftByCard[key] ?? candidate.content;
-                  const decision = decisionsByCard[key];
-                  return (
-                    <Card key={key} id={cardDomId(candidate)} className="scroll-mt-6">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base">{candidate.target}</CardTitle>
-                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          <span>{candidate.section}</span>
-                          <span>{candidate.channel}</span>
-                          <span>{candidate.basis}</span>
-                          <span>{candidate.confidence} confidence</span>
-                          <span>{candidate.operation ?? "add"}</span>
-                          {candidate.group_label && <span>{candidate.group_label}</span>}
-                          <span>{candidate.status_recommendation}</span>
-                          {candidate.signal_count > 1 && (
-                            <span>{candidate.signal_count} signals</span>
-                          )}
-                          {!applicable && (
-                            <span>{candidate.review_only_reason || "review only"}</span>
-                          )}
-                          {decision && <span>selected: {decision.action}</span>}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {applicable ? (
-                          <div className="space-y-3">
-                            {(candidate.operation ?? "add") === "adjust" && (
-                              <div className="rounded border bg-muted/40 p-3 text-xs">
-                                <div className="mb-1 font-medium text-foreground">
-                                  Replace
-                                </div>
-                                <p className="whitespace-pre-wrap text-muted-foreground">
-                                  {candidate.replaces_content || "Missing replacement source"}
-                                </p>
-                                <div className="mb-1 mt-3 font-medium text-foreground">
-                                  With
-                                </div>
-                              </div>
-                            )}
-                            <Textarea
-                              value={draft}
-                              onChange={(e) => {
-                                const nextDraft = e.target.value;
-                                setDraftByCard((current) => ({
-                                  ...current,
-                                  [key]: nextDraft,
-                                }));
-                                setDecisionsByCard((current) => {
-                                  const selected = current[key];
-                                  if (!selected || selected.action !== "apply") return current;
-                                  return {
-                                    ...current,
-                                    [key]: { ...selected, content: nextDraft },
-                                  };
-                                });
-                              }}
-                              disabled={busy}
-                              className="min-h-24 text-sm"
-                            />
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <p className="text-sm">{candidate.content}</p>
-                            <p className="text-xs text-muted-foreground">
-                              This suggestion cannot be added automatically. Choose
-                              whether it is already in memory, not needed, should be
-                              reviewed later while more evidence accumulates, or should
-                              be removed from the review list.
-                            </p>
-                          </div>
-                        )}
-                        {candidate.evidence_summary && (
-                          <p className="text-xs text-muted-foreground">
-                            {candidate.evidence_summary}
-                          </p>
-                        )}
-                        {candidate.why_now && (
-                          <p className="text-xs text-muted-foreground">
-                            Why now: {candidate.why_now}
-                          </p>
-                        )}
-                        {(candidate.warnings ?? []).map((warning) => (
-                          <Alert key={warning} className="border-border bg-muted">
-                            <AlertDescription>
-                              <div className="space-y-1">
-                                <div className="text-xs font-semibold text-foreground">
-                                  Warning
-                                </div>
-                                <p>{warning}</p>
-                              </div>
-                            </AlertDescription>
-                          </Alert>
-                        ))}
-                        {candidate.public_rationale && (
-                          <p className="text-xs text-muted-foreground">
-                            Rationale: {candidate.public_rationale}
-                          </p>
-                        )}
-                        {candidate.current_memory_excerpt && (
-                          <div className="rounded border bg-muted/40 p-3 text-xs text-muted-foreground">
-                            <div className="mb-1 font-medium text-foreground">
-                              Current memory excerpt
-                            </div>
-                            <p className="whitespace-pre-wrap">
-                              {candidate.current_memory_excerpt}
-                            </p>
-                          </div>
-                        )}
-                        {candidate.evidence_refs.length > 0 && (
-                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                            {candidate.evidence_refs.map((ref) => (
-                              <span key={ref} className="rounded bg-muted px-2 py-1">
-                                {ref}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <div className="flex flex-wrap gap-2">
-                          {applicable && (
-                            <Button
-                              onClick={() => setDecision(candidate, "apply")}
-                              disabled={busy}
-                            >
-                              {(candidate.operation ?? "add") === "adjust"
-                                ? "Apply adjustment"
-                                : "Add memory"}
-                            </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            onClick={() => setDecision(candidate, "already_covered")}
-                            disabled={busy}
-                          >
-                            Already in memory
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => setDecision(candidate, "reject")}
-                            disabled={busy}
-                          >
-                            Not needed
-                          </Button>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="outline"
-                                onClick={() => setDecision(candidate, "snooze")}
-                                disabled={busy}
-                              >
-                                Review later
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-72">
-                              {REVIEW_LATER_TOOLTIP}
-                            </TooltipContent>
-                          </Tooltip>
-                          <Button
-                            variant="outline"
-                            onClick={() => setDecision(candidate, "delete")}
-                            disabled={busy}
-                          >
-                            Remove
-                          </Button>
-                          {decision && (
-                            <Button
-                              variant="outline"
-                              onClick={() => clearDecision(candidate)}
-                              disabled={busy}
-                            >
-                              Clear
-                            </Button>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-      </div>
+                <div className="grid gap-3">
+                  {candidates.map((candidate) => (
+                    <div key={cardKey(candidate)}>
+                      {renderCandidateCard(candidate)}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+          <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-t-md border-t border-border bg-background/95 px-3 py-2 backdrop-blur">
+            <span className="text-sm text-muted-foreground">
+              {pendingCount} decision(s) selected
+            </span>
+            <Button
+              onClick={() => void submit()}
+              disabled={busy || pendingCount === 0}
+            >
+              {busy ? "Submitting..." : `Submit ${pendingCount} decision(s)`}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
