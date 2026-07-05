@@ -44,6 +44,7 @@ from app.teacher_agent.memory_update_state import (
     render_memory_runtime,
 )
 from app.teacher_agent.prompt_trace import build_ingest_chat_prompt_trace
+from app.teacher_agent.wiki import parsing as wiki_parsing
 from app.teacher_agent.wiki_store import WikiStore
 
 MODE = "ingest"
@@ -100,7 +101,9 @@ class IngestService:
 
     def _title_template(self, lesson_date: str, title: str) -> str:
         md = self.wiki.empty_diary_template(lesson_date)
-        clean_title = " ".join((title or "").split())
+        # Hinted titles arrive from the plan artifact ("Lesson Plan — …");
+        # strip that prefix so the diary heading and raw slug stay results-shaped.
+        clean_title = wiki_parsing.clean_results_title(title)
         if clean_title:
             md = md.replace(
                 f"# Lesson Results — {lesson_date} — ",

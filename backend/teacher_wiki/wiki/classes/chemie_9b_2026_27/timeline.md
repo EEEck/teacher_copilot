@@ -36,7 +36,3 @@
 - [Reaction Writing Basics](lessons/2026-04-24/lesson_results.md)
 - Covered: Word prompts, symbols, and skeleton equations
 - Highlight: Students could write the base equations before balancing
-
-## 2027-02-03 — Lesson Results
-- [Lesson Results](lessons/2027-02-03/lesson_results.md)
-- Lesson logged.

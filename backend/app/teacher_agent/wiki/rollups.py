@@ -441,7 +441,7 @@ def _finalize_lesson_writes(
             applied.append(rel)
 
     students_path = store.roll_up_paths(class_id)["students"]
-    store.write_text(students_path, store._rebuild_students_index(class_id))
+    store.write_text(students_path, store._rebuild_students_index(class_id, previews={}))
     rel_students = store.rel_wiki(students_path)
     if rel_students not in applied:
         applied.append(rel_students)

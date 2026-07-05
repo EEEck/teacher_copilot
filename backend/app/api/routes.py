@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+from collections.abc import AsyncIterator, Callable
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -74,7 +76,10 @@ from app.services.memory_sweep import (
 from app.services.plan_service import PlanService
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.memory_targets import canonical_memory_target, compact_key_for_target
+from app.teacher_agent.stream_events import SseError, sse_encode
 from app.teacher_agent.wiki_store import WikiStore
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 
@@ -290,16 +295,110 @@ def _record_beta_message(
     )
 
 
-def _sse_final_payload(line: str) -> dict | None:
+def _sse_payload_of_type(line: str, event_type: str) -> dict | None:
     if not line.startswith("data:"):
         return None
     try:
         payload = json.loads(line.removeprefix("data:").strip())
     except json.JSONDecodeError:
         return None
-    if payload.get("type") != "final":
+    if payload.get("type") != event_type:
         return None
     return payload
+
+
+def _sse_final_payload(line: str) -> dict | None:
+    return _sse_payload_of_type(line, "final")
+
+
+async def _stream_chat_with_beta_telemetry(
+    stream: AsyncIterator[str],
+    *,
+    request: Request,
+    beta_auth: BetaAuthService,
+    session_id: str,
+    class_id: str,
+    mode: str,
+    artifact_kind: str,
+    completed_payload: Callable[[dict], dict],
+) -> AsyncIterator[str]:
+    """Pass SSE lines through while recording beta chat-turn telemetry.
+
+    Every turn ends in exactly one terminal event: chat_turn_completed on the
+    final payload, otherwise chat_turn_failed (agent error line, mid-stream
+    exception, or a stream that ends without a final). Exceptions are turned
+    into an SSE error line so the client shows a retryable error instead of a
+    silently dropped turn.
+    """
+
+    def _record_failed(payload: dict) -> None:
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="chat_turn_failed",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode=mode,
+            payload={**payload, "stream": True},
+        )
+
+    terminal_seen = False
+    try:
+        async for line in stream:
+            final = _sse_final_payload(line)
+            if final is not None:
+                terminal_seen = True
+                _record_beta_message(
+                    request,
+                    beta_auth,
+                    app_session_id=session_id,
+                    class_id=class_id,
+                    mode=mode,
+                    role="assistant",
+                    content=final.get("reply", ""),
+                )
+                _record_beta_artifact_snapshot(
+                    request,
+                    beta_auth,
+                    app_session_id=session_id,
+                    class_id=class_id,
+                    mode=mode,
+                    artifact_kind=artifact_kind,
+                    markdown=final.get("artifact_markdown", ""),
+                )
+                _record_beta_event(
+                    request,
+                    beta_auth,
+                    event_type="chat_turn_completed",
+                    class_id=class_id,
+                    app_session_id=session_id,
+                    mode=mode,
+                    payload=completed_payload(final),
+                )
+            else:
+                error = _sse_payload_of_type(line, "error")
+                if error is not None:
+                    terminal_seen = True
+                    _record_failed(
+                        {
+                            "reason": "agent_error",
+                            "code": error.get("code"),
+                            "message": (error.get("message") or "")[:300],
+                        }
+                    )
+            yield line
+    except Exception as e:  # noqa: BLE001 — turn any stream crash into a client-visible error
+        logger.exception("Chat stream failed (mode=%s, session=%s)", mode, session_id)
+        _record_failed({"reason": "exception", "error": str(e)[:300]})
+        yield sse_encode(
+            SseError(
+                message="Something went wrong while generating the reply. Please send your message again.",
+                code="stream_error",
+            )
+        )
+        return
+    if not terminal_seen:
+        _record_failed({"reason": "no_final_event"})
 
 
 def _compact_page_paths(
@@ -1079,46 +1178,25 @@ async def ingest_chat_stream(
             content=body.message,
         )
 
-        async def event_generator():
-            async for line in ingest.chat_stream(
-                session_id,
-                body.message,
-                body.diary_markdown,
-                attachments=body.attachments,
-            ):
-                payload = _sse_final_payload(line)
-                if payload is not None:
-                    _record_beta_message(
-                        request,
-                        beta_auth,
-                        app_session_id=session_id,
-                        class_id=class_id,
-                        mode="ingest",
-                        role="assistant",
-                        content=payload.get("reply", ""),
-                    )
-                    _record_beta_artifact_snapshot(
-                        request,
-                        beta_auth,
-                        app_session_id=session_id,
-                        class_id=class_id,
-                        mode="ingest",
-                        artifact_kind="diary",
-                        markdown=payload.get("artifact_markdown", ""),
-                    )
-                    _record_beta_event(
-                        request,
-                        beta_auth,
-                        event_type="chat_turn_completed",
-                        class_id=class_id,
-                        app_session_id=session_id,
-                        mode="ingest",
-                        payload={"ready": payload.get("ready"), "stream": True},
-                    )
-                yield line
-
         return StreamingResponse(
-            event_generator(),
+            _stream_chat_with_beta_telemetry(
+                ingest.chat_stream(
+                    session_id,
+                    body.message,
+                    body.diary_markdown,
+                    attachments=body.attachments,
+                ),
+                request=request,
+                beta_auth=beta_auth,
+                session_id=session_id,
+                class_id=class_id,
+                mode="ingest",
+                artifact_kind="diary",
+                completed_payload=lambda final: {
+                    "ready": final.get("ready"),
+                    "stream": True,
+                },
+            ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
@@ -1458,50 +1536,26 @@ async def plan_chat_stream(
             content=body.message,
         )
 
-        async def event_generator():
-            async for line in plan_svc.chat_stream(
-                session_id,
-                body.message,
-                body.plan_markdown,
-                attachments=body.attachments,
-            ):
-                payload = _sse_final_payload(line)
-                if payload is not None:
-                    _record_beta_message(
-                        request,
-                        beta_auth,
-                        app_session_id=session_id,
-                        class_id=class_id,
-                        mode="plan",
-                        role="assistant",
-                        content=payload.get("reply", ""),
-                    )
-                    _record_beta_artifact_snapshot(
-                        request,
-                        beta_auth,
-                        app_session_id=session_id,
-                        class_id=class_id,
-                        mode="plan",
-                        artifact_kind="plan",
-                        markdown=payload.get("artifact_markdown", ""),
-                    )
-                    _record_beta_event(
-                        request,
-                        beta_auth,
-                        event_type="chat_turn_completed",
-                        class_id=class_id,
-                        app_session_id=session_id,
-                        mode="plan",
-                        payload={
-                            "ready": payload.get("ready"),
-                            "phase": payload.get("phase"),
-                            "stream": True,
-                        },
-                    )
-                yield line
-
         return StreamingResponse(
-            event_generator(),
+            _stream_chat_with_beta_telemetry(
+                plan_svc.chat_stream(
+                    session_id,
+                    body.message,
+                    body.plan_markdown,
+                    attachments=body.attachments,
+                ),
+                request=request,
+                beta_auth=beta_auth,
+                session_id=session_id,
+                class_id=class_id,
+                mode="plan",
+                artifact_kind="plan",
+                completed_payload=lambda final: {
+                    "ready": final.get("ready"),
+                    "phase": final.get("phase"),
+                    "stream": True,
+                },
+            ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )

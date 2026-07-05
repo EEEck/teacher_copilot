@@ -29,6 +29,30 @@ def extract_title(text: str) -> Optional[str]:
     return m.group(1).strip() if m else None
 
 
+_TITLE_PREFIX_RE = re.compile(
+    r"^(Lesson\s+(Plan|Results)|\d{4}-\d{2}-\d{2})\s*[—–-]\s*", re.I
+)
+
+
+def clean_results_title(title: str) -> str:
+    """Normalize a lesson-results title for headings, slugs, and the timeline.
+
+    Titles often arrive prefixed from their source artifact ("Lesson Plan —
+    Redox…" when results are logged against a planned lesson) or degenerate to
+    the "Lesson Results" placeholder. Returns "" when nothing meaningful is
+    left so callers can apply their own fallback.
+    """
+    cleaned = " ".join((title or "").split())
+    while True:
+        stripped = _TITLE_PREFIX_RE.sub("", cleaned)
+        if stripped == cleaned:
+            break
+        cleaned = stripped
+    if cleaned.lower() in {"lesson results", "lesson plan", "lesson"}:
+        return ""
+    return cleaned
+
+
 def extract_date_from_diary(text: str) -> Optional[str]:
     m = re.search(r"Lesson Results\s*—\s*(\d{4}-\d{2}-\d{2})", text)
     if m:
@@ -106,16 +130,21 @@ def parse_student_observations(students_block: str) -> dict[str, list[str]]:
     return by_student
 
 
+def _section_one_line(text: str, heading: str, max_len: int = 120) -> str:
+    """One readable line for a diary section: joined bullets, no '-' markers."""
+    body = extract_section_body(text, heading)
+    bullets = lines_to_bullets(body)
+    return one_line("; ".join(bullets) if bullets else body, max_len)
+
+
 def build_timeline_summary(
     lesson_results: str,
 ) -> tuple[str, list[str], list[str], list[str]]:
     covered = extract_section_bullets(lesson_results, "What was covered")
-    participation = one_line(
-        extract_section_body(lesson_results, "Student participation")
-    )
-    went_well = one_line(extract_section_body(lesson_results, "What went well"))
+    participation = _section_one_line(lesson_results, "Student participation")
+    went_well = _section_one_line(lesson_results, "What went well")
     didnt = extract_section_bullets(lesson_results, "What didn't go well")
-    students = one_line(extract_section_body(lesson_results, "Student observations"))
+    students = _section_one_line(lesson_results, "Student observations")
     followups = lines_to_bullets(
         extract_section_body(lesson_results, "Homework & follow-ups")
     )

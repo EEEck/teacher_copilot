@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from app.schemas.api import (
@@ -16,6 +16,28 @@ from app.teacher_agent.wiki.constants import (
 
 from app.teacher_agent.wiki import parsing
 
+# Teachers plan a full school year ahead, so lesson dates up to a year out
+# are legitimate. Anything beyond that is almost certainly a typo'd date that
+# would pollute the timeline, course state, and planning context.
+MAX_FUTURE_LESSON_DAYS = 365
+
+
+def validate_lesson_date(lesson_date: str) -> None:
+    """Raise ValueError for dates that cannot be a real lesson."""
+    try:
+        parsed = date.fromisoformat(lesson_date)
+    except ValueError as e:
+        raise ValueError(
+            f"Lesson date '{lesson_date}' in the diary heading is not a valid "
+            "date. Use the format YYYY-MM-DD."
+        ) from e
+    if parsed > date.today() + timedelta(days=MAX_FUTURE_LESSON_DAYS):
+        raise ValueError(
+            f"Lesson date {lesson_date} is more than a school year in the "
+            "future — that looks like a typo. Fix the date in the diary "
+            "heading ('# Lesson Results — YYYY-MM-DD — …') before saving."
+        )
+
 
 def compile_from_diary(
     store, class_id: str, diary_md: str, lesson_date: Optional[str] = None
@@ -26,7 +48,9 @@ def compile_from_diary(
         or parsing.extract_date_from_diary(diary_md)
         or date.today().isoformat()
     )
-    title = parsing.extract_title(diary_md) or "Lesson"
+    # No date validation here: drafts are also compiled for planned future
+    # lessons (draft preview). validate_lesson_date guards commit_ingest only.
+    title = parsing.clean_results_title(parsing.extract_title(diary_md) or "") or "Lesson"
     cls = store.get_class(class_id)
 
     lesson_results_path = store.lesson_dir(class_id, lesson_date) / "lesson_results.md"
@@ -88,17 +112,42 @@ def commit_ingest(
     approved: list[ApprovedWikiUpdate],
     session_id: str,
 ) -> tuple[str, list[str], str]:
-    lesson_date = parsing.extract_date_from_diary(diary_md) or date.today().isoformat()
-    title = parsing.extract_title(diary_md) or "lesson"
-    slug = parsing.slugify(title)
-    raw_path = store.root / "raw" / "classes" / class_id / f"{lesson_date}-{slug}.md"
-    raw_rel = store.rel_wiki(raw_path)
-
     approved_writes = [u for u in approved if u.approved]
     if not approved_writes:
         raise ValueError("At least one wiki update must be approved to commit.")
-    if not any("lesson_results.md" in u.wiki_path for u in approved_writes):
+    lesson_results_update = next(
+        (u for u in approved_writes if "lesson_results.md" in u.wiki_path),
+        None,
+    )
+    if lesson_results_update is None:
         raise ValueError("lesson_results.md must be approved to commit.")
+
+    request_lesson_date = parsing.extract_date_from_diary(diary_md)
+    if request_lesson_date:
+        validate_lesson_date(request_lesson_date)
+    canonical_diary = lesson_results_update.content or diary_md
+    lesson_date = parsing.extract_date_from_diary(canonical_diary) or date.today().isoformat()
+    validate_lesson_date(lesson_date)
+    title = parsing.clean_results_title(parsing.extract_title(canonical_diary) or "") or "lesson"
+    slug = parsing.slugify(title)
+    raw_path = store.root / "raw" / "classes" / class_id / f"{lesson_date}-{slug}.md"
+    raw_rel = store.rel_wiki(raw_path)
+    approved_rels = [
+        u.wiki_path.strip().lstrip("/").replace("\\", "/")
+        for u in approved
+    ]
+    approved_write_rels = [
+        u.wiki_path.strip().lstrip("/").replace("\\", "/")
+        for u in approved_writes
+    ]
+    has_explicit_student_entity_update = any(
+        f"/classes/{class_id}/students/S-" in f"/{rel}"
+        for rel in approved_rels
+    )
+    has_approved_students_index = any(
+        rel == f"wiki/classes/{class_id}/students.md"
+        for rel in approved_write_rels
+    )
 
     applied: list[str] = []
     for update in approved_writes:
@@ -114,6 +163,9 @@ def commit_ingest(
         else:
             store.write_text(path, update.content)
         applied.append(update.wiki_path)
+
+    if has_approved_students_index and not has_explicit_student_entity_update:
+        store._finalize_lesson_writes(class_id, canonical_diary, lesson_date, title, applied)
 
     log_id = store._append_log(class_id, lesson_date, title, applied, kind="ingest")
     store.rebuild_index()
