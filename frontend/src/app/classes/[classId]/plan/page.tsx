@@ -10,11 +10,7 @@ import {
   type ArtifactSessionBodyProps,
 } from "@/components/klassenpilot/artifact-session-page";
 import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
-import {
-  FileChangeReviewPanel,
-  fromPlanSave,
-  MarkdownLineDiff,
-} from "@/components/klassenpilot/review";
+import { fromPlanSave, ReviewBrief } from "@/components/klassenpilot/review";
 import {
   MemorySignalsReview,
   ProposedMemoryUpdates,
@@ -303,22 +299,12 @@ function PlanWorkspace({
           setBeforePlan={setBeforePlan}
         />
       }
-      reviewDiff={
-        inReview && fileItem ? (
-          <MarkdownLineDiff
-            path={fileItem.path}
-            before={fileItem.before}
-            after={fileItem.after}
-            className="h-full min-h-[12rem]"
-          />
-        ) : null
-      }
       reviewFileList={
         inReview && fileItem ? (
-          <FileChangeReviewPanel
+          <ReviewBrief
             items={[fileItem]}
             selectedPath={fileItem.path}
-            onSelectPath={() => {}}
+            title="Save lesson plan"
             onSetApproved={(_, v) => setApproved(v)}
             onUndoAll={() => setInReview(false)}
             onKeepAll={() => {
@@ -328,7 +314,6 @@ function PlanWorkspace({
             onSave={savePlan}
             saving={loading}
             saveDisabled={!approved}
-            saveLabel="Save plan"
           />
         ) : null
       }

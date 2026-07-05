@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { IngestThread } from "@/components/assistant-ui/ingest-thread";
 import {
@@ -13,8 +13,8 @@ import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-ses
 import { DiaryDraftPanel } from "@/components/klassenpilot/diary-draft-panel";
 import { ProposedMemoryUpdates } from "@/components/klassenpilot/proposed-memory-updates";
 import {
-  FileChangeReviewPanel,
   MarkdownLineDiff,
+  ReviewBrief,
   useFileChangeReview,
   WikiProposalEditor,
 } from "@/components/klassenpilot/review";
@@ -29,6 +29,11 @@ import {
   type WikiUpdateProposal,
 } from "@/lib/api";
 import { isMemoryReviewSaveDisabled } from "@/lib/memory-save-guards";
+import {
+  clearPendingMemoryReview,
+  loadPendingMemoryReview,
+  savePendingMemoryReview,
+} from "@/lib/pending-memory-review";
 
 type CommitResult = {
   lesson_date: string;
@@ -216,9 +221,11 @@ function MemoryTargetStatus() {
 
 function MemoryWorkspace({
   classId,
+  reviewStorageKey,
   onError,
 }: {
   classId: string;
+  reviewStorageKey: string;
   onError: (message: string | null) => void;
 }) {
   const router = useRouter();
@@ -226,6 +233,7 @@ function MemoryWorkspace({
     artifactMarkdown: diaryMarkdown,
     isUpdating,
     runWithSessionRecovery,
+    setArtifactMarkdown,
   } = useArtifactSession();
   const [proposals, setProposals] = useState<WikiUpdateProposal[]>([]);
   const [loading, setLoading] = useState(false);
@@ -237,6 +245,7 @@ function MemoryWorkspace({
   const [classMemoryProposal, setClassMemoryProposal] =
     useState<MemoryProposalResponse | null>(null);
   const [applyingClassMemory, setApplyingClassMemory] = useState(false);
+  const restoredReviewRef = useRef(false);
 
   const {
     items: reviewItems,
@@ -251,7 +260,81 @@ function MemoryWorkspace({
     initFromProposals,
     clear: clearReview,
     hasLessonResultsApproved,
+    approvedByPath,
   } = useFileChangeReview(proposals);
+
+  useEffect(() => {
+    if (restoredReviewRef.current) return;
+    restoredReviewRef.current = true;
+    if (typeof window === "undefined") return;
+
+    const pending = loadPendingMemoryReview(
+      window.sessionStorage,
+      classId,
+      reviewStorageKey,
+    );
+    if (!pending) return;
+
+    setArtifactMarkdown(pending.diaryMarkdown, "agent");
+    setMemoryCandidates(pending.memoryCandidates);
+    setProposals(pending.proposals);
+    initFromProposals(pending.proposals);
+    for (const [path, content] of Object.entries(pending.contentByPath)) {
+      updateContent(path, content);
+    }
+    for (const [path, approved] of Object.entries(pending.approvedByPath)) {
+      setApproved(path, approved);
+    }
+    if (pending.selectedPath) setSelectedPath(pending.selectedPath);
+    setEditingWiki(pending.editingWiki);
+    setInReview(true);
+  }, [
+    classId,
+    initFromProposals,
+    reviewStorageKey,
+    setApproved,
+    setArtifactMarkdown,
+    setSelectedPath,
+    updateContent,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!inReview || proposals.length === 0) return;
+
+    savePendingMemoryReview(window.sessionStorage, {
+      classId,
+      routeKey: reviewStorageKey,
+      diaryMarkdown,
+      proposals,
+      memoryCandidates,
+      approvedByPath,
+      contentByPath,
+      selectedPath,
+      editingWiki,
+    });
+  }, [
+    approvedByPath,
+    classId,
+    contentByPath,
+    diaryMarkdown,
+    editingWiki,
+    inReview,
+    memoryCandidates,
+    proposals,
+    reviewStorageKey,
+    selectedPath,
+  ]);
+
+  useEffect(() => {
+    if (!inReview || proposals.length === 0) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [inReview, proposals.length]);
 
   const selectFile = useCallback(
     (path: string) => {
@@ -331,13 +414,16 @@ function MemoryWorkspace({
       setInReview(false);
       setProposals([]);
       clearReview();
+      if (typeof window !== "undefined") {
+        clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
+      }
       router.refresh();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Commit failed");
     } finally {
       setLoading(false);
     }
-  }, [classId, diaryMarkdown, getCommitPayload, clearReview, isUpdating, onError, router, runWithSessionRecovery]);
+  }, [classId, diaryMarkdown, getCommitPayload, clearReview, isUpdating, onError, reviewStorageKey, router, runWithSessionRecovery]);
 
   const applyClassMemory = useCallback(
     async (pages: Record<string, string>) => {
@@ -397,8 +483,11 @@ function MemoryWorkspace({
     setMemoryCandidates([]);
     setClassMemoryProposal(null);
     clearReview();
+    if (typeof window !== "undefined") {
+      clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
+    }
     onError(null);
-  }, [onError, clearReview]);
+  }, [classId, onError, clearReview, reviewStorageKey]);
 
   const draftPanel =
     inReview && editingWiki && selectedPath && selectedPath in contentByPath ? (
@@ -422,7 +511,7 @@ function MemoryWorkspace({
           !inReview ? <ReadyToSaveButton onReady={handleReadyToSave} loading={loading} /> : null
         }
         reviewDiff={
-          inReview && selectedChange ? (
+          inReview && editingWiki && selectedChange ? (
             <MarkdownLineDiff
               path={selectedChange.path}
               before={selectedChange.before}
@@ -433,7 +522,7 @@ function MemoryWorkspace({
         }
         reviewFileList={
           inReview && reviewItems.length > 0 ? (
-            <FileChangeReviewPanel
+            <ReviewBrief
               items={reviewItems}
               selectedPath={selectedPath ?? reviewItems[0]?.path ?? null}
               onSelectPath={selectFile}
@@ -444,7 +533,6 @@ function MemoryWorkspace({
               saving={reviewActionsDisabled}
               actionsDisabled={reviewActionsDisabled}
               saveDisabled={reviewSaveDisabled}
-              saveLabel="Save selected files"
             />
           ) : null
         }
@@ -452,7 +540,7 @@ function MemoryWorkspace({
 
       {inReview && !hasLessonResultsApproved && (
         <p className="text-xs text-destructive">
-          Keep <span className="font-mono">lesson_results.md</span> to save this lesson to memory.
+          Keep the lesson results change selected to save this lesson to memory.
         </p>
       )}
 
@@ -529,6 +617,10 @@ function MemoryPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const classId = params.classId as string;
+  const reviewStorageKey = useMemo(() => {
+    const qs = searchParams.toString();
+    return `/classes/${classId}/memory${qs ? `?${qs}` : ""}`;
+  }, [classId, searchParams]);
   const startHint = useMemo<IngestStartHint | undefined>(() => {
     const lessonDate = searchParams.get("lessonDate") ?? "";
     if (!lessonDate) return undefined;
@@ -579,7 +671,11 @@ function MemoryPageContent() {
       }
       bootstrap={bootstrap}
       renderBody={({ onError }: ArtifactSessionBodyProps) => (
-        <MemoryWorkspace classId={classId} onError={onError} />
+        <MemoryWorkspace
+          classId={classId}
+          reviewStorageKey={reviewStorageKey}
+          onError={onError}
+        />
       )}
     />
   );
