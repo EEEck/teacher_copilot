@@ -283,3 +283,45 @@ class MemorySweepCardOutput(BaseModel):
 class MemorySweepProposalOutput(BaseModel):
     cards: list[MemorySweepCardOutput] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class MemoryConsolidationOpOutput(BaseModel):
+    """One Mem V3 consolidation decision (mem0-style ID-referenced ops)."""
+
+    claim_ids: list[str] = Field(
+        description="Input claim ids this operation resolves. Every input claim id must appear in exactly one operation.",
+    )
+    operation: str = Field(
+        description=(
+            "add | update | delete | none. add appends new_text as a new memory "
+            "bullet; update replaces the referenced memory bullet with new_text; "
+            "delete removes the referenced obsolete bullet (prefer update when a "
+            "claim supersedes it); none records that current memory already covers "
+            "the claim or it is not worth writing."
+        ),
+    )
+    target: str = Field(description="Memory file the operation applies to.")
+    section: str = Field(default="", description="Section within the target file.")
+    memory_id: str = Field(
+        default="",
+        description=(
+            "For update/delete: the id of the referenced memory bullet, copied "
+            "EXACTLY from the enumerated current-memory index. Never invent ids."
+        ),
+    )
+    new_text: str = Field(
+        default="",
+        description=(
+            "For add/update: the durable memory bullet to write. State the "
+            "underlying claim, not whichever phrasing appeared most often."
+        ),
+    )
+    rationale: str = Field(
+        default="",
+        description="One teacher-readable sentence explaining the decision.",
+    )
+
+
+class MemoryConsolidationOutput(BaseModel):
+    operations: list[MemoryConsolidationOpOutput] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)

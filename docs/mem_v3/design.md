@@ -84,10 +84,12 @@ LLM calls.
 - **`explicit_ask` tag** for genuinely future-scoped teacher statements
   ("from now on", "always", "for all lessons/briefs"). Tightened markers;
   one-off task requests never qualify.
-- **Deterministic insert** (no LLM): exact normalized dup → rejected;
-  content-word overlap ≥ ~0.6 with an open claim in the same target → folds
-  into that claim's cluster (`signal_count`++ via shared cluster_key);
-  sections normalized onto a fixed per-target vocabulary.
+- **Deterministic insert** (no LLM): same-session exact dup → rejected as
+  within-session noise; cross-session exact or near duplicate (stemmed
+  content-word overlap ≥ ~0.55) → folds into the matched claim's cluster
+  (`signal_count`++ via shared cluster_key — an identical re-statement in a
+  new session is the strongest reinforcement signal); sections normalized
+  onto a fixed per-target vocabulary.
 
 ### Lane 2 — Ledger (invisible staging with a promotion gate)
 

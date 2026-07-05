@@ -575,6 +575,38 @@ class StubAgentRunner:
                 )
         return MemorySweepProposalOutput(cards=cards, warnings=[])
 
+    async def consolidate_memory_sweep(
+        self,
+        class_id: str,
+        subject: str,
+        claims,
+        memory_indexes,
+        *,
+        applied_history=None,
+        rejected_history=None,
+        budget_usage=None,
+        today: str = "",
+        validation_error: str = "",
+    ):
+        """Mem V3 single-call stub: one add operation per input claim."""
+        from app.teacher_agent.models import (
+            MemoryConsolidationOpOutput,
+            MemoryConsolidationOutput,
+        )
+
+        operations = [
+            MemoryConsolidationOpOutput(
+                claim_ids=[claim["claim_id"]],
+                operation="add",
+                target=claim["target"],
+                section=claim["section"],
+                new_text=claim["text"],
+                rationale="Stub isolated sweep review.",
+            )
+            for claim in claims
+        ]
+        return MemoryConsolidationOutput(operations=operations, warnings=[])
+
     async def align_memory_sweep_candidates(
         self,
         class_id: str,

@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     openai_chat_model: str = "gpt-5.4-mini"
     openai_fast_model: str = "gpt-4o-mini"
+    # Mem V3: the weekly consolidation sweep is rare and context-heavy, so it
+    # gets the strongest reasoning model. Empty = fall back to the chat model.
+    openai_sweep_model: str = ""
     openai_reasoning_effort: ReasoningEffort = "medium"
     agent_timeout_seconds: float = 240.0
     agent_max_turns: int = 16

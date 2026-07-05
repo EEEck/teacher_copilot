@@ -78,6 +78,28 @@ def _seed_memory_sweep_examples(ledger: MemoryCandidateLedger) -> None:
                 confidence="medium",
                 cluster_key="teacher.communication.mbb_concise",
             ),
+            # Mem V3: inferred claims need reinforcement across >=2 distinct
+            # sessions to pass the promotion gate.
+            MemoryCandidateRow(
+                id="cand_teacher_mbb_2",
+                created_at="2026-06-23T09:00:00Z",
+                updated_at="2026-06-23T09:00:00Z",
+                class_id=None,
+                subject=None,
+                workflow="plan",
+                session_id="sess_plan_002",
+                turn_index=2,
+                channel="teacher_behavior",
+                target="teacher_profile.md",
+                section="Communication",
+                candidate_update="Keep planning summaries concise and MBB-style.",
+                evidence_summary="Teacher repeated the MBB-style preference.",
+                evidence_refs=["trace:sess_plan_002:turn2"],
+                source="inferred_from_session",
+                basis="repeated_behavior",
+                confidence="medium",
+                cluster_key="teacher.communication.mbb_concise",
+            ),
             MemoryCandidateRow(
                 id="cand_class_redox_examples_1",
                 created_at="2026-06-22T09:05:00Z",
@@ -100,6 +122,31 @@ def _seed_memory_sweep_examples(ledger: MemoryCandidateLedger) -> None:
                 ),
                 evidence_refs=[
                     f"wiki/classes/{CLASS_ID}/lessons/2026-05-25/lesson_results.md"
+                ],
+                source="approved_wiki",
+                basis="explicit",
+                confidence="high",
+                cluster_key="class.redox.concrete_examples",
+            ),
+            MemoryCandidateRow(
+                id="cand_class_redox_examples_2",
+                created_at="2026-06-23T09:05:00Z",
+                updated_at="2026-06-23T09:05:00Z",
+                class_id=CLASS_ID,
+                subject="chemie",
+                workflow="ingest",
+                session_id="sess_ingest_011",
+                turn_index=2,
+                channel="class_learning_pattern",
+                target="teaching_patterns.md",
+                section="What Worked Well",
+                candidate_update=(
+                    "Concrete displacement examples again helped the class "
+                    "reason about electron transfer."
+                ),
+                evidence_summary="A second lesson repeated the pattern.",
+                evidence_refs=[
+                    f"wiki/classes/{CLASS_ID}/lessons/2026-05-29/lesson_results.md"
                 ],
                 source="approved_wiki",
                 basis="explicit",
@@ -266,7 +313,9 @@ def test_memory_sweep_sqlite_groups_applies_and_preserves_boundaries(tmp_path, w
     )
     class_state = wiki.read_wiki_page(f"wiki/classes/{CLASS_ID}/memory/class_state.md")
 
-    assert "Concrete metal-displacement examples helped this class" in teaching_patterns
+    # The cluster's representative content is applied (the seed now has a
+    # second-session reinforcement twin, so either phrasing may represent it).
+    assert "displacement examples" in teaching_patterns
     assert "now applying redox vocabulary" in class_state
     assert wiki.read_user_profile() == teacher_before
     assert wiki.read_wiki_page("wiki/subjects/chemie.md") == subject_before
@@ -1658,15 +1707,17 @@ def test_memory_sweep_44_examples_route_and_apply_to_expected_files(
 def test_memory_sweep_api_proposes_and_updates_candidate_status(client: TestClient):
     plan_base = f"/api/classes/{CLASS_ID}/plan"
 
-    start = client.post(f"{plan_base}/sessions")
-    assert start.status_code == 200, start.text
-    session_id = start.json()["session_id"]
-
-    chat = client.post(
-        f"{plan_base}/sessions/{session_id}/chat",
-        json={"message": "Please draft a concise redox lesson plan."},
-    )
-    assert chat.status_code == 200, chat.text
+    # Mem V3 gate: an inferred claim needs captures in two distinct sessions
+    # before the sweep proposes it, so run the same planning signal twice.
+    for _ in range(2):
+        start = client.post(f"{plan_base}/sessions")
+        assert start.status_code == 200, start.text
+        session_id = start.json()["session_id"]
+        chat = client.post(
+            f"{plan_base}/sessions/{session_id}/chat",
+            json={"message": "Please draft a concise redox lesson plan."},
+        )
+        assert chat.status_code == 200, chat.text
 
     propose = client.post(f"/api/classes/{CLASS_ID}/memory/sweep/propose")
     assert propose.status_code == 200, propose.text
@@ -1676,7 +1727,9 @@ def test_memory_sweep_api_proposes_and_updates_candidate_status(client: TestClie
     candidate = prefs[0]
     assert candidate["target"] == "copilot_profile.md"
     assert candidate["channel"] == "teacher_behavior"
-    assert candidate["why_now"] == "Stub isolated sweep review."
+    assert candidate["public_rationale"] == "Stub isolated sweep review."
+    assert candidate["why_now"].startswith("Seen ")
+    assert candidate["signal_count"] >= 2
     assert isinstance(candidate["current_memory_excerpt"], str)
     assert len(candidate["current_memory_excerpt"]) <= 800
 
@@ -1709,15 +1762,7 @@ def test_memory_sweep_api_falls_back_when_isolated_proposer_unavailable(
     from app.main import app
 
     class FailingSweepAgent(StubAgentRunner):
-        async def propose_memory_sweep_cards(
-            self,
-            class_id: str,
-            subject: str,
-            grouped_candidates,
-            target_excerpts,
-            alignment_groups=None,
-            validation_error: str = "",
-        ):
+        async def consolidate_memory_sweep(self, *args, **kwargs):
             raise RuntimeError("offline proposer")
 
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
@@ -1736,12 +1781,12 @@ def test_memory_sweep_api_falls_back_when_isolated_proposer_unavailable(
 
     assert res.status_code == 200, res.text
     body = res.json()
-    assert "Memory Sweep card generation unresolved" in body["warnings"][0]
-    assert body["queues"]["Class Evolution"][0]["target"] == "teaching_patterns.md"
-    assert body["queues"]["Class Evolution"][0]["operation"] == "needs_decision"
-    card_warnings = body["queues"]["Class Evolution"][0]["warnings"]
-    assert len(card_warnings) == 1
-    assert card_warnings[0] in body["warnings"]
+    # Mem V3: a failed consolidation yields ONE plain-language notice and no
+    # per-candidate zombie cards; raw internal reasons stay out of the payload.
+    assert len(body["warnings"]) == 1
+    assert "could not consolidate" in body["warnings"][0]
+    assert "offline proposer" not in body["warnings"][0]
+    assert body["queues"] == {}
 
 
 def test_memory_sweep_api_can_scope_proposal_to_one_queue(
@@ -1784,78 +1829,44 @@ def test_memory_sweep_api_accepts_model_consolidated_card(
     from app.api import deps
     from app.main import app
     class MergingSweepAgent(StubAgentRunner):
-        async def align_memory_sweep_candidates(
-            self,
-            class_id: str,
-            subject: str,
-            grouped_candidates,
-            target_excerpts,
-            validation_error: str = "",
+        async def consolidate_memory_sweep(
+            self, class_id, subject, claims, memory_indexes, **kwargs
         ):
-            class_cards = [
-                item
-                for items in grouped_candidates.values()
-                for item in items
-                if item["target"] == "teaching_patterns.md"
-            ]
-            ids = [item["candidate_id"] for item in class_cards]
-            return MemorySweepAlignmentOutput(
-                alignment_groups=[
-                    MemorySweepAlignmentGroupOutput(
-                        group_id="group_roles",
-                        target="teaching_patterns.md",
-                        section="What Worked Well",
-                        ledger_candidate_ids=ids,
-                        relationship="new_semantic_claim",
-                        decision="merge",
-                        group_label="structured_group_roles",
-                        public_rationale="Two class-learning signals describe the same pattern.",
-                    )
-                ]
+            from app.teacher_agent.models import (
+                MemoryConsolidationOpOutput,
+                MemoryConsolidationOutput,
             )
 
-        async def propose_memory_sweep_cards(
-            self,
-            class_id: str,
-            subject: str,
-            grouped_candidates,
-            target_excerpts,
-            alignment_groups=None,
-            validation_error: str = "",
-        ):
-            class_cards = [
-                item
-                for items in grouped_candidates.values()
-                for item in items
-                if item["target"] == "teaching_patterns.md"
+            pattern_claims = [
+                claim for claim in claims if claim["target"] == "teaching_patterns.md"
             ]
-            ids = [item["candidate_id"] for item in class_cards]
-            first = class_cards[0]
-            return MemorySweepProposalOutput(
-                cards=[
-                    MemorySweepCardOutput(
-                        candidate_id=ids[0],
-                        source_group_id="group_roles",
-                        candidate_ids=ids,
-                        signal_count=len(ids),
-                        review_queue=first["review_queue"],
-                        channel=first["channel"],
-                        target=first["target"],
-                        section="What Worked Well",
-                        content=(
-                            "Structured group roles help Chemie 9b handle symbolic "
-                            "redox work."
-                        ),
-                        evidence_summary="Merged repeated group-role signals.",
-                        evidence_refs=[],
-                        confidence="high",
-                        basis="explicit",
-                        status="captured",
-                        why_now="Two related signals point to the same class pattern.",
-                    )
-                ],
-                warnings=[],
+            other_claims = [
+                claim for claim in claims if claim["target"] != "teaching_patterns.md"
+            ]
+            operations = [
+                MemoryConsolidationOpOutput(
+                    claim_ids=[claim["claim_id"] for claim in pattern_claims],
+                    operation="add",
+                    target="teaching_patterns.md",
+                    section="what_worked_well",
+                    new_text=(
+                        "Structured group roles help Chemie 9b handle symbolic "
+                        "redox work."
+                    ),
+                    rationale="Two class-learning signals describe the same pattern.",
+                )
+            ]
+            operations.extend(
+                MemoryConsolidationOpOutput(
+                    claim_ids=[claim["claim_id"]],
+                    operation="none",
+                    target=claim["target"],
+                    section=claim["section"],
+                    rationale="Out of scope for this scenario.",
+                )
+                for claim in other_claims
             )
+            return MemoryConsolidationOutput(operations=operations, warnings=[])
 
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()
@@ -1879,6 +1890,7 @@ def test_memory_sweep_api_accepts_model_consolidated_card(
                 source="inferred_from_session",
                 basis="inferred",
                 confidence="medium",
+                cluster_key="class.teaching_patterns.group_roles",
             ),
             MemoryCandidateRow(
                 id="semantic_group_roles_2",
@@ -1898,6 +1910,7 @@ def test_memory_sweep_api_accepts_model_consolidated_card(
                 source="teacher_explicit",
                 basis="explicit",
                 confidence="high",
+                cluster_key="class.teaching_patterns.group_roles",
             ),
         ]
     )
@@ -1937,82 +1950,47 @@ def test_memory_sweep_api_merges_mbb_and_executive_communication(
     from app.main import app
 
     class ExecutiveCommunicationSweepAgent(StubAgentRunner):
-        async def align_memory_sweep_candidates(
-            self,
-            class_id: str,
-            subject: str,
-            grouped_candidates,
-            target_excerpts,
-            validation_error: str = "",
+        async def consolidate_memory_sweep(
+            self, class_id, subject, claims, memory_indexes, **kwargs
         ):
-            rows = [
-                item
-                for items in grouped_candidates.values()
-                for item in items
-                if item["target"] == "teacher_profile.md"
-            ]
-            ids = [item["candidate_id"] for item in rows]
-            return MemorySweepAlignmentOutput(
-                alignment_groups=[
-                    MemorySweepAlignmentGroupOutput(
-                        group_id="executive_structured_communication",
-                        target="teacher_profile.md",
-                        section="Communication",
-                        ledger_candidate_ids=ids,
-                        relationship="new_semantic_claim",
-                        decision="merge",
-                        group_label="executive_structured_communication",
-                        public_rationale="MBB and executive style point to concise structured communication.",
-                    )
-                ]
+            from app.teacher_agent.models import (
+                MemoryConsolidationOpOutput,
+                MemoryConsolidationOutput,
             )
 
-        async def propose_memory_sweep_cards(
-            self,
-            class_id: str,
-            subject: str,
-            grouped_candidates,
-            target_excerpts,
-            alignment_groups=None,
-            validation_error: str = "",
-        ):
-            rows = [
-                item
-                for items in grouped_candidates.values()
-                for item in items
-                if item["target"] == "teacher_profile.md"
+            profile_claims = [
+                claim for claim in claims if claim["target"] == "teacher_profile.md"
             ]
-            ids = [item["candidate_id"] for item in rows]
-            first = rows[0]
-            return MemorySweepProposalOutput(
-                cards=[
-                    MemorySweepCardOutput(
-                        candidate_id=ids[0],
-                        source_group_id="executive_structured_communication",
-                        candidate_ids=ids,
-                        signal_count=len(ids),
-                        review_queue=first["review_queue"],
-                        channel=first["channel"],
-                        target="teacher_profile.md",
-                        section="Communication",
-                        content=(
-                            "Teacher prefers concise executive-style communication, "
-                            "including MBB-style framing when useful."
-                        ),
-                        evidence_summary=(
-                            "Two MBB-style requests and one executive-communication "
-                            "request point to the same broader preference."
-                        ),
-                        evidence_refs=[],
-                        confidence="high",
-                        basis="explicit",
-                        status="captured",
-                        status_recommendation="promote",
-                        why_now="Repeated communication-style signals are semantically aligned.",
-                    )
-                ],
-                warnings=[],
+            other_claims = [
+                claim for claim in claims if claim["target"] != "teacher_profile.md"
+            ]
+            operations = [
+                MemoryConsolidationOpOutput(
+                    claim_ids=[claim["claim_id"] for claim in profile_claims],
+                    operation="add",
+                    target="teacher_profile.md",
+                    section="Communication",
+                    new_text=(
+                        "Teacher prefers concise executive-style communication, "
+                        "including MBB-style framing when useful."
+                    ),
+                    rationale=(
+                        "MBB and executive style point to concise structured "
+                        "communication."
+                    ),
+                )
+            ]
+            operations.extend(
+                MemoryConsolidationOpOutput(
+                    claim_ids=[claim["claim_id"]],
+                    operation="none",
+                    target=claim["target"],
+                    section=claim["section"],
+                    rationale="Out of scope for this scenario.",
+                )
+                for claim in other_claims
             )
+            return MemoryConsolidationOutput(operations=operations, warnings=[])
 
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()
@@ -2076,87 +2054,57 @@ def test_memory_sweep_api_merges_mbb_and_executive_communication(
 
 
 @pytest.mark.anyio
-async def test_memory_sweep_retries_alignment_when_card_validation_reveals_bad_adjust(
+async def test_memory_sweep_retries_consolidation_on_structural_validation_error(
     tmp_path,
     wiki: WikiStore,
 ):
-    class BadAdjustThenMergeAgent(StubAgentRunner):
+    class BadIdThenValidAgent(StubAgentRunner):
         def __init__(self, wiki: WikiStore) -> None:
             super().__init__(wiki)
-            self.alignment_errors: list[str] = []
+            self.validation_errors: list[str] = []
 
-        async def align_memory_sweep_candidates(
+        async def consolidate_memory_sweep(
             self,
-            class_id: str,
-            subject: str,
-            grouped_candidates,
-            target_excerpts,
+            class_id,
+            subject,
+            claims,
+            memory_indexes,
+            *,
             validation_error: str = "",
+            **kwargs,
         ):
-            self.alignment_errors.append(validation_error)
-            rows = [item for items in grouped_candidates.values() for item in items]
-            ids = [item["candidate_id"] for item in rows]
-            retrying_after_bad_adjust = "replaces_content not found" in validation_error
-            return MemorySweepAlignmentOutput(
-                alignment_groups=[
-                    MemorySweepAlignmentGroupOutput(
-                        group_id="teacher_style",
-                        target="teacher_profile.md",
-                        section="Communication",
-                        ledger_candidate_ids=ids,
-                        relationship=(
-                            "new_semantic_claim"
-                            if retrying_after_bad_adjust
-                            else "broadens_existing_memory"
-                        ),
-                        decision="merge" if retrying_after_bad_adjust else "adjust_existing",
-                        group_label="teacher_style",
-                        surface_labels=(
-                            [] if retrying_after_bad_adjust else ["named-style communication"]
-                        ),
-                    )
-                ]
+            from app.teacher_agent.models import (
+                MemoryConsolidationOpOutput,
+                MemoryConsolidationOutput,
             )
 
-        async def propose_memory_sweep_cards(
-            self,
-            class_id: str,
-            subject: str,
-            grouped_candidates,
-            target_excerpts,
-            alignment_groups=None,
-            validation_error: str = "",
-        ):
-            rows = [item for items in grouped_candidates.values() for item in items]
-            ids = [item["candidate_id"] for item in rows]
-            group = (alignment_groups or [])[0]
-            operation = {
-                "merge": "add",
-                "adjust_existing": "adjust",
-            }[group["decision"]]
-            return MemorySweepProposalOutput(
-                cards=[
-                    MemorySweepCardOutput(
-                        candidate_id=ids[0],
-                        source_group_id=group["group_id"],
-                        candidate_ids=ids,
-                        signal_count=len(ids),
-                        review_queue=rows[0]["review_queue"],
-                        channel=rows[0]["channel"],
+            self.validation_errors.append(validation_error)
+            if not validation_error:
+                # First attempt references an id that is not in the
+                # enumerated memory index -> structural rejection + retry.
+                return MemoryConsolidationOutput(
+                    operations=[
+                        MemoryConsolidationOpOutput(
+                            claim_ids=[claim["claim_id"] for claim in claims],
+                            operation="update",
+                            target="teacher_profile.md",
+                            section="Communication",
+                            memory_id="M99_404",
+                            new_text="Teacher prefers concise named-style communication.",
+                        )
+                    ],
+                    warnings=[],
+                )
+            return MemoryConsolidationOutput(
+                operations=[
+                    MemoryConsolidationOpOutput(
+                        claim_ids=[claim["claim_id"] for claim in claims],
+                        operation="add",
                         target="teacher_profile.md",
                         section="Communication",
-                        content=(
+                        new_text=(
                             "Teacher prefers concise named-style communication "
                             "with clear recommendations."
-                        ),
-                        operation=operation,
-                        status_recommendation=(
-                            "promote" if operation == "add" else "promote"
-                        ),
-                        replaces_content=(
-                            "Teacher prefers missing narrower wording."
-                            if operation == "adjust"
-                            else ""
                         ),
                     )
                 ],
@@ -2185,7 +2133,7 @@ async def test_memory_sweep_retries_alignment_when_card_validation_reveals_bad_a
         "Communication",
         "Teacher prefers named-style communication.",
     )
-    agents = BadAdjustThenMergeAgent(wiki)
+    agents = BadIdThenValidAgent(wiki)
 
     result = await propose_memory_sweep_review(
         wiki=wiki,
@@ -2198,7 +2146,7 @@ async def test_memory_sweep_retries_alignment_when_card_validation_reveals_bad_a
     assert len(cards) == 1
     assert cards[0].operation == "add"
     assert set(cards[0].candidate_ids) == {"bad_adjust_mbb", "bad_adjust_exec"}
-    assert any("replaces_content not found" in error for error in agents.alignment_errors)
+    assert any("unknown memory id" in error for error in agents.validation_errors)
     assert result.warnings == []
 
 
@@ -2215,86 +2163,44 @@ def test_memory_sweep_api_repeated_mbb_preamble_is_already_covered(
     )
 
     class AlreadyCoveredSweepAgent(StubAgentRunner):
-        async def align_memory_sweep_candidates(
-            self,
-            class_id: str,
-            subject: str,
-            grouped_candidates,
-            target_excerpts,
-            validation_error: str = "",
+        async def consolidate_memory_sweep(
+            self, class_id, subject, claims, memory_indexes, **kwargs
         ):
-            rows = [
-                item
-                for items in grouped_candidates.values()
-                for item in items
-                if item["target"] == "teacher_profile.md"
-            ]
-            ids = [item["candidate_id"] for item in rows]
-            return MemorySweepAlignmentOutput(
-                alignment_groups=[
-                    MemorySweepAlignmentGroupOutput(
-                        group_id="covered_executive_structured_communication",
-                        target="teacher_profile.md",
-                        section="Communication",
-                        ledger_candidate_ids=ids,
-                        relationship="already_covered",
-                        decision="already_covered",
-                        group_label="executive_structured_communication",
-                        surface_labels=[
-                            "MBB-style communication",
-                            "executive-style communication",
-                        ],
-                        public_rationale="Current memory already captures the preference.",
-                    )
-                ]
+            from app.teacher_agent.models import (
+                MemoryConsolidationOpOutput,
+                MemoryConsolidationOutput,
             )
 
-        async def propose_memory_sweep_cards(
-            self,
-            class_id: str,
-            subject: str,
-            grouped_candidates,
-            target_excerpts,
-            alignment_groups=None,
-            validation_error: str = "",
-        ):
-            assert "executive-style communication" in target_excerpts["teacher_profile.md"]
-            rows = [
-                item
-                for items in grouped_candidates.values()
-                for item in items
-                if item["target"] == "teacher_profile.md"
-            ]
-            ids = [item["candidate_id"] for item in rows]
-            first = rows[0]
-            return MemorySweepProposalOutput(
-                cards=[
-                    MemorySweepCardOutput(
-                        candidate_id=ids[0],
-                        source_group_id="covered_executive_structured_communication",
-                        candidate_ids=ids,
-                        signal_count=len(ids),
-                        review_queue=first["review_queue"],
-                        channel=first["channel"],
-                        target="teacher_profile.md",
-                        section="Communication",
-                        content=(
-                            "Teacher prefers concise executive-style communication, "
-                            "including MBB-style framing when useful."
-                        ),
-                        evidence_summary=(
-                            "Repeated prompt preambles match existing profile memory."
-                        ),
-                        confidence="high",
-                        basis="explicit",
-                        status="captured",
-                        operation="already_covered",
-                        status_recommendation="already_covered",
-                        why_now="Current teacher_profile.md already contains this communication preference.",
-                    )
-                ],
-                warnings=[],
+            assert any(
+                "executive-style communication" in text
+                for text in memory_indexes.get("teacher_profile.md", {}).values()
             )
+            profile_claims = [
+                claim for claim in claims if claim["target"] == "teacher_profile.md"
+            ]
+            other_claims = [
+                claim for claim in claims if claim["target"] != "teacher_profile.md"
+            ]
+            operations = [
+                MemoryConsolidationOpOutput(
+                    claim_ids=[claim["claim_id"] for claim in profile_claims],
+                    operation="none",
+                    target="teacher_profile.md",
+                    section="Communication",
+                    rationale="Current memory already captures the preference.",
+                )
+            ]
+            operations.extend(
+                MemoryConsolidationOpOutput(
+                    claim_ids=[claim["claim_id"]],
+                    operation="none",
+                    target=claim["target"],
+                    section=claim["section"],
+                    rationale="Out of scope for this scenario.",
+                )
+                for claim in other_claims
+            )
+            return MemoryConsolidationOutput(operations=operations, warnings=[])
 
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()

@@ -197,6 +197,9 @@ class AgentRunner:
         self.model = settings.openai_model
         self.chat_model = settings.openai_chat_model
         self.fast_model = settings.openai_fast_model
+        # Mem V3: the weekly consolidation sweep runs rarely and merges the
+        # whole ledger against current memory — strongest available model.
+        self.sweep_model = settings.openai_sweep_model or settings.openai_chat_model
         self.reasoning_effort = settings.openai_reasoning_effort
         self.timeout = settings.agent_timeout_seconds
         self.max_turns = settings.agent_max_turns
@@ -824,6 +827,55 @@ class AgentRunner:
         parsed = await self._run_structured(agent, prompt)
         if not isinstance(parsed, MemorySweepProposalOutput):
             raise RuntimeError("Failed to propose Memory Sweep cards")
+        return parsed
+
+    async def consolidate_memory_sweep(
+        self,
+        class_id: str,
+        subject: str,
+        claims: list[dict],
+        memory_indexes: dict[str, dict[str, str]],
+        *,
+        applied_history: dict[str, list[str]] | None = None,
+        rejected_history: dict[str, list[str]] | None = None,
+        budget_usage: dict[str, str] | None = None,
+        today: str = "",
+        validation_error: str = "",
+    ) -> "MemoryConsolidationOutput":
+        """Mem V3 single-call sweep: claims + enumerated memory -> operations."""
+        import json
+
+        from app.teacher_agent.agent import build_memory_sweep_consolidation_agent
+        from app.teacher_agent.models import MemoryConsolidationOutput
+
+        field_cap = get_context_limits().profile_propose_field_chars
+        retry_block = (
+            "\nPrevious validation error (fix the structural issue; reference "
+            f"input ids only):\n{validation_error}\n\n"
+            if validation_error
+            else ""
+        )
+        prompt = (
+            f"Class: {class_id}\n"
+            f"Subject: {subject}\n"
+            f"Today: {today}\n\n"
+            f"{retry_block}"
+            "Claims (gate-passing durable-memory candidates):\n"
+            f"{apply_char_limit(json.dumps(claims, indent=2), field_cap * 4)}\n\n"
+            "Current memory, bullets enumerated with ids:\n"
+            f"{apply_char_limit(json.dumps(memory_indexes, indent=2), field_cap * 4)}\n\n"
+            "Recently applied memory texts per target:\n"
+            f"{apply_char_limit(json.dumps(applied_history or {}, indent=2), field_cap * 2)}\n\n"
+            "Recently rejected memory texts per target:\n"
+            f"{apply_char_limit(json.dumps(rejected_history or {}, indent=2), field_cap * 2)}\n\n"
+            "Memory budget usage per target:\n"
+            f"{apply_char_limit(json.dumps(budget_usage or {}, indent=2), field_cap)}\n\n"
+            "Return one operation set accounting for every claim_id exactly once."
+        )
+        agent = build_memory_sweep_consolidation_agent(self.sweep_model)
+        parsed = await self._run_structured(agent, prompt)
+        if not isinstance(parsed, MemoryConsolidationOutput):
+            raise RuntimeError("Failed to consolidate Memory Sweep claims")
         return parsed
 
     async def align_memory_sweep_candidates(

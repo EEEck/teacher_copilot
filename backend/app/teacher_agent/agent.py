@@ -9,6 +9,7 @@ from openai.types.shared import Reasoning
 from app.teacher_agent.models import (
     CompileOutput,
     IngestTurnOutput,
+    MemoryConsolidationOutput,
     MemorySweepAlignmentOutput,
     MemoryCompactOutput,
     MemorySweepProposalOutput,
@@ -28,6 +29,7 @@ from app.teacher_agent.prompts import (
     MEMORY_COMPACT_SYSTEM,
     MEMORY_SWEEP_ALIGNMENT_SYSTEM,
     MEMORY_SWEEP_CARD_SYSTEM,
+    MEMORY_SWEEP_CONSOLIDATION_SYSTEM,
     PROFILE_PROPOSAL_SYSTEM,
     PLAN_OPENING_SYSTEM,
     PLAN_SYSTEM,
@@ -201,4 +203,16 @@ def build_memory_sweep_alignment_agent(model: str) -> Agent:
         ),
         model=model,
         output_type=MemorySweepAlignmentOutput,
+    )
+
+
+def build_memory_sweep_consolidation_agent(model: str) -> Agent:
+    return Agent(
+        name="KlassenPilot Memory Consolidation",
+        instructions=apply_prompt(
+            MEMORY_SWEEP_CONSOLIDATION_SYSTEM,
+            security_policy=TEACHER_AGENT_SECURITY_POLICY,
+        ),
+        model=model,
+        output_type=MemoryConsolidationOutput,
     )

@@ -636,10 +636,11 @@ def insert_with_folding(
     - matches an ``applied`` row     -> stored as ``already_covered``
     - matches a ``rejected`` row     -> stored as ``suppressed`` unless the
       new capture is an explicit teacher ask (``source=teacher_explicit``)
-    - exact text match to an open row -> stored as ``duplicate``
-    - near-duplicate of an open row  -> stored open, adopting the matched
-      row's cluster_key (reinforcement: the cluster grows instead of a new
-      claim appearing)
+    - exact text match to an open row from the SAME session -> ``duplicate``
+      (within-session noise)
+    - exact or near duplicate of an open row from another session -> stored
+      open, adopting the matched row's cluster_key (reinforcement: an
+      identical re-statement in a new session is the strongest signal)
     - otherwise                      -> stored as-is (new claim)
 
     Sections are normalized onto the per-target vocabulary first so
@@ -680,7 +681,11 @@ def insert_with_folding(
         elif row.status == "rejected" and rejected_match is None:
             rejected_match = row
         elif row.status in OPEN_STATUSES:
-            if exact and open_exact is None:
+            same_session = (
+                candidate.session_id is not None
+                and row.session_id == candidate.session_id
+            )
+            if exact and same_session and open_exact is None:
                 open_exact = row
             elif open_near is None:
                 open_near = row

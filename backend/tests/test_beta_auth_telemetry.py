@@ -358,15 +358,8 @@ def test_memory_sweep_propose_records_beta_telemetry_with_warnings(
     tmp_path: Path, monkeypatch
 ):
     class FailingSweepAgent:
-        async def align_memory_sweep_candidates(
-            self,
-            class_id: str,
-            subject: str,
-            grouped_candidates,
-            target_excerpts,
-            validation_error: str = "",
-        ):
-            raise RuntimeError("offline alignment")
+        async def consolidate_memory_sweep(self, *args, **kwargs):
+            raise RuntimeError("offline consolidation")
 
     service = _service(tmp_path)
     service.provision_tester(
@@ -423,6 +416,9 @@ def test_memory_sweep_propose_records_beta_telemetry_with_warnings(
         assert event is not None
         assert event[0] == "memory_sweep_propose"
         assert '"warning_count": 1' in event[1]
-        assert "offline alignment" in event[1]
+        # Mem V3: teachers (and telemetry payloads) get the plain-language
+        # notice; raw internal failure reasons stay in server logs.
+        assert "could not consolidate" in event[1]
+        assert "offline consolidation" not in event[1]
     finally:
         app.dependency_overrides.clear()

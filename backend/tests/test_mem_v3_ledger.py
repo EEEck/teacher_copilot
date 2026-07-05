@@ -78,15 +78,29 @@ def test_fixture_contains_repeated_applied_preference():
 # --- folding goldens (xfail until phase 2) ---------------------------------
 
 
-def test_exact_duplicate_insert_is_rejected(tmp_path: Path):
+def test_same_session_exact_duplicate_is_rejected(tmp_path: Path):
     insert_with_folding = _require("insert_with_folding")
     ledger = _ledger(tmp_path)
     row = next(r for r in organic_chemistry_rows() if r.status == "captured")
     first = insert_with_folding(ledger, row)
     assert first.status == "captured"
-    dup = replace(row, id="dup-row", session_id="another-session")
+    dup = replace(row, id="dup-row")  # same session: within-session noise
     second = insert_with_folding(ledger, dup)
     assert second.status == "duplicate"
+
+
+def test_cross_session_exact_recapture_reinforces_the_cluster(tmp_path: Path):
+    # An identical re-statement in a NEW session is the strongest
+    # reinforcement signal — it must stay open and join the cluster so the
+    # promotion gate counts the second session.
+    insert_with_folding = _require("insert_with_folding")
+    ledger = _ledger(tmp_path)
+    row = next(r for r in organic_chemistry_rows() if r.status == "captured")
+    first = insert_with_folding(ledger, row)
+    recapture = replace(row, id="recap-row", session_id="another-session")
+    second = insert_with_folding(ledger, recapture)
+    assert second.status == "captured"
+    assert second.cluster_key == first.cluster_key
 
 
 def test_near_duplicate_adopts_existing_open_cluster(tmp_path: Path):
