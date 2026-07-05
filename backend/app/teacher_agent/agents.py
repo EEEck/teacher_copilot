@@ -22,12 +22,10 @@ from app.schemas.api import (
     LessonPlan,
 )
 from app.teacher_agent.agent import (
-    build_memory_sweep_alignment_agent,
     build_memory_compact_agent,
     build_compile_agent,
     build_ingest_agent,
     build_lint_agent,
-    build_memory_sweep_card_agent,
     build_plan_chat_agent,
     build_plan_lesson_agent,
     build_plan_opening_agent,
@@ -37,8 +35,6 @@ from app.teacher_agent.models import (
     CompileOutput,
     IngestTurnOutput,
     MemoryCompactOutput,
-    MemorySweepAlignmentOutput,
-    MemorySweepProposalOutput,
     PlanOutput,
     PlanTurnOutput,
     ProfileProposalOutput,
@@ -788,46 +784,6 @@ class AgentRunner:
             raise RuntimeError("Failed to propose profile updates")
         return parsed
 
-    async def propose_memory_sweep_cards(
-        self,
-        class_id: str,
-        subject: str,
-        grouped_candidates: dict[str, list[dict]],
-        target_excerpts: dict[str, str],
-        alignment_groups: list[dict] | None = None,
-        validation_error: str = "",
-    ) -> MemorySweepProposalOutput:
-        import json
-
-        field_cap = get_context_limits().profile_propose_field_chars
-        retry_block = (
-            "\nPrevious validation error:\n"
-            f"{validation_error}\n"
-            "Revise the alignment for the failing group instead of repeating the "
-            "same decision. If merge/add overlaps current memory, use "
-            "adjust_existing when the current excerpt has a narrower bullet for "
-            "the same compatible claim, already_covered when it fully covers the "
-            "claim, or needs_decision if the relationship is unclear.\n\n"
-            if validation_error
-            else ""
-        )
-        prompt = (
-            f"Class: {class_id}\n"
-            f"Subject: {subject}\n\n"
-            f"{retry_block}"
-            "Validated alignment groups:\n"
-            f"{apply_char_limit(json.dumps(alignment_groups or [], indent=2), field_cap * 3)}\n\n"
-            "Grouped candidate ledger rows:\n"
-            f"{apply_char_limit(json.dumps(grouped_candidates, indent=2), field_cap * 4)}\n\n"
-            "Current target memory excerpts:\n"
-            f"{apply_char_limit(json.dumps(target_excerpts, indent=2), field_cap * 3)}\n\n"
-            "Return review cards for the teacher. Do not write memory."
-        )
-        agent = build_memory_sweep_card_agent(self.fast_model)
-        parsed = await self._run_structured(agent, prompt)
-        if not isinstance(parsed, MemorySweepProposalOutput):
-            raise RuntimeError("Failed to propose Memory Sweep cards")
-        return parsed
 
     async def consolidate_memory_sweep(
         self,
@@ -878,34 +834,3 @@ class AgentRunner:
             raise RuntimeError("Failed to consolidate Memory Sweep claims")
         return parsed
 
-    async def align_memory_sweep_candidates(
-        self,
-        class_id: str,
-        subject: str,
-        grouped_candidates: dict[str, list[dict]],
-        target_excerpts: dict[str, str],
-        validation_error: str = "",
-    ) -> MemorySweepAlignmentOutput:
-        import json
-
-        field_cap = get_context_limits().profile_propose_field_chars
-        retry_block = (
-            f"\nPrevious validation error:\n{validation_error}\n\n"
-            if validation_error
-            else ""
-        )
-        prompt = (
-            f"Class: {class_id}\n"
-            f"Subject: {subject}\n\n"
-            f"{retry_block}"
-            "Grouped candidate ledger rows:\n"
-            f"{apply_char_limit(json.dumps(grouped_candidates, indent=2), field_cap * 4)}\n\n"
-            "Current target memory excerpts:\n"
-            f"{apply_char_limit(json.dumps(target_excerpts, indent=2), field_cap * 3)}\n\n"
-            "Return validated-ready alignment groups. Do not generate review cards."
-        )
-        agent = build_memory_sweep_alignment_agent(self.fast_model)
-        parsed = await self._run_structured(agent, prompt)
-        if not isinstance(parsed, MemorySweepAlignmentOutput):
-            raise RuntimeError("Failed to align Memory Sweep candidates")
-        return parsed
