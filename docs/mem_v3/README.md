@@ -11,7 +11,11 @@ contract still lives in `../agent_contracts.md`; Memory V2 background is in
 1. `approach.md` — the teaching guide: the approach from first principles,
    the life of one claim end to end, where we sit in the industry landscape,
    and a priming block for onboarding other agents. **Start here.**
-2. `design.md` — why V3 exists, what V2 got right and wrong (with beta
+2. `lecture.md` — the field lecture: mem0, Hindsight, OpenClaw, and Hermes
+   dissected from their actual code (`ref_repos/`), the eight design
+   dimensions of agent memory, convergent patterns across the industry,
+   2026 research and benchmarks, and design exercises.
+3. `design.md` — why V3 exists, what V2 got right and wrong (with beta
    evidence), the V3 architecture, and the borrowed-code table.
 3. `learnings.md` — post-implementation key learnings: what the beta round
    taught us, what only live runs revealed, and which lessons generalize.
