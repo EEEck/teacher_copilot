@@ -404,6 +404,13 @@ def cards_from_consolidation_ops(
                 )
             )
         else:  # none
+            # Synthetic student-summary claims have no ledger rows to retire;
+            # a "nothing changed" outcome should be silence, not a card.
+            if all(
+                is_synthetic_student_summary_candidate_id(cid)
+                for cid in candidate_ids
+            ):
+                continue
             cards.append(
                 MemorySweepReviewCard(
                     **base,
@@ -879,6 +886,16 @@ def validate_consolidation_ops(
                 )
         if operation in {"update", "add"} and not new_text:
             raise ValueError(f"{operation} operation requires new_text")
+        # Deterministic no-op guard: an update whose text matches the
+        # referenced bullet is noise (live runs produced identical student
+        # summary "updates") — demote it to none instead of a card.
+        if operation == "update" and memory_id is not None:
+            existing = " ".join(memory_index[memory_id].strip().lower().split())
+            proposed = " ".join(new_text.strip().lower().split())
+            if existing == proposed:
+                operation = "none"
+                memory_id = None
+                new_text = ""
 
         assigned.extend(op_claims)
         validated.append(

@@ -83,6 +83,23 @@ def test_every_claim_must_be_accounted_for_exactly_once():
         )
 
 
+def test_no_change_update_is_demoted_to_none():
+    validate = _require("validate_consolidation_ops")
+    ops = validate(
+        [
+            _op(
+                operation="update",
+                memory_id="M2",
+                new_text="Feedback and planning language:  english for this prototype.",
+            )
+        ],
+        MEMORY_INDEX,
+        {"c1"},
+    )
+    assert ops[0].operation == "none"
+    assert ops[0].memory_id is None
+
+
 def test_update_requires_new_text():
     validate = _require("validate_consolidation_ops")
     with pytest.raises(ValueError):

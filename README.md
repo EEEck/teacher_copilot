@@ -202,6 +202,7 @@ teacher_wiki/
 | `OPENAI_MODEL` | `backend/.env` | Default model fallback for legacy settings |
 | `OPENAI_CHAT_MODEL` | `backend/.env` | Chat turns (ingest/plan); default `gpt-5.4-mini` for reasoning + streaming |
 | `OPENAI_FAST_MODEL` | `backend/.env` | Compile/lint/opening; default `gpt-4o-mini` |
+| `OPENAI_SWEEP_MODEL` | `backend/.env` | Memory Sweep consolidation (rare, context-heavy). Use the strongest reasoning model (`gpt-5.4`); mini models fail the add-vs-adjust judgment. Empty = falls back to `OPENAI_CHAT_MODEL` |
 | `OPENAI_REASONING_EFFORT` | `backend/.env` | `none`, `low`, `medium`, `high`, `xhigh` - hidden thinking tokens (billed as output). Default `medium`; use `none` or `low` to save cost |
 | `WIKI_ROOT` | `backend/.env` | Path to `teacher_wiki` (Docker: set in `compose.yaml` as `/data/teacher_wiki`) |
 | `BETA_ENABLED` | `backend/.env` | Enables invite-code beta auth and workspace-scoped wiki roots. Default `false` |
