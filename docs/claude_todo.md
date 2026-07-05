@@ -191,7 +191,7 @@ _Update this section as PRs land._
 | Milestone | Status |
 |---|---|
 | M1a — Save-review brief | implemented — `lib/review-brief.ts` + `review/review-brief.tsx`, wired into both the memory-update review and the lesson-plan save review; detail cards & technical file list unchanged behind it. tsc + vitest green. Owner review round pending. |
-| Memory V3 (supersedes M2+M3) — capture discipline, ledger gate, single-call sweep, budgets | in progress — Phases 1+2 done (fixtures/goldens from real beta ledger; `insert_with_folding` + section vocabulary + `memory_gate.py` gate/decay; 14 goldens green, 5 xfail define the Phase-4 sweep contract). Next: Phase 3 capture, Phase 4 single-call sweep. See `mem_v3/implementation_plan.md` |
+| Memory V3 (supersedes M2+M3) — capture discipline, ledger gate, single-call sweep, budgets | in progress — Phases 1–3 done: fixtures/goldens from real beta ledger; `insert_with_folding` + section vocabulary + `memory_gate.py` (gate/decay); capture discipline (tightened future-scope markers, `discipline_memory_candidates` downgrade, teacher-words-only/silence-normal prompt policy) wired with folding into the live persistence path. 5 xfail goldens define the Phase-4 sweep contract. Next: Phase 4 single-call sweep + budgets. See `mem_v3/implementation_plan.md` |
 | M1b — Memory Sweep brief (mem_v3 Phase 6) | planned, after mem_v3 Phase 4 |
 | M4 — Date awareness | planned |
 | M5 — Reopen saved artifacts | planned |

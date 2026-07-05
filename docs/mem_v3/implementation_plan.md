@@ -62,6 +62,9 @@ Statuses are free text — no migration. New statuses: `duplicate`,
 3. Capture context block: current memory excerpts (already available via
    wiki context builders) + open ledger claim texts for the session's
    targets (small; ledger query at session start, cached on runtime).
+   **Deferred to Phase 4** — insert-time folding already neutralizes
+   re-captures deterministically, so this block is noise reduction, and
+   Phase 4 builds the ledger-excerpt plumbing it needs anyway.
 4. Keep typed-state repair, but route repaired candidates through the same
    tightened classification (repair must not re-create the explicit/high
    default).

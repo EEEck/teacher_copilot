@@ -146,17 +146,23 @@ def merge_memory_candidates(
     return out
 
 
+# Mem V3 (docs/mem_v3/design.md lane 1): only clearly future-scoped teacher
+# wording justifies a durable explicit preference. Loose markers (bare
+# "future", "general communication") promoted one-off requests in the beta.
 _DURABLE_PREFERENCE_MARKERS = (
     "from now on",
-    "future",
     "always",
     "going forward",
+    "in the future",
+    "for future",
+    "all future",
+    "for all lesson",
+    "for all brief",
+    "for all classes",
+    "not just this",
     "general preference",
     "general communication",
-    "not just this lesson",
-    "all lesson",
-    "all future",
-    "for future",
+    "as a general",
 )
 
 
@@ -165,6 +171,35 @@ def has_durable_preference_scope(text: str) -> bool:
     return bool(normalized) and any(
         marker in normalized for marker in _DURABLE_PREFERENCE_MARKERS
     )
+
+
+def discipline_memory_candidates(
+    candidates: Iterable[MemoryCandidate],
+    *,
+    teacher_message: str,
+) -> list[MemoryCandidate]:
+    """Downgrade explicit claims the teacher's own words do not support.
+
+    The workflow model may label a candidate ``teacher_explicit``/``high``,
+    but that status must be corroborated by clearly future-scoped wording in
+    the actual teacher message. Without it the candidate stays captured as a
+    weak inferred signal and earns promotion through the sweep gate
+    (reinforcement across sessions) instead.
+    """
+    scoped = has_durable_preference_scope(teacher_message)
+    out: list[MemoryCandidate] = []
+    for candidate in candidates:
+        explicit = candidate.source == "teacher_explicit"
+        if explicit and not scoped:
+            candidate = candidate.model_copy(
+                update={
+                    "source": "inferred_from_session",
+                    "basis": "inferred",
+                    "confidence": "low",
+                }
+            )
+        out.append(candidate)
+    return out
 
 
 def teacher_preference_candidate(

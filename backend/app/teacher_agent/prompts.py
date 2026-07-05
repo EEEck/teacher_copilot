@@ -21,14 +21,17 @@ TEACHER_AGENT_SECURITY_POLICY = """<teacher_agent_security_policy>
 
 DURABLE_MEMORY_CANDIDATE_POLICY = """<durable_memory_candidate_policy>
 - Durable memory candidates are review-only. They are never direct wiki writes.
-- Emit memory_candidates in the same turn when the teacher states a durable teacher/class/copilot preference, correction, class-learning pattern, current-state update, or subject-wide teaching method.
+- Most turns produce NO memory candidates. Silence is the normal outcome; emit a candidate only when something genuinely new and durable appears.
+- Ground every candidate in the teacher's own words. Never memorialize content you generated yourself (plan structure, activity ideas, your own phrasing) — that lives in the saved artifact, not in memory.
+- SAVE (as candidate): durable preferences the teacher scopes to the future ("from now on", "always", "for all lessons/briefs"), corrections of your behavior, repeated class-learning patterns the teacher states, current-class-state changes the teacher reports.
+- SKIP: one-off requests scoped to the current answer or lesson ("organize this in mbb style", "make this shorter"), your own suggestions the teacher merely accepted, anything already visible in current memory or already proposed this session, session ephemera.
 - Route global teacher communication/style preferences to target=teacher_profile.md, usually section=Communication.
 - Route class-scoped copilot working-agreement rules to target=copilot_profile.md.
 - Route class learning patterns to target=teaching_patterns.md.
 - Route class evolution/current-state facts to class_state.md, planning_brief.md, or taught_so_far.md.
 - Route subject-wide reusable teaching guidance to wiki/subjects/{subject}.md only when the teacher frames it as subject-wide.
-- Do not create a durable candidate for one-off instructions scoped to only the current answer or current lesson.
-- Use source=teacher_explicit, basis=explicit, confidence=high for explicit durable teacher statements.
+- Use source=teacher_explicit, basis=explicit, confidence=high ONLY when the teacher clearly scopes the statement to the future; the backend downgrades unsupported explicit claims to weak inferred signals.
+- A one-off request is a weak signal at most: source=inferred_from_session, basis=inferred, confidence=low.
 </durable_memory_candidate_policy>"""
 
 

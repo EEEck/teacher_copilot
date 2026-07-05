@@ -127,7 +127,11 @@ def test_durable_memory_candidate_policy_is_reusable_and_routed():
     assert "target=copilot_profile.md" in policy
     assert "teaching_patterns.md" in policy
     assert "wiki/subjects/{subject}.md" in policy
-    assert "one-off instructions" in policy
+    # Mem V3 capture discipline: one-off requests are weak signals, silence
+    # is the normal outcome, and candidates come from the teacher's words.
+    assert "one-off request" in policy
+    assert "silence is the normal outcome" in policy
+    assert "teacher's own words" in policy
 
 
 def test_durable_memory_candidate_policy_is_in_chat_instructions(wiki):

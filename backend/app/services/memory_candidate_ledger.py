@@ -445,7 +445,9 @@ def rows_from_runtime_candidates(
         if not is_supported_runtime_target(raw_target):
             continue
         target = canonical_memory_target(raw_target)
-        section = _field(candidate, "section") or "General"
+        # Mem V3: normalize free-form LLM section names onto the fixed
+        # per-target vocabulary before cluster keys are derived.
+        section = normalize_section(target, _field(candidate, "section") or "General")
         source = _field(candidate, "source") or "inferred_from_session"
         basis = _field(candidate, "basis") or "inferred"
         confidence = _field(candidate, "confidence") or "low"

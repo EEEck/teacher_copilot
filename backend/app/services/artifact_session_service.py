@@ -24,7 +24,11 @@ from app.teacher_agent.stream_events import (
 )
 from app.services.artifact_spec import ArtifactSpec, TurnResult, default_specs
 from app.services.memory_candidate_ledger import MemoryCandidateLedger
-from app.teacher_agent.memory_capture import runtime_candidates_to_ledger_rows
+from app.services.memory_candidate_ledger import insert_with_folding
+from app.teacher_agent.memory_capture import (
+    discipline_memory_candidates,
+    runtime_candidates_to_ledger_rows,
+)
 from app.services.output_safety import (
     SAFE_INTERNAL_DATA_REPLY,
     OutputSafetyFinding,
@@ -249,6 +253,16 @@ class ArtifactSessionService:
         candidates = getattr(session.runtime, "memory_candidates", [])
         if not candidates:
             return
+        # Mem V3 capture discipline: explicit/high status must be corroborated
+        # by future-scoped wording in the teacher's own message; otherwise the
+        # claim is stored as a weak inferred signal for the sweep gate.
+        last_teacher_message = next(
+            (msg.content for msg in reversed(session.messages) if msg.role == "user"),
+            "",
+        )
+        candidates = discipline_memory_candidates(
+            candidates, teacher_message=last_teacher_message
+        )
         subject = self.wiki.get_class(session.class_id).subject
         turn_index = sum(1 for msg in session.messages if msg.role == "user")
         rows = runtime_candidates_to_ledger_rows(
@@ -259,7 +273,10 @@ class ArtifactSessionService:
             session_id=session.session_id,
             turn_index=turn_index,
         )
-        self.memory_candidate_ledger.add_many(rows)
+        # Insert-time folding: exact/near duplicates join their cluster or are
+        # neutralized against applied/rejected history (docs/mem_v3 lane 1).
+        for row in rows:
+            insert_with_folding(self.memory_candidate_ledger, row)
 
     async def chat(
         self,
