@@ -195,6 +195,7 @@ async def propose_memory_sweep_review(
                 memory_indexes,
                 applied_history=_history_texts(ledger, targets, status="applied"),
                 rejected_history=_history_texts(ledger, targets, status="rejected"),
+                budget_usage=_budget_usage(targets, target_excerpts),
                 today=now.date().isoformat(),
                 validation_error=validation_error,
             )
@@ -256,6 +257,36 @@ def _student_summary_claims(
                 }
             )
     return claims
+
+
+def _budget_usage(
+    targets: list[str], target_excerpts: dict[str, str]
+) -> dict[str, str]:
+    """Per-target character usage against the hermes-style page budgets.
+
+    Fed into the consolidation call so the model prefers update/delete over
+    add when a memory file is near its budget (letta's error-on-exceed idea,
+    applied one step earlier: pressure becomes compaction proposals).
+    """
+    from app.teacher_agent.wiki.memory import memory_budget
+
+    usage: dict[str, str] = {}
+    for target in targets:
+        canonical = canonical_memory_target(target)
+        if canonical == "teacher_profile.md":
+            key = "user"
+        elif canonical == "copilot_profile.md":
+            key = "copilot_profile"
+        elif is_subject_guide_target(canonical):
+            key = "subject_guide"
+        else:
+            key = compact_key_for_target(canonical) or ""
+        if not key:
+            continue
+        usage[canonical] = (
+            f"{len(target_excerpts.get(canonical, ''))}/{memory_budget(key)} chars"
+        )
+    return usage
 
 
 def _history_texts(
