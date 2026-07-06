@@ -78,6 +78,14 @@ class MemoryCandidateRow:
     review_batch_id: str | None = None
     rejection_reason: str | None = None
     snoozed_until: str | None = None
+    # Mem V3 fast-lane verdict, persisted by discipline_memory_candidates
+    # after speech-act + lane-policy + quote-provenance verification.
+    fast_lane: bool = False
+    # Mem V3 occasion anchor: the artifact the capturing session was about
+    # (e.g. "lesson:2026-07-04"). Reinforcement counts distinct occasions,
+    # not sessions — retries and bursts about the same lesson are one
+    # occasion. Empty = no anchor; the gate falls back to 6h time buckets.
+    occasion_key: str = ""
 
     @classmethod
     def from_sqlite(cls, row: sqlite3.Row) -> "MemoryCandidateRow":
@@ -112,6 +120,11 @@ class MemoryCandidateRow:
             review_batch_id=row["review_batch_id"],
             rejection_reason=row["rejection_reason"],
             snoozed_until=row["snoozed_until"],
+            fast_lane=bool(row["fast_lane"] if "fast_lane" in row.keys() else 0),
+            occasion_key=(
+                row["occasion_key"] if "occasion_key" in row.keys() else ""
+            )
+            or "",
         )
 
 
@@ -149,11 +162,14 @@ class MemoryCandidateLedger:
                   promoted_at TEXT,
                   review_batch_id TEXT,
                   rejection_reason TEXT,
-                  snoozed_until TEXT
+                  snoozed_until TEXT,
+                  fast_lane INTEGER NOT NULL DEFAULT 0
                 )
                 """
             )
             self._ensure_column(conn, "snoozed_until", "TEXT")
+            self._ensure_column(conn, "fast_lane", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "occasion_key", "TEXT NOT NULL DEFAULT ''")
             self._backfill_snoozed_until(conn)
             conn.execute(
                 """
@@ -185,14 +201,15 @@ class MemoryCandidateLedger:
                   session_id, turn_index, channel, target, section,
                   candidate_update, evidence_summary, evidence_refs_json,
                   source, basis, confidence, cluster_key, status, promoted_at,
-                  review_batch_id, rejection_reason, snoozed_until
+                  review_batch_id, rejection_reason, snoozed_until, fast_lane,
+                  occasion_key
                 ) VALUES (
                   :id, :created_at, :updated_at, :class_id, :subject,
                   :workflow, :session_id, :turn_index, :channel, :target,
                   :section, :candidate_update, :evidence_summary,
                   :evidence_refs_json, :source, :basis, :confidence,
                   :cluster_key, :status, :promoted_at, :review_batch_id,
-                  :rejection_reason, :snoozed_until
+                  :rejection_reason, :snoozed_until, :fast_lane, :occasion_key
                 )
                 ON CONFLICT(id) DO NOTHING
                 """,
@@ -398,6 +415,8 @@ class MemoryCandidateLedger:
             "review_batch_id": candidate.review_batch_id,
             "rejection_reason": candidate.rejection_reason,
             "snoozed_until": candidate.snoozed_until,
+            "fast_lane": int(candidate.fast_lane),
+            "occasion_key": candidate.occasion_key or "",
         }
 
     @staticmethod
@@ -427,6 +446,7 @@ def rows_from_runtime_candidates(
     session_id: str,
     turn_index: int,
     now: str | None = None,
+    occasion_key: str = "",
 ) -> list[MemoryCandidateRow]:
     """Convert validated runtime candidates into durable ledger rows.
 
@@ -484,6 +504,8 @@ def rows_from_runtime_candidates(
                 confidence=confidence,
                 cluster_key=cluster_key,
                 status="captured",
+                fast_lane=bool(getattr(candidate, "fast_lane", False)),
+                occasion_key=occasion_key,
             )
         )
     return rows
@@ -635,7 +657,7 @@ def insert_with_folding(
     Outcomes (by precedence):
     - matches an ``applied`` row     -> stored as ``already_covered``
     - matches a ``rejected`` row     -> stored as ``suppressed`` unless the
-      new capture is an explicit teacher ask (``source=teacher_explicit``)
+      new capture has the backend-verified fast-lane verdict
     - exact text match to an open row from the SAME session -> ``duplicate``
       (within-session noise)
     - exact or near duplicate of an open row from another session -> stored
@@ -655,7 +677,7 @@ def insert_with_folding(
     canonical_target = canonical_memory_target(candidate.target)
     new_norm = _normalized_update(candidate.candidate_update)
     new_tokens = _content_tokens(candidate.candidate_update)
-    explicit = candidate.source == "teacher_explicit"
+    explicit = candidate.fast_lane
 
     existing = [
         row

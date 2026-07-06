@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from app.context_limits import get_context_limits
 from app.teacher_agent.memory_targets import (
     canonical_memory_target,
+    is_subject_guide_target,
     is_supported_runtime_target,
 )
 
@@ -53,6 +54,23 @@ class MemoryCandidate(BaseModel):
     basis: str = "inferred"
     confidence: str = "low"
     requires_teacher_approval: bool = True
+    speech_act: str = Field(
+        default="",
+        description=(
+            "How the teacher's message relates to this candidate: "
+            "conduct_request (teacher directs the agent's behavior or states a "
+            "standing preference, not bounded to the current document), "
+            "store_request (teacher explicitly asks to remember/add/remove "
+            "something in memory), observation (teacher reports what happened). "
+            "Leave empty when unsure."
+        ),
+    )
+    fast_lane: bool = Field(
+        default=False,
+        description=(
+            "Backend-computed after verification; never set this yourself."
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -146,9 +164,9 @@ def merge_memory_candidates(
     return out
 
 
-# Mem V3 (docs/mem_v3/design.md lane 1): only clearly future-scoped teacher
-# wording justifies a durable explicit preference. Loose markers (bare
-# "future", "general communication") promoted one-off requests in the beta.
+# Mem V3 fallback markers. The primary fast-lane policy is speech_act +
+# target + quote provenance; these markers only corroborate legacy/empty
+# speech_act conduct requests for profile targets.
 _DURABLE_PREFERENCE_MARKERS = (
     "from now on",
     "always",
@@ -156,6 +174,7 @@ _DURABLE_PREFERENCE_MARKERS = (
     "in the future",
     "for future",
     "all future",
+    "for the next block",
     "for all lesson",
     "for all brief",
     "for all classes",
@@ -164,6 +183,38 @@ _DURABLE_PREFERENCE_MARKERS = (
     "general communication",
     "as a general",
 )
+DIRECT_TEACHER_QUOTE_PREFIX = "Direct teacher quote:"
+
+# Fast-lane policy per target (dictation vs observation, docs/mem_v3):
+# - conduct files hold the agent's standing instructions -> any direct
+#   request or correction qualifies;
+# - content files are teachable -> only an explicit store/remove request
+#   ("remember/add/remove ...") qualifies;
+# - compiled files are built from lessons, never dictated -> never fast lane.
+FAST_LANE_ALWAYS_TARGETS = {"teacher_profile.md", "copilot_profile.md"}
+FAST_LANE_STORE_REQUEST_TARGETS = {"teaching_patterns.md", "planning_brief.md"}
+_MIN_VERIFIED_QUOTE_CHARS = 10
+
+
+def occasion_key_for(mode: str, session_id: str, lesson_date: str = "") -> str:
+    """Occasion anchor for reinforcement counting (docs/mem_v3 lane 2).
+
+    An occasion is the artifact the capture was about, so re-pasting the same
+    report into several sessions counts once:
+    - ingest anchors on the lesson being logged (``lesson:<date>``); if the
+      target is unresolved, the key is empty and the gate falls back to a
+      6-hour time bucket (still collapses retries);
+    - plan sessions have no resolved lesson at capture time and are NOT a
+      re-paste failure mode, so each plan session is its own occasion
+      (``plansession:<id>``) — this also avoids wrongly collapsing two
+      distinct evening planning sessions into one time bucket.
+    """
+    date = (lesson_date or "").strip()
+    if date:
+        return f"lesson:{date}"
+    if mode == "plan":
+        return f"plansession:{session_id}"
+    return ""
 
 
 def has_durable_preference_scope(text: str) -> bool:
@@ -173,31 +224,164 @@ def has_durable_preference_scope(text: str) -> bool:
     )
 
 
+def has_fast_lane_explicit_proof(text: str) -> bool:
+    """Ledger-side fast-lane token: the verified-quote prefix.
+
+    Only ``discipline_memory_candidates`` writes this prefix, and only after
+    verifying the quote against the actual teacher message (fabricated quotes
+    are stripped and the candidate downgraded), so its presence in a ledger
+    row's evidence is the trust token for the explicit fast lane.
+    """
+    return DIRECT_TEACHER_QUOTE_PREFIX.lower() in clean_text(text).lower()
+
+
+def fast_lane_policy(target: str) -> str:
+    """Return 'always' | 'store_request' | 'never' for a memory target."""
+    canonical = canonical_memory_target(target)
+    if canonical in FAST_LANE_ALWAYS_TARGETS:
+        return "always"
+    if canonical in FAST_LANE_STORE_REQUEST_TARGETS or is_subject_guide_target(
+        canonical
+    ):
+        return "store_request"
+    return "never"
+
+
+def is_fast_lane_explicit_target(target: str) -> bool:
+    """Targets that can EVER use the explicit fast lane."""
+    return fast_lane_policy(target) != "never"
+
+
+def has_fast_lane_explicit_signal(target: str, evidence: str) -> bool:
+    return is_fast_lane_explicit_target(target) and has_fast_lane_explicit_proof(
+        evidence
+    )
+
+
+def is_fast_lane_row(
+    target: str,
+    source: str,
+    evidence: str,
+    fast_lane_flag: bool,
+) -> bool:
+    """Ledger-side fast-lane check with defense in depth.
+
+    The persisted ``fast_lane`` verdict (written only by
+    ``discipline_memory_candidates`` after full verification) is the primary
+    signal. For conduct files ("always" tier) the verified-quote token in
+    evidence is accepted as a fallback for rows written before the flag
+    existed. Compiled targets ("never" tier) are held regardless of any
+    token — a forged or legacy prefix cannot fast-lane class memory. Content
+    files ("store_request" tier) require the persisted verdict, because the
+    speech-act judgment is not reconstructible from a ledger row.
+    """
+    policy = fast_lane_policy(target)
+    if policy == "never":
+        return False
+    if fast_lane_flag:
+        return True
+    return (
+        policy == "always"
+        and source == "teacher_explicit"
+        and has_fast_lane_explicit_proof(evidence)
+    )
+
+
+def _strip_quote_prefix(evidence: str) -> str:
+    """Remove any quote-prefix segments so downgrades cannot leak the token."""
+    parts = [
+        part.strip()
+        for part in clean_text(evidence).split("|")
+        if DIRECT_TEACHER_QUOTE_PREFIX.lower() not in part.lower()
+    ]
+    return " | ".join(part for part in parts if part)
+
+
+def _verified_quote(evidence: str, teacher_message: str) -> str | None:
+    """Verify the model's claimed teacher quote against the real message.
+
+    Returns the verified quote, "" when the model quoted nothing (caller may
+    fall back to the whole message), or None when the model FABRICATED a
+    quote that does not appear in what the teacher typed.
+    """
+    evidence_clean = clean_text(evidence)
+    lower = evidence_clean.lower()
+    prefix = DIRECT_TEACHER_QUOTE_PREFIX.lower()
+    if prefix not in lower:
+        return ""
+    start = lower.index(prefix) + len(prefix)
+    quoted = evidence_clean[start:].split("|", 1)[0].strip().strip('"“”')
+    message_normalized = clean_text(teacher_message).lower()
+    if (
+        len(quoted) >= _MIN_VERIFIED_QUOTE_CHARS
+        and quoted.lower() in message_normalized
+    ):
+        return quoted
+    return None
+
+
 def discipline_memory_candidates(
     candidates: Iterable[MemoryCandidate],
     *,
     teacher_message: str,
 ) -> list[MemoryCandidate]:
-    """Downgrade explicit claims the teacher's own words do not support.
+    """Keep only defensible explicit claims; downgrade the rest to signals.
 
-    The workflow model may label a candidate ``teacher_explicit``/``high``,
-    but that status must be corroborated by clearly future-scoped wording in
-    the actual teacher message. Without it the candidate stays captured as a
-    weak inferred signal and earns promotion through the sweep gate
-    (reinforcement across sessions) instead.
+    The workflow model judges the speech act (conduct_request /
+    store_request / observation) — that is the primary classification, per
+    the direct-agent-instruction pattern (ChatGPT memory, LangMem procedural
+    memory). Deterministic code enforces exactly three things:
+    1. the lane policy of the target (dictation vs observation boundary);
+    2. quote provenance — a quoted sentence must actually appear in the
+       teacher's message; a fabricated quote downgrades the candidate;
+    3. the future-scope markers as fallback corroboration when the model
+       did not classify the speech act (legacy/typed-state paths).
+    Kept candidates get the canonical verified-quote prefix stamped into
+    evidence and ``fast_lane=True``; downgraded candidates have any quote
+    prefix stripped so the token cannot leak into the ledger.
     """
-    scoped = has_durable_preference_scope(teacher_message)
+    marker_scoped = has_durable_preference_scope(teacher_message)
     out: list[MemoryCandidate] = []
     for candidate in candidates:
-        explicit = candidate.source == "teacher_explicit"
-        if explicit and not scoped:
+        if candidate.source != "teacher_explicit":
+            if candidate.fast_lane:
+                candidate = candidate.model_copy(update={"fast_lane": False})
+            out.append(candidate)
+            continue
+
+        policy = fast_lane_policy(candidate.target)
+        speech_act = (candidate.speech_act or "").strip().lower()
+        act_ok = (
+            speech_act == "store_request"
+            if policy == "store_request"
+            else speech_act in ("conduct_request", "store_request") or marker_scoped
+        )
+        quote = _verified_quote(candidate.evidence, teacher_message)
+
+        if policy == "never" or not act_ok or quote is None:
+            evidence = _strip_quote_prefix(candidate.evidence)
             candidate = candidate.model_copy(
                 update={
                     "source": "inferred_from_session",
                     "basis": "inferred",
                     "confidence": "low",
+                    "fast_lane": False,
+                    "evidence": evidence[:1600],
                 }
             )
+            out.append(candidate)
+            continue
+
+        # Kept: stamp the canonical verified quote (model's verified quote,
+        # or the whole teacher message when the model quoted nothing).
+        verified = quote or clean_text(teacher_message)
+        rest = _strip_quote_prefix(candidate.evidence)
+        evidence = f"{DIRECT_TEACHER_QUOTE_PREFIX} {verified}"
+        if rest:
+            evidence = f"{evidence} | {rest}"
+        candidate = candidate.model_copy(
+            update={"evidence": evidence[:1600], "fast_lane": True}
+        )
         out.append(candidate)
     return out
 
@@ -297,6 +481,7 @@ def runtime_candidates_to_ledger_rows(
     workflow: str,
     session_id: str,
     turn_index: int,
+    occasion_key: str = "",
 ):
     """Adapter around the SQLite ledger row conversion.
 
@@ -312,4 +497,5 @@ def runtime_candidates_to_ledger_rows(
         workflow=workflow,
         session_id=session_id,
         turn_index=turn_index,
+        occasion_key=occasion_key,
     )

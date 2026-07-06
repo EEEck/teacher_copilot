@@ -30,8 +30,12 @@ DURABLE_MEMORY_CANDIDATE_POLICY = """<durable_memory_candidate_policy>
 - Route class learning patterns to target=teaching_patterns.md.
 - Route class evolution/current-state facts to class_state.md, planning_brief.md, or taught_so_far.md.
 - Route subject-wide reusable teaching guidance to wiki/subjects/{subject}.md only when the teacher frames it as subject-wide.
-- Use source=teacher_explicit, basis=explicit, confidence=high ONLY when the teacher clearly scopes the statement to the future; the backend downgrades unsupported explicit claims to weak inferred signals.
-- A one-off request is a weak signal at most: source=inferred_from_session, basis=inferred, confidence=low.
+- Classify the teacher's speech act on every candidate you emit (speech_act field):
+  - conduct_request: the teacher directs YOUR behavior or states a standing preference, and nothing bounds it to the current document ("can you communicate more concisely", "stop explaining orbitals in depth"). A request about THIS plan/diary ("organize the lesson results in mbb style") is NOT a conduct_request — it is a task.
+  - store_request: the teacher explicitly asks to remember, add, or remove something in memory ("remember for chemistry that...", "add to the teaching patterns that...", "remove X from my profile").
+  - observation: the teacher reports what happened ("the molecule kits worked well today") — even enthusiastic reports are observations, never requests.
+- Use source=teacher_explicit ONLY for conduct_request or store_request, and then copy the teacher's exact sentence into evidence as: Direct teacher quote: <the sentence, verbatim>. The backend verifies the quote against the real message — a paraphrased or invented quote gets the candidate downgraded.
+- Everything else (observations, one-off task requests) is a weak signal at most: source=inferred_from_session, basis=inferred, confidence=low, speech_act=observation.
 </durable_memory_candidate_policy>"""
 
 

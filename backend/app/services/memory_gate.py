@@ -5,9 +5,13 @@ thresholds (ref_repos/openclaw/src/memory-host-sdk/dreaming.ts, MIT):
 signals must demonstrate persistence before they earn teacher attention.
 
 Rules:
-- explicit teacher asks (``source == "teacher_explicit"``) are always
-  eligible — they get the pinned "Explicitly requested changes" section;
-- inferred claims need captures in >= 2 distinct sessions;
+- explicit teacher asks are eligible only via the verified fast-lane verdict
+  (persisted ``fast_lane`` flag, or the quote token on conduct files); they
+  get the pinned "Explicitly requested changes" section;
+- inferred claims need captures on >= 2 distinct OCCASIONS — an occasion is
+  the artifact the session was about (``occasion_key``, e.g. one lesson),
+  falling back to 6-hour time buckets for unanchored sessions, so retries
+  and same-evening bursts about one lesson count once;
 - eligible clusters are ordered by a frequency+recency score;
 - stale unreinforced singletons expire silently (the ledger is invisible;
   wiki artifacts remain the durable evidence).
@@ -22,8 +26,10 @@ from app.services.memory_candidate_ledger import (
     MemoryCandidateLedger,
     MemoryCandidateRow,
 )
+from app.teacher_agent.memory_capture import is_fast_lane_row
 
-GATE_MIN_DISTINCT_SESSIONS = 2
+GATE_MIN_DISTINCT_OCCASIONS = 2
+OCCASION_FALLBACK_BUCKET_HOURS = 6
 STALE_SINGLETON_DAYS = 42
 
 # OpenClaw dreaming weights (frequency 0.24 / relevance 0.30 / recency 0.15,
@@ -47,19 +53,39 @@ def _parse_utc(value: str) -> datetime:
     return parsed
 
 
-def _distinct_sessions(cluster: list[MemoryCandidateRow]) -> int:
-    return len({row.session_id for row in cluster if row.session_id})
+def _occasion(row: MemoryCandidateRow) -> str:
+    """The independence unit for reinforcement (docs/mem_v3 lane 2).
+
+    Anchored captures use the artifact they were about (one lesson = one
+    occasion no matter how many sessions touched it). Unanchored captures
+    fall back to 6-hour time buckets so retries and reloads collapse.
+    """
+    if row.occasion_key:
+        return row.occasion_key
+    bucket = int(_parse_utc(row.created_at).timestamp()) // (
+        OCCASION_FALLBACK_BUCKET_HOURS * 3600
+    )
+    return f"t:{bucket}"
+
+
+def distinct_occasions(cluster: list[MemoryCandidateRow]) -> int:
+    return len({_occasion(row) for row in cluster})
 
 
 def _is_explicit(cluster: list[MemoryCandidateRow]) -> bool:
-    return any(row.source == "teacher_explicit" for row in cluster)
+    return any(
+        is_fast_lane_row(
+            row.target, row.source, row.evidence_summary, row.fast_lane
+        )
+        for row in cluster
+    )
 
 
 def cluster_score(cluster: list[MemoryCandidateRow], now: datetime) -> float:
     """Frequency+recency ordering score in [0, 1]; explicit clusters get 1."""
     if _is_explicit(cluster):
         return 1.0
-    frequency = min(_distinct_sessions(cluster) / 3.0, 1.0)
+    frequency = min(distinct_occasions(cluster) / 3.0, 1.0)
     newest = max(_parse_utc(row.created_at) for row in cluster)
     age_days = max((now - newest).total_seconds() / 86400.0, 0.0)
     recency = 0.5 ** (age_days / RECENCY_HALF_LIFE_DAYS)
@@ -74,7 +100,10 @@ def gate_clusters(
     for cluster in clusters:
         if not cluster:
             continue
-        if _is_explicit(cluster) or _distinct_sessions(cluster) >= GATE_MIN_DISTINCT_SESSIONS:
+        if (
+            _is_explicit(cluster)
+            or distinct_occasions(cluster) >= GATE_MIN_DISTINCT_OCCASIONS
+        ):
             eligible.append(cluster)
         else:
             held.append(cluster)

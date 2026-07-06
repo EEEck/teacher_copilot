@@ -148,6 +148,7 @@ class MemorySweepCandidate(BaseModel):
     why_now: str = ""
     current_memory_excerpt: str = ""
     signal_count: int = 1
+    occasion_count: int = 1
     can_apply: bool = False
     review_only_reason: str = ""
     warnings: list[str] = Field(default_factory=list)

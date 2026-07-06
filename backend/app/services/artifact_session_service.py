@@ -27,6 +27,7 @@ from app.services.memory_candidate_ledger import MemoryCandidateLedger
 from app.services.memory_candidate_ledger import insert_with_folding
 from app.teacher_agent.memory_capture import (
     discipline_memory_candidates,
+    occasion_key_for,
     runtime_candidates_to_ledger_rows,
 )
 from app.services.output_safety import (
@@ -253,9 +254,8 @@ class ArtifactSessionService:
         candidates = getattr(session.runtime, "memory_candidates", [])
         if not candidates:
             return
-        # Mem V3 capture discipline: explicit/high status must be corroborated
-        # by future-scoped wording in the teacher's own message; otherwise the
-        # claim is stored as a weak inferred signal for the sweep gate.
+        # Mem V3 capture discipline: source=teacher_explicit is only a model
+        # hint until speech act, target policy, and quote provenance verify it.
         last_teacher_message = next(
             (msg.content for msg in reversed(session.messages) if msg.role == "user"),
             "",
@@ -265,6 +265,14 @@ class ArtifactSessionService:
         )
         subject = self.wiki.get_class(session.class_id).subject
         turn_index = sum(1 for msg in session.messages if msg.role == "user")
+        # Occasion anchor: reinforcement counts distinct occasions (one
+        # lesson = one occasion, however many sessions/retries touch it).
+        # Ingest resolves a lesson target; plan sessions anchor on the session.
+        target = getattr(session.runtime, "target", None)
+        lesson_date = (getattr(target, "lesson_date", "") or "").strip()
+        occasion_key = occasion_key_for(
+            session.mode, session.session_id, lesson_date
+        )
         rows = runtime_candidates_to_ledger_rows(
             candidates,
             class_id=session.class_id,
@@ -272,6 +280,7 @@ class ArtifactSessionService:
             workflow=session.mode,
             session_id=session.session_id,
             turn_index=turn_index,
+            occasion_key=occasion_key,
         )
         # Insert-time folding: exact/near duplicates join their cluster or are
         # neutralized against applied/rejected history (docs/mem_v3 lane 1).

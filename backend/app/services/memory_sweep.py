@@ -16,6 +16,7 @@ from app.services.memory_candidate_ledger import (
     MemoryCandidateLedger,
     MemoryCandidateRow,
 )
+from app.teacher_agent.memory_capture import is_fast_lane_row
 from app.teacher_agent.memory_targets import (
     canonical_memory_target,
     compact_key_for_target,
@@ -101,6 +102,7 @@ class MemorySweepReviewCard:
     why_now: str = ""
     current_memory_excerpt: str = ""
     signal_count: int = 1
+    occasion_count: int = 1
     can_apply: bool = False
     review_only_reason: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -249,6 +251,7 @@ def _student_summary_claims(
                     "observations_excerpt": proposal.current_memory_excerpt,
                     "signal_count": proposal.signal_count,
                     "session_count": proposal.signal_count,
+                    "occasion_count": proposal.signal_count,
                     "first_seen": "",
                     "last_seen": "",
                     "explicit": False,
@@ -337,6 +340,9 @@ def cards_from_consolidation_ops(
         channel = memory_channel_for_target(target)
         review_queue = QUEUE_BY_CHANNEL.get(channel, "Memory Sweep")
         signal_count = sum(int(claim.get("signal_count") or 1) for claim in op_claims)
+        occasion_count = max(
+            int(claim.get("occasion_count") or 1) for claim in op_claims
+        )
         explicit = any(claim.get("explicit") for claim in op_claims)
         evidence_summary = "; ".join(
             _unique(
@@ -360,12 +366,12 @@ def cards_from_consolidation_ops(
             "group_label": "explicit_ask" if explicit else "",
             "public_rationale": op.rationale,
             "why_now": (
-                f"Seen {signal_count}x across "
-                f"{max(int(claim.get('session_count') or 1) for claim in op_claims)} "
-                "session(s)."
+                f"Mentioned on {occasion_count} occasion(s) "
+                f"({signal_count} signal(s))."
             ),
             "current_memory_excerpt": target_excerpts.get(target, "")[:800],
             "signal_count": signal_count,
+            "occasion_count": occasion_count,
         }
         if op.operation == "add":
             cards.append(
@@ -966,6 +972,12 @@ def enumerate_memory_bullets(markdown: str, *, prefix: str = "M") -> dict[str, s
     return index
 
 
+def _cluster_occasions(cluster: list[MemoryCandidateRow]) -> int:
+    from app.services.memory_gate import distinct_occasions
+
+    return distinct_occasions(cluster)
+
+
 def claims_from_clusters(
     clusters: list[list[MemoryCandidateRow]],
     now: Any,
@@ -996,10 +1008,14 @@ def claims_from_clusters(
                 "session_count": len(
                     {row.session_id for row in cluster if row.session_id}
                 ),
+                "occasion_count": _cluster_occasions(cluster),
                 "first_seen": min(row.created_at for row in cluster),
                 "last_seen": newest.created_at,
                 "explicit": any(
-                    row.source == "teacher_explicit" for row in cluster
+                    is_fast_lane_row(
+                        row.target, row.source, row.evidence_summary, row.fast_lane
+                    )
+                    for row in cluster
                 ),
                 "score": round(cluster_score(cluster, now), 3),
                 "candidate_ids": [row.id for row in cluster],
