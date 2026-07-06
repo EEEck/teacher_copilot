@@ -1,5 +1,11 @@
 # Claude TODO — beta feedback roadmap (living document)
 
+> **HIGHEST PRIORITY — Memory next-implementation block:** the post-V3 memory
+> work (capture emission gap, write-boundary leaks, composable read/write
+> skills) is planned as five sequenced PRs in
+> [`docs/mem_v3/next_implementation.md`](mem_v3/next_implementation.md) —
+> awaiting one owner review pass, then PR1 starts.
+
 > Working progress document for the improvements derived from the first beta
 > tester results (demo workspace `w_demo_chem9b`). Organized as orthogonal
 > milestones, **one PR each**. Update the "Implementation status" section at
