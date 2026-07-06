@@ -63,9 +63,9 @@ function BriefRow({
         >
           <div className="flex flex-wrap items-center gap-x-2 text-sm">
             <span className="font-medium">{row.label}</span>
-            {row.signalCount > 1 && (
+            {row.occasionCount > 1 && (
               <span className="text-xs text-muted-foreground">
-                seen {row.signalCount}×
+                mentioned on {row.occasionCount} occasions
               </span>
             )}
             {decision && (

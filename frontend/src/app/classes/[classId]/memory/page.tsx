@@ -34,6 +34,7 @@ import {
   loadPendingMemoryReview,
   savePendingMemoryReview,
 } from "@/lib/pending-memory-review";
+import { useAuiState } from "@assistant-ui/react";
 
 type CommitResult = {
   lesson_date: string;
@@ -53,12 +54,23 @@ const COMPACT_PAGE_LABELS: Record<string, string> = {
 
 function ReadyToSaveButton({ onReady, loading }: { onReady: () => void; loading: boolean }) {
   const { isUpdating, readyToSave } = useArtifactSession();
+  const hasDraftMessage = useAuiState((s) => !s.composer.isEmpty);
 
   return (
     <div className="flex flex-col gap-1">
-      <Button className="w-fit" onClick={onReady} disabled={loading || isUpdating}>
+      <Button
+        type="button"
+        className="w-fit"
+        onClick={onReady}
+        disabled={loading || isUpdating || hasDraftMessage}
+      >
         {loading ? "Compiling wiki updates…" : "Ready to save memory"}
       </Button>
+      {hasDraftMessage && !loading && !isUpdating && (
+        <p className="text-xs text-muted-foreground">
+          Send or clear the draft message before preparing wiki updates.
+        </p>
+      )}
       {readyToSave && !loading && (
         <p className="text-xs text-primary">
           All sections filled — compile and review wiki file changes before saving.
@@ -242,10 +254,12 @@ function MemoryWorkspace({
   const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
   const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidate[]>([]);
   const [applyingMemory, setApplyingMemory] = useState(false);
+  const [reviewBaseMarkdown, setReviewBaseMarkdown] = useState<string | null>(null);
   const [classMemoryProposal, setClassMemoryProposal] =
     useState<MemoryProposalResponse | null>(null);
   const [applyingClassMemory, setApplyingClassMemory] = useState(false);
   const restoredReviewRef = useRef(false);
+  const hasDraftMessage = useAuiState((s) => !s.composer.isEmpty);
 
   const {
     items: reviewItems,
@@ -278,6 +292,7 @@ function MemoryWorkspace({
     setArtifactMarkdown(pending.diaryMarkdown, "agent");
     setMemoryCandidates(pending.memoryCandidates);
     setProposals(pending.proposals);
+    setReviewBaseMarkdown(pending.diaryMarkdown);
     initFromProposals(pending.proposals);
     for (const [path, content] of Object.entries(pending.contentByPath)) {
       updateContent(path, content);
@@ -336,6 +351,43 @@ function MemoryWorkspace({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [inReview, proposals.length]);
 
+  useEffect(() => {
+    if (!isUpdating || (!inReview && proposals.length === 0)) return;
+    setInReview(false);
+    setEditingWiki(false);
+    setProposals([]);
+    setMemoryCandidates([]);
+    setReviewBaseMarkdown(null);
+    setClassMemoryProposal(null);
+    clearReview();
+    if (typeof window !== "undefined") {
+      clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
+    }
+  }, [classId, clearReview, inReview, isUpdating, proposals.length, reviewStorageKey]);
+
+  useEffect(() => {
+    if (!inReview || proposals.length === 0 || reviewBaseMarkdown === null) return;
+    if (diaryMarkdown === reviewBaseMarkdown) return;
+    setInReview(false);
+    setEditingWiki(false);
+    setProposals([]);
+    setMemoryCandidates([]);
+    setReviewBaseMarkdown(null);
+    setClassMemoryProposal(null);
+    clearReview();
+    if (typeof window !== "undefined") {
+      clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
+    }
+  }, [
+    classId,
+    clearReview,
+    diaryMarkdown,
+    inReview,
+    proposals.length,
+    reviewBaseMarkdown,
+    reviewStorageKey,
+  ]);
+
   const selectFile = useCallback(
     (path: string) => {
       setSelectedPath(path);
@@ -359,6 +411,10 @@ function MemoryWorkspace({
       onError("Wait for the current chat turn to finish before preparing wiki updates.");
       return;
     }
+    if (hasDraftMessage) {
+      onError("Send or clear the draft message before preparing wiki updates.");
+      return;
+    }
     setLoading(true);
     onError(null);
     setCommitResult(null);
@@ -379,6 +435,7 @@ function MemoryWorkspace({
         ),
       );
       setProposals(unique);
+      setReviewBaseMarkdown(d.diary_markdown);
       initFromProposals(unique);
       setInReview(true);
     } catch (e) {
@@ -386,7 +443,15 @@ function MemoryWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [classId, diaryMarkdown, isUpdating, onError, runWithSessionRecovery, initFromProposals]);
+  }, [
+    classId,
+    diaryMarkdown,
+    hasDraftMessage,
+    isUpdating,
+    onError,
+    runWithSessionRecovery,
+    initFromProposals,
+  ]);
 
   const commit = useCallback(async () => {
     if (isUpdating) {
@@ -413,6 +478,7 @@ function MemoryWorkspace({
       );
       setInReview(false);
       setProposals([]);
+      setReviewBaseMarkdown(null);
       clearReview();
       if (typeof window !== "undefined") {
         clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
@@ -481,6 +547,7 @@ function MemoryWorkspace({
     setEditingWiki(false);
     setProposals([]);
     setMemoryCandidates([]);
+    setReviewBaseMarkdown(null);
     setClassMemoryProposal(null);
     clearReview();
     if (typeof window !== "undefined") {

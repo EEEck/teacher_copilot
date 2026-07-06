@@ -77,11 +77,7 @@ export function toApplicableMemoryCandidate(c: MemoryCandidate): {
 }
 
 function isImmediateApplyCandidate(c: MemoryCandidate): boolean {
-  return (
-    c.source === "teacher_explicit" &&
-    c.basis === "explicit" &&
-    (c.confidence === "medium" || c.confidence === "high")
-  );
+  return c.fast_lane === true;
 }
 
 export function splitPostSaveMemoryCandidates(candidates: MemoryCandidate[]): {

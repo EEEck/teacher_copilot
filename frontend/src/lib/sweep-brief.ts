@@ -8,7 +8,8 @@ export type SweepBriefRow = {
   section: SweepBriefSection;
   label: string;
   summary: string;
-  signalCount: number;
+  /** Distinct occasions (lessons/artifacts) this claim was mentioned on. */
+  occasionCount: number;
   canApply: boolean;
   candidate: MemorySweepCandidate;
 };
@@ -82,7 +83,7 @@ export function sweepBriefRows(
     section: sectionFor(candidate),
     label: sweepTargetLabel(candidate.target),
     summary: oneLine(candidate.content),
-    signalCount: candidate.signal_count || 1,
+    occasionCount: candidate.occasion_count ?? 1,
     canApply: Boolean(candidate.can_apply),
     candidate,
   }));

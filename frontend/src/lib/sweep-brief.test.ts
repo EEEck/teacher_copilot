@@ -62,16 +62,17 @@ describe("sweepBriefRows", () => {
     expect(rows.every((r) => r.section === "removed")).toBe(true);
   });
 
-  it("summarizes content on one line and keeps signal counts", () => {
+  it("summarizes content on one line and keeps occasion counts", () => {
     const rows = sweepBriefRows([
       candidate({
         content: "Line one\n  with   wrapping  " + "x".repeat(200),
         signal_count: 4,
+        occasion_count: 3,
       }),
     ]);
     expect(rows[0].summary).not.toContain("\n");
     expect(rows[0].summary.length).toBeLessThanOrEqual(130);
-    expect(rows[0].signalCount).toBe(4);
+    expect(rows[0].occasionCount).toBe(3);
   });
 });
 

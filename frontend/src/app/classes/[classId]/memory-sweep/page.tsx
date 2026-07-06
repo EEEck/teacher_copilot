@@ -144,8 +144,8 @@ function CandidateCard({
           <span>{candidate.operation ?? "add"}</span>
           {candidate.group_label && <span>{candidate.group_label}</span>}
           <span>{candidate.status_recommendation}</span>
-          {candidate.signal_count > 1 && (
-            <span>{candidate.signal_count} signals</span>
+          {(candidate.occasion_count ?? 1) > 1 && (
+            <span>{candidate.occasion_count} occasions</span>
           )}
           {!applicable && (
             <span>{candidate.review_only_reason || "review only"}</span>

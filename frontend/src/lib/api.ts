@@ -153,6 +153,9 @@ export type MemoryCandidate = {
   source?: string;
   basis?: string;
   confidence?: string;
+  speech_act?: string;
+  fast_lane?: boolean;
+  occasion_key?: string;
   requires_teacher_approval?: boolean;
 };
 export type SavePlanResponse = {
@@ -231,6 +234,7 @@ export type MemorySweepCandidate = {
   why_now: string;
   current_memory_excerpt: string;
   signal_count: number;
+  occasion_count?: number;
   can_apply: boolean;
   review_only_reason: string;
   warnings: string[];

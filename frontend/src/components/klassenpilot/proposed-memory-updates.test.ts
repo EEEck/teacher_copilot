@@ -39,10 +39,12 @@ describe("toApplicableMemoryCandidate", () => {
         target: "teacher_profile.md",
         section: "Communication",
         candidate_update: "Always keep future lesson plans in English.",
-        evidence: "Teacher explicitly said this is a future preference.",
+        evidence:
+          "Direct teacher quote: From now on, always keep future lesson plans in English.",
         source: "teacher_explicit",
         basis: "explicit",
         confidence: "high",
+        fast_lane: true,
         requires_teacher_approval: true,
       },
     ]);
@@ -51,5 +53,60 @@ describe("toApplicableMemoryCandidate", () => {
     expect(split.signals[0]?.candidate_update).toContain("timed");
     expect(split.immediate).toHaveLength(1);
     expect(split.immediate[0]?.candidate_update).toContain("English");
+  });
+
+  it("does not infer apply-now status from source or quote markers", () => {
+    const split = splitPostSaveMemoryCandidates([
+      {
+        target: "teacher_profile.md",
+        section: "Communication",
+        candidate_update: "Always keep future lesson plans in English.",
+        evidence:
+          "Direct teacher quote: From now on, always keep future lesson plans in English.",
+        source: "teacher_explicit",
+        basis: "explicit",
+        confidence: "high",
+        fast_lane: false,
+        requires_teacher_approval: true,
+      },
+    ]);
+
+    expect(split.immediate).toHaveLength(0);
+    expect(split.signals).toHaveLength(1);
+  });
+
+  it("uses backend fast_lane even for supported content targets", () => {
+    const split = splitPostSaveMemoryCandidates([
+      {
+        target: "teaching_patterns.md",
+        section: "Class Learning Profile",
+        candidate_update:
+          "Organic chemistry works better with molecule kits before terminology.",
+        evidence:
+          "Direct teacher quote: For the next block of organic chemistry, always use molecule kits before terminology.",
+        source: "teacher_explicit",
+        basis: "explicit",
+        confidence: "high",
+        fast_lane: true,
+        requires_teacher_approval: true,
+      },
+      {
+        target: "class_state.md",
+        section: "Current Unit",
+        candidate_update: "The class is moving into organic chemistry.",
+        evidence:
+          "Direct teacher quote: From now on, remember that we are starting organic chemistry.",
+        source: "teacher_explicit",
+        basis: "explicit",
+        confidence: "high",
+        fast_lane: false,
+        requires_teacher_approval: true,
+      },
+    ]);
+
+    expect(split.immediate).toHaveLength(1);
+    expect(split.immediate[0]?.target).toBe("teaching_patterns.md");
+    expect(split.signals).toHaveLength(1);
+    expect(split.signals[0]?.target).toBe("class_state.md");
   });
 });
