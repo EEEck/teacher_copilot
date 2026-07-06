@@ -809,17 +809,51 @@ def apply_memory(
     body: MemoryApplyRequest,
     request: Request,
     wiki: WikiStore = Depends(get_wiki),
+    ledger: MemoryCandidateLedger = Depends(get_memory_candidate_ledger),
     beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> MemoryApplyResponse:
-    """Write only teacher-approved memory items via the bounded helpers (HITL)."""
+    """Write only teacher-approved memory items via the bounded helpers (HITL).
+
+    When an item's write lands, close its originating ledger rows to ``applied``
+    so the Memory Sweep never re-proposes an already-applied fact (fast-lane
+    candidates surfaced on the post-save panel).
+    """
     try:
-        wiki.get_class(class_id)
+        cls = wiki.get_class(class_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
     candidate_paths = _memory_apply_candidate_paths(wiki, class_id, body.items)
     before_by_path = {path: _read_wiki_rel(wiki, path) for path in candidate_paths}
-    applied, skipped, warnings = apply_memory_items(wiki, class_id, body.items)
+    applied, skipped, warnings, successful_indexes = apply_memory_items(
+        wiki, class_id, body.items
+    )
+
+    # Close the ledger rows for items that actually wrote. Only rows still open
+    # are touched, so a re-apply (or an item with no candidate_ids) is a no-op.
+    open_rows = ledger.list_candidates(
+        class_id=class_id,
+        subject=cls.subject,
+        statuses=OPEN_STATUSES,
+        include_global=True,
+    )
+    open_ids = {row.id for row in open_rows}
+    now = _utc_now()
+    review_batch_id = f"memory_apply_{now}"
+    updated_ids: list[str] = []
+    for index in successful_indexes:
+        for candidate_id in body.items[index].candidate_ids:
+            if candidate_id not in open_ids or candidate_id in updated_ids:
+                continue
+            ledger.update_status(
+                candidate_id,
+                "applied",
+                updated_at=now,
+                review_batch_id=review_batch_id,
+                promoted_at=now,
+            )
+            updated_ids.append(candidate_id)
+
     _record_beta_wiki_diff(
         request,
         beta_auth,
@@ -837,6 +871,7 @@ def apply_memory(
         applied_wiki_paths=applied,
         skipped=skipped,
         warnings=warnings,
+        updated_candidate_ids=updated_ids,
     )
 
 

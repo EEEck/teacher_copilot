@@ -194,12 +194,14 @@ export type MemoryApplyItem = {
   target: string;
   section?: string;
   content: string;
+  candidate_ids?: string[];
 };
 export type MemoryApplyResponse = {
   class_id: string;
   applied_wiki_paths: string[];
   skipped: string[];
   warnings: string[];
+  updated_candidate_ids: string[];
 };
 export type MemorySweepCandidate = {
   card_id: string;

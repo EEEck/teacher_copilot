@@ -154,7 +154,7 @@ def test_apply_memory_items_helper_dispatch(wiki: WikiStore):
         section: str
         content: str
 
-    applied, skipped, warnings = apply_memory_items(
+    applied, skipped, warnings, _ = apply_memory_items(
         wiki,
         CLASS_ID,
         [

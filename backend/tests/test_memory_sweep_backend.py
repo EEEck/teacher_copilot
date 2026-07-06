@@ -277,7 +277,7 @@ def test_memory_sweep_sqlite_groups_applies_and_preserves_boundaries(tmp_path, w
 
     redox = _proposal_by_id(grouped, "cand_class_redox_examples_1")
     stale_state = _proposal_by_id(grouped, "cand_lint_stale_class_state_1")
-    applied, skipped, warnings = apply_memory_items(
+    applied, skipped, warnings, _ = apply_memory_items(
         wiki,
         CLASS_ID,
         [
@@ -538,7 +538,7 @@ def test_memory_apply_supports_bounded_active_subject_guide_updates(wiki: WikiSt
         "when generalizing redox sequences."
     )
 
-    applied, skipped, warnings = apply_memory_items(
+    applied, skipped, warnings, _ = apply_memory_items(
         wiki,
         CLASS_ID,
         [
@@ -558,7 +558,7 @@ def test_memory_apply_supports_bounded_active_subject_guide_updates(wiki: WikiSt
     assert subject_before != subject_after
     assert update in subject_after
 
-    applied_again, skipped_again, warnings_again = apply_memory_items(
+    applied_again, skipped_again, warnings_again, _ = apply_memory_items(
         wiki,
         CLASS_ID,
         [_ApplyItem("wiki/subjects/chemie.md", "Common lesson patterns", update)],
@@ -822,7 +822,7 @@ def test_memory_sweep_44_examples_route_and_apply_to_expected_files(
     before_subject = wiki.read_wiki_page("wiki/subjects/chemie.md")
     before_user = wiki.read_user_profile()
 
-    applied, skipped, warnings = apply_memory_items(
+    applied, skipped, warnings, _ = apply_memory_items(
         wiki,
         CLASS_ID,
         [

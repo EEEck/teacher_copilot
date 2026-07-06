@@ -161,6 +161,7 @@ function PlanWorkspace({
             target: c.target,
             section: c.section,
             content: c.candidate_update,
+            candidate_ids: c.candidate_id ? [c.candidate_id] : [],
           })),
         );
         goToLesson();

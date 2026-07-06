@@ -87,7 +87,7 @@ def test_memory_sweep_golden_stub(tmp_path, eval_wiki, golden):
         )
         for candidate_id in golden.apply_candidate_ids
     ]
-    applied_paths, skipped, warnings = apply_memory_items(eval_wiki, golden.class_id, apply_items)
+    applied_paths, skipped, warnings, _ = apply_memory_items(eval_wiki, golden.class_id, apply_items)
     assert warnings == []
 
     for candidate_id in golden.apply_candidate_ids:
