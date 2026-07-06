@@ -81,27 +81,32 @@ LLM calls.
   (hermes frozen-snapshot effect).
 - **Silence is normal** (hermes background-review framing): most turns emit
   zero candidates.
-- **`explicit_ask` tag** for genuinely future-scoped teacher statements
-  ("from now on", "always", "for all lessons/briefs"). Tightened markers;
-  one-off task requests never qualify.
+- **Backend-owned fast lane** for direct teacher speech acts, not marker
+  heuristics. The model supplies `speech_act`; deterministic code verifies
+  target policy and quote provenance:
+  `teacher_profile.md` / `copilot_profile.md` allow direct conduct requests,
+  `teaching_patterns.md` / `planning_brief.md` / subject guides require an
+  explicit store/update/remove request, and compiled class-state/session files
+  never fast-lane.
 - **Deterministic insert** (no LLM): same-session exact dup → rejected as
   within-session noise; cross-session exact or near duplicate (stemmed
   content-word overlap ≥ ~0.55) → folds into the matched claim's cluster
-  (`signal_count`++ via shared cluster_key — an identical re-statement in a
-  new session is the strongest reinforcement signal); sections normalized
-  onto a fixed per-target vocabulary.
+  (shared cluster_key; promotion counts distinct occasions, not raw rows);
+  sections normalized onto a fixed per-target vocabulary.
 
 ### Lane 2 — Ledger (invisible staging with a promotion gate)
 
 - OpenClaw-style gate decides sweep eligibility:
-  - `explicit_ask` → always eligible, surfaced in the pinned
+  - backend-verified `fast_lane` → eligible, surfaced in the pinned
     **"Explicitly requested changes"** section of the sweep briefing.
-  - inferred → needs captures in **≥2 distinct sessions**, recency-weighted
+  - inferred → needs captures in **≥2 distinct occasions**, recency-weighted
     (OpenClaw's weights — frequency 0.24 / relevance 0.30 / recency 0.15 — as
-    the tunable starting point).
+    the tunable starting point). Anchored lessons/artifacts define occasions;
+    unanchored captures fall back to 6-hour buckets.
   - clusters matching **applied** content → auto `already_covered`.
   - clusters matching **rejected** content → suppressed; resurfacing requires
-    a fresh `explicit_ask` (teacher rejections have teeth).
+    a fresh backend-verified `fast_lane=True` row (teacher rejections have
+    teeth, but later direct teacher intent can override them).
 - **Silent decay**: singletons never reinforced expire after ~6 weeks
   (status `expired`, unreviewed). Wiki artifacts remain the durable
   evidence, so nothing real is lost.
@@ -112,7 +117,7 @@ LLM calls.
 
 - One high-reasoning call receives: current memory files with bullets
   **enumerated with ephemeral IDs** (assigned at call time; no file format
-  change), all gate-passing claims (with signal counts, dates, session
+  change), all gate-passing claims (with signal counts, dates, occasion
   counts), recently applied + rejected texts per target, and today's date.
 - Output: per-claim operation, mem0-style —
   `ADD` / `UPDATE(id, new_text)` / `DELETE(id)` / `NONE(id|reason)` — with
@@ -147,9 +152,9 @@ LLM calls.
 | Capture grounding | any signal, incl. agent's own output | teacher's words only |
 | Capture context | blind | sees current memory + open claims |
 | Capture default | "notice durable signals" | "silence is normal" |
-| Explicit vs inferred | markers loose, both → explicit/high | tightened markers → `explicit_ask`; rest inferred/low |
-| Insert dedup | exact text hash, same session | exact reject + near-dup fold (cluster reuse, signal_count++) + section vocabulary |
-| Promotion | everything open → cards | gate: explicit always; inferred ≥2 sessions, recency-weighted; rejected suppressed; stale expire |
+| Explicit vs inferred | markers loose, both → explicit/high | backend verifies speech_act + target + direct quote; rest inferred/low |
+| Insert dedup | exact text hash, same session | exact reject + near-dup fold (cluster reuse, occasion-aware reinforcement) + section vocabulary |
+| Promotion | everything open → cards | gate: verified fast_lane; inferred ≥2 occasions, recency-weighted; rejected suppressed unless verified fast_lane override; stale expire |
 | Sweep passes | two LLM passes over per-section packets | one high-reasoning call over full target context |
 | Merge mechanism | alignment groups + lexical validators | ID-referenced ADD/UPDATE/DELETE/NONE (mem0 contract) |
 | Validation | structural + token-overlap semantic gates | structural only |
@@ -184,5 +189,5 @@ powers the eval harness.
    student-summary queues keep V2 behavior until this settles.
 7. Two-pass alignment machinery is retired; its eval intent survives as
    ledger-replay goldens (test-driven, written before the refactor).
-8. M1a (save-review brief) is unchanged; M1b (sweep brief) consumes the new
-   card model.
+8. M1a and M1b consume the same backend `fast_lane` verdict; no frontend
+   quote-marker heuristic decides what is explicitly requested.

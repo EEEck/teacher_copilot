@@ -16,13 +16,14 @@ Assertions per layer:
 - **Ledger/folding**: 12 rows insert into ≤5 open clusters; exact dup →
   `duplicate`; rephrasing adopts matched cluster_key; sections normalized to
   vocabulary; applied-match → `already_covered`; rejected-match →
-  `suppressed` unless explicit_ask.
-- **Gate**: singleton inferred held back; 2-session cluster eligible;
-  explicit_ask always eligible; stale singleton expires at +42d (clock
-  injected).
+  `suppressed` unless the new capture has backend-verified `fast_lane=True`.
+- **Gate**: singleton inferred held back; 2-occasion cluster eligible;
+  backend-verified `fast_lane` eligible; stale singleton expires at +42d
+  (clock injected). Unanchored rows use 6-hour buckets as occasions.
 - **Capture classification**: "organize this in mbb style" → inferred/low;
-  "use mbb style for all future briefs" → explicit_ask; repaired state
-  candidates get the same classification.
+  direct quote evidence for "use mbb style for all future briefs" plus
+  `speech_act=conduct_request` → `fast_lane=True`; explicit store requests
+  can fast-lane content targets; class_state never can.
 - **Sweep contract** (LLM stubbed): operations validate structurally —
   unknown memory_id rejected with retry; UPDATE quoting enforced; full claim
   coverage enforced; second failure → exactly one notice, zero cards, no raw
@@ -37,9 +38,11 @@ structure, not prose —
 
 - card count ceilings per fixture ("this ledger must never produce >N
   cards");
-- merge correctness (4 rephrasings → 1 card, signal_count 4);
+- merge correctness (4 rephrasings → 1 card, occasion_count derived from
+  distinct occasion anchors / 6-hour buckets);
 - class_state transition → UPDATE of the current-unit bullet;
-- explicit_ask claims land in the pinned section.
+- verified fast-lane claims land in the pinned section; quote markers alone
+  do not.
 
 ## Tier 3 — Live traces (opt-in, real model)
 
@@ -52,6 +55,11 @@ structure, not prose —
 - Live capture drift check: replay the recorded beta transcripts (from
   `beta.sqlite3` messages) through ingest chat; assert candidate counts and
   tags per turn.
+- Live speech-act judge check (opt-in): replay direct conduct requests,
+  explicit store/remove requests, observations, fabricated quotes, rejected
+  near-duplicates, verified-explicit overrides, and class-state non-fast-lane
+  cases; assert the backend-computed `fast_lane` verdict, not raw model
+  `source`.
 
 ## Telemetry as the production feedback loop
 

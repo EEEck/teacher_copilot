@@ -43,10 +43,11 @@ serve one of those four clauses.
    candidates. A system biased to notice things drowns; one biased to
    silence stays legible.
 5. **Attention must be earned.** An inferred observation needs independent
-   reinforcement (seen in ≥2 sessions) before it may ask for teacher time.
-   Only an explicit, future-scoped teacher request ("from now on…", "for all
-   briefs…") skips the queue — and even then it only skips *ahead*, never
-   *past* review.
+   reinforcement (seen on ≥2 occasions) before it may ask for teacher time.
+   Only a backend-verified direct teacher request can take the fast lane:
+   conduct requests for teacher/copilot profiles, explicit store/update/remove
+   requests for content targets, and never compiled class-state files. Even
+   then it only skips *ahead*, never *past* review.
 6. **Deterministic code owns structure; the model owns meaning.** Folding,
    gates, budgets, id checks, and no-op demotion are plain code. Judging
    whether "MBB style" and "executive communication" are the same preference
@@ -69,8 +70,8 @@ from the teacher's mouth to durable memory. Three lanes, one gate, one call.
 The chat agent emits a review-only candidate because the teacher stated a
 class-state change. Capture discipline applies immediately:
 - grounded in the teacher's words (axiom 3);
-- no future-scoped wording → even if the model labels it
-  `teacher_explicit/high`, the backend downgrades it to a weak inferred
+- observation, not a direct store/conduct request → even if the model labels
+  it `teacher_explicit/high`, the backend downgrades it to a weak inferred
   signal (`discipline_memory_candidates`);
 - at insert (`insert_with_folding`, no LLM): the free-form section name the
   model invented ("organic_chemistry_lesson_design") is normalized onto a
@@ -81,18 +82,21 @@ class-state change. Capture discipline applies immediately:
   strongest reinforcement signal; the same statement twice in *one* session
   is noise. Re-captures of already-applied content are neutralized as
   `already_covered`; re-captures of teacher-rejected content are
-  `suppressed` (rejections have teeth).
+  `suppressed` unless the new row has backend-verified `fast_lane=True`
+  (rejections have teeth, but later direct teacher intent can override them).
 
 **The gate (deterministic, invisible).**
-The claim's cluster now has rows from two different sessions → it passes the
-promotion gate (`memory_gate.py`). Had it stayed a singleton, it would wait,
-and after ~6 weeks unreinforced it would expire silently. The ledger is
+The claim's cluster now has rows from two different occasions → it passes the
+promotion gate (`memory_gate.py`). Anchored lessons/artifacts count as one
+occasion no matter how many retries happen; unanchored rows fall back to a
+6-hour bucket. Had it stayed a singleton, it would wait, and after ~6 weeks
+unreinforced it would expire silently. The ledger is
 invisible staging — human-in-the-loop applies to *writes*, not to *staging*.
 
 **Lane 3 — The sweep (teacher-clicked, one strong call).**
 When the teacher hits "Memory Sweep", the backend assembles ONE call:
-- all gate-passing claims with reinforcement metadata (seen 4×, 3 sessions,
-  first/last seen, explicit flag);
+- all gate-passing claims with reinforcement metadata (4 signals, 3
+  occasions, first/last seen, explicit flag);
 - every in-scope memory file with its bullets **enumerated by ephemeral
   ids** (`M2_1: **Current Unit:** Practicing redox half equations…`);
 - recently applied and recently rejected texts per file;
@@ -110,7 +114,8 @@ becomes a single plain-language notice, never a pile of fallback cards.
 
 **Review and write.**
 The operation renders as one row in the sweep brief — old text struck
-through, new text below, "seen 4×" — under "Changed (old → new)". Explicit
+through, new text below, "mentioned on 3 occasions" — under
+"Changed (old → new)". Explicit
 asks would be pinned above it. The teacher taps ✓; the apply layer replaces
 exactly that bullet (verbatim-quote check), clamps the page to its hermes-
 style character budget, and marks all four ledger rows `applied`. Future
@@ -149,14 +154,16 @@ KLASSENPILOT MEMORY — CORE APPROACH
 - Never write durable memory directly. Chat emits review-only candidates;
   only /memory/apply and /memory/sweep/apply write, after teacher approval.
 - Capture: teacher's words only; never memorialize agent output; silence is
-  the normal outcome; teacher_explicit/high requires future-scoped wording
-  or the backend downgrades it.
+  the normal outcome; teacher_explicit/high is only a model hint. The backend
+  verifies speech_act + target policy + direct quote provenance and stamps
+  fast_lane=True only when the claim qualifies.
 - Ledger (SQLite, invisible): insert_with_folding dedupes deterministically
   (section vocabulary; same-session exact dup = noise; cross-session
   exact/near dup = reinforcement, joins cluster; applied → already_covered;
-  rejected → suppressed unless a fresh explicit ask).
-- Gate: explicit asks always sweep-eligible; inferred needs ≥2 distinct
-  sessions; stale singletons expire silently at ~42 days.
+  rejected → suppressed unless a fresh backend-verified fast_lane ask).
+- Gate: proof-backed explicit asks are sweep-eligible; inferred needs ≥2
+  distinct occasions (lesson/artifact anchors, else 6-hour buckets); stale
+  singletons expire silently at ~42 days.
 - Sweep: teacher-clicked; ONE call on OPENAI_SWEEP_MODEL (strong reasoning
   model, non-negotiable); input = claims + enumerated memory bullets with
   ephemeral ids + applied/rejected history + budgets + today; output =

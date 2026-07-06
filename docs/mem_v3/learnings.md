@@ -31,11 +31,10 @@ V3 brakes, in order of leverage:
   the loop reinforces itself.
 - **Silence is the normal outcome** (hermes framing): most turns save
   nothing, and the prompt says so explicitly.
-- **Explicit status must be earned**: `teacher_explicit/high` requires
-  clearly future-scoped wording ("from now on", "for all briefs"); the
-  backend downgrades anything else to a weak inferred signal
-  (`discipline_memory_candidates`). A one-off "organize this in mbb style"
-  is a formatting request, not a durable preference.
+- **Explicit status must be earned**: `teacher_explicit/high` is only a model
+  hint. The backend verifies `speech_act`, target policy, and direct quote
+  provenance before stamping `fast_lane=True`. A one-off "organize this in
+  mbb style" is a formatting request, not a durable preference.
 
 ## Learning 2 — Deduplicate at write time, deterministically
 
@@ -49,7 +48,8 @@ memory quality. `insert_with_folding` needs no LLM:
   strongest signal there is (we almost discarded these; catching that was a
   test-migration find);
 - re-captures of applied content become `already_covered`; re-captures of
-  rejected content are `suppressed` unless the teacher explicitly asks again
+  rejected content are `suppressed` unless the later row has backend-verified
+  `fast_lane=True`
   — **rejections must have teeth**, or the teacher re-reviews the same
   suggestion forever (the beta MBB preference was approved six times).
 
@@ -127,11 +127,29 @@ loop that works: recorded real data as offline fixtures → contract goldens
 → live traces as the behavior bar → telemetry (`memory_sweep_propose`
 card/warning counts) as the production metric.
 
+A second, sharper instance: the speech-act live judge eval
+(`test_klassenpilot_memory_capture_live.py`) ran the classification goldens
+through the real capture model. It found the model's *judgment is sound* —
+all negatives (observations, one-off task requests, class-state statements)
+correctly stayed out of the fast lane — but the *emission rate is the
+bottleneck*: for durable conduct/store requests the model emitted **no
+candidate at all**, even with work context. That is the original V2 capture
+bug's shape resurfacing (understood-but-not-routed). The lesson: when you
+add a classification the model must produce, measure emission and judgment
+**separately** — a deterministic test that hand-feeds candidates proves the
+discipline logic but is blind to whether the model emits the candidate in
+the first place. The eval encodes this by xfailing emission gaps (a known
+upstream limitation) and hard-failing only misclassification (a real
+judgment regression). Fixing the emission rate — via a stronger capture
+prompt or reviving the typed-state repair for direct requests — is the next
+capture-side lever, tracked separately.
+
 ## Learning 9 — Reinforcement needs visible gates, invisible staging
 
-OpenClaw's promotion thresholds translated well: explicit teacher asks are
-always sweep-eligible (pinned first in the brief), inferred claims need two
-distinct sessions, stale singletons expire silently after ~6 weeks. The
+OpenClaw's promotion thresholds translated well: backend-verified direct
+teacher asks are sweep-eligible (pinned first in the brief), inferred claims
+need two distinct occasions (lesson/artifact anchors, else 6-hour buckets),
+stale singletons expire silently after ~6 weeks. The
 ledger stays invisible; HITL applies to *writes*, not to *staging*. Known
 accepted limitation: we gate on capture frequency, not usage frequency
 (OpenClaw's recall counts) — revisit if curated memory grows.
