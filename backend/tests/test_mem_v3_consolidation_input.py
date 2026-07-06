@@ -68,3 +68,64 @@ def test_claims_payload_from_gated_clusters():
     assert claim["text"] == newest.candidate_update
     assert claim["explicit"] is False
     assert set(claim["candidate_ids"]) == {r.id for r in cluster}
+
+
+def test_claims_payload_requires_direct_quote_for_explicit_fast_lane():
+    build_claims = getattr(sweep, "claims_from_clusters", None)
+    if build_claims is None:
+        pytest.xfail("mem_v3 phase 4: claims_from_clusters not implemented")
+    row = next(
+        r
+        for r in organic_chemistry_rows()
+        if r.status == "captured" and r.target == "teacher_profile.md"
+    )
+    legacy = replace(
+        row,
+        source="teacher_explicit",
+        basis="explicit",
+        confidence="high",
+        evidence_summary=(
+            "Teacher explicitly said organic chemistry needs concrete examples."
+        ),
+    )
+    proof_backed = replace(
+        row,
+        id="proof-backed",
+        source="teacher_explicit",
+        basis="explicit",
+        confidence="high",
+        evidence_summary=(
+            "Direct teacher quote: From now on, use concrete molecule "
+            "examples for all organic chemistry briefs."
+        ),
+    )
+
+    claims = build_claims([[legacy], [proof_backed]], NOW)
+
+    assert claims[0]["explicit"] is False
+    assert claims[1]["explicit"] is True
+
+
+def test_claims_payload_keeps_compiled_class_memory_out_of_explicit_lane():
+    build_claims = getattr(sweep, "claims_from_clusters", None)
+    if build_claims is None:
+        pytest.xfail("mem_v3 phase 4: claims_from_clusters not implemented")
+    row = next(
+        r
+        for r in organic_chemistry_rows()
+        if r.status == "captured" and r.target == "teaching_patterns.md"
+    )
+    proof_backed = replace(
+        row,
+        source="teacher_explicit",
+        basis="explicit",
+        confidence="high",
+        evidence_summary=(
+            "Direct teacher quote: For the next block of organic chemistry, "
+            "always use concrete molecule examples before terminology."
+        ),
+    )
+
+    claims = build_claims([[proof_backed]], NOW)
+
+    assert claims[0]["explicit"] is False

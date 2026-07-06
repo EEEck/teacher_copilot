@@ -225,7 +225,21 @@ class StubAgentRunner:
             ),
             new_evidence_briefs=briefs,
             memory_candidates=[
+                # Simulate a well-behaved capture model: a conduct request
+                # addressed to the agent ("from now on ...") is emitted as an
+                # explicit candidate with the teacher's sentence quoted;
+                # anything else stays a weak inferred signal.
                 MemoryCandidate(
+                    target="copilot.md",
+                    candidate_update="Draft early, then refine the markdown directly.",
+                    source="teacher_explicit",
+                    basis="explicit",
+                    confidence="high",
+                    speech_act="conduct_request",
+                    evidence=f"Direct teacher quote: {latest.strip()}",
+                )
+                if "from now on" in latest.lower()
+                else MemoryCandidate(
                     target="copilot.md",
                     candidate_update="Draft early, then refine the markdown directly.",
                     source="inferred_from_session",

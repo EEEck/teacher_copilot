@@ -27,6 +27,7 @@ from app.teacher_agent.memory_capture import MemoryCandidate
         "Use this style in the future for all briefs.",
         "This is a general preference for me, not just this one class.",
         "Please keep answers concise for all future lessons.",
+        "For the next block of organic chemistry, always use molecule examples first.",
     ],
 )
 def test_future_scoped_statements_are_durable(message: str):
@@ -92,6 +93,146 @@ def test_explicit_claim_with_scope_is_kept():
     )
     assert out[0].source == "teacher_explicit"
     assert out[0].confidence == "high"
+    assert "Direct teacher quote:" in out[0].evidence
+    assert "From now on" in out[0].evidence
+
+
+def test_explicit_claim_with_scope_but_non_preference_target_is_downgraded():
+    # A directive about teaching approach is not a store request, so
+    # teaching_patterns.md (store_request tier) stays regular-lane.
+    discipline = _require_discipline()
+    out = discipline(
+        [
+            _explicit_candidate(
+                "Organic chemistry works better with concrete molecule examples."
+            ).model_copy(update={"target": "teaching_patterns.md"})
+        ],
+        teacher_message=(
+            "For the next block of organic chemistry, always use concrete "
+            "molecule examples before terminology."
+        ),
+    )
+    assert out[0].source == "inferred_from_session"
+    assert out[0].basis == "inferred"
+    assert out[0].confidence == "low"
+    assert out[0].fast_lane is False
+
+
+# --- speech-act lanes (dictation vs observation boundary) -------------------
+
+
+def test_store_request_enables_content_target_fast_lane():
+    discipline = _require_discipline()
+    message = "Please add to the teaching patterns that this class needs visuals first."
+    out = discipline(
+        [
+            _explicit_candidate("This class needs visual supports first.").model_copy(
+                update={"target": "teaching_patterns.md", "speech_act": "store_request"}
+            )
+        ],
+        teacher_message=message,
+    )
+    assert out[0].source == "teacher_explicit"
+    assert out[0].fast_lane is True
+    assert "Direct teacher quote:" in out[0].evidence
+
+
+def test_conduct_request_keeps_profile_target_without_markers():
+    # "can you communicate more concisely" has no future-scope marker; the
+    # model's speech-act judgment carries it (industry pattern: direct
+    # requests to the agent are first-class).
+    discipline = _require_discipline()
+    out = discipline(
+        [
+            _explicit_candidate("Prefers concise communication.").model_copy(
+                update={"speech_act": "conduct_request"}
+            )
+        ],
+        teacher_message="can you communicate more concisely with me",
+    )
+    assert out[0].source == "teacher_explicit"
+    assert out[0].fast_lane is True
+
+
+def test_conduct_request_never_fast_lanes_compiled_targets():
+    discipline = _require_discipline()
+    out = discipline(
+        [
+            _explicit_candidate("The class moved to organic chemistry.").model_copy(
+                update={"target": "class_state.md", "speech_act": "conduct_request"}
+            )
+        ],
+        teacher_message="From now on remember the class moved to organic chemistry.",
+    )
+    assert out[0].source == "inferred_from_session"
+    assert out[0].fast_lane is False
+
+
+# --- quote provenance (the one hard backend check) ---------------------------
+
+
+def test_fabricated_quote_is_downgraded_and_stripped():
+    discipline = _require_discipline()
+    out = discipline(
+        [
+            _explicit_candidate().model_copy(
+                update={
+                    "speech_act": "conduct_request",
+                    "evidence": (
+                        "Direct teacher quote: Always answer in bullet points only."
+                    ),
+                }
+            )
+        ],
+        teacher_message="can you communicate more concisely with me",
+    )
+    assert out[0].source == "inferred_from_session"
+    assert out[0].fast_lane is False
+    assert "Direct teacher quote:" not in out[0].evidence
+
+
+def test_verified_model_quote_is_kept_and_canonicalized():
+    discipline = _require_discipline()
+    message = (
+        "Thanks for the plan. Also, from now on use MBB-style summaries for "
+        "all briefs. The redox part looked fine."
+    )
+    out = discipline(
+        [
+            _explicit_candidate().model_copy(
+                update={
+                    "speech_act": "conduct_request",
+                    "evidence": (
+                        "Direct teacher quote: from now on use MBB-style "
+                        "summaries for all briefs"
+                    ),
+                }
+            )
+        ],
+        teacher_message=message,
+    )
+    assert out[0].source == "teacher_explicit"
+    assert out[0].fast_lane is True
+    # The verified sentence, not the whole message, is the stamped proof.
+    assert out[0].evidence.startswith("Direct teacher quote: from now on")
+    assert "redox part" not in out[0].evidence
+
+
+def test_downgraded_candidates_never_carry_the_quote_token():
+    discipline = _require_discipline()
+    out = discipline(
+        [
+            _explicit_candidate().model_copy(
+                update={
+                    "target": "class_state.md",
+                    "evidence": "Direct teacher quote: whatever | other context",
+                }
+            )
+        ],
+        teacher_message="whatever",
+    )
+    assert "Direct teacher quote:" not in out[0].evidence
+    assert "other context" in out[0].evidence
 
 
 def test_inferred_candidates_pass_through_unchanged():

@@ -146,7 +146,7 @@ def test_applied_match_becomes_already_covered(tmp_path: Path):
     assert stored.status == "already_covered"
 
 
-def test_rejected_match_is_suppressed_unless_explicit(tmp_path: Path):
+def test_rejected_match_is_suppressed_unless_verified_fast_lane(tmp_path: Path):
     insert_with_folding = _require("insert_with_folding")
     ledger = _ledger(tmp_path)
     base = next(r for r in organic_chemistry_rows() if r.status == "captured")
@@ -170,7 +170,7 @@ def test_rejected_match_is_suppressed_unless_explicit(tmp_path: Path):
     stored = insert_with_folding(ledger, recapture)
     assert stored.status == "suppressed"
 
-    explicit = replace(
+    explicit_without_verdict = replace(
         base,
         id="recapture-3",
         session_id="new-session-2",
@@ -178,10 +178,28 @@ def test_rejected_match_is_suppressed_unless_explicit(tmp_path: Path):
         source="teacher_explicit",
         basis="explicit",
         confidence="high",
+        fast_lane=False,
     )
-    stored_explicit = insert_with_folding(ledger, explicit)
-    assert stored_explicit.status == "captured", (
-        "a fresh explicit teacher ask may resurface a rejected claim"
+    stored_explicit_without_verdict = insert_with_folding(
+        ledger, explicit_without_verdict
+    )
+    assert stored_explicit_without_verdict.status == "suppressed", (
+        "raw source=teacher_explicit is not enough to override a rejection"
+    )
+
+    verified_fast_lane = replace(
+        base,
+        id="recapture-4",
+        session_id="new-session-3",
+        status="captured",
+        source="teacher_explicit",
+        basis="explicit",
+        confidence="high",
+        fast_lane=True,
+    )
+    stored_verified = insert_with_folding(ledger, verified_fast_lane)
+    assert stored_verified.status == "captured", (
+        "a fresh backend-verified explicit teacher ask may resurface a rejected claim"
     )
 
 

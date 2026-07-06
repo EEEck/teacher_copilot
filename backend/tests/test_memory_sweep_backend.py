@@ -216,6 +216,12 @@ def _teacher_behavior_row(
     update: str,
     evidence: str,
     created_at: str,
+    session_id: str | None = None,
+    source: str = "teacher_explicit",
+    basis: str = "explicit",
+    confidence: str = "high",
+    cluster_key: str | None = None,
+    occasion_key: str = "",
 ) -> MemoryCandidateRow:
     return MemoryCandidateRow(
         id=candidate_id,
@@ -224,17 +230,26 @@ def _teacher_behavior_row(
         class_id=None,
         subject=None,
         workflow="plan",
-        session_id=candidate_id,
+        session_id=session_id or candidate_id,
         turn_index=1,
         channel="teacher_behavior",
         target="user.md",
         section="Communication",
         candidate_update=update,
-        evidence_summary=evidence,
+        # Mem V3 fast lane: explicit rows carry the verified-quote token and
+        # the persisted verdict (production: written only by discipline).
+        evidence_summary=(
+            f"Direct teacher quote: {update} | {evidence}"
+            if source == "teacher_explicit"
+            else evidence
+        ),
         evidence_refs=[f"trace:{candidate_id}"],
-        source="teacher_explicit",
-        basis="explicit",
-        confidence="high",
+        source=source,
+        basis=basis,
+        fast_lane=source == "teacher_explicit",
+        confidence=confidence,
+        cluster_key=cluster_key,
+        occasion_key=occasion_key,
     )
 
 
@@ -852,17 +867,22 @@ def test_memory_sweep_44_examples_route_and_apply_to_expected_files(
 def test_memory_sweep_api_proposes_and_updates_candidate_status(client: TestClient):
     plan_base = f"/api/classes/{CLASS_ID}/plan"
 
-    # Mem V3 gate: an inferred claim needs captures in two distinct sessions
-    # before the sweep proposes it, so run the same planning signal twice.
-    for _ in range(2):
-        start = client.post(f"{plan_base}/sessions")
-        assert start.status_code == 200, start.text
-        session_id = start.json()["session_id"]
-        chat = client.post(
-            f"{plan_base}/sessions/{session_id}/chat",
-            json={"message": "Please draft a concise redox lesson plan."},
-        )
-        assert chat.status_code == 200, chat.text
+    # Mem V3 fast lane end to end: a conduct request addressed to the agent
+    # ("from now on ...") is captured explicit with a verified quote and is
+    # sweep-eligible after a single session — no reinforcement needed.
+    start = client.post(f"{plan_base}/sessions")
+    assert start.status_code == 200, start.text
+    session_id = start.json()["session_id"]
+    chat = client.post(
+        f"{plan_base}/sessions/{session_id}/chat",
+        json={
+            "message": (
+                "From now on, please keep lesson plans concise and draft "
+                "early, then refine."
+            )
+        },
+    )
+    assert chat.status_code == 200, chat.text
 
     propose = client.post(f"/api/classes/{CLASS_ID}/memory/sweep/propose")
     assert propose.status_code == 200, propose.text
@@ -872,9 +892,9 @@ def test_memory_sweep_api_proposes_and_updates_candidate_status(client: TestClie
     candidate = prefs[0]
     assert candidate["target"] == "copilot_profile.md"
     assert candidate["channel"] == "teacher_behavior"
+    assert candidate["group_label"] == "explicit_ask"
     assert candidate["public_rationale"] == "Stub isolated sweep review."
-    assert candidate["why_now"].startswith("Seen ")
-    assert candidate["signal_count"] >= 2
+    assert candidate["why_now"].startswith("Mentioned on ")
     assert isinstance(candidate["current_memory_excerpt"], str)
     assert len(candidate["current_memory_excerpt"]) <= 800
 
@@ -1039,8 +1059,9 @@ def test_memory_sweep_api_accepts_model_consolidated_card(
             ),
             MemoryCandidateRow(
                 id="semantic_group_roles_2",
-                created_at="2026-06-22T09:05:00Z",
-                updated_at="2026-06-22T09:05:00Z",
+                # A different day: reinforcement counts distinct occasions.
+                created_at="2026-06-23T09:05:00Z",
+                updated_at="2026-06-23T09:05:00Z",
                 class_id=CLASS_ID,
                 subject="chemie",
                 workflow="ingest",
@@ -1154,18 +1175,36 @@ def test_memory_sweep_api_merges_mbb_and_executive_communication(
                 update="Use MBB-style communication for lesson plans.",
                 evidence="Teacher asked for MBB-style summaries.",
                 created_at="2026-06-22T09:00:00Z",
+                session_id="mbb_style_session_1",
+                source="inferred_from_session",
+                basis="repeated_behavior",
+                confidence="medium",
+                cluster_key="teacher.communication.executive_mbb",
+                occasion_key="plan:2026-06-22",
             ),
             _teacher_behavior_row(
                 "mbb_style_2",
                 update="Please keep using MBB-style planning summaries.",
                 evidence="Teacher repeated the MBB-style preference.",
                 created_at="2026-06-22T09:05:00Z",
+                session_id="mbb_style_session_2",
+                source="inferred_from_session",
+                basis="repeated_behavior",
+                confidence="medium",
+                cluster_key="teacher.communication.executive_mbb",
+                occasion_key="plan:2026-06-23",
             ),
             _teacher_behavior_row(
                 "executive_style_1",
                 update="Use executive-style communication as the standard.",
                 evidence="Teacher asked for executive-style communication.",
                 created_at="2026-06-22T09:10:00Z",
+                session_id="executive_style_session_1",
+                source="inferred_from_session",
+                basis="repeated_behavior",
+                confidence="medium",
+                cluster_key="teacher.communication.executive_mbb",
+                occasion_key="plan:2026-06-24",
             ),
         ]
     )
@@ -1265,12 +1304,24 @@ async def test_memory_sweep_retries_consolidation_on_structural_validation_error
                 update="Use named-style communication.",
                 evidence="Teacher asked for a named communication style.",
                 created_at="2026-06-22T09:00:00Z",
+                session_id="bad_adjust_session_1",
+                source="inferred_from_session",
+                basis="repeated_behavior",
+                confidence="medium",
+                cluster_key="teacher.communication.named_style",
+                occasion_key="plan:2026-06-22",
             ),
             _teacher_behavior_row(
                 "bad_adjust_exec",
                 update="Use concise executive communication.",
                 evidence="Teacher asked for concise executive communication.",
                 created_at="2026-06-22T09:05:00Z",
+                session_id="bad_adjust_session_2",
+                source="inferred_from_session",
+                basis="repeated_behavior",
+                confidence="medium",
+                cluster_key="teacher.communication.named_style",
+                occasion_key="plan:2026-06-23",
             ),
         ]
     )
@@ -1356,12 +1407,24 @@ def test_memory_sweep_api_repeated_mbb_preamble_is_already_covered(
                 update="MBB style please.",
                 evidence="Teacher used an MBB preamble.",
                 created_at="2026-06-22T09:00:00Z",
+                session_id="covered_mbb_session_1",
+                source="inferred_from_session",
+                basis="repeated_behavior",
+                confidence="medium",
+                cluster_key="teacher.communication.mbb_preamble",
+                occasion_key="plan:2026-06-22",
             ),
             _teacher_behavior_row(
                 "covered_mbb_preamble_2",
                 update="Use MBB style again for this plan.",
                 evidence="Teacher repeated an MBB preamble.",
                 created_at="2026-06-22T09:05:00Z",
+                session_id="covered_mbb_session_2",
+                source="inferred_from_session",
+                basis="repeated_behavior",
+                confidence="medium",
+                cluster_key="teacher.communication.mbb_preamble",
+                occasion_key="plan:2026-06-23",
             ),
         ]
     )

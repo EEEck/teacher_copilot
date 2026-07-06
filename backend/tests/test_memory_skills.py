@@ -51,7 +51,7 @@ def test_profile_proposal_labels_basis(client: TestClient, wiki: WikiStore):
     candidates = res.json()["candidates"]
     assert candidates
     targets = {c["target"] for c in candidates}
-    assert {"user.md", "copilot.md"} <= targets
+    assert {"teacher_profile.md", "copilot_profile.md"} <= targets
     assert {c["basis"] for c in candidates} <= {"explicit", "inferred"}
     # Proposal does not write.
     assert wiki.read_user_profile() == user_before
