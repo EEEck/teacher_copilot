@@ -28,7 +28,11 @@ import {
   type MemoryProposalResponse,
   type WikiUpdateProposal,
 } from "@/lib/api";
-import { isMemoryReviewSaveDisabled } from "@/lib/memory-save-guards";
+import {
+  isMemoryReCommitBlocked,
+  isMemoryReviewSaveDisabled,
+  shouldShowReviewBrief,
+} from "@/lib/memory-save-guards";
 import {
   clearPendingMemoryReview,
   loadPendingMemoryReview,
@@ -250,6 +254,7 @@ function MemoryWorkspace({
   const [inReview, setInReview] = useState(false);
   const [editingWiki, setEditingWiki] = useState(false);
   const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
+  const commitResultRef = useRef<HTMLDivElement>(null);
   const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidate[]>([]);
   const [applyingMemory, setApplyingMemory] = useState(false);
   const [reviewBaseMarkdown, setReviewBaseMarkdown] = useState<string | null>(null);
@@ -394,6 +399,14 @@ function MemoryWorkspace({
     [setSelectedPath],
   );
 
+  // After a successful commit, bring the "Memory saved" confirmation into view
+  // so the save is unmissable (beta: teachers re-clicked Save when the card
+  // rendered below the fold, causing a duplicate commit).
+  useEffect(() => {
+    if (!commitResult) return;
+    commitResultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [commitResult]);
+
   const viewerAllHref = commitResult
     ? `/classes/${classId}/wiki/view?paths=${encodeURIComponent(commitResult.applied_wiki_paths.join(","))}`
     : "";
@@ -456,6 +469,12 @@ function MemoryWorkspace({
       onError("Wait for the current chat turn to finish before saving memory.");
       return;
     }
+    // Idempotency: this review already committed (the confirmation is showing).
+    // Re-entry here would write the lesson a second time — the double-commit
+    // seen in beta telemetry. A new review cycle clears commitResult first.
+    if (isMemoryReCommitBlocked({ saving: loading, alreadyCommitted: !!commitResult })) {
+      return;
+    }
     setLoading(true);
     onError(null);
     try {
@@ -487,7 +506,7 @@ function MemoryWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [classId, diaryMarkdown, getCommitPayload, clearReview, isUpdating, onError, reviewStorageKey, router, runWithSessionRecovery]);
+  }, [classId, diaryMarkdown, getCommitPayload, clearReview, isUpdating, loading, commitResult, onError, reviewStorageKey, router, runWithSessionRecovery]);
 
   const applyClassMemory = useCallback(
     async (pages: Record<string, string>) => {
@@ -587,7 +606,11 @@ function MemoryWorkspace({
           ) : null
         }
         reviewFileList={
-          inReview && reviewItems.length > 0 ? (
+          shouldShowReviewBrief({
+            inReview,
+            alreadyCommitted: !!commitResult,
+            itemCount: reviewItems.length,
+          }) ? (
             <ReviewBrief
               items={reviewItems}
               selectedPath={selectedPath ?? reviewItems[0]?.path ?? null}
@@ -611,7 +634,7 @@ function MemoryWorkspace({
       )}
 
       {commitResult && (
-        <Card variant="highlight">
+        <Card variant="highlight" ref={commitResultRef}>
           <CardHeader>
             <CardTitle className="text-base">Memory saved</CardTitle>
             <p className="text-sm text-muted-foreground">
