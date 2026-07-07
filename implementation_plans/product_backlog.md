@@ -356,6 +356,17 @@ teacher-value work without a concrete blocker.
 
 ## Parking Lot
 
+- **Names-first student display (beta UX), IDs stay the internal key.** Surface
+  student *names* on all teacher-facing surfaces (chat, diary, student pages)
+  while wiki entities stay `students/S-###.md` keyed — a display/render layer
+  (inverse of `_pseudonymize_known_students`), reversible for real students.
+  Held 2026-07-07 (owner testing on IDs first). For beta the name↔ID handling
+  stays prompt-based. Design + decisions:
+  [`docs/mem_v3/input_reconciliation.md`](../docs/mem_v3/input_reconciliation.md).
+- **Input↔wiki reconciliation** — deterministic roster-membership check
+  (names + IDs, fuzzy), clarify-then-confirm, removal-on-revise tombstone fix.
+  Eval scaffold + design landed; validate UX with real teachers before
+  hardening. Same doc.
 - Multiple classes polish, class calendar, lesson graph view.
 - Long-running jobs and background queues.
 - Memory approval queue.
