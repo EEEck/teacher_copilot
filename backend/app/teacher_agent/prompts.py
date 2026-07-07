@@ -20,22 +20,23 @@ TEACHER_AGENT_SECURITY_POLICY = """<teacher_agent_security_policy>
 
 
 DURABLE_MEMORY_CANDIDATE_POLICY = """<durable_memory_candidate_policy>
+- When the teacher gives YOU a durable instruction — tells you how to behave, states a standing preference, or asks you to remember/add something that is NOT bounded to the current lesson or document — CALL the remember(target, content, speech_act, quote) tool in that same turn. This is the primary way durable facts are captured; do not defer it or rely only on filling an output field.
 - Durable memory candidates are review-only. They are never direct wiki writes.
-- Most turns produce NO memory candidates. Silence is the normal outcome; emit a candidate only when something genuinely new and durable appears.
+- Most turns produce NO memory candidates. Silence is the normal outcome; capture only when something genuinely new and durable appears.
 - Ground every candidate in the teacher's own words. Never memorialize content you generated yourself (plan structure, activity ideas, your own phrasing) — that lives in the saved artifact, not in memory.
-- SAVE (as candidate): durable preferences the teacher scopes to the future ("from now on", "always", "for all lessons/briefs"), corrections of your behavior, repeated class-learning patterns the teacher states, current-class-state changes the teacher reports.
-- SKIP: one-off requests scoped to the current answer or lesson ("organize this in mbb style", "make this shorter"), your own suggestions the teacher merely accepted, anything already visible in current memory or already proposed this session, session ephemera.
-- Route global teacher communication/style preferences to target=teacher_profile.md, usually section=Communication.
+- SAVE (call remember): durable preferences the teacher scopes to the future ("from now on", "always", "for all lessons/briefs"), corrections of your behavior, repeated class-learning patterns the teacher states.
+- SKIP (do not remember): one-off requests scoped to the current answer or lesson ("organize this in mbb style", "make this shorter"), your own suggestions the teacher merely accepted, anything already visible in current memory or already captured this session, session ephemera.
+- Route global teacher communication/style preferences to target=teacher_profile.md.
 - Route class-scoped copilot working-agreement rules to target=copilot_profile.md.
 - Route class learning patterns to target=teaching_patterns.md.
 - Do NOT capture current-unit / "what we've taught" / class-state facts as durable memory — those are derived from the lesson record (course state and timeline). Planning-oriented notes may go to planning_brief.md.
 - Route subject-wide reusable teaching guidance to wiki/subjects/{subject}.md only when the teacher frames it as subject-wide.
-- Classify the teacher's speech act on every candidate you emit (speech_act field):
-  - conduct_request: the teacher directs YOUR behavior or states a standing preference, and nothing bounds it to the current document ("can you communicate more concisely", "stop explaining orbitals in depth"). A request about THIS plan/diary ("organize the lesson results in mbb style") is NOT a conduct_request — it is a task.
+- speech_act is why the fact is durable:
+  - conduct_request: the teacher directs YOUR behavior or states a standing preference, and nothing bounds it to the current document ("can you communicate more concisely", "stop explaining orbitals in depth"). A request about THIS plan/diary ("organize the lesson results in mbb style") is NOT a conduct_request — it is a task, so do not remember it.
   - store_request: the teacher explicitly asks to remember, add, or remove something in memory ("remember for chemistry that...", "add to the teaching patterns that...", "remove X from my profile").
-  - observation: the teacher reports what happened ("the molecule kits worked well today") — even enthusiastic reports are observations, never requests.
-- Use source=teacher_explicit ONLY for conduct_request or store_request, and then copy the teacher's exact sentence into evidence as: Direct teacher quote: <the sentence, verbatim>. The backend verifies the quote against the real message — a paraphrased or invented quote gets the candidate downgraded.
-- Everything else (observations, one-off task requests) is a weak signal at most: source=inferred_from_session, basis=inferred, confidence=low, speech_act=observation.
+  - observation: the teacher reports what happened ("the molecule kits worked well today") — even enthusiastic reports are observations, never requests; do not remember them.
+- The quote must be the teacher's exact sentence, verbatim. The backend verifies it against the real message — a paraphrased or invented quote is rejected and you must retry with their real words.
+- A one-off request or observation is a weak signal at most: leave it for later review, source=inferred_from_session, basis=inferred, confidence=low.
 </durable_memory_candidate_policy>"""
 
 
@@ -56,7 +57,7 @@ MEMORY_SKILL = (
     "Patch state_patch.lesson_result_state category lists as the teacher provides facts; "
     "diary_markdown is the save artifact, while runtime lists are compact working memory "
     "for continuity after conversation trimming. "
-    "Add memory_candidates for durable facts worth teacher review later: explicit teacher "
+    "Call the remember(...) tool for durable facts worth teacher review later: explicit teacher "
     "preferences, repeated communication style requests, class learning patterns, copilot "
     "behavior rules, or useful next-step summaries. These are proposed "
     "only and must never be written during chat. Use targets teacher_profile.md, copilot_profile.md, "
@@ -270,7 +271,7 @@ Rules:
 - Ground the plan in class memory; cite past lessons or rollups when you use them.
 - Merge chat and uploaded materials into plan_markdown; preserve manual edits from the current draft.
 - Be practical and specific to this class.
-- When the teacher states a durable preference for future sessions, general communication, or how the copilot should work across classes, emit a memory_candidates item in the same turn.
+- When the teacher states a durable preference for future sessions, general communication, or how the copilot should work across classes, call the remember(...) tool in the same turn with their exact words.
 - Treat phase as conversation state, not the save-button state: stay in lesson_refinement while the teacher is still revising, even if the artifact is structurally ready to save. Set phase=finalize only when the teacher's intent clearly indicates the plan is accepted/finished after any requested final tweak. Infer that intent from the whole message and conversation; do not keyword-match a trigger list.
 - When the plan is complete enough to save, you may tell the teacher they can click "Ready to save plan"; do not treat that alone as a reason to set phase=finalize.
 - Never write wiki files directly.

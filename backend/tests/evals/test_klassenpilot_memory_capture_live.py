@@ -80,13 +80,15 @@ def test_memory_capture_speech_act_live(live_eval_client, golden):
 
     # Separate the two failure modes so the eval measures JUDGMENT cleanly:
     # - emission gap: the model emitted no candidate for a target it should
-    #   have captured. This is an upstream capture-prompt limitation (the same
-    #   shape as the original V2 capture bug), reported as xfail, not a red
-    #   judgment regression.
+    #   have captured. Mem V3 PR4 targets this by making capture an explicit
+    #   remember(...) tool call (whose staged candidates land in
+    #   runtime.memory_candidates, read above). When the tool fires, this xfail
+    #   no longer triggers and the run proceeds to the judgment assertion; a
+    #   still-empty emission is reported as xfail, not a red judgment regression.
     if golden.expected_fast_lane and not target_candidates:
         pytest.xfail(
             f"capture emission gap: model emitted no {target} candidate for "
-            f"{golden.teacher_message!r}"
+            f"{golden.teacher_message!r} (remember tool did not fire)"
         )
 
     # Judgment: run what the model DID emit through the same backend discipline

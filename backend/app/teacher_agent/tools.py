@@ -25,6 +25,65 @@ class WikiToolContext:
     # Update-memory chat uses the same progressive exposure pattern for target
     # discovery and lesson evidence, but keeps state separate from planning.
     memory: Optional[MemoryRuntime] = None
+    # This turn's latest teacher message — the ground truth the remember(...)
+    # tool validates quotes against.
+    teacher_message: str = ""
+
+
+def create_remember_tool(ctx: WikiToolContext) -> list:
+    """The explicit durable-memory capture tool (mem_v3 PR4).
+
+    Capture used to be a passive output field the model had to remember to fill
+    while doing planning/ingest work, so durable teacher instructions were
+    routinely dropped (the emission gap). This makes capture an explicit tool
+    call the model invokes the moment the teacher gives a standing instruction,
+    with quote-provenance validation + retry feedback grounded in the teacher's
+    words. The staged candidate flows through the same review path as before.
+    """
+    from app.teacher_agent.memory_capture import validate_remember_call
+
+    @function_tool
+    def remember(target: str, content: str, speech_act: str, quote: str) -> str:
+        """Save a durable instruction the teacher just gave YOU, for their review.
+
+        Call this the moment the teacher tells you how to behave, states a
+        standing preference, or asks you to remember/add something — anything
+        NOT bounded to the current lesson or document. Do NOT call it for
+        one-off requests about this plan/diary, or for things that merely
+        happened in class.
+
+        Args:
+            target: where it belongs — teacher_profile.md (how to communicate
+                with the teacher), copilot_profile.md (how to plan for this
+                class), teaching_patterns.md (how this class learns),
+                planning_brief.md (current planning priorities), or
+                wiki/subjects/<subject>.md (subject-wide guidance).
+            content: the durable fact/instruction, in your own concise words.
+            speech_act: "conduct_request" if the teacher directed your behavior,
+                or "store_request" if they explicitly asked you to remember it.
+            quote: the teacher's exact sentence that asked for this, verbatim.
+
+        Nothing is written to memory now — it goes to the teacher's review.
+        """
+        runtime = ctx.memory or ctx.planning
+        candidate, error = validate_remember_call(
+            target=target,
+            content=content,
+            quote=quote,
+            speech_act=speech_act,
+            teacher_message=ctx.teacher_message,
+        )
+        if error:
+            return f"Not saved. {error}"
+        if runtime is None:
+            return "Noted, but there is no active session to save it to."
+        runtime.memory_candidates.append(candidate)
+        return (
+            f"Saved for the teacher's review: \"{candidate.candidate_update}\" "
+            f"→ {candidate.target}. Do not mention this unless the teacher asks."
+        )
+
+    return [remember]
 
 
 def _capture(
@@ -320,6 +379,7 @@ def create_memory_update_tools(ctx: WikiToolContext) -> list:
         search_memory,
         read_memory_page,
         get_raw_evidence,
+        *create_remember_tool(ctx),
     ]
 
 
@@ -465,4 +525,5 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
         search_memory,
         read_memory_page,
         get_raw_evidence,
+        *create_remember_tool(ctx),
     ]

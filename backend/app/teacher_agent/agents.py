@@ -214,9 +214,14 @@ class AgentRunner:
         class_id: str,
         planning: PlanRuntime | None = None,
         memory: MemoryRuntime | None = None,
+        teacher_message: str = "",
     ) -> WikiToolContext:
         return WikiToolContext(
-            wiki=self.wiki, class_id=class_id, planning=planning, memory=memory
+            wiki=self.wiki,
+            class_id=class_id,
+            planning=planning,
+            memory=memory,
+            teacher_message=teacher_message,
         )
 
     def _format_attachments(self, attachments: list[ChatAttachment]) -> str:
@@ -351,8 +356,11 @@ class AgentRunner:
         memory: MemoryRuntime | None = None,
     ) -> _PreparedAgentTurn:
         runtime = memory or MemoryRuntime()
+        latest_teacher_message = messages[-1].content if messages else ""
         agent = build_ingest_agent(
-            self._wiki_ctx(class_id, memory=runtime),
+            self._wiki_ctx(
+                class_id, memory=runtime, teacher_message=latest_teacher_message
+            ),
             self.chat_model,
             memory=runtime,
             reasoning_effort=self.reasoning_effort,
@@ -400,8 +408,11 @@ class AgentRunner:
     ) -> _PreparedAgentTurn:
         runtime = planning or PlanRuntime()
         current_draft = partial_plan.strip() or self.wiki.empty_plan_template()
+        latest_teacher_message = messages[-1].content if messages else ""
         agent = build_plan_chat_agent(
-            self._wiki_ctx(class_id, runtime),
+            self._wiki_ctx(
+                class_id, planning=runtime, teacher_message=latest_teacher_message
+            ),
             current_draft,
             self.chat_model,
             planning=runtime,

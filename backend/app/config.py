@@ -20,7 +20,11 @@ class Settings(BaseSettings):
 
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4o-mini"
-    openai_chat_model: str = "gpt-5.4-mini"
+    # Planning + Update-Memory chat run here. Mem V3 PR4 makes durable capture an
+    # explicit remember(...) tool call in this turn; the live judge eval showed
+    # the -mini tier both under-emits and calls tools unreliably, so the capture
+    # turn runs on the stronger gpt-5.5 tier. Override via OPENAI_CHAT_MODEL.
+    openai_chat_model: str = "gpt-5.5"
     openai_fast_model: str = "gpt-4o-mini"
     # Mem V3: the weekly consolidation sweep is rare and context-heavy, so it
     # gets the strongest reasoning model. Empty = fall back to the chat model.

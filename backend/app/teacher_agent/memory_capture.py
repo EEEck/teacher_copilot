@@ -384,6 +384,71 @@ def discipline_memory_candidates(
     return out
 
 
+# Human-readable target list for the remember(...) tool's retry feedback.
+REMEMBER_TARGET_HINT = (
+    "teacher_profile.md (how to communicate with the teacher), "
+    "copilot_profile.md (how to plan for this class), "
+    "teaching_patterns.md (how this class learns), "
+    "planning_brief.md (current planning priorities), or "
+    "wiki/subjects/<subject>.md (subject-wide teaching guidance)"
+)
+
+
+def validate_remember_call(
+    *,
+    target: str,
+    content: str,
+    quote: str,
+    speech_act: str = "",
+    teacher_message: str,
+) -> tuple[MemoryCandidate | None, str]:
+    """Validate one ``remember(...)`` tool call against the teacher's words.
+
+    Returns ``(candidate, "")`` when the call is well-formed, or
+    ``(None, error)`` with a structured, model-facing message so the agent can
+    correct and retry within the turn. The three checks all ground in ground
+    truth (a supported preference target; the teacher actually said the quote),
+    never in a guess about intent — persist-time ``discipline_memory_candidates``
+    still makes the authoritative fast-lane decision.
+    """
+    clean_content = clean_text(content)
+    if not clean_content:
+        return None, "Nothing to remember: pass the durable fact as `content`."
+
+    canonical = canonical_memory_target(target)
+    if not is_fast_lane_explicit_target(canonical):
+        return None, (
+            f"'{target}' is not a memory target you can write to. Use one of: "
+            f"{REMEMBER_TARGET_HINT}. Class state and the lesson record are not "
+            "memory targets — they come from the saved lessons."
+        )
+
+    clean_quote = clean_text(quote)
+    if len(clean_quote) < _MIN_VERIFIED_QUOTE_CHARS:
+        return None, (
+            "Pass `quote`: the teacher's exact sentence that asked for this "
+            "(copy their words verbatim)."
+        )
+    if clean_quote.lower() not in clean_text(teacher_message).lower():
+        return None, (
+            "That quote is not in the teacher's message. Copy their exact "
+            "words — do not paraphrase or invent a sentence."
+        )
+
+    candidate = MemoryCandidate(
+        target=canonical,
+        section="General",
+        candidate_update=clean_content,
+        evidence=f"{DIRECT_TEACHER_QUOTE_PREFIX} {clean_quote}",
+        source="teacher_explicit",
+        basis="explicit",
+        confidence="high",
+        speech_act=clean_text(speech_act).lower(),
+        requires_teacher_approval=True,
+    )
+    return candidate, ""
+
+
 def teacher_preference_candidate(
     *,
     preference: str,
