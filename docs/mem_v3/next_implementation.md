@@ -17,14 +17,16 @@ tests pass.
 
 | PR | Scope | State |
 |---|---|---|
-| PR1 | Post-save `/memory/apply` closes ledger rows (B1) | **next — starts after this review** |
-| PR2 | Retire wiki-derived compact files `class_state`/`taught_so_far` (B3) | planned |
-| PR3 | Typed `MemoryWrite`/`MemoryRead` service interface (C step 1, no behavior change; B2 folds in) | planned |
-| PR4 | `remember(...)` capture tool + validation/retry (A — the emission gap) | planned (pullable earlier) |
-| PR5 | Focus-grouped agent skills + subagent capabilities (C step 2) | later, under-specified |
+| PR1 | Post-save `/memory/apply` closes ledger rows (B1) | **done** (`686f5eb`) |
+| PR2 | Retire wiki-derived compact files `class_state`/`taught_so_far` (B3) | **done** (`8c037fa`) |
+| PR4 | `remember(...)` capture tool + validation/retry (A — the emission gap) | **done** (`a91a171`) — live emission on gpt-5.5 unverified |
+| PR3 | Typed `MemoryWrite`/`MemoryRead` service interface (C step 1) + B2 canonical folding | **done** (`6e9fb60`) |
+| PR5 | Focus-grouped agent skills + subagent capabilities (C step 2) | later — **rediscuss after testing PR1–4** |
 
-**Gate:** owner reviews this doc once more, then PR1 begins. Nothing here is
-implemented yet.
+Built in owner-requested order (1, 2, 4, 3). Docs across `docs/` were updated to
+match (`d82bb56`). **Gate:** owner tests PR1–4 (especially PR4's live emission
+via `RUN_LIVE_AGENT_EVALS=1`) before PR5, which is deliberately under-specified
+and to be rediscussed.
 
 Tracked in the roadmap as the current highest-priority block:
 [`docs/claude_todo.md`](../claude_todo.md).
