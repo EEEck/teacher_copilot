@@ -163,6 +163,16 @@ no hints; saved plans are dead ends).
 - **"Add one thing" delta flow** — adding a forgotten note without a full
   session + full re-review. No good design yet; revisit after Milestone 1
   (the skip/brief mechanics may suggest a shape).
+- **Input ↔ wiki reconciliation** (beta 2026-07-07) — trust the committed wiki
+  as the baseline; flag teacher input that conflicts (esp. non-roster student
+  IDs), clarify, and only accept the deviation on explicit confirmation.
+  Design + eval scaffold landed:
+  [`docs/mem_v3/input_reconciliation.md`](mem_v3/input_reconciliation.md),
+  goldens + deterministic/opt-in-live eval in
+  `backend/tests/evals/…wiki_reconciliation…`. Detector + clarify wiring +
+  removal-on-revise tombstone are the implementation follow-up. **Validate the
+  UX with real teacher testers before hardening** (proactive flagging helpful
+  vs naggy; typo vs genuine new student).
 
 ## Design decisions taken
 
