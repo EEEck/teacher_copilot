@@ -23,13 +23,15 @@ Scripts or REPL code that construct `AgentRunner` without importing `app.main` m
 
 ## Agent runtime settings
 
-The default chat model is `OPENAI_CHAT_MODEL=gpt-5.5` with
-`OPENAI_REASONING_EFFORT=medium`. mem_v3 PR4 makes durable capture an explicit
-`remember(...)` tool call during the planning/ingest turn, and the live judge
-eval showed the `-mini` tier both under-emits and calls tools unreliably — so
-the capture turn runs on the stronger tier. Override via `OPENAI_CHAT_MODEL` in
-`backend/.env` (e.g. back to `gpt-5.4-mini`) for cheaper local smoke runs where
-capture reliability does not matter.
+Models are two tiers (`OPENAI_STRONG_MODEL=gpt-5.5`, `OPENAI_CHEAP_MODEL=gpt-5.4-mini`)
+selected by `MODEL_PROFILE`. **quality** (testing) runs the capture chat turn on
+the strong model — mem_v3 PR4 makes durable capture an explicit `remember(...)`
+tool call, and the live judge eval showed the cheaper tier under-emits and calls
+tools unreliably. **economy** (production) runs the capture chat turn on the
+cheap model to control token cost. The Memory Sweep is always strong (important +
+infrequent); compile/lint/plan-lesson/opening are always cheap. `MODEL_PROFILE`
+is unset by default and derives from `APP_ENV` (development→quality,
+production→economy). `OPENAI_REASONING_EFFORT=medium` by default.
 
 Complex lesson-planning turns can browse wiki memory, reason over evidence, and
 stream a full artifact. The default `AGENT_TIMEOUT_SECONDS=240` gives those

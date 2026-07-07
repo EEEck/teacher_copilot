@@ -19,16 +19,18 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: SecretStr = SecretStr("")
-    openai_model: str = "gpt-4o-mini"
-    # Planning + Update-Memory chat run here. Mem V3 PR4 makes durable capture an
-    # explicit remember(...) tool call in this turn; the live judge eval showed
-    # the -mini tier both under-emits and calls tools unreliably, so the capture
-    # turn runs on the stronger gpt-5.5 tier. Override via OPENAI_CHAT_MODEL.
-    openai_chat_model: str = "gpt-5.5"
-    openai_fast_model: str = "gpt-4o-mini"
-    # Mem V3: the weekly consolidation sweep is rare and context-heavy, so it
-    # gets the strongest reasoning model. Empty = fall back to the chat model.
-    openai_sweep_model: str = ""
+    # Two model tiers (mem_v3). STRONG runs the important, infrequent calls
+    # (memory-sweep consolidation always; the capture chat turn in the quality
+    # profile). CHEAP runs frequent/utility calls (compile, lint, plan-lesson,
+    # plan-opening; the capture chat turn in the economy profile). Override the
+    # ids here when a newer model ships — no other model vars.
+    openai_strong_model: str = "gpt-5.5"
+    openai_cheap_model: str = "gpt-5.4-mini"
+    # Model profile: "quality" runs the capture chat turn on the strong model
+    # (verify emission / best answers); "economy" runs it on the cheap model to
+    # control token cost. None derives from app_env (development -> quality,
+    # production -> economy). The sweep is always strong; utility is always cheap.
+    model_profile: Literal["quality", "economy"] | None = None
     openai_reasoning_effort: ReasoningEffort = "medium"
     agent_timeout_seconds: float = 240.0
     agent_max_turns: int = 16
@@ -94,6 +96,25 @@ class Settings(BaseSettings):
 
     def is_plan_trace_enabled(self) -> bool:
         return self.is_agent_trace_enabled()
+
+    def resolved_model_profile(self) -> str:
+        if self.model_profile is not None:
+            return self.model_profile
+        return "economy" if self.app_env == "production" else "quality"
+
+    def resolved_chat_model(self) -> str:
+        """Capture/chat turn — strong to verify emission, cheap to save cost."""
+        if self.resolved_model_profile() == "quality":
+            return self.openai_strong_model
+        return self.openai_cheap_model
+
+    def resolved_sweep_model(self) -> str:
+        """Consolidation sweep — important and infrequent, always strong."""
+        return self.openai_strong_model
+
+    def resolved_utility_model(self) -> str:
+        """Compile / lint / plan-lesson / plan-opening — always cheap."""
+        return self.openai_cheap_model
 
 
 @lru_cache

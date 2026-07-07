@@ -190,12 +190,12 @@ class AgentRunner:
             self.client = None
         else:
             self.client = OpenAI(api_key=key)
-        self.model = settings.openai_model
-        self.chat_model = settings.openai_chat_model
-        self.fast_model = settings.openai_fast_model
-        # Mem V3: the weekly consolidation sweep runs rarely and merges the
-        # whole ledger against current memory — strongest available model.
-        self.sweep_model = settings.openai_sweep_model or settings.openai_chat_model
+        # Two model tiers resolved by profile (config.py). Capture/chat is
+        # strong in the quality profile, cheap in economy; the sweep is always
+        # strong (important + infrequent); utility calls are always cheap.
+        self.chat_model = settings.resolved_chat_model()
+        self.fast_model = settings.resolved_utility_model()
+        self.sweep_model = settings.resolved_sweep_model()
         self.reasoning_effort = settings.openai_reasoning_effort
         self.timeout = settings.agent_timeout_seconds
         self.max_turns = settings.agent_max_turns
@@ -605,7 +605,7 @@ class AgentRunner:
             return self._plan_opening_fallback(class_id)
         try:
             context = self.wiki.build_plan_context_slim(class_id)
-            agent = build_plan_opening_agent(context, self.model)
+            agent = build_plan_opening_agent(context, self.fast_model)
             out = await self._run_structured(
                 agent, "Open the planning session for this class."
             )
