@@ -420,9 +420,7 @@ def _normalize_profile_candidate_target(target: str) -> str:
     if normalized in {
         "teacher_profile.md",
         "copilot_profile.md",
-        "class_state.md",
         "planning_brief.md",
-        "taught_so_far.md",
         "teaching_patterns.md",
     } or normalized.startswith("wiki/subjects/"):
         return normalized
@@ -717,13 +715,10 @@ def apply_compact_memory_proposal(
 
 def _compaction_pages(output) -> dict[str, str]:
     pages = {
-        "taught_so_far": output.taught_so_far_markdown,
         "planning_brief": output.planning_brief_markdown,
         "teaching_patterns": output.teaching_patterns_markdown,
         "copilot_profile": output.copilot_profile_markdown,
     }
-    if output.class_state_markdown.strip():
-        pages["class_state"] = output.class_state_markdown
     if output.session_summaries_markdown.strip():
         pages["session_summaries"] = output.session_summaries_markdown
     return pages
@@ -738,7 +733,7 @@ async def refresh_memory(
     agents: AgentRunner = Depends(get_agents),
     wiki: WikiStore = Depends(get_wiki),
 ) -> MemoryProposalResponse:
-    """Propose refreshed derived memory pages (incl. class_state) WITHOUT writing.
+    """Propose refreshed derived memory pages WITHOUT writing.
 
     Teacher reviews the proposal, then commits via /memory/compact or /memory/apply.
     """

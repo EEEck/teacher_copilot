@@ -545,9 +545,7 @@ def memory_sweep_target_excerpts(
         elif target == "copilot_profile.md":
             excerpts[target] = wiki.read_copilot_profile(class_id)[:1600]
         elif target in {
-            "class_state.md",
             "planning_brief.md",
-            "taught_so_far.md",
             "teaching_patterns.md",
         }:
             key = target.removesuffix(".md")

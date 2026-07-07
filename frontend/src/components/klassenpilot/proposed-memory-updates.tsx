@@ -17,9 +17,7 @@ const APPLICABLE = new Set([
   "teacher_profile.md",
   "copilot.md",
   "copilot_profile.md",
-  "class_state.md",
   "planning_brief.md",
-  "taught_so_far.md",
   "teaching_patterns.md",
 ]);
 

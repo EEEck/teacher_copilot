@@ -159,7 +159,7 @@ def test_conduct_request_never_fast_lanes_compiled_targets():
     out = discipline(
         [
             _explicit_candidate("The class moved to organic chemistry.").model_copy(
-                update={"target": "class_state.md", "speech_act": "conduct_request"}
+                update={"target": "session_summaries.md", "speech_act": "conduct_request"}
             )
         ],
         teacher_message="From now on remember the class moved to organic chemistry.",
@@ -224,7 +224,7 @@ def test_downgraded_candidates_never_carry_the_quote_token():
         [
             _explicit_candidate().model_copy(
                 update={
-                    "target": "class_state.md",
+                    "target": "session_summaries.md",
                     "evidence": "Direct teacher quote: whatever | other context",
                 }
             )

@@ -582,8 +582,10 @@ def test_build_plan_context_slim_dedup_and_budget(wiki: WikiStore):
     assert len(slim) < 9000
     # Misconceptions header appears once (no 4x duplication).
     assert slim.count("## Top misconceptions") == 1
-    assert "## Taught so far" in slim
-    assert "Reaction Writing Basics" in slim
+    # taught_so_far.md was retired: the taught sequence now surfaces via the
+    # canonical current-unit line + recent lessons, not a compact twin.
+    assert "Current unit:" in slim
+    assert "## Recent lessons" in slim
 
 
 def test_build_plan_context_slim_clamps_oversized_pages(wiki: WikiStore):
@@ -757,7 +759,7 @@ def test_memory_candidates_capped():
     cap = get_context_limits().candidates_cap
     rt = PlanRuntime()
     cands = [
-        MemoryCandidate(target="class_state.md", candidate_update=f"fact {i}")
+        MemoryCandidate(target="teaching_patterns.md", candidate_update=f"fact {i}")
         for i in range(cap + 15)
     ]
     _merge(rt, SessionState(), LessonPlanningState(), candidates=cands)

@@ -227,7 +227,7 @@ def test_proof_backed_explicit_on_compiled_class_memory_is_held():
     class_state = _row(
         base,
         id="exp-class-state",
-        target="class_state.md",
+        target="planning_brief.md",
         source="teacher_explicit",
         basis="explicit",
         confidence="high",
@@ -235,7 +235,7 @@ def test_proof_backed_explicit_on_compiled_class_memory_is_held():
             "Direct teacher quote: From now on, remember the class is starting "
             "organic chemistry."
         ),
-        cluster_key="test.cluster.class_state",
+        cluster_key="test.cluster.planning_brief",
     )
     result = gate.gate_clusters([[teaching_pattern], [class_state]], NOW)
     assert not result.eligible

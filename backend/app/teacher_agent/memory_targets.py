@@ -6,10 +6,12 @@ import re
 
 TEACHER_PROFILE_TARGETS = {"user.md", "teacher_profile.md"}
 COPILOT_PROFILE_TARGETS = {"copilot.md", "copilot_profile.md"}
+# class_state.md and taught_so_far.md were retired (mem_v3 PR2): the "current
+# unit / taught sequence" facts they held are deterministic projections of the
+# diary + timeline and now live only in the canonical rollups (course_state.md,
+# timeline.md). The sweep reads those; it no longer curates compact twins.
 COMPACT_TARGETS = {
-    "class_state.md": "class_state",
     "planning_brief.md": "planning_brief",
-    "taught_so_far.md": "taught_so_far",
     "teaching_patterns.md": "teaching_patterns",
 }
 CANONICAL_REVIEW_TARGET = "canonical_wiki"
@@ -74,12 +76,6 @@ def is_supported_runtime_target(target: str) -> bool:
 # cluster keys and sweep grouping, so ledger inserts normalize onto this
 # vocabulary. First entry per target is the default bucket.
 SECTION_VOCABULARY: dict[str, tuple[str, ...]] = {
-    "class_state.md": (
-        "class_notes",
-        "current_unit",
-        "student_participation",
-        "next_focus",
-    ),
     "teaching_patterns.md": (
         "class_learning_profile",
         "what_worked_well",
@@ -97,7 +93,6 @@ SECTION_VOCABULARY: dict[str, tuple[str, ...]] = {
         "language",
     ),
     "planning_brief.md": ("planning_notes",),
-    "taught_so_far.md": ("sequence",),
 }
 
 _SECTION_TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -142,7 +137,7 @@ def memory_channel_for_target(target: str) -> str:
         return "teacher_behavior"
     if normalized == "teaching_patterns.md":
         return "class_learning_pattern"
-    if normalized in {"class_state.md", "planning_brief.md", "taught_so_far.md"}:
+    if normalized == "planning_brief.md":
         return "class_evolution"
     if is_subject_guide_target(normalized):
         return "subject_concept"

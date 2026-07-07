@@ -108,9 +108,9 @@ class PlanOutput(BaseModel):
 
 
 class MemoryCompactOutput(BaseModel):
-    taught_so_far_markdown: str = Field(
-        description="Compact year-to-date content sequence for the class"
-    )
+    # taught_so_far_markdown and class_state_markdown were retired (mem_v3 PR2):
+    # those facts are derived from the canonical timeline / course_state rollups,
+    # not curated as compact pages.
     planning_brief_markdown: str = Field(
         description="Planning-oriented summary of readiness, open loops, and misconception priorities"
     )
@@ -125,10 +125,6 @@ class MemoryCompactOutput(BaseModel):
             "Copilot working agreement for this class only: planning patterns to apply, "
             "avoid-rules, repeated teacher corrections, agent-behavior preferences"
         )
-    )
-    class_state_markdown: str = Field(
-        default="",
-        description="Derived current-state snapshot for the class (compact)",
     )
     session_summaries_markdown: str = Field(
         default="",

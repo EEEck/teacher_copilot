@@ -447,11 +447,6 @@ class StubAgentRunner:
         )
         return (
             MemoryCompactOutput(
-                taught_so_far_markdown=(
-                    "# Taught So Far\n\n"
-                    f"> Class: {class_id}\n\n"
-                    "- Reaction writing, balancing, oxidation numbers, and redox have been taught.\n"
-                ),
                 planning_brief_markdown=(
                     "# Planning Brief\n\n"
                     "- Keep contrasting ion charge and oxidation number.\n"
@@ -464,10 +459,6 @@ class StubAgentRunner:
                     "# Class Copilot Profile\n\n"
                     "## Planning Patterns\n"
                     "- Draft early, then refine the markdown artifact directly.\n"
-                ),
-                class_state_markdown=(
-                    "# Class State\n\n"
-                    "- Current unit: redox. Next: practice arrow direction.\n"
                 ),
                 stale_report=[],
                 warnings=[],

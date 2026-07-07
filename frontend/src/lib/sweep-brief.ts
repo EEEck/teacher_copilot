@@ -37,9 +37,7 @@ const TARGET_LABELS: Record<string, string> = {
   "copilot_profile.md": "Class copilot profile",
   "copilot.md": "Class copilot profile",
   "teaching_patterns.md": "Teaching patterns",
-  "class_state.md": "Class state",
   "planning_brief.md": "Planning brief",
-  "taught_so_far.md": "Taught so far",
   "session_summaries.md": "Session summaries",
 };
 

@@ -93,7 +93,7 @@ class ProfileProposalResponse(BaseModel):
 
 
 class MemoryApplyItem(BaseModel):
-    target: str  # teacher_profile.md | copilot_profile.md | class_state.md | wiki/subjects/{subject}.md
+    target: str  # teacher_profile.md | copilot_profile.md | teaching_patterns.md | wiki/subjects/{subject}.md
     section: str = "General"
     content: str
     # Ledger rows this item was captured from; closed to `applied` when the

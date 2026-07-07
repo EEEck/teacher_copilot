@@ -23,7 +23,6 @@ LAYER_GOLDENS: tuple[LayerExpectation, ...] = (
         required_markers=("Chemie 9b", "Distinguish ion charge from oxidation number", "Peer checking"),
         forbidden_markers=("Confusing oxidation number with ionic charge",),
         required_memory_files=(
-            "taught_so_far.md",
             "planning_brief.md",
             "teaching_patterns.md",
             "copilot_profile.md",
@@ -39,7 +38,6 @@ LAYER_GOLDENS: tuple[LayerExpectation, ...] = (
         forbidden_markers=("ESL", "engl_10c", "mathe"),
         subject_required_markers=("Confusing oxidation number with ionic charge",),
         required_memory_files=(
-            "taught_so_far.md",
             "planning_brief.md",
             "teaching_patterns.md",
             "copilot_profile.md",
@@ -60,7 +58,7 @@ LAYER_GOLDENS: tuple[LayerExpectation, ...] = (
         subject_id="ESL",
         required_markers=("Englisch 10c", "Focus on essay scaffolding for 10c", "pair feedback in ESL writing blocks"),
         forbidden_markers=("chemie", "oxidation", "Confusing oxidation number with ionic charge"),
-        required_memory_files=("taught_so_far.md", "planning_brief.md", "copilot_profile.md"),
+        required_memory_files=("planning_brief.md", "copilot_profile.md"),
     ),
     LayerExpectation(
         golden_id="10c_global_class_subject",
@@ -70,6 +68,6 @@ LAYER_GOLDENS: tuple[LayerExpectation, ...] = (
         required_markers=("Englisch 10c", "Focus on essay scaffolding for 10c"),
         forbidden_markers=("chemie", "Confusing oxidation", "chemie_9b"),
         subject_required_markers=("Confusing present perfect with simple past",),
-        required_memory_files=("taught_so_far.md", "planning_brief.md", "copilot_profile.md"),
+        required_memory_files=("planning_brief.md", "copilot_profile.md"),
     ),
 )

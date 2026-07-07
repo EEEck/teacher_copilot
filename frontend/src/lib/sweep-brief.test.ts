@@ -80,7 +80,7 @@ describe("sweepTargetLabel", () => {
   it("maps memory targets to teacher language", () => {
     expect(sweepTargetLabel("teacher_profile.md")).toBe("Teacher profile");
     expect(sweepTargetLabel("copilot_profile.md")).toBe("Class copilot profile");
-    expect(sweepTargetLabel("class_state.md")).toBe("Class state");
+    expect(sweepTargetLabel("planning_brief.md")).toBe("Planning brief");
     expect(sweepTargetLabel("students/S-046.md")).toBe("Student S-046");
     expect(sweepTargetLabel("wiki/subjects/chemie.md")).toBe(
       "Subject guide (chemie)",

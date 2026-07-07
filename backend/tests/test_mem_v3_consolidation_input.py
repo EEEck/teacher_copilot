@@ -48,7 +48,7 @@ def test_claims_payload_from_gated_clusters():
     rows = [
         r
         for r in organic_chemistry_rows()
-        if r.status == "captured" and r.target == "class_state.md"
+        if r.status == "captured" and r.target == "planning_brief.md"
     ]
     # Simulate phase-2 folding (shared cluster) and phase-3 discipline (the
     # fixture preserves V2's over-promoted teacher_explicit labels).
@@ -60,7 +60,7 @@ def test_claims_payload_from_gated_clusters():
     assert len(claims) == 1
     claim = claims[0]
     assert claim["claim_id"]
-    assert claim["target"] == "class_state.md"
+    assert claim["target"] == "planning_brief.md"
     assert claim["signal_count"] == len(cluster)
     assert claim["session_count"] >= 3
     # Representative text is the most recent phrasing.

@@ -44,8 +44,6 @@ type CommitResult = {
 };
 
 const COMPACT_PAGE_LABELS: Record<string, string> = {
-  class_state: "Class state",
-  taught_so_far: "Taught so far",
   planning_brief: "Planning brief",
   teaching_patterns: "Teaching patterns",
   copilot_profile: "Class copilot profile",

@@ -91,7 +91,7 @@ describe("toApplicableMemoryCandidate", () => {
         requires_teacher_approval: true,
       },
       {
-        target: "class_state.md",
+        target: "session_summaries.md",
         section: "Current Unit",
         candidate_update: "The class is moving into organic chemistry.",
         evidence:
@@ -107,6 +107,6 @@ describe("toApplicableMemoryCandidate", () => {
     expect(split.immediate).toHaveLength(1);
     expect(split.immediate[0]?.target).toBe("teaching_patterns.md");
     expect(split.signals).toHaveLength(1);
-    expect(split.signals[0]?.target).toBe("class_state.md");
+    expect(split.signals[0]?.target).toBe("session_summaries.md");
   });
 });

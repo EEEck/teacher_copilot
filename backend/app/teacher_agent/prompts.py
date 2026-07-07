@@ -28,7 +28,7 @@ DURABLE_MEMORY_CANDIDATE_POLICY = """<durable_memory_candidate_policy>
 - Route global teacher communication/style preferences to target=teacher_profile.md, usually section=Communication.
 - Route class-scoped copilot working-agreement rules to target=copilot_profile.md.
 - Route class learning patterns to target=teaching_patterns.md.
-- Route class evolution/current-state facts to class_state.md, planning_brief.md, or taught_so_far.md.
+- Do NOT capture current-unit / "what we've taught" / class-state facts as durable memory — those are derived from the lesson record (course state and timeline). Planning-oriented notes may go to planning_brief.md.
 - Route subject-wide reusable teaching guidance to wiki/subjects/{subject}.md only when the teacher frames it as subject-wide.
 - Classify the teacher's speech act on every candidate you emit (speech_act field):
   - conduct_request: the teacher directs YOUR behavior or states a standing preference, and nothing bounds it to the current document ("can you communicate more concisely", "stop explaining orbitals in depth"). A request about THIS plan/diary ("organize the lesson results in mbb style") is NOT a conduct_request — it is a task.
@@ -58,9 +58,9 @@ MEMORY_SKILL = (
     "for continuity after conversation trimming. "
     "Add memory_candidates for durable facts worth teacher review later: explicit teacher "
     "preferences, repeated communication style requests, class learning patterns, copilot "
-    "behavior rules, current class state, or useful next-step summaries. These are proposed "
+    "behavior rules, or useful next-step summaries. These are proposed "
     "only and must never be written during chat. Use targets teacher_profile.md, copilot_profile.md, "
-    "teaching_patterns.md, class_state.md, planning_brief.md, taught_so_far.md, or "
+    "teaching_patterns.md, planning_brief.md, or "
     "canonical_wiki for review-only lesson facts. "
     "Stay in collect_results while the teacher is still adding or revising details, even if the "
     "diary looks structurally complete. Move to review_draft only when the teacher's intent clearly "
@@ -345,12 +345,11 @@ Rules:
 - Report stale or conflicting facts you find in stale_report instead of silently keeping both.
 
 Expected page intent (re-scoped — keep each scope clean, do not overlap):
-- taught_so_far_markdown: chronological compact summary of what has been taught this year.
 - planning_brief_markdown: current planning priorities, open loops, misconception focus, assessment readiness.
 - teaching_patterns_markdown: class+subject TEACHING STYLE — how THIS class learns and which teaching approaches work or fail for it (this is where the class learning profile lives). Not generic subject content.
 - copilot_profile_markdown: COPILOT WORKING AGREEMENT for this class only — planning patterns to apply, avoid-rules, repeated teacher corrections, agent-behavior preferences. Do NOT put global teacher preferences or the class learning profile here.
-- class_state_markdown: a short derived current-state snapshot (current unit, last lesson, what to do next, active open loops/misconceptions).
 - session_summaries_markdown: leave empty unless the source packet contains useful prior session summaries.
+Do NOT produce a taught-so-far or current-class-state page — that lives in the canonical timeline / course_state rollups.
 """
 
 

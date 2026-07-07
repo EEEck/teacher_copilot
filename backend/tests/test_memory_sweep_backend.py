@@ -179,10 +179,10 @@ def _seed_memory_sweep_examples(ledger: MemoryCandidateLedger) -> None:
                 session_id="sweep_001",
                 turn_index=0,
                 channel="wiki_lint",
-                target="class_state.md",
+                target="planning_brief.md",
                 section="Current State",
                 candidate_update=(
-                    "Class state should say the class is now applying redox "
+                    "Planning brief should say the class is now applying redox "
                     "vocabulary, not merely preparing oxidation numbers."
                 ),
                 evidence_summary=(
@@ -196,7 +196,7 @@ def _seed_memory_sweep_examples(ledger: MemoryCandidateLedger) -> None:
                 source="approved_wiki",
                 basis="explicit",
                 confidence="high",
-                cluster_key="lint.class_state.redox_progression",
+                cluster_key="lint.planning_brief.redox_progression",
             ),
         ]
     )
@@ -267,7 +267,7 @@ def test_memory_sweep_sqlite_groups_applies_and_preserves_boundaries(tmp_path, w
     assert grouped["Teacher/Copilot Preferences"][0].target == "teacher_profile.md"
     assert grouped["Class Evolution"][0].target == "teaching_patterns.md"
     assert grouped["Subject Concepts"][0].target == "wiki/subjects/chemie.md"
-    assert grouped["Wiki Review"][0].target == "class_state.md"
+    assert grouped["Wiki Review"][0].target == "planning_brief.md"
 
     teacher_before = wiki.read_user_profile()
     subject_before = wiki.read_wiki_page("wiki/subjects/chemie.md")
@@ -289,7 +289,7 @@ def test_memory_sweep_sqlite_groups_applies_and_preserves_boundaries(tmp_path, w
     assert warnings == []
     assert skipped == []
     assert f"wiki/classes/{CLASS_ID}/memory/teaching_patterns.md" in applied
-    assert f"wiki/classes/{CLASS_ID}/memory/class_state.md" in applied
+    assert f"wiki/classes/{CLASS_ID}/memory/planning_brief.md" in applied
 
     ledger.update_status(
         "cand_class_redox_examples_1",
@@ -316,12 +316,14 @@ def test_memory_sweep_sqlite_groups_applies_and_preserves_boundaries(tmp_path, w
     teaching_patterns = wiki.read_wiki_page(
         f"wiki/classes/{CLASS_ID}/memory/teaching_patterns.md"
     )
-    class_state = wiki.read_wiki_page(f"wiki/classes/{CLASS_ID}/memory/class_state.md")
+    planning_brief = wiki.read_wiki_page(
+        f"wiki/classes/{CLASS_ID}/memory/planning_brief.md"
+    )
 
     # The cluster's representative content is applied (the seed now has a
     # second-session reinforcement twin, so either phrasing may represent it).
     assert "displacement examples" in teaching_patterns
-    assert "now applying redox vocabulary" in class_state
+    assert "now applying redox vocabulary" in planning_brief
     assert wiki.read_user_profile() == teacher_before
     assert wiki.read_wiki_page("wiki/subjects/chemie.md") == subject_before
     assert (

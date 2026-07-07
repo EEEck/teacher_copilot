@@ -40,7 +40,7 @@ def _op(**kwargs):
         "operation": "add",
         "memory_id": None,
         "new_text": "New durable note.",
-        "target": "class_state.md",
+        "target": "planning_brief.md",
         "section": "current_unit",
         "rationale": "test",
     }

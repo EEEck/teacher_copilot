@@ -30,9 +30,9 @@ each scope clean, dedupe, and replace stale facts.
   which teaching approaches work or fail. This holds the class learning profile.
 - `memory/copilot_profile.md` (**copilot.md**, class) - copilot working agreement
   only: planning patterns, avoid-rules, repeated corrections, and agent behavior.
-- `memory/class_state.md` (class) - derived current-state snapshot.
-- `memory/taught_so_far.md`, `memory/planning_brief.md`, and
-  `memory/session_summaries.md`.
+- `memory/planning_brief.md` and `memory/session_summaries.md`.
+- Current unit / taught-so-far sequence is NOT a memory page: it is derived
+  from the canonical `course_state.md` and `timeline.md` rollups.
 
 Durable writes to these pages are teacher-approved only through the memory
 refresh/propose/apply endpoints. Planning and ingest chat never write them.
@@ -47,8 +47,8 @@ propose, but backend code validates scope and writes only after teacher approval
   manual/update workflow only; do not infer it from one class.
 - Class learning pattern -> `memory/teaching_patterns.md`.
 - Copilot behavior rule for this class -> `memory/copilot_profile.md`.
-- Current class state / likely next move -> `memory/class_state.md`.
-- Year-to-date taught sequence -> `memory/taught_so_far.md`.
+- Current class state / taught sequence -> NOT memory; read the canonical
+  `course_state.md` / `timeline.md` rollups (deterministic from lessons).
 - Lesson facts -> `lessons/{YYYY-MM-DD}/lesson_results.md` through ingest HITL.
 - Student-specific facts -> `students/S-###.md`, pseudonymous only. Each student
   page starts with `## Student Summary` and then keeps dated observation
@@ -63,11 +63,9 @@ wiki/classes/{class_id}/
   misconceptions.md
   open_loops.md
   memory/
-    taught_so_far.md
     planning_brief.md
     teaching_patterns.md   # class+subject teaching style (how this class learns)
     copilot_profile.md     # class copilot working agreement (copilot.md)
-    class_state.md         # derived current-state snapshot
     session_summaries.md
   students.md           # class student index / roster
   timeline.md           # chronological narrative with links to lessons

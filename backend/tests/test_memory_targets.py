@@ -29,3 +29,17 @@ def test_memory_target_policy_covers_doc_44_targets():
 
     assert not is_supported_runtime_target("wiki/classes/chemie_9b_2026_27/timeline.md")
     assert not is_supported_runtime_target("../subjects/chemie.md")
+
+
+def test_retired_compact_targets_are_no_longer_durable():
+    """mem_v3 PR2: class_state.md / taught_so_far.md were retired.
+
+    Their "current unit / taught sequence" facts are derived from the canonical
+    course_state.md / timeline.md rollups, so they are no longer supported
+    durable targets and do not route to a compact memory page.
+    """
+    for retired in ("class_state.md", "taught_so_far.md"):
+        assert compact_key_for_target(retired) is None
+        assert not is_supported_runtime_target(retired)
+        # No longer routed to the class-evolution channel; falls through.
+        assert memory_channel_for_target(retired) == "memory_sweep"

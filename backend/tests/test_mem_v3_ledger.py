@@ -44,7 +44,7 @@ def test_fixture_captures_the_overcapture_case():
     transitions = [
         r
         for r in captured
-        if r.target == "class_state.md" and "organic" in r.candidate_update.lower()
+        if r.target == "planning_brief.md" and "organic" in r.candidate_update.lower()
     ]
     # Four sessions each re-captured the unit transition with new wording.
     assert len(transitions) >= 3
@@ -109,7 +109,7 @@ def test_near_duplicate_adopts_existing_open_cluster(tmp_path: Path):
     rows = [
         r
         for r in organic_chemistry_rows()
-        if r.target == "class_state.md" and "organic" in r.candidate_update.lower()
+        if r.target == "planning_brief.md" and "organic" in r.candidate_update.lower()
     ]
     assert len(rows) >= 3
     stored = [insert_with_folding(ledger, r) for r in rows]

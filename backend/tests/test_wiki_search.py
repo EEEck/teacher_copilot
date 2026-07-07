@@ -58,7 +58,7 @@ def test_list_class_pages_includes_compact_memory():
     wiki = WikiStore(root=_WIKI_ROOT)
     pages = wiki.list_class_pages(CLASS_ID, kind="memory")
     paths = {page["path"] for page in pages}
-    assert f"wiki/classes/{CLASS_ID}/memory/taught_so_far.md" in paths
+    assert f"wiki/classes/{CLASS_ID}/memory/teaching_patterns.md" in paths
     assert all(page["kind"] == "memory" for page in pages)
 
 

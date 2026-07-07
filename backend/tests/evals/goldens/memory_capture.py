@@ -108,9 +108,11 @@ MEMORY_CAPTURE_GOLDENS: tuple[MemoryCaptureGolden, ...] = (
         workflow="",
     ),
     MemoryCaptureGolden(
-        golden_id="class_state_never_fast_lane",
+        # class_state.md was retired (mem_v3 PR2); session_summaries.md is the
+        # surviving compiled page that must never fast-lane.
+        golden_id="compiled_page_never_fast_lane",
         teacher_message="From now on, remember that the class is starting organics.",
-        target="class_state.md",
+        target="session_summaries.md",
         speech_act="conduct_request",
         evidence=(
             "Direct teacher quote: From now on, remember that the class is "

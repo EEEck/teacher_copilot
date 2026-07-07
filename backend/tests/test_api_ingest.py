@@ -66,22 +66,20 @@ def test_ingest_full_flow(client: TestClient):
     assert commit_body["log_entry_id"]
     proposal = commit_body["class_memory_proposal"]
     assert proposal["class_id"] == CLASS_ID
-    assert "class_state" in proposal["pages"]
+    # class_state.md / taught_so_far.md were retired (mem_v3 PR2): the refresh
+    # proposal offers the surviving curated pages only.
+    assert "class_state" not in proposal["pages"]
+    assert "taught_so_far" not in proposal["pages"]
+    assert "planning_brief" in proposal["pages"]
     assert "teaching_patterns" in proposal["pages"]
     assert "Peer checking helps reduce balancing errors." in proposal["pages"]["teaching_patterns"]
     assert f"wiki/classes/{CLASS_ID}/memory/class_state.md" not in commit_body["applied_wiki_paths"]
-
-    class_state = client.get(
-        f"/api/classes/{CLASS_ID}/wiki/file",
-        params={"path": f"wiki/classes/{CLASS_ID}/memory/class_state.md"},
-    )
-    assert class_state.status_code == 404
 
     apply_compact = client.post(
         f"/api/classes/{CLASS_ID}/memory/compact/apply",
         json={
             "pages": {
-                "class_state": proposal["pages"]["class_state"],
+                "planning_brief": proposal["pages"]["planning_brief"],
                 "teaching_patterns": proposal["pages"]["teaching_patterns"],
             },
             "source_paths": proposal["source_paths"],
@@ -89,15 +87,15 @@ def test_ingest_full_flow(client: TestClient):
     )
     assert apply_compact.status_code == 200, apply_compact.text
     apply_body = apply_compact.json()
-    assert f"wiki/classes/{CLASS_ID}/memory/class_state.md" in apply_body["applied_wiki_paths"]
+    assert f"wiki/classes/{CLASS_ID}/memory/planning_brief.md" in apply_body["applied_wiki_paths"]
     assert f"wiki/classes/{CLASS_ID}/memory/teaching_patterns.md" in apply_body["applied_wiki_paths"]
 
-    class_state = client.get(
+    planning_brief = client.get(
         f"/api/classes/{CLASS_ID}/wiki/file",
-        params={"path": f"wiki/classes/{CLASS_ID}/memory/class_state.md"},
+        params={"path": f"wiki/classes/{CLASS_ID}/memory/planning_brief.md"},
     )
-    assert class_state.status_code == 200
-    assert "Current unit: redox" in class_state.json()["markdown"]
+    assert planning_brief.status_code == 200
+    assert "Keep contrasting ion charge" in planning_brief.json()["markdown"]
 
 
 def test_compact_memory_apply_rejects_non_compact_memory_pages(client: TestClient):

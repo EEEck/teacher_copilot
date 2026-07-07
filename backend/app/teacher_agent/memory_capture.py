@@ -20,9 +20,7 @@ from app.teacher_agent.memory_targets import (
 )
 
 MEMORY_TARGETS = (
-    "class_state.md",
     "planning_brief.md",
-    "taught_so_far.md",
     "teaching_patterns.md",
     "copilot_profile.md",
     "teacher_profile.md",
