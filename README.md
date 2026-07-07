@@ -199,7 +199,7 @@ teacher_wiki/
 |---|---|---|
 | `OPENAI_API_KEY` | `backend/.env` | OpenAI API (required for chat & plan) |
 | `OPENAI_MODEL` | `backend/.env` | Default model fallback for legacy settings |
-| `OPENAI_CHAT_MODEL` | `backend/.env` | Chat turns (ingest/plan); default `gpt-5.4-mini` for reasoning + streaming |
+| `OPENAI_CHAT_MODEL` | `backend/.env` | Chat turns (ingest/plan), incl. the `remember(...)` capture tool; default `gpt-5.5` (the `-mini` tier under-emits + calls tools unreliably — mem_v3 PR4) |
 | `OPENAI_FAST_MODEL` | `backend/.env` | Compile/lint/opening; default `gpt-4o-mini` |
 | `OPENAI_SWEEP_MODEL` | `backend/.env` | Memory Sweep consolidation (rare, context-heavy). Use the strongest reasoning model (`gpt-5.4`); mini models fail the add-vs-adjust judgment. Empty = falls back to `OPENAI_CHAT_MODEL` |
 | `OPENAI_REASONING_EFFORT` | `backend/.env` | `none`, `low`, `medium`, `high`, `xhigh` - hidden thinking tokens (billed as output). Default `medium`; use `none` or `low` to save cost |
