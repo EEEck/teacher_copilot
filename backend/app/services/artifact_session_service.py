@@ -25,6 +25,10 @@ from app.teacher_agent.stream_events import (
 from app.services.artifact_spec import ArtifactSpec, TurnResult, default_specs
 from app.services.memory_candidate_ledger import MemoryCandidateLedger
 from app.services.memory_candidate_ledger import insert_with_folding
+from app.services.memory_skills import (
+    read_curated_target_bullets,
+    write_skill_for_target,
+)
 from app.teacher_agent.memory_capture import (
     discipline_memory_candidates,
     occasion_key_for,
@@ -283,9 +287,23 @@ class ArtifactSessionService:
             occasion_key=occasion_key,
         )
         # Insert-time folding: exact/near duplicates join their cluster or are
-        # neutralized against applied/rejected history (docs/mem_v3 lane 1).
+        # neutralized against applied/rejected history (docs/mem_v3 lane 1). For
+        # curated targets whose write skill declares dedup_scope=ledger+canonical
+        # (B2), also fold against what is already written to the target file so a
+        # re-capture of an already-present fact does not get re-proposed.
+        bullets_by_target: dict[str, list[str]] = {}
         for row in rows:
-            insert_with_folding(self.memory_candidate_ledger, row)
+            skill = write_skill_for_target(row.target)
+            canonical_bullets: list[str] = []
+            if skill is not None and skill.dedup_scope == "ledger+canonical":
+                if row.target not in bullets_by_target:
+                    bullets_by_target[row.target] = read_curated_target_bullets(
+                        self.wiki, session.class_id, row.target
+                    )
+                canonical_bullets = bullets_by_target[row.target]
+            insert_with_folding(
+                self.memory_candidate_ledger, row, canonical_bullets=canonical_bullets
+            )
 
     async def chat(
         self,

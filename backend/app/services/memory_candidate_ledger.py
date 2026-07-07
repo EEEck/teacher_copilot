@@ -650,12 +650,16 @@ def _same_scope(a: MemoryCandidateRow, b: MemoryCandidateRow) -> bool:
 
 
 def insert_with_folding(
-    ledger: MemoryCandidateLedger, candidate: MemoryCandidateRow
+    ledger: MemoryCandidateLedger,
+    candidate: MemoryCandidateRow,
+    *,
+    canonical_bullets: list[str] | None = None,
 ) -> MemoryCandidateRow:
     """Store a candidate with deterministic dedup against ledger history.
 
     Outcomes (by precedence):
-    - matches an ``applied`` row     -> stored as ``already_covered``
+    - already written to the target file (``canonical_bullets``, B2) or matches
+      an ``applied`` row -> stored as ``already_covered``
     - matches a ``rejected`` row     -> stored as ``suppressed`` unless the
       new capture has the backend-verified fast-lane verdict
     - exact text match to an open row from the SAME session -> ``duplicate``
@@ -664,6 +668,11 @@ def insert_with_folding(
       open, adopting the matched row's cluster_key (reinforcement: an
       identical re-statement in a new session is the strongest signal)
     - otherwise                      -> stored as-is (new claim)
+
+    ``canonical_bullets`` are the bullets already present in the target's
+    curated file; passing them realizes ``dedup_scope="ledger+canonical"`` (B2)
+    so a re-capture of a fact already written (e.g. by compaction) folds instead
+    of being re-proposed. The caller supplies them only for curated targets.
 
     Sections are normalized onto the per-target vocabulary first so
     free-form LLM section names cannot fragment clusters.
@@ -678,6 +687,16 @@ def insert_with_folding(
     new_norm = _normalized_update(candidate.candidate_update)
     new_tokens = _content_tokens(candidate.candidate_update)
     explicit = candidate.fast_lane
+
+    # B2: a fact already present in the target's curated file is covered — the
+    # strongest "already covered" signal there is (stronger than a ledger row).
+    canonical_covered = any(
+        _normalized_update(bullet) == new_norm
+        or _content_similarity(new_tokens, _content_tokens(bullet))
+        >= NEAR_DUPLICATE_OVERLAP
+        for bullet in (canonical_bullets or [])
+        if _normalized_update(bullet)
+    )
 
     existing = [
         row
@@ -712,12 +731,18 @@ def insert_with_folding(
             elif open_near is None:
                 open_near = row
 
-    if applied_match is not None:
+    if applied_match is not None or canonical_covered:
+        if applied_match is not None:
+            cluster_key = applied_match.cluster_key or candidate.cluster_key
+            reason = f"auto: duplicate of applied candidate {applied_match.id}"
+        else:
+            cluster_key = candidate.cluster_key
+            reason = f"auto: already present in {canonical_target}"
         candidate = _replace(
             candidate,
             status="already_covered",
-            cluster_key=applied_match.cluster_key or candidate.cluster_key,
-            rejection_reason=f"auto: duplicate of applied candidate {applied_match.id}",
+            cluster_key=cluster_key,
+            rejection_reason=reason,
         )
     elif rejected_match is not None and not explicit:
         candidate = _replace(

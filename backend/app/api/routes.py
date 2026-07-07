@@ -66,7 +66,10 @@ from app.schemas.api import (
 )
 from app.services.beta import BetaAuthService
 from app.services.ingest_service import IngestService
-from app.services.memory_apply import apply_memory_items, apply_memory_sweep_decisions
+from app.services.memory_skills import (
+    apply_curated_memory,
+    apply_curated_sweep_decisions,
+)
 from app.services.memory_candidate_ledger import MemoryCandidateLedger, OPEN_STATUSES
 from app.services.memory_sweep import (
     is_synthetic_student_summary_candidate_id,
@@ -820,7 +823,7 @@ def apply_memory(
 
     candidate_paths = _memory_apply_candidate_paths(wiki, class_id, body.items)
     before_by_path = {path: _read_wiki_rel(wiki, path) for path in candidate_paths}
-    applied, skipped, warnings, successful_indexes = apply_memory_items(
+    applied, skipped, warnings, successful_indexes = apply_curated_memory(
         wiki, class_id, body.items
     )
 
@@ -973,7 +976,7 @@ def apply_memory_sweep(
     before_by_path = {path: _read_wiki_rel(wiki, path) for path in candidate_paths}
     if any(decision.action == "apply" for decision in body.decisions):
         applied, skipped, warnings, successful_apply_indexes = (
-            apply_memory_sweep_decisions(wiki, class_id, body.decisions)
+            apply_curated_sweep_decisions(wiki, class_id, body.decisions)
         )
         _record_beta_wiki_diff(
             request,
