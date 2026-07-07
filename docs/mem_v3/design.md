@@ -4,6 +4,16 @@ Status: approved direction, implementation starting
 Date: 2026-07-05
 Owner decision log: beta round-2 discussion (July 2026)
 
+> Post-build note (2026-07-06): this design record uses `class_state` /
+> `taught_so_far` as the running over-capture and temporal-supersession
+> examples (they were the recorded beta case). Those two compact pages were
+> later **retired** (mem_v3 PR2) — current unit and taught sequence are derived
+> from the canonical `course_state.md` / `timeline.md` rollups, so read the
+> `class_state` examples below as the original scenario. Capture also became an
+> explicit `remember(...)` tool (PR4). See
+> [`next_implementation.md`](next_implementation.md) and Learning 10 in
+> [`learnings.md`](learnings.md).
+
 ## 1. Why V3 — the beta evidence
 
 The first beta round (demo workspace `w_demo_chem9b`) exercised the full V2

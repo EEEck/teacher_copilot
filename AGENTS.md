@@ -100,6 +100,16 @@ Important current contracts:
  Durable profile/state writes go only through the teacher-approved
  `POST /classes/{id}/memory/apply` (proposals via `/memory/refresh` and
  `/memory/profile/propose`).
+- Durable capture during chat is an explicit `remember(target, content,
+ speech_act, quote)` tool the model calls when the teacher gives a standing
+ instruction (mem_v3 PR4). It stages a review-only candidate grounded in the
+ teacher's verbatim words and writes nothing durable. Every memory write goes
+ through one typed contract (`backend/app/services/memory_skills.py`) that
+ declares whether it closes ledger rows — post-save `/memory/apply` closes them
+ so the sweep never re-proposes an applied fact (mem_v3 PR1).
+- Current unit / taught sequence is derived from the canonical `course_state.md`
+ / `timeline.md` rollups, not curated memory (mem_v3 PR2 retired the
+ `class_state.md` / `taught_so_far.md` twins — one home per fact).
 - Memory scope is split: global `user.md` (teacher), class `teaching_patterns.md`
  (how the class learns), class `copilot.md` (copilot working agreement); each
  page is size-budgeted.

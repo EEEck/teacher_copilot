@@ -7,6 +7,11 @@ prompts.
 
 Status: **proposal** (investigation complete; no code changes yet).
 
+> Note (2026-07): this doc predates mem_v3 PR2. The compact pages `class_state`
+> and `taught_so_far` referenced in the tables below were retired — current unit
+> and taught sequence are now derived from the canonical `course_state.md` /
+> `timeline.md` rollups. Read the compact-page lists here as historical.
+
 Related docs:
 
 - [`docs/agent_architecture.md`](../docs/agent_architecture.md) — retrieval and

@@ -293,12 +293,19 @@ that contract.
 
 ## Wiki memory
 
-The class wiki now includes compact memory pages under `wiki/classes/{class_id}/memory/`:
-`taught_so_far.md`, `planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and `session_summaries.md`.
+The class wiki includes compact memory pages under `wiki/classes/{class_id}/memory/`:
+`planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and `session_summaries.md`.
+(`class_state.md` / `taught_so_far.md` were retired in mem_v3 PR2 — current unit
+and taught sequence are derived from the canonical `course_state.md` /
+`timeline.md` rollups, so every such fact has one home.)
 
 Planning and ingest prompt layers are derived from those pages plus the current
 artifact/runtime state. `search_memory` is the deterministic pathfinder; use
 `read_memory_page` or `read_lesson_range` when the snippet is not enough.
+
+Durable memory is captured through the explicit `remember(...)` tool the model
+calls when the teacher gives a standing instruction (mem_v3 PR4); every memory
+write goes through one typed contract (`app/services/memory_skills.py`).
 
 ## Tests
 

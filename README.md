@@ -186,7 +186,6 @@ teacher_wiki/
       lesson_results.md
       lesson_plan.md
     memory/
-      taught_so_far.md
       planning_brief.md
       teaching_patterns.md
       copilot_profile.md
