@@ -23,15 +23,26 @@ Scripts or REPL code that construct `AgentRunner` without importing `app.main` m
 
 ## Agent runtime settings
 
-Models are two tiers (`OPENAI_STRONG_MODEL=gpt-5.5`, `OPENAI_CHEAP_MODEL=gpt-5.4-mini`)
-selected by `MODEL_PROFILE`. **quality** (testing) runs the capture chat turn on
-the strong model — mem_v3 PR4 makes durable capture an explicit `remember(...)`
-tool call, and the live judge eval showed the cheaper tier under-emits and calls
-tools unreliably. **economy** (production) runs the capture chat turn on the
-cheap model to control token cost. The Memory Sweep is always strong (important +
-infrequent); compile/lint/plan-lesson/opening are always cheap. `MODEL_PROFILE`
-is unset by default and derives from `APP_ENV` (development→quality,
-production→economy). `OPENAI_REASONING_EFFORT=medium` by default.
+Two model ids (`OPENAI_STRONG_MODEL=gpt-5.5`, `OPENAI_CHEAP_MODEL=gpt-5.4-mini`)
+are routed to three **call classes** by `MODEL_PROFILE`:
+
+- **CHAT** (plan + ingest, high volume; `remember(...)` capture happens here) —
+  strong/high in production, cheap/medium in economy.
+- **IMPORTANT** (the Memory Sweep consolidation only — the durable-memory
+  judgment) — always the strong model at max reasoning (xhigh production / high
+  economy). This is the quality gate that backstops cheaper capture.
+- **UTILITY** (compile, lint, plan-lesson, opening, compact, profile-propose) —
+  the chat model at minimal reasoning.
+
+So **production is one model (`gpt-5.5`), reasoning-tiered**; **economy runs
+chat/utility on `gpt-5.4-mini` and only the sweep on `gpt-5.5`**. `MODEL_PROFILE`
+is unset by default and derives from `APP_ENV` (production→production, else
+economy). `OPENAI_REASONING_EFFORT` optionally overrides the CHAT effort only.
+
+Note (mem_v3 PR4): durable capture is an explicit `remember(...)` tool call in
+the chat turn, and the live judge eval showed the cheaper tier under-emits and
+calls tools unreliably — so run the quality/production profile when verifying
+capture, and rely on the always-strong sweep as the backstop in economy.
 
 Complex lesson-planning turns can browse wiki memory, reason over evidence, and
 stream a full artifact. The default `AGENT_TIMEOUT_SECONDS=240` gives those

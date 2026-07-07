@@ -198,10 +198,10 @@ teacher_wiki/
 | Variable | Where | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | `backend/.env` | OpenAI API (required for chat & plan) |
-| `OPENAI_STRONG_MODEL` | `backend/.env` | Important/infrequent calls: Memory Sweep always, and the `remember(...)` capture chat turn in the quality profile. Default `gpt-5.5` |
-| `OPENAI_CHEAP_MODEL` | `backend/.env` | Frequent/utility calls: compile/lint/plan-lesson/opening, and the capture chat turn in the economy profile. Default `gpt-5.4-mini` |
-| `MODEL_PROFILE` | `backend/.env` | `quality` (capture chat on the strong model — testing/best emission) or `economy` (capture chat on the cheap model — lower token cost). Unset derives from `APP_ENV` (development→quality, production→economy). Sweep is always strong; utility always cheap |
-| `OPENAI_REASONING_EFFORT` | `backend/.env` | `none`, `low`, `medium`, `high`, `xhigh` - hidden thinking tokens (billed as output). Default `medium`; use `none` or `low` to save cost |
+| `OPENAI_STRONG_MODEL` | `backend/.env` | The newest/best model. Default `gpt-5.5`. Runs IMPORTANT calls always + CHAT/UTILITY in the production profile |
+| `OPENAI_CHEAP_MODEL` | `backend/.env` | The small model. Default `gpt-5.4-mini`. Runs CHAT/UTILITY in the economy profile |
+| `MODEL_PROFILE` | `backend/.env` | Routes three call classes — CHAT (plan+ingest), IMPORTANT (Memory Sweep only), UTILITY (one-shots). `production`: strong high / strong xhigh / strong minimal (one model, reasoning-tiered). `economy`: cheap medium / strong high / cheap minimal. Unset derives from `APP_ENV` (production→production, else economy) |
+| `OPENAI_REASONING_EFFORT` | `backend/.env` | Optional override of the CHAT reasoning effort only (`none`/`low`/`medium`/`high`/`xhigh`); unset = profile default. Use `none`/`low` for cheap local smoke runs |
 | `WIKI_ROOT` | `backend/.env` | Path to `teacher_wiki` (Docker: set in `compose.yaml` as `/data/teacher_wiki`) |
 | `BETA_ENABLED` | `backend/.env` | Enables invite-code beta auth and workspace-scoped wiki roots. Default `false` |
 | `BETA_DATA_ROOT` | `backend/.env` | Local SQLite telemetry DB and per-workspace wiki copies. Default `beta_data` |

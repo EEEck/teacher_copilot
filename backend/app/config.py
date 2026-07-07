@@ -19,19 +19,28 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: SecretStr = SecretStr("")
-    # Two model tiers (mem_v3). STRONG runs the important, infrequent calls
-    # (memory-sweep consolidation always; the capture chat turn in the quality
-    # profile). CHEAP runs frequent/utility calls (compile, lint, plan-lesson,
-    # plan-opening; the capture chat turn in the economy profile). Override the
-    # ids here when a newer model ships — no other model vars.
+    # Two model ids. STRONG is the newest/best model; CHEAP is the small model.
+    # Set the ids here when a newer model ships. Which call class uses which, and
+    # at what reasoning effort, is decided by MODEL_PROFILE below.
     openai_strong_model: str = "gpt-5.5"
     openai_cheap_model: str = "gpt-5.4-mini"
-    # Model profile: "quality" runs the capture chat turn on the strong model
-    # (verify emission / best answers); "economy" runs it on the cheap model to
-    # control token cost. None derives from app_env (development -> quality,
-    # production -> economy). The sweep is always strong; utility is always cheap.
-    model_profile: Literal["quality", "economy"] | None = None
-    openai_reasoning_effort: ReasoningEffort = "medium"
+    # Call classes (mem_v3 boundary):
+    #   CHAT     = plan + ingest chat (high volume, user-facing; capture happens
+    #              here, but the sweep backstops it).
+    #   IMPORTANT= the Memory Sweep consolidation ONLY (durable-memory judgment;
+    #              rare) -> always the strong model at max reasoning.
+    #   UTILITY  = compile, lint, plan-lesson, opening, compact, profile-propose
+    #              (one-shots, non-durable) -> cheap, minimal reasoning.
+    # Profiles (production = one model, reasoning-tiered; economy = cheap chat):
+    #                CHAT model / effort | IMPORTANT model / effort | UTILITY effort
+    #   production:  strong / high        | strong / xhigh           | minimal
+    #   economy:     cheap  / medium      | strong / high            | minimal
+    # UTILITY always runs on the CHAT model. Unset MODEL_PROFILE derives from
+    # app_env (production -> production, else economy).
+    model_profile: Literal["production", "economy"] | None = None
+    # Optional override of the CHAT reasoning effort only (the cost-heavy call);
+    # None = use the profile default. Handy for fast/cheap local smoke runs.
+    openai_reasoning_effort: ReasoningEffort | None = None
     agent_timeout_seconds: float = 240.0
     agent_max_turns: int = 16
 
@@ -100,21 +109,32 @@ class Settings(BaseSettings):
     def resolved_model_profile(self) -> str:
         if self.model_profile is not None:
             return self.model_profile
-        return "economy" if self.app_env == "production" else "quality"
+        return "production" if self.app_env == "production" else "economy"
 
     def resolved_chat_model(self) -> str:
-        """Capture/chat turn — strong to verify emission, cheap to save cost."""
-        if self.resolved_model_profile() == "quality":
+        """CHAT (plan + ingest): strong in production, cheap in economy."""
+        if self.resolved_model_profile() == "production":
             return self.openai_strong_model
         return self.openai_cheap_model
 
-    def resolved_sweep_model(self) -> str:
-        """Consolidation sweep — important and infrequent, always strong."""
+    def resolved_important_model(self) -> str:
+        """IMPORTANT (Memory Sweep only): always the strong model."""
         return self.openai_strong_model
 
     def resolved_utility_model(self) -> str:
-        """Compile / lint / plan-lesson / plan-opening — always cheap."""
-        return self.openai_cheap_model
+        """UTILITY (one-shots): follows the CHAT model tier."""
+        return self.resolved_chat_model()
+
+    def resolved_chat_effort(self) -> ReasoningEffort:
+        if self.openai_reasoning_effort is not None:
+            return self.openai_reasoning_effort
+        return "high" if self.resolved_model_profile() == "production" else "medium"
+
+    def resolved_important_effort(self) -> ReasoningEffort:
+        return "xhigh" if self.resolved_model_profile() == "production" else "high"
+
+    def resolved_utility_effort(self) -> ReasoningEffort:
+        return "minimal"
 
 
 @lru_cache

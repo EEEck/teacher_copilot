@@ -190,13 +190,15 @@ class AgentRunner:
             self.client = None
         else:
             self.client = OpenAI(api_key=key)
-        # Two model tiers resolved by profile (config.py). Capture/chat is
-        # strong in the quality profile, cheap in economy; the sweep is always
-        # strong (important + infrequent); utility calls are always cheap.
+        # Call classes resolved by profile (config.py): CHAT (plan+ingest),
+        # IMPORTANT (Memory Sweep only, strong + max reasoning), UTILITY
+        # (one-shots on the chat model, minimal reasoning).
         self.chat_model = settings.resolved_chat_model()
-        self.fast_model = settings.resolved_utility_model()
-        self.sweep_model = settings.resolved_sweep_model()
-        self.reasoning_effort = settings.openai_reasoning_effort
+        self.chat_effort = settings.resolved_chat_effort()
+        self.sweep_model = settings.resolved_important_model()
+        self.sweep_effort = settings.resolved_important_effort()
+        self.utility_model = settings.resolved_utility_model()
+        self.utility_effort = settings.resolved_utility_effort()
         self.timeout = settings.agent_timeout_seconds
         self.max_turns = settings.agent_max_turns
         self.wiki = wiki
@@ -363,7 +365,7 @@ class AgentRunner:
             ),
             self.chat_model,
             memory=runtime,
-            reasoning_effort=self.reasoning_effort,
+            reasoning_effort=self.chat_effort,
         )
         current_draft = partial_diary.strip() or self.wiki.empty_diary_template()
         user_input = build_ingest_user_input_assembly(
@@ -416,7 +418,7 @@ class AgentRunner:
             current_draft,
             self.chat_model,
             planning=runtime,
-            reasoning_effort=self.reasoning_effort,
+            reasoning_effort=self.chat_effort,
         )
         user_input = self._build_plan_user_input(messages, attachments)
         return _PreparedAgentTurn(runtime, current_draft, agent, user_input)
@@ -605,7 +607,9 @@ class AgentRunner:
             return self._plan_opening_fallback(class_id)
         try:
             context = self.wiki.build_plan_context_slim(class_id)
-            agent = build_plan_opening_agent(context, self.fast_model)
+            agent = build_plan_opening_agent(
+                context, self.utility_model, reasoning_effort=self.utility_effort
+            )
             out = await self._run_structured(
                 agent, "Open the planning session for this class."
             )
@@ -705,7 +709,9 @@ class AgentRunner:
             f"Conversation transcript:\n{transcript}\n\n"
             "Compile the lesson results markdown now."
         )
-        agent = build_compile_agent(self.fast_model)
+        agent = build_compile_agent(
+            self.utility_model, reasoning_effort=self.utility_effort
+        )
         parsed = await self._run_structured(agent, prompt)
         if not isinstance(parsed, CompileOutput):
             return self.wiki.empty_diary_template()
@@ -725,7 +731,11 @@ class AgentRunner:
             f"Start from index.md via tools, then open relevant pages.\n"
             f"Context excerpt:\n{apply_char_limit(context, lim.plan_lesson_context_chars)}"
         )
-        agent = build_plan_lesson_agent(self._wiki_ctx(class_id), self.fast_model)
+        agent = build_plan_lesson_agent(
+            self._wiki_ctx(class_id),
+            self.utility_model,
+            reasoning_effort=self.utility_effort,
+        )
         parsed = await self._run_structured(agent, user)
         if not isinstance(parsed, PlanOutput):
             raise RuntimeError("Failed to generate lesson plan")
@@ -733,7 +743,12 @@ class AgentRunner:
 
     async def lint_wiki(self, class_id: str) -> str:
         context = self.wiki.read_wiki_index(class_id)
-        agent = build_lint_agent(self._wiki_ctx(class_id), context, self.fast_model)
+        agent = build_lint_agent(
+            self._wiki_ctx(class_id),
+            context,
+            self.utility_model,
+            reasoning_effort=self.utility_effort,
+        )
         out = await self._run_structured(
             agent,
             f"Lint the wiki for class {class_id}. Read index.md and scan lessons, students, roll-ups.",
@@ -749,7 +764,9 @@ class AgentRunner:
         source = self.wiki.build_memory_compaction_source_packet(
             class_id, start_date=start_date, end_date=end_date
         )
-        agent = build_memory_compact_agent(self.fast_model)
+        agent = build_memory_compact_agent(
+            self.utility_model, reasoning_effort=self.utility_effort
+        )
         prompt = (
             "Compact the approved class wiki memory into durable class memory pages.\n\n"
             f"{apply_char_limit(source['packet'], get_context_limits().memory_compact_source_chars)}"
@@ -789,7 +806,9 @@ class AgentRunner:
             f"{apply_char_limit(json.dumps(memory_candidates or [], indent=2), field_cap)}\n\n"
             "Propose teacher_profile.md and copilot_profile.md updates now."
         )
-        agent = build_profile_proposal_agent(self.fast_model)
+        agent = build_profile_proposal_agent(
+            self.utility_model, reasoning_effort=self.utility_effort
+        )
         parsed = await self._run_structured(agent, prompt)
         if not isinstance(parsed, ProfileProposalOutput):
             raise RuntimeError("Failed to propose profile updates")
@@ -839,7 +858,9 @@ class AgentRunner:
             f"{apply_char_limit(json.dumps(budget_usage or {}, indent=2), field_cap)}\n\n"
             "Return one operation set accounting for every claim_id exactly once."
         )
-        agent = build_memory_sweep_consolidation_agent(self.sweep_model)
+        agent = build_memory_sweep_consolidation_agent(
+            self.sweep_model, reasoning_effort=self.sweep_effort
+        )
         parsed = await self._run_structured(agent, prompt)
         if not isinstance(parsed, MemoryConsolidationOutput):
             raise RuntimeError("Failed to consolidate Memory Sweep claims")

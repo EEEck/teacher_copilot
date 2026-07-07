@@ -1,8 +1,11 @@
-"""Two-tier model config + testing/production profile switch.
+"""Call-class model + reasoning routing, by profile.
 
-STRONG runs important/infrequent calls (sweep always; capture chat in the
-quality profile); CHEAP runs frequent/utility calls (and capture chat in the
-economy profile). The profile derives from APP_ENV when unset.
+Three call classes (mem_v3 boundary): CHAT (plan+ingest), IMPORTANT (Memory
+Sweep only), UTILITY (one-shots). Profiles:
+- production: one model (strong) reasoning-tiered — chat high, important xhigh,
+  utility minimal.
+- economy: cheap chat/utility, strong important — chat medium, important high.
+The profile derives from APP_ENV when unset.
 """
 
 from __future__ import annotations
@@ -12,27 +15,40 @@ from app.config import Settings
 _MODELS = {"openai_strong_model": "STRONG", "openai_cheap_model": "CHEAP"}
 
 
-def test_quality_profile_runs_capture_on_the_strong_model():
-    s = Settings(model_profile="quality", **_MODELS)
+def test_production_is_one_model_reasoning_tiered():
+    s = Settings(model_profile="production", **_MODELS)
     assert s.resolved_chat_model() == "STRONG"
-    assert s.resolved_sweep_model() == "STRONG"
-    assert s.resolved_utility_model() == "CHEAP"
+    assert s.resolved_important_model() == "STRONG"
+    assert s.resolved_utility_model() == "STRONG"
+    assert s.resolved_chat_effort() == "high"
+    assert s.resolved_important_effort() == "xhigh"
+    assert s.resolved_utility_effort() == "minimal"
 
 
-def test_economy_profile_runs_capture_on_the_cheap_model():
+def test_economy_uses_cheap_chat_and_utility_strong_important():
     s = Settings(model_profile="economy", **_MODELS)
     assert s.resolved_chat_model() == "CHEAP"
-    # The sweep is important + infrequent, so it stays strong even in economy.
-    assert s.resolved_sweep_model() == "STRONG"
     assert s.resolved_utility_model() == "CHEAP"
+    assert s.resolved_important_model() == "STRONG"  # sweep always strong
+    assert s.resolved_chat_effort() == "medium"
+    assert s.resolved_important_effort() == "high"
+    assert s.resolved_utility_effort() == "minimal"
 
 
 def test_profile_derives_from_app_env_when_unset():
-    assert Settings(app_env="development", model_profile=None).resolved_model_profile() == "quality"
-    assert Settings(app_env="production", model_profile=None).resolved_model_profile() == "economy"
+    assert Settings(app_env="production", model_profile=None).resolved_model_profile() == "production"
+    assert Settings(app_env="development", model_profile=None).resolved_model_profile() == "economy"
 
 
 def test_explicit_profile_overrides_app_env():
-    s = Settings(app_env="production", model_profile="quality", **_MODELS)
-    assert s.resolved_model_profile() == "quality"
-    assert s.resolved_chat_model() == "STRONG"
+    s = Settings(app_env="production", model_profile="economy", **_MODELS)
+    assert s.resolved_model_profile() == "economy"
+    assert s.resolved_chat_model() == "CHEAP"
+
+
+def test_reasoning_effort_override_applies_to_chat_only():
+    s = Settings(model_profile="production", openai_reasoning_effort="none", **_MODELS)
+    assert s.resolved_chat_effort() == "none"
+    # The important/utility efforts are profile-fixed, not overridden.
+    assert s.resolved_important_effort() == "xhigh"
+    assert s.resolved_utility_effort() == "minimal"
