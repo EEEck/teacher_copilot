@@ -140,9 +140,22 @@ add a classification the model must produce, measure emission and judgment
 discipline logic but is blind to whether the model emits the candidate in
 the first place. The eval encodes this by xfailing emission gaps (a known
 upstream limitation) and hard-failing only misclassification (a real
-judgment regression). Fixing the emission rate — via a stronger capture
-prompt or reviving the typed-state repair for direct requests — is the next
-capture-side lever, tracked separately.
+judgment regression).
+
+The fix (PR4) followed the 2026 self-editing-memory pattern rather than a
+prompt tweak: capture became an **explicit `remember(target, content,
+speech_act, quote)` tool** the model calls when the teacher gives a standing
+instruction, replacing the passive output field it forgot to fill while doing
+other work. A durable-memory decision routed through a salient tool call
+survives a real turn where a "also populate this field" instruction does not.
+The tool's deterministic guard grounds only in the teacher's verbatim words
+(quote provenance) and returns a structured error the model retries on — the
+Mem0/Letta/hermes shape, kept model-swappable, with persist-time discipline
+still the authoritative fast-lane decision. The capture turn also moved off the
+`-mini` tier (Learning 6 again: tool-calling and emission are both bounded by
+model strength). The live judge eval is unchanged as the instrument — it now
+measures whether the tool fires; when it does, the emission xfails stop
+triggering and the run proceeds to the judgment assertion.
 
 ## Learning 9 — Reinforcement needs visible gates, invisible staging
 
@@ -153,6 +166,31 @@ stale singletons expire silently after ~6 weeks. The
 ledger stays invisible; HITL applies to *writes*, not to *staging*. Known
 accepted limitation: we gate on capture frequency, not usage frequency
 (OpenClaw's recall counts) — revisit if curated memory grows.
+
+## Learning 10 — Every fact needs exactly one home, and the write must close its own loop
+
+The first live beta with V3 running surfaced the *seams* between the two memory
+layers, not a fault in either. Two write-boundary leaks:
+
+- **The twin (PR2).** `class_state.md` (curated, sweep-managed) and
+  `course_state.md` (canonical, diary-derived) held the same "current unit"
+  fact, updated by two mechanisms, "out of sync by design." The fix is a rule,
+  not a patch: **every fact has exactly one home**, chosen by which axis it sits
+  on — *retrieved-and-grows* (canonical wiki, entered on demand, so detail is
+  cheap) vs *assembled-and-budgeted* (curated memory, a task-scoped slice each
+  context builder pulls, so it must stay small). "Current unit / taught
+  sequence" is a deterministic projection of the lesson record, so it lives only
+  in the canonical rollups and the sweep *reads* them; `class_state.md` and
+  `taught_so_far.md` were retired.
+- **The open loop (PR1).** A fast-lane candidate applied on the post-save panel
+  wrote the wiki file but left its ledger row open, so the next sweep
+  re-proposed an already-applied fact. Write-time is the cheapest control point
+  (Learning 2 again): the write that applies a candidate must also *close* its
+  ledger row, or the loop never terminates and the teacher re-reviews forever.
+
+Both are the same principle stated two ways: a memory system is only as clean as
+its write boundaries. A fact with two homes drifts; a write that doesn't close
+its own loop repeats.
 
 ## What carried over from V2 unchanged
 

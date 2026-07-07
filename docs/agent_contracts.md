@@ -474,14 +474,16 @@ Writes:
 Allowed compact pages (each has a hard size budget in `MEMORY_PAGE_BUDGETS`,
 enforced at write AND inject time via `clamp_memory_page`):
 
-- `taught_so_far.md`
 - `planning_brief.md`
 - `teaching_patterns.md` — class + subject TEACHING STYLE: how this class learns
   and which approaches work/fail (holds the class learning profile).
 - `copilot_profile.md` (`copilot.md`) — class-scoped COPILOT WORKING AGREEMENT
   only: planning patterns, avoid-rules, repeated corrections, agent behavior.
-- `class_state.md` — derived current-state snapshot for the class.
 - `session_summaries.md`
+
+`class_state.md` and `taught_so_far.md` were retired (mem_v3 PR2): current unit
+and taught sequence are deterministic projections of the canonical
+`course_state.md` / `timeline.md` rollups, so they are not compact pages.
 
 Plus one global, cross-class page:
 
@@ -512,10 +514,15 @@ Shared memory-capture rules:
   and `MemoryRuntime` owns update-memory target/result state.
 - Candidate capture mechanics are shared: validation, target allowlisting,
   dedupe, caps, evidence refs, ledger conversion, and ledger persistence.
-- The main workflow model should emit `memory_candidates` in the same turn when
-  it detects durable teacher/class/copilot memory. Backend code may repair a
-  missed candidate only from typed runtime state the model already emitted, not
-  from broad raw-message keyword scraping.
+- The primary capture path is the explicit `remember(target, content,
+  speech_act, quote)` tool the model calls in the same turn when the teacher
+  gives a durable instruction (mem_v3 PR4). Its deterministic guard
+  (`validate_remember_call`) requires a supported preference target and verbatim
+  quote provenance, returning a structured error the model retries on; the
+  staged candidate flows into the shared candidate layer. The passive
+  `memory_candidates` output field remains as a fallback, and backend code may
+  repair a missed candidate only from typed runtime state the model already
+  emitted, not from broad raw-message keyword scraping.
 - If planning state carries a durable global teacher communication preference
   but top-level `memory_candidates` is empty, the backend may synthesize a
   review-only `teacher_profile.md` / `Communication` candidate with
@@ -534,8 +541,9 @@ Purpose:
 Proposal (read-only, no writes):
 
 - `POST /classes/{id}/memory/refresh` proposes refreshed derived pages
-  (`taught_so_far`, `planning_brief`, `teaching_patterns`, `copilot_profile`,
-  `class_state`) plus a `stale_report`. It does not write.
+  (`planning_brief`, `teaching_patterns`, `copilot_profile`,
+  `session_summaries`) plus a `stale_report`. It does not write. (`class_state`
+  / `taught_so_far` were retired — mem_v3 PR2.)
 - After a successful teacher-approved ingest commit, the commit response may
   include the same proposal shape as `class_memory_proposal`. This is an
   immediate class-evolution review aid, not an automatic compact-memory write.
@@ -551,17 +559,17 @@ Apply (the only durable-write path for these pages):
 
 - `POST /classes/{id}/memory/apply` writes only the teacher-approved items via
   the bounded helpers (`add_user_profile_conclusion`, `add_profile_conclusion`,
-  `add_compact_memory_conclusion` for `class_state`, `planning_brief`,
-  `taught_so_far`, and `teaching_patterns`, plus
-  `add_subject_guide_conclusion` for the active class subject guide).
+  `add_compact_memory_conclusion` for `planning_brief` and `teaching_patterns`,
+  plus `add_subject_guide_conclusion` for the active class subject guide).
   Unsupported targets such as `canonical_wiki` or a different subject guide are
-  skipped, not written.
+  skipped, not written. It also closes the originating ledger rows for applied
+  fast-lane candidates so the sweep never re-proposes them (mem_v3 PR1).
 - `POST /classes/{id}/memory/compact/apply` writes teacher-reviewed compact
   pages exactly as approved from a proposal payload. It is for full compact page
   replacement and uses the deterministic compact-memory allowlist; it must not
   be used for teacher-profile or canonical-wiki edits.
-- `POST /classes/{id}/memory/compact` remains the full derived-page rebuild and
-  now also writes `class_state`, each page clamped to budget.
+- `POST /classes/{id}/memory/compact` remains the full derived-page rebuild for
+  the surviving compact pages, each clamped to budget.
 
 ## Query Pack Contract
 

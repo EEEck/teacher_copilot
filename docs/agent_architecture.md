@@ -105,19 +105,26 @@ The product uses tiered class memory.
 
 2. **Compact class memory**
    Derived, size-budgeted pages under `wiki/classes/{class_id}/memory/`:
-   `taught_so_far.md`, `planning_brief.md`, `teaching_patterns.md`,
-   `copilot_profile.md`, `class_state.md`, and `session_summaries.md`. Each page
-   has a hard char budget in `MEMORY_PAGE_BUDGETS`, enforced at write AND inject
-   time via `clamp_memory_page` (Hermes-style: small, high-signal, replace not
-   append).
+   `planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and
+   `session_summaries.md`. Each page has a hard char budget in
+   `MEMORY_PAGE_BUDGETS`, enforced at write AND inject time via
+   `clamp_memory_page` (Hermes-style: small, high-signal, replace not append).
+   `class_state.md` and `taught_so_far.md` were **retired** (mem_v3 PR2):
+   "current unit" and "taught sequence" are deterministic projections of the
+   canonical `course_state.md` / `timeline.md` rollups, so they live in exactly
+   one home there and the sweep *reads* them rather than curating a second,
+   drifting twin. This is the two-axis rule in practice — **retrieved-and-grows**
+   (the canonical wiki, entered on demand) vs **assembled-and-budgeted** (curated
+   memory, a task-scoped slice each context builder pulls): every fact has one
+   home on exactly one axis.
 
 3. **Workflow prompt layers**
    Read-only packs for base class chat, lesson planning, ingest, and review.
    These are rebuilt from the wiki and compact memory rather than stored as
    separate durable state. The planning chat uses `build_plan_context_slim`: a
    single deduped slice with class identity, recent misconceptions/lessons,
-   bounded subject guide, class state, planning brief, and teaching patterns
-   (each component clamped to budget) instead of the
+   canonical course state (current unit), bounded subject guide, planning brief,
+   and teaching patterns (each component clamped to budget) instead of the
    stacked, duplicated `build_plan_context` pack — so there is no blunt
    end-of-pack truncation. The legacy `_CHAT_CONTEXT_CHARS = 14_000` clip caused
    random tail loss and is removed. The ingest chat now mirrors this with
@@ -173,17 +180,31 @@ The product uses tiered class memory.
    Update Memory also surfaces accumulated candidates after the teacher-approved
    lesson-memory commit, so subtle chat signals such as repeated communication
    preferences can be reviewed for `teacher_profile.md`, `copilot_profile.md`,
-   `teaching_patterns.md`, `class_state.md`, `planning_brief.md`, or
-   `taught_so_far.md`. `canonical_wiki` remains review-only in this path.
+   `teaching_patterns.md`, or `planning_brief.md`. `canonical_wiki` remains
+   review-only in this path.
 
 6. **Candidate ledger and Memory Sweep (Memory V3)**
-   Planning and Update Memory chats can emit review-only `memory_candidates`,
-   under a disciplined capture contract (docs/mem_v3/design.md lane 1):
-   candidates must be grounded in the teacher's own words (never the agent's
-   own artifact output), silence is the normal outcome of a turn, and
-   `teacher_explicit`/high status requires clearly future-scoped wording — the
-   backend downgrades unsupported explicit claims to weak inferred signals
-   (`discipline_memory_candidates`). Persistence goes through deterministic
+   Planning and Update Memory chats capture review-only durable facts. The
+   **primary path is an explicit `remember(target, content, speech_act, quote)`
+   tool** the model calls the moment the teacher gives a standing instruction
+   (mem_v3 PR4). This replaced a passive `memory_candidates` output field the
+   model reliably forgot to fill while doing planning/ingest work — the measured
+   "emission gap" (durable requests understood but never routed, the original V2
+   capture-bug shape). The shift matches the 2026 self-editing-memory pattern
+   (Mem0 / Letta / hermes): capture is a tool call the model *decides* to make,
+   which keeps it model-swappable and inspectable. The tool's deterministic
+   guard (`validate_remember_call`) grounds only in ground truth — a supported
+   preference target and **verbatim quote provenance** (the quoted sentence must
+   appear in the teacher's real message) — and returns a structured, model-facing
+   error so the agent self-corrects and retries within the turn; it never guesses
+   intent. The passive field remains as a fallback. Whichever path emits, the
+   candidate flows through the same review pipeline: candidates must be grounded
+   in the teacher's own words (never the agent's own artifact output), silence is
+   the normal outcome of a turn, and `teacher_explicit`/high status requires a
+   verified quote plus target lane policy — the backend downgrades unsupported
+   explicit claims to weak inferred signals (`discipline_memory_candidates`),
+   which remains the authoritative fast-lane decision at persist time regardless
+   of how the candidate was emitted. Persistence goes through deterministic
    insert-time folding (`insert_with_folding`): sections are normalized onto a
    fixed per-target vocabulary, same-session exact duplicates are rejected as
    noise, cross-session exact or near duplicates (stemmed overlap coefficient,
@@ -260,6 +281,14 @@ Design rules:
   `list_memory_targets` for date/lesson discovery, `read_memory_target` for one
   planned or taught lesson, and the shared memory search/page/raw-evidence
   pattern for continuity.
+- Capture is a tool, not a passive field. `remember(target, content,
+  speech_act, quote)` is the one write-capable tool on both chat surfaces, and
+  even it writes nothing durable — it stages a review-only candidate grounded in
+  the teacher's verbatim words, with a deterministic guard that returns a
+  structured error for the model to retry (mem_v3 PR4). Making the durable-memory
+  decision an explicit, salient tool call is what closed the emission gap; a
+  field the model must remember to fill while doing other work does not survive
+  contact with a real turn.
 - Put capability semantics in tool docstrings and output shapes. Example:
   `list_lessons` is the sequence-map tool; `read_lesson_range` is the
   multi-lesson evidence tool; `search_memory` is the broad topic pathfinder.
@@ -366,7 +395,9 @@ should receive enough context to start well and use tools for the long tail.
 - Wiki retrieval: `backend/app/teacher_agent/wiki/search.py`
 - Context packs (incl. `build_plan_context_slim` / `build_ingest_context_slim`): `backend/app/teacher_agent/wiki/context_packs.py`
 - Compact memory + budgets/clamp + bounded profile writers: `backend/app/teacher_agent/wiki/memory.py`
-- Shared memory candidate capture + discipline: `backend/app/teacher_agent/memory_capture.py`
+- Shared memory candidate capture + discipline + `remember(...)` validation (`validate_remember_call`): `backend/app/teacher_agent/memory_capture.py`
+- `remember(...)` capture tool wiring: `backend/app/teacher_agent/tools.py` (`create_remember_tool`)
+- Post-save `/memory/apply` ledger-close (mem_v3 PR1): `backend/app/api/routes.py` (`apply_memory`)
 - Memory candidate ledger + insert-time folding: `backend/app/services/memory_candidate_ledger.py`
 - Promotion gate and silent decay: `backend/app/services/memory_gate.py`
 - Single-call Memory Sweep consolidation (Mem V3): `backend/app/services/memory_sweep.py`

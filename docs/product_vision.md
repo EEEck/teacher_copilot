@@ -89,9 +89,11 @@ KlassenPilot uses a tiered memory model.
   student notes, and subject guides. This is the source of truth.
 
 - **Compact class memory**
-  Derived pages under `wiki/classes/{class_id}/memory/`, including
-  `taught_so_far.md`, `planning_brief.md`, `teaching_patterns.md`,
-  `copilot_profile.md`, `class_state.md`, and `session_summaries.md`.
+  Derived pages under `wiki/classes/{class_id}/memory/`:
+  `planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and
+  `session_summaries.md`. (Current unit / taught sequence is derived from the
+  canonical `course_state.md` / `timeline.md` rollups; mem_v3 PR2 retired the
+  `class_state.md` / `taught_so_far.md` twins.)
 
 - **Workflow context packs**
   Read-only packs for base class chat, lesson planning, memory update, review,

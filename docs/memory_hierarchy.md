@@ -176,25 +176,15 @@ Update paths:
   conclusions to selected compact pages; it is not the full-page replacement
   path.
 
-#### `taught_so_far.md`
+#### `taught_so_far.md` — RETIRED (mem_v3 PR2)
 
-Purpose:
-
-- compact chronological summary of the year's taught content
-- major sequence of concepts
-- recent lesson sequence
-
-Loaded where today:
-
-- Included in the active class core context.
-- Available through `search_memory`.
-- Included in legacy `build_plan_context`.
-- Used by review/query packs.
-
-Good update source:
-
-- memory compaction over approved lesson results and saved plans.
-- reviewed `class_memory_proposal` after an approved lesson-memory commit.
+The taught sequence is a deterministic projection of the canonical lesson
+record, so it now lives in `timeline.md` (and the current unit in
+`course_state.md`) — not in a curated compact twin. Context builders derive the
+sequence from the timeline; the sweep reads the rollups rather than maintaining
+this page. See [`docs/mem_v3/next_implementation.md`](mem_v3/next_implementation.md)
+(the two-axis memory map) and Learning 10 in
+[`docs/mem_v3/learnings.md`](mem_v3/learnings.md).
 
 #### `planning_brief.md`
 
@@ -282,28 +272,15 @@ Do not put here:
 - how the class learns (`teaching_patterns.md`)
 - raw session summaries
 
-#### `class_state.md`
+#### `class_state.md` — RETIRED (mem_v3 PR2)
 
-Purpose:
-
-- shortest current-state snapshot for this class
-- current unit
-- last lesson
-- likely next move
-- active open loops and misconceptions
-
-Loaded where:
-
-- Included in the active class core context if the file exists.
-
-Current observed state:
-
-- In the FCKW trace, `class_state.md` was missing, so it was not included.
-
-Good update source:
-
-- memory refresh/compaction from approved canonical wiki
-- reviewed `class_memory_proposal` after an approved lesson-memory commit
+The "current unit / last lesson / next move / open loops" snapshot duplicated
+the canonical `course_state.md` rollup (diary-derived) — one fact, two homes,
+out of sync by design. It was retired so every such fact has exactly one home in
+the canonical rollups; the sweep and context builders read `course_state.md` /
+`timeline.md` directly. See the two-axis memory map in
+[`docs/mem_v3/next_implementation.md`](mem_v3/next_implementation.md) and
+Learning 10 in [`docs/mem_v3/learnings.md`](mem_v3/learnings.md).
 
 #### `session_summaries.md`
 
@@ -417,22 +394,25 @@ After a plan is saved, profile/memory proposal can suggest:
 
 - `teacher_profile.md` (`user.md` alias): stable global teacher preference
 - `copilot.md`: class-specific copilot behavior preference
-- `class_state.md`: updated current class state
 - `teaching_patterns.md`: stable class learning patterns seen across approved
   lesson evidence
-- `planning_brief.md` / `taught_so_far.md`: compact class-current or sequence
-  updates when the signal is stable enough for teacher review
+- `planning_brief.md`: compact current planning-priority updates when the signal
+  is stable enough for teacher review
 - `canonical_wiki`: only as a suggestion for teacher-approved wiki action, not
   an automatic write
+
+(Current unit / taught sequence is not a proposal target — it is derived from
+the canonical `course_state.md` / `timeline.md` rollups; mem_v3 PR2 retired the
+`class_state.md` / `taught_so_far.md` twins.)
 
 Examples:
 
 - Teacher says: "I always want plans in English."
-  - Target: `teacher_profile.md`
+  - Target: `teacher_profile.md` (the model calls `remember(...)` with this quote)
 - Teacher says: "For 9b, avoid starting too open-ended."
   - Target: `copilot.md`
 - The final plan establishes the next concrete class direction.
-  - Target: `class_state.md`
+  - Not memory: it is captured in the saved plan and the canonical rollups.
 - A lesson was actually taught and logged.
   - Target: canonical wiki through memory-update commit, not planning chat
 
@@ -442,8 +422,8 @@ Examples:
 - Global teacher facts go to `teacher_profile.md`.
 - Class learning facts go to `teaching_patterns.md`.
 - Copilot behavior rules go to `copilot_profile.md`.
-- Current state goes to `class_state.md`.
-- Year-to-date taught sequence goes to `taught_so_far.md`.
+- Current unit / taught sequence is NOT curated memory: it is derived from the
+  canonical `course_state.md` / `timeline.md` rollups (mem_v3 PR2).
 - Review-only lesson facts go to `canonical_wiki` candidates until an ingest
   commit/revise action writes the canonical lesson files.
 - Detailed lesson history stays canonical in `lessons/{date}/`.

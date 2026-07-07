@@ -236,8 +236,11 @@ a later memory-refresh run.
 
 The useful pattern is a candidate ledger:
 
-1. During an active chat, the model may emit `memory_candidates` alongside the
-   artifact and runtime `state_patch`.
+1. During an active chat, the model calls the explicit `remember(...)` tool the
+   moment the teacher gives a durable instruction (mem_v3 PR4 — capture is a
+   tool the model *decides* to invoke, not a passive field it forgets while
+   working; a `memory_candidates` output field remains as a fallback). Either
+   path stages a candidate alongside the artifact and runtime `state_patch`.
 2. The backend stores them in session runtime, dedupes them, caps the list, and
    returns them to the UI.
 3. After the teacher saves a plan or commits lesson memory, the UI presents
@@ -264,9 +267,12 @@ For KlassenPilot this means:
 - teacher-level preferences -> `teacher_profile.md` / `user.md`
 - class learning patterns -> `teaching_patterns.md`
 - copilot behavior rules -> `copilot_profile.md` / `copilot.md`
-- current class state -> `class_state.md`
-- taught sequence or planning priorities -> `taught_so_far.md` /
-  `planning_brief.md`
+- current planning priorities -> `planning_brief.md`
+- current class state / taught sequence -> **not a candidate target**: these are
+  deterministic projections of the canonical `course_state.md` / `timeline.md`
+  rollups. mem_v3 PR2 retired the `class_state.md` / `taught_so_far.md` twins so
+  every such fact has one home (the two-axis rule: retrieved-and-grows canonical
+  wiki vs assembled-and-budgeted curated memory).
 
 Do not create a teacher-facing `agent_tmp` wiki page for this. If candidate
 state must survive backend restarts, persist it outside canonical wiki memory
@@ -474,19 +480,23 @@ Key files:
   local profile helpers, and compaction commits.
 - `backend/app/teacher_agent/wiki/store.py`: facade exposing wiki helpers.
 - `backend/app/teacher_agent/memory_capture.py`: shared runtime candidate
-  validation, dedupe, repair, rendering, and ledger conversion.
+  validation, dedupe, repair, rendering, ledger conversion, and the
+  `remember(...)` capture-tool guard (`validate_remember_call`).
 - `backend/app/services/memory_candidate_ledger.py`: raw candidate evidence
-  ledger for cross-session review.
-- `backend/app/services/memory_sweep.py`: two-pass alignment/card
-  consolidation and validation before Memory Sweep review cards.
-- `backend/app/teacher_agent/tools.py`: model-visible read tools.
+  ledger for cross-session review with deterministic insert-time folding.
+- `backend/app/services/memory_sweep.py`: single-call (Mem V3) mem0-style
+  ID-referenced consolidation with structural-only validation.
+- `backend/app/teacher_agent/tools.py`: model-visible read tools plus the
+  `remember(...)` capture tool (the one write-capable chat tool; stages
+  review-only candidates, writes nothing durable).
 - `backend/app/teacher_agent/prompts.py`: workflow prompts and tool policy.
 - `backend/app/api/routes.py`: includes memory refresh, compact rebuild,
   reviewed compact-page apply, and append-style memory apply endpoints.
 
-Current memory pages:
+Current memory pages (mem_v3 PR2 retired `class_state.md` / `taught_so_far.md`;
+current unit and taught sequence are derived from the canonical
+`course_state.md` / `timeline.md` rollups):
 
-- `taught_so_far.md`: compact year-to-date sequence
 - `planning_brief.md`: open loops, readiness, priorities
 - `teaching_patterns.md`: what has worked or failed
 - `copilot_profile.md`: teacher/class/copilot profile
