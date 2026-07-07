@@ -38,8 +38,13 @@ class Settings(BaseSettings):
     # UTILITY always runs on the CHAT model. Unset MODEL_PROFILE derives from
     # app_env (production -> production, else economy).
     model_profile: Literal["production", "economy"] | None = None
-    # Optional override of the CHAT reasoning effort only (the cost-heavy call);
-    # None = use the profile default. Handy for fast/cheap local smoke runs.
+    # Per-call-class reasoning-effort overrides. None = use the profile default
+    # (production: chat high / important xhigh / utility minimal;
+    #  economy: chat medium / important high / utility minimal).
+    openai_chat_reasoning_effort: ReasoningEffort | None = None
+    openai_important_reasoning_effort: ReasoningEffort | None = None
+    openai_utility_reasoning_effort: ReasoningEffort | None = None
+    # Legacy alias for the chat effort (kept so existing .env files keep working).
     openai_reasoning_effort: ReasoningEffort | None = None
     agent_timeout_seconds: float = 240.0
     agent_max_turns: int = 16
@@ -126,14 +131,21 @@ class Settings(BaseSettings):
         return self.resolved_chat_model()
 
     def resolved_chat_effort(self) -> ReasoningEffort:
-        if self.openai_reasoning_effort is not None:
-            return self.openai_reasoning_effort
+        override = self.openai_chat_reasoning_effort
+        if override is None:
+            override = self.openai_reasoning_effort  # legacy alias
+        if override is not None:
+            return override
         return "high" if self.resolved_model_profile() == "production" else "medium"
 
     def resolved_important_effort(self) -> ReasoningEffort:
+        if self.openai_important_reasoning_effort is not None:
+            return self.openai_important_reasoning_effort
         return "xhigh" if self.resolved_model_profile() == "production" else "high"
 
     def resolved_utility_effort(self) -> ReasoningEffort:
+        if self.openai_utility_reasoning_effort is not None:
+            return self.openai_utility_reasoning_effort
         return "minimal"
 
 

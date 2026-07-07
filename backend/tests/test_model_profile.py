@@ -46,9 +46,34 @@ def test_explicit_profile_overrides_app_env():
     assert s.resolved_chat_model() == "CHEAP"
 
 
-def test_reasoning_effort_override_applies_to_chat_only():
-    s = Settings(model_profile="production", openai_reasoning_effort="none", **_MODELS)
+def test_each_reasoning_effort_is_independently_overridable():
+    s = Settings(
+        model_profile="production",
+        openai_chat_reasoning_effort="none",
+        openai_important_reasoning_effort="low",
+        openai_utility_reasoning_effort="medium",
+        **_MODELS,
+    )
     assert s.resolved_chat_effort() == "none"
-    # The important/utility efforts are profile-fixed, not overridden.
+    assert s.resolved_important_effort() == "low"
+    assert s.resolved_utility_effort() == "medium"
+
+
+def test_unset_reasoning_efforts_fall_back_to_profile_defaults():
+    s = Settings(model_profile="production", **_MODELS)
+    assert s.resolved_chat_effort() == "high"
     assert s.resolved_important_effort() == "xhigh"
     assert s.resolved_utility_effort() == "minimal"
+
+
+def test_legacy_reasoning_effort_still_overrides_chat():
+    s = Settings(model_profile="production", openai_reasoning_effort="low", **_MODELS)
+    assert s.resolved_chat_effort() == "low"
+    # The explicit chat override wins over the legacy alias when both are set.
+    s2 = Settings(
+        model_profile="production",
+        openai_reasoning_effort="low",
+        openai_chat_reasoning_effort="none",
+        **_MODELS,
+    )
+    assert s2.resolved_chat_effort() == "none"
