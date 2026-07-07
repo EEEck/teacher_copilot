@@ -77,6 +77,22 @@ difference.
 4. Flip the live clarify xfails to expected passes; measure on the production
    profile (`gpt-5.5`).
 
+## Decisions (2026-07-07)
+
+- **Beta = names-first, IDs stay the internal key.** The agent should chat, reply,
+  and display in student **names**; wiki entity files remain `students/S-###.md`
+  (names are the display label, IDs the key). Keeps the pseudonymity layer intact
+  and reversible for real (non-fake) students post-beta. This is a *display /
+  render* change, not a re-keying: input names already map to IDs
+  (`_pseudonymize_known_students`); the work is (a) stop showing raw `S-###` on
+  teacher-facing surfaces and (b) resolve names→IDs at commit so observations
+  still file under the right entity.
+- **The roster check works on names + IDs.** Once built, flag both a mistyped
+  `S-###` and a **name that doesn't match any enrolled student** (normalized /
+  fuzzy compare against the roster name column) — not only exact-ID membership.
+  The current `non_roster_ids()` detector is the ID half; a `non_roster_names()`
+  half (fuzzy) is added when the detector is wired.
+
 ## Test with real users (deferred, on purpose)
 
 The judge eval documents the *target*, but the real signal is behavioral with
