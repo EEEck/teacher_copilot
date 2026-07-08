@@ -20,6 +20,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 COMPOSE_FILE="$ROOT/compose.yaml"
 CMD="${1:-up}"
+BACKEND_PORT="${BACKEND_PORT:-8010}"
+FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 
 cd "$ROOT"
 
@@ -37,8 +39,8 @@ case "$CMD" in
     compose up --build -d
     echo ""
     echo "Docker dev stack started:"
-    echo "  App:  http://localhost:3000"
-    echo "  API:  http://localhost:8010/api/health"
+    echo "  App:  http://localhost:$FRONTEND_PORT"
+    echo "  API:  http://localhost:$BACKEND_PORT/api/health"
     echo ""
     echo "  ./scripts/docker-dev.sh logs   # follow logs"
     echo "  ./scripts/docker-dev.sh down   # stop"

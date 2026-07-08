@@ -6,14 +6,17 @@ services:
       dockerfile: Dockerfile.dev
     env_file: backend/.env
     environment:
-      APP_ENV: development
+      APP_ENV: ${APP_ENV:-development}
       WIKI_ROOT: /data/teacher_wiki
+      BETA_ENABLED: ${BETA_ENABLED:-false}
+      BETA_DATA_ROOT: /data/beta_data
+      CORS_ORIGINS: '["http://localhost:${FRONTEND_PORT:-3000}"]'
     volumes:
       - ./backend/app:/app/app
-      - ./backend/teacher_wiki:/data/teacher_wiki
-      - ./backend/beta_data:/data/beta_data
+      - ${WIKI_HOST_DIR:-./backend/teacher_wiki}:/data/teacher_wiki
+      - ${BETA_DATA_HOST_DIR:-./backend/beta_data}:/data/beta_data
     ports:
-      - "8010:8010"
+      - "${BACKEND_PORT:-8010}:8010"
     healthcheck:
       test:
         [
@@ -33,14 +36,14 @@ services:
       dockerfile: Dockerfile.dev
     environment:
       INTERNAL_API_BASE_URL: http://backend:8010
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8010
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:${BACKEND_PORT:-8010}
       WATCHPACK_POLLING: "true"
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
       backend:
         condition: service_healthy

@@ -158,3 +158,48 @@ From repo root, the broader deterministic suite is:
 ```
 
 No OpenAI calls should be needed for tests.
+
+## Multi-worktree Development
+
+This repo is commonly developed with multiple Codex agents running in separate
+Git worktrees. Treat each worktree as an isolated copy of the app.
+
+Prefer fast deterministic validation before running the full app:
+
+1. Run backend tests/evals from the worktree.
+2. Use host/pytest-based tests where possible.
+3. Only start Docker Compose when the change needs human-in-the-loop app
+   testing.
+
+For HITL testing, prefer the worktree stack helper from the worktree root:
+
+```powershell
+.\scripts\worktree-stack.cmd up --fresh-wiki
+```
+
+The helper generates a worktree-scoped Compose project name and available host
+ports, creates `backend/teacher_wiki_sandbox/` from the tracked baseline wiki
+when needed, and can enable beta mode with worktree-local beta data:
+
+```powershell
+.\scripts\worktree-stack.cmd up --beta --fresh-beta-data
+.\scripts\worktree-stack.cmd up --app-env production --model-profile production
+```
+
+Direct Compose remains supported. Each live stack must use a unique
+`COMPOSE_PROJECT_NAME`, `BACKEND_PORT`, and `FRONTEND_PORT`. Set
+`WIKI_HOST_DIR=./backend/teacher_wiki_sandbox` for mutable wiki testing and keep
+`backend/teacher_wiki/` as source-like baseline fixture memory unless the task
+intentionally changes fixture memory.
+
+Use `--model-profile economy` or `--model-profile production` only when the task
+needs explicit model routing. Otherwise leave it unset so the backend derives
+`MODEL_PROFILE` from `APP_ENV` and keeps model IDs/reasoning overrides in
+`backend/.env`.
+
+Do not assume the main repo's running Docker stack is serving worktree code. A
+Compose stack serves the files from the directory where it is started.
+
+When done, report the worktree/branch used, tests/evals run, whether a Docker
+stack was started, frontend URL if HITL testing was used, any wiki files
+changed, and known limitations or follow-up needed.
