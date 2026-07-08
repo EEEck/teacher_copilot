@@ -27,6 +27,9 @@ scripts/.logs/
 /runs/
 /backend/runs/
 /backend/beta_data/
+/backend/beta_data_sandbox/
+/backend/teacher_wiki_sandbox/
+/.worktree-stack/
 
 # Secrets
 .env
