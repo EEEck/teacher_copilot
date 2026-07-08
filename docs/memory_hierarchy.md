@@ -11,6 +11,58 @@ Short rule:
 > are small derived or preference layers. The LLM may propose updates, but the
 > backend validates scope and the teacher approves durable writes.
 
+## Routing Summary
+
+A memory target is chosen by the fact's durable purpose, not by surface wording
+like "next", "remember", or "for this lesson".
+
+- `teacher_profile.md` / `user.md`: stable global teacher preferences across
+  classes: communication style, default lesson structure, workflow preferences,
+  and reusable teacher-facing conventions.
+- `wiki/subjects/{subject}.md`: subject-wide reusable guidance that should
+  apply beyond one class, such as common misconceptions, safety reminders,
+  lesson patterns, and question templates.
+- `course_state.md`: canonical current class state derived from approved
+  lessons: current unit, last lesson, next planned focus, and overall status.
+- `timeline.md`: canonical chronological lesson sequence with dated links,
+  covered content, and concise highlights.
+- `memory/planning_brief.md`: compact near-term planning brief for this class:
+  current priorities, open loops, misconception focus, assessment readiness,
+  and immediate next-step pressure.
+- `memory/teaching_patterns.md`: durable class learning profile: how this class
+  learns, what scaffolds/materials/pacing/activity formats work or fail, and
+  recurring class-specific pedagogy.
+- `memory/copilot_profile.md` / `copilot.md`: class-scoped copilot working
+  agreement: how the agent should plan or behave for this class, including
+  repeated teacher corrections and avoid-rules.
+- `memory/session_summaries.md`: sparse compact summaries of prior workflow
+  sessions when they help continuity; not a transcript store.
+- `lessons/{date}/lesson_results.md`: canonical approved record of what
+  happened in one taught lesson.
+- `lessons/{date}/lesson_plan.md`: saved plan artifact for one lesson; useful
+  evidence, but not itself durable profile memory.
+- `students/S-###.md`: pseudonymous individual student learning trajectory with
+  dated evidence and a reviewed summary.
+- `open_loops.md`: canonical unresolved class follow-ups, questions, and
+  pending teaching tasks derived from lessons.
+- `misconceptions.md`: canonical class misconception rollup grounded in
+  approved lesson evidence.
+- `index.md`: navigation catalog for finding relevant wiki pages; it orients
+  reads but is not the behavioral source of truth.
+
+Overlap rules:
+
+- If a fact is both a durable class learning pattern and an immediate planning
+  priority, capture both with separate concise contents for
+  `teaching_patterns.md` and `planning_brief.md`.
+- If a teacher gives an agent-behavior instruction and explains why it works
+  for the class, capture the behavior in `copilot_profile.md` and the learning
+  pattern in `teaching_patterns.md`.
+- If the teacher says the rule applies across the subject, route to
+  `wiki/subjects/{subject}.md`; if it applies to this class, route to
+  `teaching_patterns.md`; if it applies to the teacher's general style, route
+  to `teacher_profile.md`.
+
 ## Memory Layers
 
 ### 1. Global Teacher Profile

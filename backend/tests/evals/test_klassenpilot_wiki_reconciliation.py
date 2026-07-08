@@ -16,6 +16,9 @@ from __future__ import annotations
 import os
 
 import pytest
+from deepeval import assert_test
+from deepeval.dataset import Golden
+from deepeval.test_case import LLMTestCase
 
 from tests.evals.goldens.wiki_input_reconciliation import (
     CHEMIE_9B_CLASS_ID,
@@ -24,6 +27,9 @@ from tests.evals.goldens.wiki_input_reconciliation import (
     student_ids_in,
 )
 from tests.evals.harness import actual_output_text, run_chat_scenario
+from tests.evals.metrics.wiki_reconciliation_metrics import (
+    WikiReconciliationJudgeMetric,
+)
 
 
 def _roster(eval_wiki) -> set[str]:
@@ -61,6 +67,7 @@ def test_non_roster_detection_is_deterministic(eval_wiki, golden):
 # --- live judge: target behavior, opt-in --------------------------------------
 
 _LIVE = os.getenv("RUN_LIVE_AGENT_EVALS") == "1"
+_LLM_JUDGE = os.getenv("RUN_LLM_WIKI_RECONCILIATION_JUDGE") == "1"
 
 
 @pytest.mark.skipif(not _LIVE, reason="live agent evals are opt-in (RUN_LIVE_AGENT_EVALS=1)")
@@ -96,3 +103,61 @@ def test_wiki_reconciliation_reply_behavior_live(live_eval_client, golden):
             f"reconciliation not yet wired: reply did not clarify the non-roster "
             f"id(s) {golden.non_roster_ids} for {golden.golden_id!r}"
         )
+
+
+@pytest.mark.skipif(
+    not (_LIVE and _LLM_JUDGE),
+    reason=(
+        "LLM wiki reconciliation judge is opt-in "
+        "(set RUN_LIVE_AGENT_EVALS=1 and RUN_LLM_WIKI_RECONCILIATION_JUDGE=1)"
+    ),
+)
+@pytest.mark.parametrize(
+    "golden",
+    WIKI_RECONCILIATION_GOLDENS,
+    ids=[g.golden_id for g in WIKI_RECONCILIATION_GOLDENS],
+)
+def test_wiki_reconciliation_reply_behavior_llm_judge_live(live_eval_client, golden):
+    result = run_chat_scenario(
+        live_eval_client,
+        workflow=golden.workflow,
+        class_id=CHEMIE_9B_CLASS_ID,
+        prior_messages=(golden.prior_message,) if golden.prior_message else (),
+        message=golden.teacher_message,
+    )
+    reply = actual_output_text(result)
+    roster_context = (
+        "Roster truth for this eval fixture: S-014 is enrolled in Chemie 9b; "
+        "S-099 is not currently on the Chemie 9b roster."
+    )
+    expected_context = (
+        f"Expected clarify: {golden.expect_clarify}\n"
+        f"Non-roster IDs in teacher message: {golden.non_roster_ids}\n"
+        f"Rationale: {golden.rationale}"
+    )
+    test_case = LLMTestCase(
+        input=golden.teacher_message,
+        actual_output=reply,
+        retrieval_context=[roster_context, expected_context],
+        metadata={"golden_id": golden.golden_id, "class_id": CHEMIE_9B_CLASS_ID},
+    )
+    deepeval_golden = Golden(
+        input=golden.teacher_message,
+        context=[roster_context, expected_context],
+        metadata={"golden_id": golden.golden_id, "mode": "live_llm_judge"},
+    )
+
+    try:
+        assert_test(
+            test_case=test_case,
+            metrics=[WikiReconciliationJudgeMetric(golden=golden)],
+            golden=deepeval_golden,
+            run_async=False,
+        )
+    except AssertionError as exc:
+        if golden.expect_clarify:
+            pytest.xfail(
+                "reconciliation clarify behavior is not wired yet; LLM judge "
+                f"failed target behavior for {golden.golden_id!r}: {exc}"
+            )
+        raise

@@ -147,6 +147,11 @@ $env:RUN_LLM_CHAT_JUDGE="1"   # GEval grounding judge (default on for live)
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_chat_live.py -v
 ```
 
+Live agent evals force the production model profile by default, ignoring local
+`MODEL_PROFILE` and local reasoning-effort overrides. Set
+`LIVE_AGENT_EVAL_MODEL_PROFILE=economy` only when the point of the run is an
+explicit model-profile comparison.
+
 Each chat golden scores three metrics:
 
 1. **ToolInvocation** — required/any-of tool names from SSE `tool_call` events

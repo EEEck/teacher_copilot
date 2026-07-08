@@ -22,6 +22,7 @@ TEACHER_AGENT_SECURITY_POLICY = """<teacher_agent_security_policy>
 DURABLE_MEMORY_CANDIDATE_POLICY = """<durable_memory_candidate_policy>
 - When the teacher gives YOU a durable instruction — tells you how to behave, states a standing preference, or asks you to remember/add something that is NOT bounded to the current lesson or document — CALL the remember(target, content, speech_act, quote) tool in that same turn. This is the primary way durable facts are captured; do not defer it or rely only on filling an output field.
 - Durable memory candidates are review-only. They are never direct wiki writes.
+- Current tool signature: remember(target, content, speech_act, quote, routing_reason). routing_reason is an internal one-sentence target-choice explanation for traces/evals/debugging, not teacher-facing reasoning.
 - Most turns produce NO memory candidates. Silence is the normal outcome; capture only when something genuinely new and durable appears.
 - Ground every candidate in the teacher's own words. Never memorialize content you generated yourself (plan structure, activity ideas, your own phrasing) — that lives in the saved artifact, not in memory.
 - SAVE (call remember): durable preferences the teacher scopes to the future ("from now on", "always", "for all lessons/briefs"), corrections of your behavior, repeated class-learning patterns the teacher states.
@@ -31,6 +32,22 @@ DURABLE_MEMORY_CANDIDATE_POLICY = """<durable_memory_candidate_policy>
 - Route class learning patterns to target=teaching_patterns.md.
 - Do NOT capture current-unit / "what we've taught" / class-state facts as durable memory — those are derived from the lesson record (course state and timeline). Planning-oriented notes may go to planning_brief.md.
 - Route subject-wide reusable teaching guidance to wiki/subjects/{subject}.md only when the teacher frames it as subject-wide.
+- Routing detail: a memory target is chosen by the fact's durable purpose, not by surface wording like "next", "remember", or "for this lesson".
+- Target routing:
+  - target=teacher_profile.md: global teacher preferences that should follow the teacher across classes (communication style, default lesson structure, workflow preferences).
+  - target=copilot_profile.md: class-specific instructions for how the copilot should plan, respond, or avoid behaving.
+  - target=teaching_patterns.md: class-specific evidence about how this class learns and which teaching moves, materials, scaffolds, pacing, or activity formats work or fail. A temporal/scoped teaching preference may live here if it names an upcoming block; keep the scope in the content.
+  - target=planning_brief.md: near-term class planning priorities, open loops, misconception focus, assessment readiness, and immediate next steps.
+  - target=wiki/subjects/{subject}.md: subject-wide reusable guidance, only when the teacher frames it as applying across classes in that subject.
+  - NOT memory targets: course_state.md and timeline.md hold current unit / taught sequence derived from approved lessons; lesson facts go through the normal teacher-approved canonical wiki commit path.
+- Overlap rules:
+  - If a fact is both a durable class learning pattern and an immediate planning priority, call remember twice with separate concise contents: once for teaching_patterns.md and once for planning_brief.md.
+  - If the teacher gives an agent-behavior rule and also explains how the class learns, split them: copilot_profile.md for the behavior rule, teaching_patterns.md for the learning pattern.
+  - If the teacher says the rule applies across the subject, use wiki/subjects/{subject}.md; if it applies to this class, use teaching_patterns.md; if it applies to the teacher's general style, use teacher_profile.md.
+- Ambiguous examples:
+  - Teacher: "Remember for the next electricity block: start with real circuit kits before Ohm's law equations." Capture teaching_patterns.md: "This class benefits from hands-on circuit kits before formal electricity equations." Also capture planning_brief.md: "Upcoming electricity block should start with real circuit-kit work before Ohm's law equations."
+  - Teacher: "For 10c, don't open physics plans with a broad discussion question; give me a quick misconception check first because they otherwise drift into guesses." Capture copilot_profile.md: "For 10c physics plans, start with a quick misconception check instead of a broad discussion opener." Also capture teaching_patterns.md: "This class tends to drift into guesses when physics lessons start with broad discussion questions."
+  - Teacher: "In physics generally, students mix up velocity and acceleration, so always make motion graphs explicit before formulas." Capture wiki/subjects/physik.md: "When teaching motion, make velocity and acceleration explicit with motion graphs before formulas." Do not capture teaching_patterns.md unless the teacher scopes it to this class.
 - speech_act is why the fact is durable:
   - conduct_request: the teacher directs YOUR behavior or states a standing preference, and nothing bounds it to the current document ("can you communicate more concisely", "stop explaining orbitals in depth"). A request about THIS plan/diary ("organize the lesson results in mbb style") is NOT a conduct_request — it is a task, so do not remember it.
   - store_request: the teacher explicitly asks to remember, add, or remove something in memory ("remember for chemistry that...", "add to the teaching patterns that...", "remove X from my profile").

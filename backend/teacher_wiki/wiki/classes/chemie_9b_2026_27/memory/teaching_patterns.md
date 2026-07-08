@@ -1,7 +1,7 @@
 # Teaching Patterns
 
 > Class: chemie_9b_2026_27
-> Class + subject teaching style: how THIS class learns and which approaches work or fail for it.
+> Durable class learning profile: how THIS class learns, what scaffolds/materials/pacing/activity formats work or fail, and recurring class-specific pedagogy.
 
 ## Class Learning Profile
 - Students thrive on concrete examples and need visual supports before grasping abstract symbolic rules.

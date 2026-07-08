@@ -495,6 +495,14 @@ Scope discipline (no cross-contamination):
 
 - Global teacher preferences → `teacher_profile.md`. Class learning profile →
   `teaching_patterns.md`. Copilot working agreement → `copilot_profile.md`.
+- Durable-memory routing is by purpose, not surface wording: near-term planning
+  pressure goes to `planning_brief.md`, class learning patterns go to
+  `teaching_patterns.md`, class-scoped copilot behavior goes to
+  `copilot_profile.md`, global teacher preferences go to `teacher_profile.md`,
+  and subject-wide guidance goes to the active subject guide. If one explicit
+  teacher request is both a class learning pattern and an immediate planning
+  priority, the model should call `remember(...)` twice with separate concise
+  contents.
 - Dedupe and REPLACE stale facts rather than appending; report stale/conflicting
   facts in the compaction `stale_report`.
 
@@ -515,14 +523,18 @@ Shared memory-capture rules:
 - Candidate capture mechanics are shared: validation, target allowlisting,
   dedupe, caps, evidence refs, ledger conversion, and ledger persistence.
 - The primary capture path is the explicit `remember(target, content,
-  speech_act, quote)` tool the model calls in the same turn when the teacher
-  gives a durable instruction (mem_v3 PR4). Its deterministic guard
+  speech_act, quote, routing_reason)` tool the model calls in the same turn
+  when the teacher gives a durable instruction (mem_v3 PR4). Its deterministic guard
   (`validate_remember_call`) requires a supported preference target and verbatim
   quote provenance, returning a structured error the model retries on; the
   staged candidate flows into the shared candidate layer. The passive
   `memory_candidates` output field remains as a fallback, and backend code may
   repair a missed candidate only from typed runtime state the model already
   emitted, not from broad raw-message keyword scraping.
+- `remember(...)` also carries an internal `routing_reason`: one compact
+  sentence explaining why the target was chosen. This is for traces, evals, and
+  debugging only; it is not teacher-facing reasoning and does not affect the
+  backend fast-lane verdict.
 - If planning state carries a durable global teacher communication preference
   but top-level `memory_candidates` is empty, the backend may synthesize a
   review-only `teacher_profile.md` / `Communication` candidate with

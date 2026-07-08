@@ -24,6 +24,7 @@ def test_valid_call_builds_a_grounded_explicit_candidate():
         content="Keep future lesson plans in English.",
         quote="always keep future lesson plans in English",
         speech_act="conduct_request",
+        routing_reason="Global teacher preference for future lesson-plan language.",
         teacher_message=MESSAGE,
     )
     assert error == ""
@@ -32,6 +33,26 @@ def test_valid_call_builds_a_grounded_explicit_candidate():
     assert cand.source == "teacher_explicit"
     assert cand.evidence.startswith(DIRECT_TEACHER_QUOTE_PREFIX)
     assert "always keep future lesson plans in English" in cand.evidence
+    assert cand.routing_reason == "Global teacher preference for future lesson-plan language."
+
+
+def test_routing_reason_is_compacted_and_internal():
+    cand, error = validate_remember_call(
+        target="teaching_patterns.md",
+        content="This class benefits from concrete apparatus before formulas.",
+        quote="always keep future lesson plans in English",
+        speech_act="store_request",
+        routing_reason="  Durable class-learning pattern: apparatus-before-formulas.  \n"
+        "Also useful for tracing target choice.  ",
+        teacher_message=MESSAGE,
+    )
+
+    assert error == ""
+    assert cand is not None
+    assert cand.routing_reason == (
+        "Durable class-learning pattern: apparatus-before-formulas. "
+        "Also useful for tracing target choice."
+    )
 
 
 def test_alias_targets_are_canonicalized():

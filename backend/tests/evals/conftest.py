@@ -21,6 +21,8 @@ from tests.conftest import StubAgentRunner
 _SEED_WIKI = Path(__file__).resolve().parents[2] / "teacher_wiki"
 _EVAL_WIKI_OVERLAY = Path(__file__).resolve().parents[1] / "fixtures" / "eval_wiki"
 _PROCESSOR_REGISTERED = False
+_MODEL_PROFILES = {"production", "economy"}
+_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
 
 
 def _register_deepeval_processor() -> None:
@@ -47,6 +49,45 @@ def _overlay_eval_wiki(dest: Path) -> None:
         target = dest / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, target)
+
+
+def _env_choice(name: str, allowed: set[str]) -> str | None:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return None
+    normalized = value.strip().lower()
+    if normalized not in allowed:
+        options = ", ".join(sorted(allowed))
+        raise pytest.UsageError(f"{name} must be one of: {options}")
+    return normalized
+
+
+def _settings_for_live_agent_eval():
+    """Return live-eval settings pinned to production routing by default.
+
+    Live goldens are meant to evaluate production model behavior, independent
+    from local economy/dev settings. Use LIVE_AGENT_EVAL_MODEL_PROFILE only for
+    explicit model-profile comparison runs.
+    """
+    base = get_settings()
+    updates = {
+        "model_profile": _env_choice("LIVE_AGENT_EVAL_MODEL_PROFILE", _MODEL_PROFILES)
+        or "production",
+        "openai_chat_reasoning_effort": None,
+        "openai_important_reasoning_effort": None,
+        "openai_utility_reasoning_effort": None,
+        "openai_reasoning_effort": None,
+    }
+    effort_overrides = {
+        "LIVE_AGENT_EVAL_CHAT_REASONING_EFFORT": "openai_chat_reasoning_effort",
+        "LIVE_AGENT_EVAL_IMPORTANT_REASONING_EFFORT": "openai_important_reasoning_effort",
+        "LIVE_AGENT_EVAL_UTILITY_REASONING_EFFORT": "openai_utility_reasoning_effort",
+    }
+    for env_name, field_name in effort_overrides.items():
+        effort = _env_choice(env_name, _REASONING_EFFORTS)
+        if effort is not None:
+            updates[field_name] = effort
+    return base.model_copy(update=updates)
 
 
 @pytest.fixture
@@ -87,7 +128,7 @@ def live_eval_client(eval_wiki: WikiStore) -> Iterator[TestClient]:
     if os.getenv("RUN_LIVE_AGENT_EVALS") != "1":
         pytest.skip("live agent evals disabled")
 
-    settings = get_settings()
+    settings = _settings_for_live_agent_eval()
     if not configure_openai_from_settings(settings):
         pytest.skip("OPENAI_API_KEY not configured for live agent evals")
 

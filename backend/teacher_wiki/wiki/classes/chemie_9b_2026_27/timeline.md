@@ -1,6 +1,7 @@
 # Lesson Timeline
 
 > Class: chemie_9b_2026_27
+> Canonical chronological lesson sequence with dated links, covered content, and concise highlights.
 
 ## 2026-05-29 - Anions and Oxidation State Review
 - [Anions and Oxidation State Review](lessons/2026-05-29/lesson_results.md)

@@ -8,6 +8,8 @@ These tests pin that prompts are rendered with ``apply_prompt`` (plain
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from app.teacher_agent.prompts import (
@@ -23,6 +25,7 @@ from app.teacher_agent.prompts import (
     TEACHER_AGENT_SECURITY_POLICY,
     apply_prompt,
 )
+from app.teacher_agent.tools import create_remember_tool
 from app.schemas.api import ChatAttachment, ChatMessage
 from app.teacher_agent.memory_update_state import MemoryRuntime
 from app.teacher_agent.planning_state import PlanRuntime
@@ -131,6 +134,31 @@ def test_durable_memory_candidate_policy_is_reusable_and_routed():
     assert "one-off request" in policy
     assert "silence is the normal outcome" in policy
     assert "teacher's own words" in policy
+
+
+def test_durable_memory_candidate_policy_defines_overlap_routing_with_physics_examples():
+    policy = DURABLE_MEMORY_CANDIDATE_POLICY.lower()
+
+    assert "chosen by the fact's durable purpose" in policy
+    assert "real circuit kits before ohm's law equations" in policy
+    assert "this class benefits from hands-on circuit kits" in policy
+    assert "upcoming electricity block should start" in policy
+    assert "quick misconception check" in policy
+    assert "drift into guesses" in policy
+    assert "physics generally" in policy
+    assert "velocity and acceleration" in policy
+    assert "call remember twice" in policy
+
+
+def test_remember_tool_docstring_exposes_same_routing_taxonomy():
+    source = " ".join(inspect.getsource(create_remember_tool).lower().split())
+
+    assert "routing_reason" in source
+    assert "internal" in source
+    assert "chosen by the fact's durable purpose" in source
+    assert "teaching_patterns.md: class-specific evidence" in source
+    assert "planning_brief.md: near-term class planning priorities" in source
+    assert "real circuit kits before ohm's law equations" in source
 
 
 def test_durable_memory_candidate_policy_is_in_chat_instructions(wiki):

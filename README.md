@@ -325,6 +325,11 @@ need `docker compose up` for CI goldens.
 | Live agent + LLM judge | `$env:RUN_LIVE_AGENT_EVALS="1"; pytest tests/evals/test_klassenpilot_chat_live.py` |
 | Live API smoke (needs `:8010`) | `$env:RUN_LIVE_API_TESTS="1"; pytest tests/test_live_api_plan_trace.py` |
 
+Live agent evals pin the app agent runner to the production model profile by
+default, independent of local `MODEL_PROFILE` / reasoning-effort settings. Use
+`LIVE_AGENT_EVAL_MODEL_PROFILE=economy` only for an explicit model-profile
+comparison run.
+
 Full documentation: [`backend/docs/evals.md`](backend/docs/evals.md),
 [`backend/tests/README.md`](backend/tests/README.md).
 

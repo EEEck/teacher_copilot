@@ -43,7 +43,13 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
     from app.teacher_agent.memory_capture import validate_remember_call
 
     @function_tool
-    def remember(target: str, content: str, speech_act: str, quote: str) -> str:
+    def remember(
+        target: str,
+        content: str,
+        speech_act: str,
+        quote: str,
+        routing_reason: str,
+    ) -> str:
         """Save a durable instruction the teacher just gave YOU, for their review.
 
         Call this the moment the teacher tells you how to behave, states a
@@ -62,6 +68,42 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
             speech_act: "conduct_request" if the teacher directed your behavior,
                 or "store_request" if they explicitly asked you to remember it.
             quote: the teacher's exact sentence that asked for this, verbatim.
+            routing_reason: one compact internal sentence explaining why this
+                target was chosen. Do not include hidden reasoning; just the
+                routing basis, such as "class learning pattern plus immediate
+                next-block priority".
+
+        Routing detail: a memory target is chosen by the fact's durable
+        purpose, not by surface wording like "next", "remember", or "for this
+        lesson".
+
+        Target routing:
+        - teacher_profile.md: global teacher preferences across classes.
+        - copilot_profile.md: class-specific instructions for how the copilot
+          should plan, respond, or avoid behaving.
+        - teaching_patterns.md: class-specific evidence about how this class
+          learns and which teaching moves, materials, scaffolds, pacing, or
+          activity formats work or fail. Temporal teaching preferences can live
+          here when scoped to an upcoming block; keep that scope in content.
+        - planning_brief.md: near-term class planning priorities, open loops,
+          misconception focus, assessment readiness, and immediate next steps.
+        - wiki/subjects/<subject>.md: subject-wide reusable guidance only when
+          the teacher frames it as applying across classes in that subject.
+
+        Overlap examples:
+        - "Remember for the next electricity block: start with real circuit
+          kits before Ohm's law equations." Save both teaching_patterns.md
+          ("This class benefits from hands-on circuit kits before formal
+          electricity equations.") and planning_brief.md ("Upcoming electricity
+          block should start with real circuit-kit work before Ohm's law
+          equations.").
+        - "For 10c, don't open physics plans with a broad discussion question;
+          give me a quick misconception check first because they otherwise drift
+          into guesses." Save copilot_profile.md for the planning behavior and
+          teaching_patterns.md for the class learning pattern.
+        - "In physics generally, students mix up velocity and acceleration..."
+          Save wiki/subjects/physik.md, not teaching_patterns.md, unless the
+          teacher scopes it to this class.
 
         Nothing is written to memory now — it goes to the teacher's review.
         """
@@ -71,6 +113,7 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
             content=content,
             quote=quote,
             speech_act=speech_act,
+            routing_reason=routing_reason,
             teacher_message=ctx.teacher_message,
         )
         if error:

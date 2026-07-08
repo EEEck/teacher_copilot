@@ -51,6 +51,13 @@ class MemoryCandidate(BaseModel):
     source: str = "inferred_from_session"
     basis: str = "inferred"
     confidence: str = "low"
+    routing_reason: str = Field(
+        default="",
+        description=(
+            "Internal one-sentence reason for choosing this memory target. "
+            "Used for traces/evals/debugging; not teacher-facing."
+        ),
+    )
     requires_teacher_approval: bool = True
     speech_act: str = Field(
         default="",
@@ -400,6 +407,7 @@ def validate_remember_call(
     content: str,
     quote: str,
     speech_act: str = "",
+    routing_reason: str = "",
     teacher_message: str,
 ) -> tuple[MemoryCandidate | None, str]:
     """Validate one ``remember(...)`` tool call against the teacher's words.
@@ -443,6 +451,7 @@ def validate_remember_call(
         source="teacher_explicit",
         basis="explicit",
         confidence="high",
+        routing_reason=clean_text(routing_reason)[:320],
         speech_act=clean_text(speech_act).lower(),
         requires_teacher_approval=True,
     )

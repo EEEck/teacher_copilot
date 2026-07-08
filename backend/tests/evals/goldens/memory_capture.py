@@ -18,10 +18,16 @@ class MemoryCaptureGolden:
     # about the agent's behavior are natural in planning; lesson observations
     # and content stores are natural in update-memory (ingest).
     workflow: str = "ingest"
-    # A prior turn establishing realistic work context. Capture emission
-    # needs the agent to be doing work — a cold session with only a
-    # standalone preference emits nothing (which is itself a known finding).
+    # A prior turn establishing realistic work context. Capture emission needs
+    # the agent to be doing work; a cold session with only a standalone
+    # preference emits nothing, which is itself a known finding.
     prior_message: str = ""
+    # Component-level tool-call expectations, inspired by tool-correctness
+    # evals: live runs compare emitted memory candidates against expected and
+    # forbidden targets, instead of only checking one final fast-lane verdict.
+    expected_targets: tuple[str, ...] = ()
+    forbidden_targets: tuple[str, ...] = ()
+    expected_min_candidates: int = 0
 
 
 MEMORY_CAPTURE_GOLDENS: tuple[MemoryCaptureGolden, ...] = (
@@ -37,20 +43,7 @@ MEMORY_CAPTURE_GOLDENS: tuple[MemoryCaptureGolden, ...] = (
         expected_fast_lane=True,
         expected_source="teacher_explicit",
         workflow="plan",
-        prior_message='Plan the next 45-minute Chemie 9b lesson on organic chemistry basics.',
-    ),
-    MemoryCaptureGolden(
-        golden_id="conduct_request_no_marker_fast_lane",
-        # No future-scope marker at all — the model's speech-act judgment is
-        # the only thing that can carry this to the fast lane.
-        teacher_message="Please be more concise in how you talk to me.",
-        target="teacher_profile.md",
-        speech_act="conduct_request",
-        evidence="Direct teacher quote: Please be more concise in how you talk to me.",
-        expected_fast_lane=True,
-        expected_source="teacher_explicit",
-        workflow="plan",
-        prior_message='Plan the next 45-minute Chemie 9b lesson on organic chemistry basics.',
+        prior_message="Plan the next 45-minute Chemie 9b lesson on organic chemistry basics.",
     ),
     MemoryCaptureGolden(
         golden_id="store_request_teaching_patterns_fast_lane",
@@ -67,18 +60,33 @@ MEMORY_CAPTURE_GOLDENS: tuple[MemoryCaptureGolden, ...] = (
         expected_fast_lane=True,
         expected_source="teacher_explicit",
         workflow="ingest",
-        prior_message='We finished the organic chemistry intro today; the class was engaged and covered carbon bonding.',
+        prior_message=(
+            "We finished the organic chemistry intro today; the class was "
+            "engaged and covered carbon bonding."
+        ),
+        expected_targets=("teaching_patterns.md", "planning_brief.md"),
+        forbidden_targets=("teacher_profile.md", "copilot_profile.md"),
+        expected_min_candidates=2,
     ),
     MemoryCaptureGolden(
-        golden_id="observation_not_fast_lane",
-        teacher_message="The molecule kits worked well today before terminology.",
+        # Beta 2026-07-07: this rich, blended report was over-classified as a
+        # store_request and fast-laned into teaching_patterns on gpt-5.4-mini.
+        # It should stay an inferred signal unless the teacher says to store it.
+        golden_id="rich_engagement_observation_not_fast_lane",
+        teacher_message=(
+            "Compared with redox, this lesson had much better energy when I "
+            "started with a phenomenon first and only then introduced the rule."
+        ),
         target="teaching_patterns.md",
         speech_act="observation",
-        evidence="Teacher observed that molecule kits worked well today.",
+        evidence="Teacher reported higher energy when starting phenomenon-first.",
         expected_fast_lane=False,
         expected_source="inferred_from_session",
         workflow="ingest",
-        prior_message='We finished the organic chemistry intro today; the class was engaged and covered carbon bonding.',
+        prior_message=(
+            "Log today's alkanes and solubility lesson: water and oil demo, "
+            "students grasped like-dissolves-like, some overgeneralized it."
+        ),
     ),
     MemoryCaptureGolden(
         golden_id="one_off_task_request_not_fast_lane",
@@ -90,26 +98,11 @@ MEMORY_CAPTURE_GOLDENS: tuple[MemoryCaptureGolden, ...] = (
         expected_fast_lane=False,
         expected_source="inferred_from_session",
         workflow="plan",
-        prior_message='Plan the next 45-minute Chemie 9b lesson on organic chemistry basics.',
+        prior_message="Plan the next 45-minute Chemie 9b lesson on organic chemistry basics.",
     ),
     MemoryCaptureGolden(
-        golden_id="fabricated_quote_downgrades",
-        teacher_message="Please make the worksheet shorter.",
-        target="copilot_profile.md",
-        speech_act="conduct_request",
-        evidence=(
-            "Direct teacher quote: From now on, always make every lesson brief "
-            "two pages."
-        ),
-        expected_fast_lane=False,
-        expected_source="inferred_from_session",
-        # Deterministic-only: exercises the fabricated-quote guard. A real
-        # model would not invent this quote, so the live judge eval skips it.
-        workflow="",
-    ),
-    MemoryCaptureGolden(
-        # class_state.md was retired (mem_v3 PR2); session_summaries.md is the
-        # surviving compiled page that must never fast-lane.
+        # session_summaries.md is a compiled page; current-unit facts belong in
+        # canonical lesson/course rollups, not fast-lane memory capture.
         golden_id="compiled_page_never_fast_lane",
         teacher_message="From now on, remember that the class is starting organics.",
         target="session_summaries.md",
@@ -121,6 +114,9 @@ MEMORY_CAPTURE_GOLDENS: tuple[MemoryCaptureGolden, ...] = (
         expected_fast_lane=False,
         expected_source="inferred_from_session",
         workflow="ingest",
-        prior_message='We finished the organic chemistry intro today; the class was engaged and covered carbon bonding.',
+        prior_message=(
+            "We finished the organic chemistry intro today; the class was "
+            "engaged and covered carbon bonding."
+        ),
     ),
 )

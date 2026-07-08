@@ -54,6 +54,11 @@ propose, but backend code validates scope and writes only after teacher approval
   page starts with `## Student Summary` and then keeps dated observation
   sections below it.
 
+Overlap rule: if one teacher statement is both a durable class learning pattern
+and an immediate planning priority, propose separate candidates for
+`memory/teaching_patterns.md` and `memory/planning_brief.md`. Keep temporal
+scope in the teaching-pattern text when the teacher names an upcoming block.
+
 ## Directory layout
 
 ```text

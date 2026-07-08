@@ -1,5 +1,7 @@
 # Course State
 
+> Canonical current class state derived from approved lessons: current unit, last lesson, next planned focus, and overall status.
+
 ## Current unit
 - Reaction writing, balancing equations, oxidation numbers, and redox with ion follow-up.
 
