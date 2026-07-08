@@ -7,7 +7,10 @@ This folder contains the Next.js app and shared UI code.
 - `app/page.tsx` - landing/class selection.
 - `app/classes/[classId]/page.tsx` - class home.
 - `app/classes/[classId]/memory/page.tsx` - update-memory artifact session;
-  accepts optional lesson/date query hints from timeline/detail actions.
+  accepts optional lesson/date query hints from timeline/detail actions and
+  renders the teacher-first memory review before commit.
+- `app/classes/[classId]/memory-sweep/page.tsx` - periodic Memory Sweep inbox
+  and batch decision review.
 - `app/classes/[classId]/lessons/[lessonDate]/page.tsx` - lesson detail.
 - `app/classes/[classId]/plan/page.tsx` - create lesson plan workflow.
 - `app/classes/[classId]/wiki/view/page.tsx` - wiki file viewer.
@@ -18,8 +21,11 @@ This folder contains the Next.js app and shared UI code.
 - `components/ui/` - generic primitives. Keep these domain-free.
 - `components/layout/` - page/app chrome.
 - `components/assistant-ui/` - chat runtime, thread UI, tool display, streaming
-  event handling; see `components/assistant-ui/README.md` for provenance.
-- `components/klassenpilot/` - domain-specific workflow components.
+  event handling; adapted from
+  [`assistant-ui/assistant-ui`](https://github.com/assistant-ui/assistant-ui).
+  See `components/assistant-ui/README.md` for provenance and update notes.
+- `components/klassenpilot/` - domain-specific workflow components, including
+  proposed durable-memory updates, Memory Sweep brief, and wiki review panels.
 
 ## Library Code
 
@@ -28,15 +34,26 @@ This folder contains the Next.js app and shared UI code.
 - `lib/session-attachments.ts` - upload/session attachment utilities.
 - `lib/markdown-diff.ts` - review diff helpers.
 - `lib/diary-utils.ts` - diary-specific helpers.
+- `lib/review-brief.ts` - groups proposed wiki file changes into a
+  teacher-first save brief.
+- `lib/sweep-brief.ts` - groups Memory Sweep candidates into New / Changed /
+  Already-covered brief rows.
+- `lib/pending-memory-review.ts` - session-storage helper for non-durable
+  prepared reviews.
+- `lib/memory-save-guards.ts` - prevents save/double-save actions in invalid
+  review states.
 - `content/docs/en/` - teacher-facing markdown docs (English; add `de/` for German later).
 
 ## Boundaries
 
 - API shape changes should be reflected in `lib/api.ts` and backend
   `app/schemas/api.py`.
-- Memory Sweep UI/API changes should also update
-  `../../docs/mem_v2/frontend.md`.
+- Memory Sweep UI/API changes should also update the current Memory V3 docs
+  under `../../docs/mem_v3/`; `../../docs/mem_v2/frontend.md` is historical.
 - Keep assistant-ui integration reusable across ingest/plan workflows.
+- When adding richer inline chat artifacts later, first inspect upstream
+  assistant-ui patterns and adapt them behind KlassenPilot's artifact/review
+  contracts instead of baking product behavior into vendor-style primitives.
 - Keep typed memory hint construction in page/domain code, not low-level UI
   primitives. The backend remains the source of truth for whether a hinted
   lesson target is confirmed.

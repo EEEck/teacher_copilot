@@ -87,7 +87,7 @@ def test_merge_memory_candidates_drops_invalid_candidates():
 
 def test_merge_memory_candidates_enforces_cap():
     candidates = [
-        MemoryCandidate(target="class_state.md", candidate_update=f"fact {i}")
+        MemoryCandidate(target="teaching_patterns.md", candidate_update=f"fact {i}")
         for i in range(6)
     ]
 

@@ -32,6 +32,13 @@ For common agent debug motions, use the trace bundle scripts documented in
 Update Memory lesson-results scenario, and the Memory Sweep MBB/executive merge
 trace that checks the core backend memory-consolidation behavior.
 
+Current memory work is Memory V3: chat stages review-only candidates through
+`remember(...)`, the ledger/folding/gate layer throttles noise, Memory Sweep
+uses the production-quality consolidation path, and the frontend shows a
+teacher-first review brief before durable writes. The next trust gap is
+input-vs-wiki reconciliation, starting with proactive roster/name mismatch
+clarification.
+
 ## Architecture
 
 - **Backend:** FastAPI + OpenAI Agents SDK (`backend/`)
@@ -167,8 +174,9 @@ Both backend and frontend use **hot reload** in dev - you usually do not restart
 
 1. **Landing** -> select a class
 2. **Class home** -> lesson timeline + status
-3. **Update memory** -> chat + diary draft (right panel) -> review wiki proposals -> save
+3. **Update memory** -> chat + diary draft (right panel) -> review wiki proposals and memory suggestions -> save
 4. **Create lesson plan** -> chat + plan draft (same layout) -> save to a lesson date
+5. **Memory Sweep** -> periodically review accumulated durable-memory signals before applying them
 
 Both chat flows share the same UI shell (`ArtifactSessionWorkspace`: thread left, markdown draft right).
 Update Memory can start free-form from the class header, or from a lesson
@@ -186,7 +194,6 @@ teacher_wiki/
       lesson_results.md
       lesson_plan.md
     memory/
-      taught_so_far.md
       planning_brief.md
       teaching_patterns.md
       copilot_profile.md
@@ -199,14 +206,59 @@ teacher_wiki/
 | Variable | Where | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | `backend/.env` | OpenAI API (required for chat & plan) |
-| `OPENAI_MODEL` | `backend/.env` | Default model fallback for legacy settings |
-| `OPENAI_CHAT_MODEL` | `backend/.env` | Chat turns (ingest/plan); default `gpt-5.4-mini` for reasoning + streaming |
-| `OPENAI_FAST_MODEL` | `backend/.env` | Compile/lint/opening; default `gpt-4o-mini` |
-| `OPENAI_REASONING_EFFORT` | `backend/.env` | `none`, `low`, `medium`, `high`, `xhigh` - hidden thinking tokens (billed as output). Default `medium`; use `none` or `low` to save cost |
+| `OPENAI_STRONG_MODEL` | `backend/.env` | The newest/best model. Default `gpt-5.5`. Runs IMPORTANT calls always + CHAT/UTILITY in the production profile |
+| `OPENAI_CHEAP_MODEL` | `backend/.env` | The small model. Default `gpt-5.4-mini`. Runs CHAT/UTILITY in the economy profile |
+| `MODEL_PROFILE` | `backend/.env` | Routes three call classes — CHAT (plan+ingest), IMPORTANT (Memory Sweep only), UTILITY (one-shots). `production`: strong high / strong xhigh / strong minimal (one model, reasoning-tiered). `economy`: cheap medium / strong high / cheap minimal. Unset derives from `APP_ENV` (production→production, else economy) |
+| `OPENAI_CHAT_REASONING_EFFORT` / `OPENAI_IMPORTANT_REASONING_EFFORT` / `OPENAI_UTILITY_REASONING_EFFORT` | `backend/.env` | Per-call-class reasoning effort (`none`/`minimal`/`low`/`medium`/`high`/`xhigh`); unset = profile default (production: chat high / important xhigh / utility minimal; economy: chat medium / important high / utility minimal). `OPENAI_REASONING_EFFORT` is a legacy alias for the chat one |
 | `WIKI_ROOT` | `backend/.env` | Path to `teacher_wiki` (Docker: set in `compose.yaml` as `/data/teacher_wiki`) |
+| `BETA_ENABLED` | `backend/.env` | Enables invite-code beta auth and workspace-scoped wiki roots. Default `false` |
+| `BETA_DATA_ROOT` | `backend/.env` | Local SQLite telemetry DB and per-workspace wiki copies. Default `beta_data` |
+| `BETA_COOKIE_NAME` | `backend/.env` | HTTP-only session cookie name. Default `kp_beta_session` |
+| `BETA_SESSION_DAYS` | `backend/.env` | Session cookie/token lifetime in days. Default `30` |
+| `BETA_COOKIE_SECURE` | `backend/.env` | Set `true` behind HTTPS. Keep `false` for localhost |
 | `NEXT_PUBLIC_API_BASE_URL` | `frontend/.env.local` | Backend URL for browser (default `http://localhost:8010`) |
 | `APP_ENV` | `backend/.env` / Compose | `development` keeps raw local stream diagnostics; `production` strips streamed reasoning text, tool args, and tool outputs before they reach the browser. |
 | `INTERNAL_API_BASE_URL` | Docker / SSR only | Server-side fetches in frontend container (`http://backend:8010` in Compose) |
+
+### Beta testers
+
+Beta mode keeps one app process but resolves each request to a separate
+`tester_id`, `workspace_id`, and copied wiki root. The login page is
+`/beta/login`; the backend sets an opaque HTTP-only cookie, so a browser refresh
+keeps the tester session.
+
+Provision invite codes from a backend shell for now:
+
+```powershell
+docker compose exec backend python -m app.services.beta_cli `
+  provision `
+  --tester-id t_anna `
+  --workspace-id w_anna_chem9b `
+  --invite-code replace-with-random-code `
+  --display-label Anna
+```
+
+Telemetry is stored in `beta.sqlite3`: app sessions, visible user/assistant
+messages, draft snapshots, app events, and per-file wiki diffs for approved
+writes.
+
+Generate a tester review report from telemetry and wiki diffs:
+
+```powershell
+docker compose exec backend python -m app.services.beta_cli `
+  report `
+  --tester t_anna `
+  --workspace w_anna_chem9b `
+  --out beta_data/reports/t_anna.md
+```
+
+For the hosted beta path, keep this same `tester_id` / `workspace_id` identity
+contract and move the backing services to AWS: Amplify for the frontend,
+ECS/Fargate + ALB for the backend, EFS for per-workspace wiki roots,
+Postgres/Aurora for telemetry metadata, and S3 for exports/backups. Later
+production auth should replace only the invite-code resolver behind
+`RequestIdentity` with Cognito, Auth.js, Clerk, Auth0, or another OAuth/OIDC
+provider. See [`implementation_plans/beta_push.md`](implementation_plans/beta_push.md).
 
 ### OpenAI API key (required for chat & plan)
 
@@ -280,6 +332,11 @@ need `docker compose up` for CI goldens.
 | CI-safe evals | `pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py` |
 | Live agent + LLM judge | `$env:RUN_LIVE_AGENT_EVALS="1"; pytest tests/evals/test_klassenpilot_chat_live.py` |
 | Live API smoke (needs `:8010`) | `$env:RUN_LIVE_API_TESTS="1"; pytest tests/test_live_api_plan_trace.py` |
+
+Live agent evals pin the app agent runner to the production model profile by
+default, independent of local `MODEL_PROFILE` / reasoning-effort settings. Use
+`LIVE_AGENT_EVAL_MODEL_PROFILE=economy` only for an explicit model-profile
+comparison run.
 
 Full documentation: [`backend/docs/evals.md`](backend/docs/evals.md),
 [`backend/tests/README.md`](backend/tests/README.md).

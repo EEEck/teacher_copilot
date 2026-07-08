@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { IngestThread } from "@/components/assistant-ui/ingest-thread";
 import {
@@ -13,8 +13,8 @@ import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-ses
 import { DiaryDraftPanel } from "@/components/klassenpilot/diary-draft-panel";
 import { ProposedMemoryUpdates } from "@/components/klassenpilot/proposed-memory-updates";
 import {
-  FileChangeReviewPanel,
   MarkdownLineDiff,
+  ReviewBrief,
   useFileChangeReview,
   WikiProposalEditor,
 } from "@/components/klassenpilot/review";
@@ -28,6 +28,17 @@ import {
   type MemoryProposalResponse,
   type WikiUpdateProposal,
 } from "@/lib/api";
+import {
+  isMemoryReCommitBlocked,
+  isMemoryReviewSaveDisabled,
+  shouldShowReviewBrief,
+} from "@/lib/memory-save-guards";
+import {
+  clearPendingMemoryReview,
+  loadPendingMemoryReview,
+  savePendingMemoryReview,
+} from "@/lib/pending-memory-review";
+import { useAuiState } from "@assistant-ui/react";
 
 type CommitResult = {
   lesson_date: string;
@@ -37,8 +48,6 @@ type CommitResult = {
 };
 
 const COMPACT_PAGE_LABELS: Record<string, string> = {
-  class_state: "Class state",
-  taught_so_far: "Taught so far",
   planning_brief: "Planning brief",
   teaching_patterns: "Teaching patterns",
   copilot_profile: "Class copilot profile",
@@ -47,12 +56,23 @@ const COMPACT_PAGE_LABELS: Record<string, string> = {
 
 function ReadyToSaveButton({ onReady, loading }: { onReady: () => void; loading: boolean }) {
   const { isUpdating, readyToSave } = useArtifactSession();
+  const hasDraftMessage = useAuiState((s) => !s.composer.isEmpty);
 
   return (
     <div className="flex flex-col gap-1">
-      <Button className="w-fit" onClick={onReady} disabled={loading || isUpdating}>
+      <Button
+        type="button"
+        className="w-fit"
+        onClick={onReady}
+        disabled={loading || isUpdating || hasDraftMessage}
+      >
         {loading ? "Compiling wiki updates…" : "Ready to save memory"}
       </Button>
+      {hasDraftMessage && !loading && !isUpdating && (
+        <p className="text-xs text-muted-foreground">
+          Send or clear the draft message before preparing wiki updates.
+        </p>
+      )}
       {readyToSave && !loading && (
         <p className="text-xs text-primary">
           All sections filled — compile and review wiki file changes before saving.
@@ -215,23 +235,34 @@ function MemoryTargetStatus() {
 
 function MemoryWorkspace({
   classId,
+  reviewStorageKey,
   onError,
 }: {
   classId: string;
+  reviewStorageKey: string;
   onError: (message: string | null) => void;
 }) {
   const router = useRouter();
-  const { artifactMarkdown: diaryMarkdown, runWithSessionRecovery } = useArtifactSession();
+  const {
+    artifactMarkdown: diaryMarkdown,
+    isUpdating,
+    runWithSessionRecovery,
+    setArtifactMarkdown,
+  } = useArtifactSession();
   const [proposals, setProposals] = useState<WikiUpdateProposal[]>([]);
   const [loading, setLoading] = useState(false);
   const [inReview, setInReview] = useState(false);
   const [editingWiki, setEditingWiki] = useState(false);
   const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
+  const commitResultRef = useRef<HTMLDivElement>(null);
   const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidate[]>([]);
   const [applyingMemory, setApplyingMemory] = useState(false);
+  const [reviewBaseMarkdown, setReviewBaseMarkdown] = useState<string | null>(null);
   const [classMemoryProposal, setClassMemoryProposal] =
     useState<MemoryProposalResponse | null>(null);
   const [applyingClassMemory, setApplyingClassMemory] = useState(false);
+  const restoredReviewRef = useRef(false);
+  const hasDraftMessage = useAuiState((s) => !s.composer.isEmpty);
 
   const {
     items: reviewItems,
@@ -246,7 +277,119 @@ function MemoryWorkspace({
     initFromProposals,
     clear: clearReview,
     hasLessonResultsApproved,
+    approvedByPath,
   } = useFileChangeReview(proposals);
+
+  useEffect(() => {
+    if (restoredReviewRef.current) return;
+    restoredReviewRef.current = true;
+    if (typeof window === "undefined") return;
+
+    const pending = loadPendingMemoryReview(
+      window.sessionStorage,
+      classId,
+      reviewStorageKey,
+    );
+    if (!pending) return;
+
+    setArtifactMarkdown(pending.diaryMarkdown, "agent");
+    setMemoryCandidates(pending.memoryCandidates);
+    setProposals(pending.proposals);
+    setReviewBaseMarkdown(pending.diaryMarkdown);
+    initFromProposals(pending.proposals);
+    for (const [path, content] of Object.entries(pending.contentByPath)) {
+      updateContent(path, content);
+    }
+    for (const [path, approved] of Object.entries(pending.approvedByPath)) {
+      setApproved(path, approved);
+    }
+    if (pending.selectedPath) setSelectedPath(pending.selectedPath);
+    setEditingWiki(pending.editingWiki);
+    setInReview(true);
+  }, [
+    classId,
+    initFromProposals,
+    reviewStorageKey,
+    setApproved,
+    setArtifactMarkdown,
+    setSelectedPath,
+    updateContent,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!inReview || proposals.length === 0) return;
+
+    savePendingMemoryReview(window.sessionStorage, {
+      classId,
+      routeKey: reviewStorageKey,
+      diaryMarkdown,
+      proposals,
+      memoryCandidates,
+      approvedByPath,
+      contentByPath,
+      selectedPath,
+      editingWiki,
+    });
+  }, [
+    approvedByPath,
+    classId,
+    contentByPath,
+    diaryMarkdown,
+    editingWiki,
+    inReview,
+    memoryCandidates,
+    proposals,
+    reviewStorageKey,
+    selectedPath,
+  ]);
+
+  useEffect(() => {
+    if (!inReview || proposals.length === 0) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [inReview, proposals.length]);
+
+  useEffect(() => {
+    if (!isUpdating || (!inReview && proposals.length === 0)) return;
+    setInReview(false);
+    setEditingWiki(false);
+    setProposals([]);
+    setMemoryCandidates([]);
+    setReviewBaseMarkdown(null);
+    setClassMemoryProposal(null);
+    clearReview();
+    if (typeof window !== "undefined") {
+      clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
+    }
+  }, [classId, clearReview, inReview, isUpdating, proposals.length, reviewStorageKey]);
+
+  useEffect(() => {
+    if (!inReview || proposals.length === 0 || reviewBaseMarkdown === null) return;
+    if (diaryMarkdown === reviewBaseMarkdown) return;
+    setInReview(false);
+    setEditingWiki(false);
+    setProposals([]);
+    setMemoryCandidates([]);
+    setReviewBaseMarkdown(null);
+    setClassMemoryProposal(null);
+    clearReview();
+    if (typeof window !== "undefined") {
+      clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
+    }
+  }, [
+    classId,
+    clearReview,
+    diaryMarkdown,
+    inReview,
+    proposals.length,
+    reviewBaseMarkdown,
+    reviewStorageKey,
+  ]);
 
   const selectFile = useCallback(
     (path: string) => {
@@ -256,11 +399,33 @@ function MemoryWorkspace({
     [setSelectedPath],
   );
 
+  // After a successful commit, bring the "Memory saved" confirmation into view
+  // so the save is unmissable (beta: teachers re-clicked Save when the card
+  // rendered below the fold, causing a duplicate commit).
+  useEffect(() => {
+    if (!commitResult) return;
+    commitResultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [commitResult]);
+
   const viewerAllHref = commitResult
     ? `/classes/${classId}/wiki/view?paths=${encodeURIComponent(commitResult.applied_wiki_paths.join(","))}`
     : "";
+  const reviewActionsDisabled = loading || isUpdating;
+  const reviewSaveDisabled = isMemoryReviewSaveDisabled({
+    saving: loading,
+    isUpdating,
+    hasLessonResultsApproved,
+  });
 
   const handleReadyToSave = useCallback(async () => {
+    if (isUpdating) {
+      onError("Wait for the current chat turn to finish before preparing wiki updates.");
+      return;
+    }
+    if (hasDraftMessage) {
+      onError("Send or clear the draft message before preparing wiki updates.");
+      return;
+    }
     setLoading(true);
     onError(null);
     setCommitResult(null);
@@ -281,6 +446,7 @@ function MemoryWorkspace({
         ),
       );
       setProposals(unique);
+      setReviewBaseMarkdown(d.diary_markdown);
       initFromProposals(unique);
       setInReview(true);
     } catch (e) {
@@ -288,9 +454,27 @@ function MemoryWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [classId, diaryMarkdown, onError, runWithSessionRecovery, initFromProposals]);
+  }, [
+    classId,
+    diaryMarkdown,
+    hasDraftMessage,
+    isUpdating,
+    onError,
+    runWithSessionRecovery,
+    initFromProposals,
+  ]);
 
   const commit = useCallback(async () => {
+    if (isUpdating) {
+      onError("Wait for the current chat turn to finish before saving memory.");
+      return;
+    }
+    // Idempotency: this review already committed (the confirmation is showing).
+    // Re-entry here would write the lesson a second time — the double-commit
+    // seen in beta telemetry. A new review cycle clears commitResult first.
+    if (isMemoryReCommitBlocked({ saving: loading, alreadyCommitted: !!commitResult })) {
+      return;
+    }
     setLoading(true);
     onError(null);
     try {
@@ -311,14 +495,18 @@ function MemoryWorkspace({
       );
       setInReview(false);
       setProposals([]);
+      setReviewBaseMarkdown(null);
       clearReview();
+      if (typeof window !== "undefined") {
+        clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
+      }
       router.refresh();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Commit failed");
     } finally {
       setLoading(false);
     }
-  }, [classId, diaryMarkdown, getCommitPayload, clearReview, onError, router, runWithSessionRecovery]);
+  }, [classId, diaryMarkdown, getCommitPayload, clearReview, isUpdating, loading, commitResult, onError, reviewStorageKey, router, runWithSessionRecovery]);
 
   const applyClassMemory = useCallback(
     async (pages: Record<string, string>) => {
@@ -353,6 +541,7 @@ function MemoryWorkspace({
             target: c.target,
             section: c.section,
             content: c.candidate_update,
+            candidate_ids: c.candidate_id ? [c.candidate_id] : [],
           })),
         );
         setMemoryCandidates([]);
@@ -376,10 +565,14 @@ function MemoryWorkspace({
     setEditingWiki(false);
     setProposals([]);
     setMemoryCandidates([]);
+    setReviewBaseMarkdown(null);
     setClassMemoryProposal(null);
     clearReview();
+    if (typeof window !== "undefined") {
+      clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
+    }
     onError(null);
-  }, [onError, clearReview]);
+  }, [classId, onError, clearReview, reviewStorageKey]);
 
   const draftPanel =
     inReview && editingWiki && selectedPath && selectedPath in contentByPath ? (
@@ -403,7 +596,7 @@ function MemoryWorkspace({
           !inReview ? <ReadyToSaveButton onReady={handleReadyToSave} loading={loading} /> : null
         }
         reviewDiff={
-          inReview && selectedChange ? (
+          inReview && editingWiki && selectedChange ? (
             <MarkdownLineDiff
               path={selectedChange.path}
               before={selectedChange.before}
@@ -413,8 +606,12 @@ function MemoryWorkspace({
           ) : null
         }
         reviewFileList={
-          inReview && reviewItems.length > 0 ? (
-            <FileChangeReviewPanel
+          shouldShowReviewBrief({
+            inReview,
+            alreadyCommitted: !!commitResult,
+            itemCount: reviewItems.length,
+          }) ? (
+            <ReviewBrief
               items={reviewItems}
               selectedPath={selectedPath ?? reviewItems[0]?.path ?? null}
               onSelectPath={selectFile}
@@ -422,9 +619,9 @@ function MemoryWorkspace({
               onUndoAll={undoAll}
               onKeepAll={keepAll}
               onSave={commit}
-              saving={loading}
-              saveDisabled={!hasLessonResultsApproved}
-              saveLabel="Save selected files"
+              saving={reviewActionsDisabled}
+              actionsDisabled={reviewActionsDisabled}
+              saveDisabled={reviewSaveDisabled}
             />
           ) : null
         }
@@ -432,12 +629,12 @@ function MemoryWorkspace({
 
       {inReview && !hasLessonResultsApproved && (
         <p className="text-xs text-destructive">
-          Keep <span className="font-mono">lesson_results.md</span> to save this lesson to memory.
+          Keep the lesson results change selected to save this lesson to memory.
         </p>
       )}
 
       {commitResult && (
-        <Card variant="highlight">
+        <Card variant="highlight" ref={commitResultRef}>
           <CardHeader>
             <CardTitle className="text-base">Memory saved</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -509,6 +706,10 @@ function MemoryPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const classId = params.classId as string;
+  const reviewStorageKey = useMemo(() => {
+    const qs = searchParams.toString();
+    return `/classes/${classId}/memory${qs ? `?${qs}` : ""}`;
+  }, [classId, searchParams]);
   const startHint = useMemo<IngestStartHint | undefined>(() => {
     const lessonDate = searchParams.get("lessonDate") ?? "";
     if (!lessonDate) return undefined;
@@ -559,7 +760,11 @@ function MemoryPageContent() {
       }
       bootstrap={bootstrap}
       renderBody={({ onError }: ArtifactSessionBodyProps) => (
-        <MemoryWorkspace classId={classId} onError={onError} />
+        <MemoryWorkspace
+          classId={classId}
+          reviewStorageKey={reviewStorageKey}
+          onError={onError}
+        />
       )}
     />
   );

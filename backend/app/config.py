@@ -19,10 +19,33 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: SecretStr = SecretStr("")
-    openai_model: str = "gpt-4o-mini"
-    openai_chat_model: str = "gpt-5.4-mini"
-    openai_fast_model: str = "gpt-4o-mini"
-    openai_reasoning_effort: ReasoningEffort = "medium"
+    # Two model ids. STRONG is the newest/best model; CHEAP is the small model.
+    # Set the ids here when a newer model ships. Which call class uses which, and
+    # at what reasoning effort, is decided by MODEL_PROFILE below.
+    openai_strong_model: str = "gpt-5.5"
+    openai_cheap_model: str = "gpt-5.4-mini"
+    # Call classes (mem_v3 boundary):
+    #   CHAT     = plan + ingest chat (high volume, user-facing; capture happens
+    #              here, but the sweep backstops it).
+    #   IMPORTANT= the Memory Sweep consolidation ONLY (durable-memory judgment;
+    #              rare) -> always the strong model at max reasoning.
+    #   UTILITY  = compile, lint, plan-lesson, opening, compact, profile-propose
+    #              (one-shots, non-durable) -> cheap, minimal reasoning.
+    # Profiles (production = one model, reasoning-tiered; economy = cheap chat):
+    #                CHAT model / effort | IMPORTANT model / effort | UTILITY effort
+    #   production:  strong / high        | strong / xhigh           | minimal
+    #   economy:     cheap  / medium      | strong / high            | minimal
+    # UTILITY always runs on the CHAT model. Unset MODEL_PROFILE derives from
+    # app_env (production -> production, else economy).
+    model_profile: Literal["production", "economy"] | None = None
+    # Per-call-class reasoning-effort overrides. None = use the profile default
+    # (production: chat high / important xhigh / utility minimal;
+    #  economy: chat medium / important high / utility minimal).
+    openai_chat_reasoning_effort: ReasoningEffort | None = None
+    openai_important_reasoning_effort: ReasoningEffort | None = None
+    openai_utility_reasoning_effort: ReasoningEffort | None = None
+    # Legacy alias for the chat effort (kept so existing .env files keep working).
+    openai_reasoning_effort: ReasoningEffort | None = None
     agent_timeout_seconds: float = 240.0
     agent_max_turns: int = 16
 
@@ -63,6 +86,12 @@ class Settings(BaseSettings):
     wiki_root: Path = Path(__file__).resolve().parent.parent / "teacher_wiki"
     cors_origins: list[str] = ["http://localhost:3000"]
     app_env: Literal["development", "production"] = "development"
+    beta_enabled: bool = False
+    beta_data_root: Path = Path(__file__).resolve().parent.parent / "beta_data"
+    beta_cookie_name: str = "kp_beta_session"
+    beta_session_days: int = 30
+    beta_cookie_secure: bool = False
+    beta_dev_workspace_id: str = ""
     # Debug endpoints exposing prompt assemblies, session messages, and raw tool
     # evidence. Default: enabled outside production, disabled in production.
     agent_trace_enabled: bool | None = None
@@ -81,6 +110,43 @@ class Settings(BaseSettings):
 
     def is_plan_trace_enabled(self) -> bool:
         return self.is_agent_trace_enabled()
+
+    def resolved_model_profile(self) -> str:
+        if self.model_profile is not None:
+            return self.model_profile
+        return "production" if self.app_env == "production" else "economy"
+
+    def resolved_chat_model(self) -> str:
+        """CHAT (plan + ingest): strong in production, cheap in economy."""
+        if self.resolved_model_profile() == "production":
+            return self.openai_strong_model
+        return self.openai_cheap_model
+
+    def resolved_important_model(self) -> str:
+        """IMPORTANT (Memory Sweep only): always the strong model."""
+        return self.openai_strong_model
+
+    def resolved_utility_model(self) -> str:
+        """UTILITY (one-shots): follows the CHAT model tier."""
+        return self.resolved_chat_model()
+
+    def resolved_chat_effort(self) -> ReasoningEffort:
+        override = self.openai_chat_reasoning_effort
+        if override is None:
+            override = self.openai_reasoning_effort  # legacy alias
+        if override is not None:
+            return override
+        return "high" if self.resolved_model_profile() == "production" else "medium"
+
+    def resolved_important_effort(self) -> ReasoningEffort:
+        if self.openai_important_reasoning_effort is not None:
+            return self.openai_important_reasoning_effort
+        return "xhigh" if self.resolved_model_profile() == "production" else "high"
+
+    def resolved_utility_effort(self) -> ReasoningEffort:
+        if self.openai_utility_reasoning_effort is not None:
+            return self.openai_utility_reasoning_effort
+        return "minimal"
 
 
 @lru_cache

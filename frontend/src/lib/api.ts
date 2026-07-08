@@ -11,6 +11,11 @@ function getApiBase(): string {
 }
 
 export type ClassSummary = { id: string; label: string; subject: string };
+export type BetaIdentity = {
+  tester_id: string;
+  workspace_id: string;
+  role: string;
+};
 export type TimelineEntry = {
   date: string;
   title: string;
@@ -139,6 +144,7 @@ export type PlanChatResponse = {
   memory_candidates?: MemoryCandidate[];
 };
 export type MemoryCandidate = {
+  candidate_id?: string;
   target: string;
   section?: string;
   candidate_update: string;
@@ -147,6 +153,9 @@ export type MemoryCandidate = {
   source?: string;
   basis?: string;
   confidence?: string;
+  speech_act?: string;
+  fast_lane?: boolean;
+  occasion_key?: string;
   requires_teacher_approval?: boolean;
 };
 export type SavePlanResponse = {
@@ -185,12 +194,14 @@ export type MemoryApplyItem = {
   target: string;
   section?: string;
   content: string;
+  candidate_ids?: string[];
 };
 export type MemoryApplyResponse = {
   class_id: string;
   applied_wiki_paths: string[];
   skipped: string[];
   warnings: string[];
+  updated_candidate_ids: string[];
 };
 export type MemorySweepCandidate = {
   card_id: string;
@@ -225,8 +236,10 @@ export type MemorySweepCandidate = {
   why_now: string;
   current_memory_excerpt: string;
   signal_count: number;
+  occasion_count?: number;
   can_apply: boolean;
   review_only_reason: string;
+  warnings: string[];
 };
 export type MemorySweepProposalResponse = {
   class_id: string;
@@ -317,6 +330,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetch(`${getApiBase()}${path}`, {
       ...init,
       cache: "no-store",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         ...init?.headers,
@@ -351,6 +365,7 @@ async function apiStreamPost(path: string, body: object, signal?: AbortSignal): 
     res = await fetch(`${getApiBase()}${path}`, {
       method: "POST",
       cache: "no-store",
+      credentials: "include",
       signal,
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify(body),
@@ -419,6 +434,13 @@ function normalizeTimeline(raw: Partial<ClassTimeline> & { class_id: string }): 
 }
 
 export const client = {
+  betaLogin: (inviteCode: string) =>
+    api<BetaIdentity>("/api/beta/login", {
+      method: "POST",
+      body: JSON.stringify({ invite_code: inviteCode }),
+    }),
+  betaLogout: () => api<{ status: string }>("/api/beta/logout", { method: "POST" }),
+  betaMe: () => api<BetaIdentity>("/api/beta/me"),
   getClasses: () => api<{ classes: ClassSummary[] }>("/api/classes"),
   getTimeline: async (classId: string) => {
     const raw = await api<Partial<ClassTimeline> & { class_id: string }>(
@@ -581,10 +603,17 @@ export const client = {
       method: "POST",
       body: JSON.stringify({ items }),
     }),
-  memorySweepPropose: (classId: string) =>
-    api<MemorySweepProposalResponse>(`/api/classes/${classId}/memory/sweep/propose`, {
-      method: "POST",
-    }),
+  memorySweepPropose: (classId: string, options?: { queue?: string }) => {
+    const search = options?.queue
+      ? `?queue=${encodeURIComponent(options.queue)}`
+      : "";
+    return api<MemorySweepProposalResponse>(
+      `/api/classes/${classId}/memory/sweep/propose${search}`,
+      {
+        method: "POST",
+      },
+    );
+  },
   memoryCandidateStatus: (
     classId: string,
     candidateId: string,

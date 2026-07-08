@@ -23,6 +23,7 @@ export function FileChangeReviewPanel({
   onKeepAll,
   onSave,
   saving,
+  actionsDisabled,
   saveDisabled,
   saveLabel = "Save changes",
   defaultOpen = true,
@@ -35,6 +36,7 @@ export function FileChangeReviewPanel({
   onKeepAll: () => void;
   onSave: () => void;
   saving?: boolean;
+  actionsDisabled?: boolean;
   saveDisabled?: boolean;
   saveLabel?: string;
   defaultOpen?: boolean;
@@ -57,6 +59,7 @@ export function FileChangeReviewPanel({
               type="button"
               className="text-muted-foreground hover:text-foreground"
               onClick={onUndoAll}
+              disabled={actionsDisabled}
             >
               Undo all
             </button>
@@ -64,6 +67,7 @@ export function FileChangeReviewPanel({
               type="button"
               className="text-muted-foreground hover:text-foreground"
               onClick={onKeepAll}
+              disabled={actionsDisabled}
             >
               Keep all
             </button>

@@ -236,8 +236,13 @@ a later memory-refresh run.
 
 The useful pattern is a candidate ledger:
 
-1. During an active chat, the model may emit `memory_candidates` alongside the
-   artifact and runtime `state_patch`.
+1. During an active chat, the model calls the explicit `remember(...)` tool the
+   moment the teacher gives a durable instruction (mem_v3 PR4 — capture is a
+   tool the model *decides* to invoke, not a passive field it forgets while
+   working; a `memory_candidates` output field remains as a fallback). The tool
+   includes an internal `routing_reason` so traces can explain why a target was
+   chosen without exposing model reasoning to the teacher. Either path stages a
+   candidate alongside the artifact and runtime `state_patch`.
 2. The backend stores them in session runtime, dedupes them, caps the list, and
    returns them to the UI.
 3. After the teacher saves a plan or commits lesson memory, the UI presents
@@ -264,16 +269,48 @@ For KlassenPilot this means:
 - teacher-level preferences -> `teacher_profile.md` / `user.md`
 - class learning patterns -> `teaching_patterns.md`
 - copilot behavior rules -> `copilot_profile.md` / `copilot.md`
-- current class state -> `class_state.md`
-- taught sequence or planning priorities -> `taught_so_far.md` /
-  `planning_brief.md`
+- current planning priorities -> `planning_brief.md`
+- current class state / taught sequence -> **not a candidate target**: these are
+  deterministic projections of the canonical `course_state.md` / `timeline.md`
+  rollups. mem_v3 PR2 retired the `class_state.md` / `taught_so_far.md` twins so
+  every such fact has one home (the two-axis rule: retrieved-and-grows canonical
+  wiki vs assembled-and-budgeted curated memory).
 
 Do not create a teacher-facing `agent_tmp` wiki page for this. If candidate
 state must survive backend restarts, persist it outside canonical wiki memory
 with an app-owned store such as SQLite session storage or a gitignored workflow
 ledger, then feed only reviewed candidates into memory apply.
 
+## Input-Vs-Wiki Reconciliation
+
+The same split applies when a teacher's new input contradicts committed memory.
+The wiki is the baseline until the teacher confirms a change. A non-roster
+student ID/name, a lesson date that does not exist, or a current-unit claim that
+conflicts with `course_state.md` should be treated as a proposed correction, not
+silently accepted as truth.
+
+The useful division of labor:
+
+- deterministic code detects factual mismatches against known state, such as
+  roster membership
+- the model writes the human clarification in a teacher-friendly way
+- the teacher confirms whether the input was a typo, a one-off exception, or a
+  real wiki change
+- backend write paths apply only the confirmed resolution
+
+This is the same lesson as `remember(...)`: do not rely on the model's attention
+for crisp factual checks the backend can perform exactly. Use LLM judges to test
+the teacher-facing behavior, but keep membership/conflict detection deterministic.
+
 ## Memory Sweep Lessons From The MBB/Executive Failure
+
+> Historical note (2026-07): this section describes the Memory V2 two-pass
+> sweep. The two-pass machinery was retired in Memory V3 after the first beta
+> round — see "Memory V3: Why The Two-Pass Sweep Was Retired" below and
+> `mem_v3/learnings.md` for the full post-mortem. The *lessons* in this
+> section (normalization as a first-class contract, observable abstractions,
+> teach-the-contract prompts) survived; the specific two-pass implementation
+> did not.
 
 The 2026 SOTA pattern for agent memory is:
 
@@ -300,7 +337,7 @@ The important lesson:
 > If normalization matters, make it a first-class contract. Do not hide it as a
 > sentence inside a card-generation prompt.
 
-The fixed pattern is a two-pass sweep:
+The fixed V2 pattern was a two-pass sweep:
 
 1. **Alignment / normalization pass**: assign every candidate id exactly once to
    an underlying durable claim group. This is where aliases such as MBB,
@@ -383,6 +420,69 @@ The broader architecture lesson is:
 > Use the model for semantic grouping, but force the grouping to be observable,
 > validated, and testable before it can affect memory.
 
+## Memory V3: Why The Two-Pass Sweep Was Retired
+
+The first beta round (July 2026) stress-tested the two-pass sweep with real
+teacher behavior and it failed in production despite passing its tests. One
+day of testing produced ~12 ledger rows encoding ~4 claims, which became 6+
+review cards plus 4 raw internal warnings — several cards unresolvable. The
+full post-mortem lives in `mem_v3/learnings.md`; the compressed lessons:
+
+1. **The dedup LLM never saw the duplicates together.** Packets were keyed on
+   `(queue, target, section)`, but `section` was a free-form string invented
+   by the capture LLM. The same claim landed in `class_learning_profile`,
+   `organic_chemistry`, and `what_worked_well` — three isolated alignment
+   calls that could not merge what they could not see. An alignment pass is
+   only as good as its context window's contents.
+
+2. **Deterministic semantic validators created unsatisfiable states.** The
+   token-overlap gates (merge forbidden when labels overlap an existing
+   bullet; adjust/already_covered *require* overlap) deadlocked on class-state
+   transitions, where the new claim by definition shares no words with the
+   old bullet. Live traces showed the model flip-flopping between two
+   decisions that were both rejected. Validators should check structure
+   (coverage, id existence, exact quotes); semantics belong to the model,
+   with teacher review as the net.
+
+3. **Failure handling amplified the problem.** A failed packet emitted one
+   `needs_decision` card per candidate with raw internal ids — one
+   over-constrained rejection became four zombie cards. Failures must
+   collapse, not multiply.
+
+4. **Capture had a gas pedal and no brake.** The V2 fix for the lost-MBB bug
+   over-corrected into per-turn re-emission with no cross-session awareness.
+   V3 added the brakes: teacher-words-only grounding, silence as the default,
+   backend downgrade of unscoped "explicit" claims, insert-time folding, a
+   reinforcement gate, and silent decay.
+
+5. **Token economics were the hidden architect.** Packets, per-section
+   splitting, and the two-pass structure all existed to control context size
+   — for a sweep that runs about once a week on a teacher click. Pricing the
+   actual call frequency dissolved most of the architecture: one big
+   high-reasoning call over everything replaced both passes, and the mem0
+   ID-referencing contract (enumerate current bullets, operations must
+   reference input ids) made validation mechanical.
+
+6. **Model strength is part of the contract.** Control-tested live: the mini
+   model repurposes unrelated bullets as "updates" even with a tightened
+   prompt; the strong model passes the full MBB/executive trace. Both sweep
+   passes had silently been running on the fast model. Consolidation quality
+   is bounded by the model, not just the prompt — pin `OPENAI_SWEEP_MODEL`.
+
+7. **Live runs catch what offline tests cannot.** Two defects surfaced only
+   against the real model: unrelated-bullet repurposing and no-change student
+   summary "updates". Each got a deterministic guard plus a prompt rule. The
+   recorded beta ledger is now the offline fixture, and telemetry
+   (`memory_sweep_propose` card/warning counts) is the production metric.
+
+The V2 lesson still holds — semantic judgment in the model, write safety in
+deterministic code — but V3 sharpened where the line sits:
+
+> Deterministic code owns structure, budgets, and history (folding, gates,
+> id checks, no-op demotion). The model owns meaning — given one context
+> that actually contains everything it must reconcile, and enough model to
+> reconcile it.
+
 This mirrors the OpenClaw-style "working notes -> consolidation -> reviewed
 memory" pattern and the Hermes-style discipline of bounded curated memory. The
 ledger stays raw and never rewrites "MBB" into "executive." Consolidation only
@@ -403,19 +503,23 @@ Key files:
   local profile helpers, and compaction commits.
 - `backend/app/teacher_agent/wiki/store.py`: facade exposing wiki helpers.
 - `backend/app/teacher_agent/memory_capture.py`: shared runtime candidate
-  validation, dedupe, repair, rendering, and ledger conversion.
+  validation, dedupe, repair, rendering, ledger conversion, and the
+  `remember(...)` capture-tool guard (`validate_remember_call`).
 - `backend/app/services/memory_candidate_ledger.py`: raw candidate evidence
-  ledger for cross-session review.
-- `backend/app/services/memory_sweep.py`: two-pass alignment/card
-  consolidation and validation before Memory Sweep review cards.
-- `backend/app/teacher_agent/tools.py`: model-visible read tools.
+  ledger for cross-session review with deterministic insert-time folding.
+- `backend/app/services/memory_sweep.py`: single-call (Mem V3) mem0-style
+  ID-referenced consolidation with structural-only validation.
+- `backend/app/teacher_agent/tools.py`: model-visible read tools plus the
+  `remember(...)` capture tool (the one write-capable chat tool; stages
+  review-only candidates, writes nothing durable).
 - `backend/app/teacher_agent/prompts.py`: workflow prompts and tool policy.
 - `backend/app/api/routes.py`: includes memory refresh, compact rebuild,
   reviewed compact-page apply, and append-style memory apply endpoints.
 
-Current memory pages:
+Current memory pages (mem_v3 PR2 retired `class_state.md` / `taught_so_far.md`;
+current unit and taught sequence are derived from the canonical
+`course_state.md` / `timeline.md` rollups):
 
-- `taught_so_far.md`: compact year-to-date sequence
 - `planning_brief.md`: open loops, readiness, priorities
 - `teaching_patterns.md`: what has worked or failed
 - `copilot_profile.md`: teacher/class/copilot profile

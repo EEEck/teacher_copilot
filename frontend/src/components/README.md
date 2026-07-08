@@ -10,7 +10,8 @@ Components are split by responsibility.
   shared artifact runtime state such as completeness, last change summary, and
   memory target state.
 - `klassenpilot/` - product components for class timelines, artifact panels,
-  review flows, memory updates, and workflow-specific layouts.
+  review flows, proposed memory updates, Memory Sweep brief, and
+  workflow-specific layouts.
 
 ## Conventions
 
@@ -18,4 +19,6 @@ Components are split by responsibility.
 - Keep shared chat runtime behavior in `assistant-ui/`.
 - Timeline/detail components may construct memory-entry links, but visible
   target/phase status should come from backend `memory_state`.
+- Review surfaces should stay brief-first: use `review/review-brief.tsx` and
+  `memory-sweep-brief.tsx` before exposing detailed diffs/cards.
 - Prefer existing `ui/` primitives before adding new visual components.

@@ -214,9 +214,30 @@ def _append_bullets(
     header = existing.strip() if existing.strip() else "# Notes\n"
     if not header.startswith("#"):
         header = f"# Notes\n\n{header}"
+    date_section_pattern = rf"\n?##\s*{re.escape(lesson_date)}\s*\n.*?(?=\n##\s|\Z)"
+    header = re.sub(date_section_pattern, "", header, flags=re.S).rstrip()
     lines = [header.rstrip(), "", f"## {lesson_date}"]
     for b in new_bullets:
         lines.append(f"- {b}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _replace_date_section(text: str, lesson_date: str, bullets: list[str]) -> str:
+    """Upsert a ``## {lesson_date}`` section: drop any existing one, re-add it.
+
+    Keeps the wiki idempotent per lesson date — revising the same lesson
+    replaces that date's bullets instead of ignoring the correction (the student
+    page had an add-only-if-absent bug) or duplicating the section.
+    """
+    stripped = re.sub(
+        rf"\n?##\s*{re.escape(lesson_date)}\s*\n.*?(?=\n##\s|\Z)",
+        "",
+        text,
+        flags=re.S,
+    ).rstrip()
+    lines = [stripped, "", f"## {lesson_date}"]
+    lines.extend(f"- {b}" for b in bullets)
     lines.append("")
     return "\n".join(lines)
 
@@ -366,15 +387,7 @@ def _compile_students_and_timeline(
         content = store.read_text(path)
         if bullets:
             preview = _normalize_student_entity(store, class_id, sid, content)
-            section_pattern = rf"##\s*{re.escape(lesson_date)}\s*\n"
-            if not re.search(section_pattern, preview):
-                preview = (
-                    preview.rstrip()
-                    + "\n\n"
-                    + f"## {lesson_date}\n"
-                    + "\n".join(f"- {b}" for b in bullets)
-                    + "\n"
-                )
+            preview = _replace_date_section(preview, lesson_date, bullets)
             preview = _normalize_student_entity(store, class_id, sid, preview)
             outputs.append(
                 (
@@ -391,14 +404,7 @@ def _compile_students_and_timeline(
         content = store.read_text(path)
         if bullets:
             content = _normalize_student_entity(store, class_id, sid, content)
-            if f"## {lesson_date}" not in content:
-                content = (
-                    content.rstrip()
-                    + "\n\n"
-                    + f"## {lesson_date}\n"
-                    + "\n".join(f"- {b}" for b in bullets)
-                    + "\n"
-                )
+            content = _replace_date_section(content, lesson_date, bullets)
             previews[sid] = _normalize_student_entity(store, class_id, sid, content)
     index_content = store._rebuild_students_index(class_id, previews=previews)
     outputs.append(
@@ -439,7 +445,7 @@ def _finalize_lesson_writes(
             applied.append(rel)
 
     students_path = store.roll_up_paths(class_id)["students"]
-    store.write_text(students_path, store._rebuild_students_index(class_id))
+    store.write_text(students_path, store._rebuild_students_index(class_id, previews={}))
     rel_students = store.rel_wiki(students_path)
     if rel_students not in applied:
         applied.append(rel_students)

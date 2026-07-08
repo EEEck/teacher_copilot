@@ -32,7 +32,13 @@ surface; it does not decide what is durable memory.
 - Teacher choices are local pending decisions until submitted together.
 - After submit, the backend writes approved curated memory first and updates
   represented ledger rows only after successful writes.
-- `already_covered` and `reject` are review decisions, not wiki writes.
+- `Already in memory`, `Not needed`, `Review later`, and `Remove` are review
+  decisions, not wiki writes.
+- `Review later` defers a candidate. It should leave the current short review
+  loop and return only when either seven days pass or newer matching evidence
+  appears in the same memory lane.
+- The intended review loop is small: initial cards -> submit decisions -> show
+  only forgotten/remaining cards or the all-caught-up state.
 
 ## Frontend Guardrails
 
@@ -40,6 +46,8 @@ surface; it does not decide what is durable memory.
   endpoint for sweep decisions.
 - Do not hide cards only because another card shares evidence. Overlapping
   evidence is resolved by the backend after the full decision set.
+- Do not implement client-only snooze filtering. The backend decides whether
+  deferred cards are ready to reappear.
 - Keep network type changes aligned with `backend/app/schemas/api.py`.
 - Keep durable-memory target rules backend-owned. The UI can display targets and
   warnings, but it should not reimplement target allowlists.

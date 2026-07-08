@@ -79,7 +79,7 @@ _SEEDS: tuple[MemorySweepSeed, ...] = (
     MemorySweepSeed(
         candidate_id="golden_lint_state",
         channel="wiki_lint",
-        target="class_state.md",
+        target="planning_brief.md",
         section="Current State",
         content="Class is now applying redox vocabulary in worked examples.",
     ),
@@ -96,7 +96,7 @@ MEMORY_SWEEP_GOLDENS: tuple[MemorySweepGolden, ...] = (
             "Teacher/Copilot Preferences": ("teacher_profile.md",),
             "Class Evolution": ("teaching_patterns.md",),
             "Subject Concepts": ("wiki/subjects/chemie.md",),
-            "Wiki Review": ("class_state.md",),
+            "Wiki Review": ("planning_brief.md",),
         },
     ),
     MemorySweepGolden(

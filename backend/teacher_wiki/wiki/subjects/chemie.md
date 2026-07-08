@@ -1,5 +1,7 @@
 # Chemie — Subject Notes
 
+> Subject-wide reusable guidance for chemistry across classes: common misconceptions, safety reminders, lesson patterns, and question templates.
+
 ## Common lesson patterns
 - Board introduction → guided examples → pair practice → worksheet
 - Safety reminder before any lab/demo

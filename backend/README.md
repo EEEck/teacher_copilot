@@ -23,9 +23,28 @@ Scripts or REPL code that construct `AgentRunner` without importing `app.main` m
 
 ## Agent runtime settings
 
-The default chat model is `OPENAI_CHAT_MODEL=gpt-5.4-mini` with
-`OPENAI_REASONING_EFFORT=medium`. Keep this for test-user runs where answer
-quality matters and the teacher should see visible reasoning/progress.
+Two model ids (`OPENAI_STRONG_MODEL=gpt-5.5`, `OPENAI_CHEAP_MODEL=gpt-5.4-mini`)
+are routed to three **call classes** by `MODEL_PROFILE`:
+
+- **CHAT** (plan + ingest, high volume; `remember(...)` capture happens here) —
+  strong/high in production, cheap/medium in economy.
+- **IMPORTANT** (the Memory Sweep consolidation only — the durable-memory
+  judgment) — always the strong model at max reasoning (xhigh production / high
+  economy). This is the quality gate that backstops cheaper capture.
+- **UTILITY** (compile, lint, plan-lesson, opening, compact, profile-propose) —
+  the chat model at minimal reasoning.
+
+So **production is one model (`gpt-5.5`), reasoning-tiered**; **economy runs
+chat/utility on `gpt-5.4-mini` and only the sweep on `gpt-5.5`**. `MODEL_PROFILE`
+is unset by default and derives from `APP_ENV` (production→production, else
+economy). `OPENAI_REASONING_EFFORT` optionally overrides the CHAT effort only.
+
+Note (mem_v3 PR4): durable capture is an explicit
+`remember(target, content, speech_act, quote, routing_reason)` tool call in the
+chat turn. The live judge eval showed the cheaper tier under-emits and calls
+tools unreliably, so live agent evals force the production profile by default;
+set `LIVE_AGENT_EVAL_MODEL_PROFILE` only for an explicit model-profile
+comparison. The always-strong sweep remains the backstop in economy.
 
 Complex lesson-planning turns can browse wiki memory, reason over evidence, and
 stream a full artifact. The default `AGENT_TIMEOUT_SECONDS=240` gives those
@@ -52,6 +71,54 @@ workflow runtime object. Planning uses `PlanRuntime`; Update Memory uses
 `MemoryRuntime`. Future artifact chats should register an `ArtifactSpec` with
 runtime, prompt trace, stream, final-event, and trace-contract hooks instead of
 adding mode-specific branches to the session core.
+
+## Beta identity, telemetry, and workspace roots
+
+Beta mode keeps one FastAPI app process but resolves each request to a
+`RequestIdentity(tester_id, workspace_id, role, wiki_root)`. In local beta,
+invite-code login writes an opaque HTTP-only session cookie; the API dependency
+resolves that cookie to a workspace-scoped wiki root under `BETA_DATA_ROOT`.
+
+Current beta storage shape:
+
+- `beta.sqlite3` stores testers, workspaces, sessions, visible chat messages,
+  app events, artifact snapshots, and wiki commit/diff metadata.
+- `workspaces/{workspace_id}/teacher_wiki/` stores the tester's copied markdown
+  wiki.
+- `app.services.beta_cli` provisions testers and renders Markdown operator
+  reports.
+- Route handlers record telemetry at workflow boundaries, but durable wiki
+  writes still go only through teacher-approved apply/commit endpoints.
+
+The production path should preserve the `RequestIdentity` boundary. AWS hosting
+can move workspace roots to EFS, metadata/telemetry to Postgres/Aurora, and
+exports to S3 without changing route-level access patterns. Later OAuth/OIDC
+providers such as Cognito, Auth.js, Clerk, or Auth0 should replace only the
+invite-code/session resolver, then map provider users back into
+`RequestIdentity` before class data is accessed.
+
+## Memory Sweep review contract
+
+Memory Sweep is the slow consolidation layer between captured session signals
+and durable wiki memory. Captured candidates live in the SQLite candidate
+ledger; insert-time folding, the promotion gate, and silent decay reduce noise
+before review. The sweep proposer runs one high-reasoning consolidation call,
+maps the result into a teacher-first review brief, and never writes wiki files
+directly.
+
+Decision semantics:
+
+- `Add memory` writes supported targets, then marks represented rows `applied`.
+- `Already in memory` marks rows `applied` without a file write.
+- `Not needed` marks rows `rejected`.
+- `Remove` marks rows `deleted`.
+- `Review later` marks rows `snoozed` and sets `snoozed_until` to seven days
+  after review.
+
+Normal sweep proposals include active rows plus snoozed rows only when either
+their `snoozed_until` time has passed or a newer candidate appears in the same
+memory lane after the snooze. This keeps the review loop short after submit
+while still letting deferred signals compound when more evidence arrives.
 
 ## Agent debug CLI
 
@@ -247,12 +314,26 @@ that contract.
 
 ## Wiki memory
 
-The class wiki now includes compact memory pages under `wiki/classes/{class_id}/memory/`:
-`taught_so_far.md`, `planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and `session_summaries.md`.
+The class wiki includes compact memory pages under `wiki/classes/{class_id}/memory/`:
+`planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and `session_summaries.md`.
+(`class_state.md` / `taught_so_far.md` were retired in mem_v3 PR2 — current unit
+and taught sequence are derived from the canonical `course_state.md` /
+`timeline.md` rollups, so every such fact has one home.)
 
 Planning and ingest prompt layers are derived from those pages plus the current
 artifact/runtime state. `search_memory` is the deterministic pathfinder; use
 `read_memory_page` or `read_lesson_range` when the snippet is not enough.
+
+Durable memory is captured through the explicit `remember(...)` tool the model
+calls when the teacher gives a standing instruction (mem_v3 PR4); every memory
+write goes through one typed contract (`app/services/memory_skills.py`).
+
+The committed wiki is the baseline for factual continuity. If teacher input
+conflicts with canonical memory, such as a non-roster student ID/name, the
+target behavior is deterministic detection followed by model-written
+clarification and teacher-confirmed resolution before write. The first roster
+reconciliation cases live in the eval suite while detector/UI wiring is still
+pending.
 
 ## Tests
 
@@ -274,11 +355,22 @@ cd backend
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py -v
 ```
 
-Live agent + LLM judge (opt-in, uses `OPENAI_API_KEY` from `backend/.env`):
+Live agent + LLM judge (opt-in, uses `OPENAI_API_KEY` from `backend/.env` and
+defaults to the production model profile):
 
 ```powershell
 $env:RUN_LIVE_AGENT_EVALS="1"
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_chat_live.py -v
+```
+
+Focused Memory V3 live capture and wiki-reconciliation checks:
+
+```powershell
+$env:RUN_LIVE_AGENT_EVALS="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_memory_capture_live.py -rx
+
+$env:RUN_LLM_WIKI_RECONCILIATION_JUDGE="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_wiki_reconciliation.py -rx
 ```
 
 See also [`tests/README.md`](tests/README.md).

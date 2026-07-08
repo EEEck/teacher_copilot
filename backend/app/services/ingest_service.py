@@ -44,6 +44,7 @@ from app.teacher_agent.memory_update_state import (
     render_memory_runtime,
 )
 from app.teacher_agent.prompt_trace import build_ingest_chat_prompt_trace
+from app.teacher_agent.wiki import parsing as wiki_parsing
 from app.teacher_agent.wiki_store import WikiStore
 
 MODE = "ingest"
@@ -100,7 +101,9 @@ class IngestService:
 
     def _title_template(self, lesson_date: str, title: str) -> str:
         md = self.wiki.empty_diary_template(lesson_date)
-        clean_title = " ".join((title or "").split())
+        # Hinted titles arrive from the plan artifact ("Lesson Plan — …");
+        # strip that prefix so the diary heading and raw slug stay results-shaped.
+        clean_title = wiki_parsing.clean_results_title(title)
         if clean_title:
             md = md.replace(
                 f"# Lesson Results — {lesson_date} — ",
@@ -273,12 +276,15 @@ class IngestService:
         diary_markdown: str | None = None,
         attachments: list[ChatAttachment] | None = None,
     ) -> AsyncIterator[str]:
-        async for line in self.core.chat_stream(
-            session_id, message, diary_markdown, attachments
-        ):
-            yield line
+        stream = self.core.chat_stream(session_id, message, diary_markdown, attachments)
+        try:
+            async for line in stream:
+                yield line
+        finally:
+            await stream.aclose()
 
     def update_draft(self, session_id: str, diary_markdown: str) -> IngestDraft:
+        self.core.require_latest_turn_complete(session_id, "update the draft")
         draft = self.core.update_draft(session_id, diary_markdown)
         assert isinstance(draft, IngestDraft)
         session = self.core.get_session(session_id)
@@ -289,6 +295,7 @@ class IngestService:
 
     async def propose(self, session_id: str) -> IngestDraft:
         session = self.core.get_session(session_id)
+        self.core.require_latest_turn_complete(session_id, "prepare wiki updates")
         diary_md = session.partial_markdown
         if not diary_md.strip():
             diary_md = await self.agents.compile_diary(
@@ -363,6 +370,7 @@ class IngestService:
 
     def commit(self, req: CommitIngestRequest) -> CommitIngestResponse:
         session = self.core.get_session(req.session_id)
+        self.core.require_latest_turn_complete(req.session_id, "save memory")
         lesson_date = (
             self.wiki.extract_date_from_diary(req.diary_markdown)
             or date.today().isoformat()

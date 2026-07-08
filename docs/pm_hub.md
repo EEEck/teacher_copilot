@@ -59,6 +59,19 @@ Shipped teacher workflows:
 - **Lesson detail**: inspect saved plan/results, revise lesson results, and view
   roll-up excerpts.
 - **Wiki file viewer**: inspect changed markdown files after saves.
+- **Beta tester mode**: invite-code login with an HTTP-only session cookie,
+  workspace-scoped wiki copies, and `tester_id` / `workspace_id` request
+  identity.
+- **Beta telemetry**: local operator-side capture of app sessions, visible
+  conversations, draft snapshots, app events, approved wiki diffs, and a
+  Markdown beta report CLI.
+- **Memory Sweep v1**: review accumulated memory signals, apply supported
+  writes, mark suggestions as already in memory / not needed / remove, and
+  defer uncertain suggestions for seven days while more evidence accumulates.
+- **Memory V3 capture and sweep**: chat can stage review-only durable-memory
+  candidates through the explicit `remember(...)` tool; a ledger/folding/gate
+  layer throttles noise; the teacher-triggered sweep runs one high-reasoning
+  consolidation call and presents a teacher-first review brief.
 
 Core implementation shape:
 
@@ -67,7 +80,14 @@ Core implementation shape:
 - Karpathy-style markdown wiki as canonical class memory.
 - Compact class memory and profile pages for fast context.
 - Teacher-approved durable writes; chat tools stay read-only.
+- Model routing is tiered by call class: production uses the top model for chat
+  and sweep quality, while economy may use a cheaper chat model but still keeps
+  the sweep on the strong model.
 - In-memory prototype sessions; restart loses server chat history.
+- Beta auth is intentionally simple: invite codes plus an opaque cookie. The
+  code path resolves every request through a `RequestIdentity`, so later
+  production auth can replace only the identity provider instead of rewriting
+  wiki access.
 
 ## Product Principles
 
@@ -116,7 +136,9 @@ Core implementation shape:
 | Wiki viewer is not teacher-friendly | Teachers should not need to browse raw markdown | Memory explorer, evidence/source panel, editable preferences |
 | Test/exam generation is not first-class | Clear high-frequency teacher time saver | New assessment artifact workflow |
 | Memory/profile flows are partially productized | Personalization is part of the executive-assistant promise | Visible "copilot learned this" review and memory health |
-| Product assumes local/private/single-teacher use | Fine for validation, but not for broad deployment | Defer accounts/school SaaS until pull is proven |
+| Wiki/input conflicts are not yet proactive | Teacher trust depends on the wiki being the baseline, especially for roster typos or class-state contradictions | Deterministic conflict detection first, then model clarification and teacher-confirmed resolution |
+| Product now has local beta isolation but no hosted deployment | First external testers need persistence, HTTPS, backups, and operator recovery | AWS beta track: Amplify frontend, ECS/Fargate backend, EFS workspaces, Postgres telemetry, S3 exports |
+| Auth is beta-grade invite-code auth | Good for first testers, not proper production identity, account recovery, or school roles | Keep `RequestIdentity`; later swap invite-code provider for Cognito/Auth.js/Clerk/Auth0/OAuth |
 | Evidence is not visible enough | Trust depends on inspecting sources | Source panel for class memory, uploads, and trusted web |
 | New classes need manual memory building | Product is strongest after memory exists | Class wiki factory and material ingestion |
 | Input capture still requires web workflow | Teachers often have seconds after class | Voice memo / Telegram capture after core value is validated |
@@ -137,11 +159,14 @@ Enable teachers to trust and reuse the output with less review effort.
 
 Primary bets:
 
+- beta-hosted deployment on AWS with persistent workspace storage and telemetry
+- operator beta reports and daily review workflow
 - evidence/source panel
 - better class-home briefing
 - plan quality review
 - test/exam generation as a first-class artifact
 - visible memory/profile suggestions
+- proactive input-vs-wiki reconciliation, starting with roster/name mismatches
 - targeted session persistence if real usage exposes restart pain
 
 ### v1.2 - Make Onboarding And Memory Creation Easy

@@ -112,9 +112,9 @@ def build_ingest_query_pack(store, class_id: str) -> str:
             "## Student roster excerpt",
             store.read_text(store.roll_up_paths(class_id)["students"])[:1600],
             "",
-            "## Compact class memory",
-            _memory_page_excerpt(store, class_id, "taught_so_far", 1000)
-            or "- No compact taught-so-far memory yet.",
+            "## Course state (current unit & progression)",
+            store.read_text(store.roll_up_paths(class_id)["course_state"])[:1000]
+            or "- No course state recorded yet.",
             "",
             "## Open loops",
             store.read_text(store.roll_up_paths(class_id)["open_loops"])[:900],
@@ -126,9 +126,9 @@ def build_ingest_query_pack(store, class_id: str) -> str:
 def build_review_query_pack(store, class_id: str) -> str:
     """AutoSci-style derived read-only pack for reviews or assessment spanning memory."""
     snapshot = store.get_snapshot(class_id)
-    taught = _memory_page_excerpt(store, class_id, "taught_so_far", 1600)
-    if not taught:
-        taught = "\n".join(_lesson_sequence_lines(store, class_id, limit=10))
+    # taught_so_far.md was retired; derive the sequence from the canonical
+    # lesson timeline instead of a curated compact twin.
+    taught = "\n".join(_lesson_sequence_lines(store, class_id, limit=10))
     parts = [
         "# Review Query Pack",
         "Purpose: orient reviews, assessments, or cross-lesson synthesis.",
@@ -257,11 +257,9 @@ def _memory_context_key(path: Path) -> str:
 
 
 _MEMORY_SECTION_LABELS: dict[str, str] = {
-    "taught_so_far": "Taught so far",
     "planning_brief": "Planning brief",
     "teaching_patterns": "Teaching patterns",
     "copilot_profile": "Class copilot profile",
-    "class_state": "Class state",
     "session_summaries": "Session summaries",
 }
 

@@ -6,10 +6,14 @@ state, and composing domain components.
 ## Main Routes
 
 - `page.tsx` - landing/class selection.
+- `beta/login/page.tsx` - invite-code beta login; backend sets the
+  HTTP-only beta session cookie.
 - `classes/[classId]/page.tsx` - class home and memory/timeline entry point.
 - `classes/[classId]/memory/page.tsx` - update-memory artifact session. Reads
   optional `lessonDate`, `lessonTitle`, `intent`, and `targetKind` query params
   and sends them as a typed backend start hint.
+- `classes/[classId]/memory-sweep/page.tsx` - Memory Sweep batch review for
+  accumulated memory candidates.
 - `classes/[classId]/lessons/[lessonDate]/page.tsx` - lesson detail.
 - `classes/[classId]/plan/page.tsx` - lesson-planning artifact session.
 - `classes/[classId]/wiki/view/page.tsx` - markdown wiki file viewer.

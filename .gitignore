@@ -26,6 +26,7 @@ scripts/.logs/
 # Local trace/run artifacts
 /runs/
 /backend/runs/
+/backend/beta_data/
 
 # Secrets
 .env

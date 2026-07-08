@@ -1,13 +1,15 @@
 # Course State
 
+> Canonical current class state derived from approved lessons: current unit, last lesson, next planned focus, and overall status.
+
 ## Current unit
-- See latest lesson
+- Reaction writing, balancing equations, oxidation numbers, and redox with ion follow-up.
 
 ## Last lesson
-- 2027-02-03: Lesson Results
+- 2026-05-29: Anions and Oxidation State Review
 
 ## Next planned focus
-- See open loops
+- Apply oxidation-state rules to mixed ion practice and keep separating ion charge from oxidation number.
 
 ## Overall status
-- Updated 2027-02-03
+- Updated 2026-05-29

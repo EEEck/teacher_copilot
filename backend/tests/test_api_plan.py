@@ -46,6 +46,7 @@ def test_plan_full_flow(client: TestClient):
     assert save_body["session_state"]
     assert save_body["lesson_planning_state"]
     assert save_body["memory_candidates"]
+    assert save_body["memory_candidates"][0]["candidate_id"]
 
 
 def test_plan_chat_unknown_session_returns_typed_404(client: TestClient):
@@ -76,3 +77,41 @@ def test_plan_save_rejects_invalid_lesson_date(client: TestClient):
 
     assert save.status_code == 422
     assert "lesson_date must be YYYY-MM-DD" in save.text
+
+
+def test_profile_proposal_normalizes_human_label_targets(
+    client: TestClient, agents
+):
+    from app.teacher_agent.models import ProfileCandidateOut, ProfileProposalOutput
+
+    async def propose_profile_updates(*args, **kwargs):
+        return ProfileProposalOutput(
+            copilot_candidates=[
+                ProfileCandidateOut(
+                    target="Planning Patterns",
+                    section="Avoid",
+                    content="Avoid rote memorization as the main strategy.",
+                    basis="explicit",
+                    confidence="high",
+                    evidence="Teacher corrected the planning style.",
+                )
+            ],
+            warnings=[],
+        )
+
+    agents.propose_profile_updates = propose_profile_updates
+
+    res = client.post(
+        f"/api/classes/{CLASS_ID}/memory/profile/propose",
+        json={
+            "final_lesson_markdown": "# Lesson Plan\n",
+            "session_state": {},
+            "lesson_planning_state": {},
+            "memory_candidates": [],
+        },
+    )
+
+    assert res.status_code == 200, res.text
+    candidate = res.json()["candidates"][0]
+    assert candidate["target"] == "copilot_profile.md"
+    assert candidate["section"] == "Avoid"

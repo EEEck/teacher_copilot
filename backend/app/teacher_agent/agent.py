@@ -9,9 +9,8 @@ from openai.types.shared import Reasoning
 from app.teacher_agent.models import (
     CompileOutput,
     IngestTurnOutput,
-    MemorySweepAlignmentOutput,
+    MemoryConsolidationOutput,
     MemoryCompactOutput,
-    MemorySweepProposalOutput,
     PlanOutput,
     PlanTurnOutput,
     ProfileProposalOutput,
@@ -26,8 +25,7 @@ from app.teacher_agent.prompts import (
     COMPILE_SYSTEM,
     LINT_SYSTEM,
     MEMORY_COMPACT_SYSTEM,
-    MEMORY_SWEEP_ALIGNMENT_SYSTEM,
-    MEMORY_SWEEP_CARD_SYSTEM,
+    MEMORY_SWEEP_CONSOLIDATION_SYSTEM,
     PROFILE_PROPOSAL_SYSTEM,
     PLAN_OPENING_SYSTEM,
     PLAN_SYSTEM,
@@ -44,10 +42,11 @@ from app.teacher_agent.tools import (
 
 
 def chat_model_settings(reasoning_effort: str) -> ModelSettings | None:
-    """Optional reasoning summaries for chat agents (ingest/plan).
+    """Reasoning settings for any agent (chat, sweep, or utility one-shot).
 
-    Set effort to ``none`` to match GPT-5.4's API default and skip hidden reasoning tokens.
-    Non-reasoning models (e.g. gpt-4o-mini) ignore this when unsupported.
+    Set effort to ``none`` to match the API default and skip hidden reasoning
+    tokens. Non-reasoning models ignore this when unsupported. Call classes pass
+    their profile-resolved effort (chat/important/utility — see config.py).
     """
     if reasoning_effort == "none":
         return None
@@ -113,7 +112,14 @@ def build_plan_chat_agent(
     )
 
 
-def build_plan_opening_agent(context: str, model: str) -> Agent:
+def _reasoning(reasoning_effort: str) -> dict:
+    settings = chat_model_settings(reasoning_effort)
+    return {"model_settings": settings} if settings else {}
+
+
+def build_plan_opening_agent(
+    context: str, model: str, *, reasoning_effort: str = "minimal"
+) -> Agent:
     return Agent(
         name="KlassenPilot Plan Opening",
         instructions=apply_prompt(
@@ -123,29 +129,36 @@ def build_plan_opening_agent(context: str, model: str) -> Agent:
             ),
         ),
         model=model,
+        **_reasoning(reasoning_effort),
     )
 
 
-def build_compile_agent(model: str) -> Agent:
+def build_compile_agent(model: str, *, reasoning_effort: str = "minimal") -> Agent:
     return Agent(
         name="KlassenPilot Compile",
         instructions=COMPILE_SYSTEM,
         model=model,
         output_type=CompileOutput,
+        **_reasoning(reasoning_effort),
     )
 
 
-def build_plan_lesson_agent(ctx: WikiToolContext, model: str) -> Agent:
+def build_plan_lesson_agent(
+    ctx: WikiToolContext, model: str, *, reasoning_effort: str = "minimal"
+) -> Agent:
     return Agent(
         name="KlassenPilot Plan Lesson",
         instructions=PLAN_SYSTEM,
         model=model,
         tools=create_wiki_tools(ctx),
         output_type=PlanOutput,
+        **_reasoning(reasoning_effort),
     )
 
 
-def build_lint_agent(ctx: WikiToolContext, context: str, model: str) -> Agent:
+def build_lint_agent(
+    ctx: WikiToolContext, context: str, model: str, *, reasoning_effort: str = "minimal"
+) -> Agent:
     return Agent(
         name="KlassenPilot Wiki Lint",
         instructions=LINT_SYSTEM
@@ -153,10 +166,13 @@ def build_lint_agent(ctx: WikiToolContext, context: str, model: str) -> Agent:
         + apply_char_limit(context, get_context_limits().lint_context_chars),
         model=model,
         tools=create_wiki_tools(ctx),
+        **_reasoning(reasoning_effort),
     )
 
 
-def build_memory_compact_agent(model: str) -> Agent:
+def build_memory_compact_agent(
+    model: str, *, reasoning_effort: str = "minimal"
+) -> Agent:
     return Agent(
         name="KlassenPilot Memory Compact",
         instructions=apply_prompt(
@@ -165,10 +181,13 @@ def build_memory_compact_agent(model: str) -> Agent:
         ),
         model=model,
         output_type=MemoryCompactOutput,
+        **_reasoning(reasoning_effort),
     )
 
 
-def build_profile_proposal_agent(model: str) -> Agent:
+def build_profile_proposal_agent(
+    model: str, *, reasoning_effort: str = "minimal"
+) -> Agent:
     return Agent(
         name="KlassenPilot Profile Proposal",
         instructions=apply_prompt(
@@ -177,28 +196,20 @@ def build_profile_proposal_agent(model: str) -> Agent:
         ),
         model=model,
         output_type=ProfileProposalOutput,
+        **_reasoning(reasoning_effort),
     )
 
 
-def build_memory_sweep_card_agent(model: str) -> Agent:
+def build_memory_sweep_consolidation_agent(
+    model: str, *, reasoning_effort: str = "high"
+) -> Agent:
     return Agent(
-        name="KlassenPilot Memory Sweep Card",
+        name="KlassenPilot Memory Consolidation",
         instructions=apply_prompt(
-            MEMORY_SWEEP_CARD_SYSTEM,
+            MEMORY_SWEEP_CONSOLIDATION_SYSTEM,
             security_policy=TEACHER_AGENT_SECURITY_POLICY,
         ),
         model=model,
-        output_type=MemorySweepProposalOutput,
-    )
-
-
-def build_memory_sweep_alignment_agent(model: str) -> Agent:
-    return Agent(
-        name="KlassenPilot Memory Sweep Alignment",
-        instructions=apply_prompt(
-            MEMORY_SWEEP_ALIGNMENT_SYSTEM,
-            security_policy=TEACHER_AGENT_SECURITY_POLICY,
-        ),
-        model=model,
-        output_type=MemorySweepAlignmentOutput,
+        output_type=MemoryConsolidationOutput,
+        **_reasoning(reasoning_effort),
     )

@@ -15,8 +15,8 @@ from typing import Any, Iterable
 from app.services.memory_candidate_ledger import (
     MemoryCandidateLedger,
     MemoryCandidateRow,
-    OPEN_STATUSES,
 )
+from app.teacher_agent.memory_capture import is_fast_lane_row
 from app.teacher_agent.memory_targets import (
     canonical_memory_target,
     compact_key_for_target,
@@ -39,7 +39,6 @@ QUEUE_BY_CHANNEL = {
     "memory_sweep": "Memory Sweep",
 }
 
-SWEEP_PACKET_PROPOSAL_LIMIT = 40
 SWEEP_OPERATIONS = {
     "add",
     "adjust",
@@ -54,41 +53,6 @@ SWEEP_STATUS_RECOMMENDATIONS = {
     "needs_decision",
 }
 SYNTHETIC_STUDENT_SUMMARY_PREFIX = "student_summary:"
-OPERATION_TO_STATUS_RECOMMENDATION = {
-    "add": "promote",
-    "adjust": "promote",
-    "already_covered": "already_covered",
-    "reject_low_signal": "reject_low_signal",
-    "needs_decision": "needs_decision",
-}
-STATUS_RECOMMENDATION_TO_OPERATION = {
-    "promote": "add",
-    "already_covered": "already_covered",
-    "reject_low_signal": "reject_low_signal",
-    "needs_decision": "needs_decision",
-}
-ALIGNMENT_RELATIONSHIPS = {
-    "new_semantic_claim",
-    "broadens_existing_memory",
-    "already_covered",
-    "possible_conflict",
-    "one_off_or_low_signal",
-    "scoped_exception",
-}
-ALIGNMENT_DECISIONS = {
-    "merge",
-    "adjust_existing",
-    "already_covered",
-    "needs_decision",
-    "reject_low_signal",
-}
-DECISION_TO_OPERATION = {
-    "merge": "add",
-    "adjust_existing": "adjust",
-    "already_covered": "already_covered",
-    "needs_decision": "needs_decision",
-    "reject_low_signal": "reject_low_signal",
-}
 
 
 @dataclass(frozen=True)
@@ -138,35 +102,10 @@ class MemorySweepReviewCard:
     why_now: str = ""
     current_memory_excerpt: str = ""
     signal_count: int = 1
+    occasion_count: int = 1
     can_apply: bool = False
     review_only_reason: str = ""
-
-
-@dataclass(frozen=True)
-class MemorySweepPacket:
-    packet_id: str
-    target: str
-    section: str
-    review_queue: str
-    proposals: list[MemorySweepProposal]
-    current_memory_excerpt: str
-
-
-@dataclass(frozen=True)
-class MemorySweepAlignmentGroup:
-    group_id: str
-    target: str
-    section: str
-    ledger_candidate_ids: list[str]
-    matched_memory_item_ids: list[str] = field(default_factory=list)
-    relationship: str = "new_semantic_claim"
-    decision: str = "merge"
-    group_label: str = ""
-    surface_labels: list[str] = field(default_factory=list)
-    shared_attributes: list[str] = field(default_factory=list)
-    distinguishing_attributes: list[str] = field(default_factory=list)
-    merge_test: str = ""
-    public_rationale: str = ""
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -184,106 +123,314 @@ async def propose_memory_sweep_review(
     agents: Any,
     class_id: str,
     include_student_summaries: bool = False,
+    queue: str | None = None,
 ) -> MemorySweepResult:
-    """Run the two-pass Memory Sweep proposal lifecycle.
+    """Mem V3 single-call sweep (docs/mem_v3/design.md lane 3).
 
-    Failures after retry become unresolved review cards. This function never
-    falls back to direct row-to-add-card promotion because normalization is a
-    required contract of the sweep.
+    Deterministic backend work first (silent decay, cluster grouping, the
+    promotion gate), then ONE high-reasoning consolidation call over all
+    gate-passing claims and the enumerated current memory, validated
+    structurally. A failed run yields one plain-language notice, never
+    per-candidate fallback cards.
     """
+    from datetime import datetime, timezone
+
+    from app.services.memory_gate import expire_stale_candidates, gate_clusters
+
     cls = wiki.get_class(class_id)
-    candidates = ledger.list_candidates(
+    now = datetime.now(timezone.utc)
+    expire_stale_candidates(ledger, now)
+
+    candidates = ledger.list_review_candidates(
         class_id=class_id,
         subject=cls.subject,
-        statuses=OPEN_STATUSES,
         include_global=True,
     )
-    grouped = build_sweep_proposals(candidates)
-    if include_student_summaries:
-        for queue, proposals in build_student_summary_sweep_proposals(
-            wiki, class_id
-        ).items():
-            grouped.setdefault(queue, []).extend(proposals)
-    if not grouped:
+    clusters: dict[str, list[MemoryCandidateRow]] = {}
+    for row in candidates:
+        clusters.setdefault(row.cluster_key or row.id, []).append(row)
+    gate = gate_clusters(list(clusters.values()), now)
+    claims = claims_from_clusters(gate.eligible, now)
+
+    if include_student_summaries and queue in (None, "Student Memory"):
+        claims.extend(_student_summary_claims(wiki, class_id, start=len(claims)))
+
+    if queue:
+        # Scope the consolidation call itself, not just the returned cards —
+        # per-queue refreshes must not pay for the whole ledger.
+        claims = [
+            claim
+            for claim in claims
+            if QUEUE_BY_CHANNEL.get(
+                memory_channel_for_target(claim["target"]), "Memory Sweep"
+            )
+            == queue
+        ]
+
+    if not claims:
         return MemorySweepResult(
             class_id=class_id, subject=cls.subject, cards_by_queue={}
         )
 
-    target_excerpts = memory_sweep_target_excerpts(
-        wiki, class_id, sweep_targets(grouped)
-    )
-    packets = build_sweep_packets(grouped, target_excerpts)
-    all_cards: list[MemorySweepReviewCard] = []
+    targets = sorted({claim["target"] for claim in claims})
+    target_excerpts = memory_sweep_target_excerpts(wiki, class_id, set(targets))
+    memory_indexes: dict[str, dict[str, str]] = {}
+    flat_index: dict[str, str] = {}
+    for position, target in enumerate(targets, start=1):
+        index = enumerate_memory_bullets(
+            target_excerpts.get(target, ""), prefix=f"M{position}_"
+        )
+        memory_indexes[target] = index
+        flat_index.update(index)
+
     warnings: list[str] = []
-    for packet in packets:
-        packet_payload = sweep_packet_payloads([packet])
-        packet_excerpts = {packet.target: packet.current_memory_excerpt}
-        validation_error = ""
-        for attempt in range(2):
-            try:
-                alignment = await agents.align_memory_sweep_candidates(
-                    class_id,
-                    cls.subject,
-                    packet_payload,
-                    packet_excerpts,
-                    validation_error=validation_error,
-                )
-                alignment_groups = validate_alignment_output(packet, alignment)
-            except Exception as exc:
-                validation_error = str(exc)
-                if attempt == 1:
-                    warnings.append(
-                        f"Memory Sweep alignment unresolved for {packet.packet_id}: {validation_error}"
-                    )
-                    all_cards.extend(
-                        unresolved_cards_from_packet(
-                            packet,
-                            target_excerpts,
-                            validation_error,
-                        )
-                    )
-                continue
+    all_cards: list[MemorySweepReviewCard] = []
+    claim_ids = {claim["claim_id"] for claim in claims}
+    validation_error = ""
+    ops: list[ConsolidationOp] | None = None
+    for attempt in range(2):
+        try:
+            output = await agents.consolidate_memory_sweep(
+                class_id,
+                cls.subject,
+                claims,
+                memory_indexes,
+                applied_history=_history_texts(ledger, targets, status="applied"),
+                rejected_history=_history_texts(ledger, targets, status="rejected"),
+                budget_usage=_budget_usage(targets, target_excerpts),
+                today=now.date().isoformat(),
+                validation_error=validation_error,
+            )
+            ops = validate_consolidation_ops(output.operations, flat_index, claim_ids)
+            warnings.extend(output.warnings)
+            break
+        except Exception as exc:
+            validation_error = str(exc)
+            ops = None
 
-            try:
-                packet_out = await agents.propose_memory_sweep_cards(
-                    class_id,
-                    cls.subject,
-                    packet_payload,
-                    packet_excerpts,
-                    alignment_groups=alignment_groups_payload(alignment_groups),
-                    validation_error=validation_error,
-                )
-                packet_cards, packet_warnings = validate_cards_against_alignment(
-                    packet,
-                    packet_out,
-                    alignment_groups,
-                    target_excerpts,
-                )
-                all_cards.extend(packet_cards)
-                warnings.extend(alignment.warnings)
-                warnings.extend(packet_warnings)
-                break
-            except Exception as exc:
-                validation_error = str(exc)
-                if attempt == 1:
-                    warnings.append(
-                        "Memory Sweep card generation unresolved for "
-                        f"{packet.packet_id}: {validation_error}"
-                    )
-                    all_cards.extend(
-                        unresolved_cards_from_packet(
-                            packet,
-                            target_excerpts,
-                            validation_error,
-                        )
-                    )
+    if ops is None:
+        notice = consolidation_failure_notice(validation_error, len(claims))
+        warnings.append(notice.message)
+    else:
+        all_cards.extend(
+            cards_from_consolidation_ops(ops, claims, flat_index, target_excerpts)
+        )
 
+    cards_by_queue = grouped_review_cards(all_cards)
+    if queue:
+        cards_by_queue = {
+            review_queue: cards
+            for review_queue, cards in cards_by_queue.items()
+            if review_queue == queue
+        }
     return MemorySweepResult(
         class_id=class_id,
         subject=cls.subject,
-        cards_by_queue=grouped_review_cards(all_cards),
+        cards_by_queue=cards_by_queue,
         warnings=warnings,
     )
+
+
+def _student_summary_claims(
+    wiki: WikiStore, class_id: str, *, start: int
+) -> list[dict[str, Any]]:
+    """Student-summary refresh requests as claims for the consolidation call."""
+    claims: list[dict[str, Any]] = []
+    position = start
+    for proposals in build_student_summary_sweep_proposals(wiki, class_id).values():
+        for proposal in proposals:
+            position += 1
+            claims.append(
+                {
+                    "claim_id": f"C{position}",
+                    "cluster_key": proposal.candidate_id,
+                    "target": proposal.target,
+                    "section": proposal.section,
+                    "text": proposal.content,
+                    "evidence_summary": proposal.evidence_summary,
+                    "observations_excerpt": proposal.current_memory_excerpt,
+                    "signal_count": proposal.signal_count,
+                    "session_count": proposal.signal_count,
+                    "occasion_count": proposal.signal_count,
+                    "first_seen": "",
+                    "last_seen": "",
+                    "explicit": False,
+                    "score": 0.5,
+                    "candidate_ids": list(proposal.candidate_ids),
+                }
+            )
+    return claims
+
+
+def _budget_usage(
+    targets: list[str], target_excerpts: dict[str, str]
+) -> dict[str, str]:
+    """Per-target character usage against the hermes-style page budgets.
+
+    Fed into the consolidation call so the model prefers update/delete over
+    add when a memory file is near its budget (letta's error-on-exceed idea,
+    applied one step earlier: pressure becomes compaction proposals).
+    """
+    from app.teacher_agent.wiki.memory import memory_budget
+
+    usage: dict[str, str] = {}
+    for target in targets:
+        canonical = canonical_memory_target(target)
+        if canonical == "teacher_profile.md":
+            key = "user"
+        elif canonical == "copilot_profile.md":
+            key = "copilot_profile"
+        elif is_subject_guide_target(canonical):
+            key = "subject_guide"
+        else:
+            key = compact_key_for_target(canonical) or ""
+        if not key:
+            continue
+        usage[canonical] = (
+            f"{len(target_excerpts.get(canonical, ''))}/{memory_budget(key)} chars"
+        )
+    return usage
+
+
+def _history_texts(
+    ledger: MemoryCandidateLedger,
+    targets: list[str],
+    *,
+    status: str,
+    limit: int = 20,
+) -> dict[str, list[str]]:
+    """Recently applied/rejected candidate texts per target for the call."""
+    rows = ledger.list_candidates(statuses=(status,))
+    by_target: dict[str, list[str]] = {}
+    for row in sorted(rows, key=lambda r: r.updated_at, reverse=True):
+        target = canonical_memory_target(row.target)
+        if target not in targets:
+            continue
+        bucket = by_target.setdefault(target, [])
+        if len(bucket) < limit:
+            bucket.append(row.candidate_update)
+    return by_target
+
+
+def cards_from_consolidation_ops(
+    ops: list["ConsolidationOp"],
+    claims: list[dict[str, Any]],
+    memory_index: dict[str, str],
+    target_excerpts: dict[str, str],
+) -> list[MemorySweepReviewCard]:
+    """Map validated consolidation operations onto teacher review cards.
+
+    add -> add (can_apply), update -> adjust with the referenced bullet as
+    replaces_content (can_apply), delete -> review-only needs_decision
+    describing the removal, none -> already_covered (teacher confirms via
+    "Already in memory", which retires the ledger rows).
+    """
+    claims_by_id = {claim["claim_id"]: claim for claim in claims}
+    cards: list[MemorySweepReviewCard] = []
+    for op in ops:
+        op_claims = [claims_by_id[cid] for cid in op.claim_ids if cid in claims_by_id]
+        if not op_claims:
+            continue
+        primary = op_claims[0]
+        target = canonical_memory_target(op.target or primary["target"])
+        section = op.section or primary["section"]
+        candidate_ids = _unique(
+            cid for claim in op_claims for cid in claim["candidate_ids"]
+        )
+        channel = memory_channel_for_target(target)
+        review_queue = QUEUE_BY_CHANNEL.get(channel, "Memory Sweep")
+        signal_count = sum(int(claim.get("signal_count") or 1) for claim in op_claims)
+        occasion_count = max(
+            int(claim.get("occasion_count") or 1) for claim in op_claims
+        )
+        explicit = any(claim.get("explicit") for claim in op_claims)
+        evidence_summary = "; ".join(
+            _unique(
+                str(claim.get("evidence_summary") or "").strip()
+                for claim in op_claims
+            )
+        )[:600]
+        base = {
+            "card_id": _card_id(target, section, candidate_ids),
+            "source_group_id": _card_id(target, section, candidate_ids),
+            "candidate_id": candidate_ids[0],
+            "candidate_ids": candidate_ids,
+            "review_queue": review_queue,
+            "channel": channel,
+            "target": target,
+            "section": section,
+            "evidence_summary": evidence_summary,
+            "confidence": "high" if explicit else "medium",
+            "basis": "explicit" if explicit else "inferred",
+            "status": "proposed",
+            "group_label": "explicit_ask" if explicit else "",
+            "public_rationale": op.rationale,
+            "why_now": (
+                f"Mentioned on {occasion_count} occasion(s) "
+                f"({signal_count} signal(s))."
+            ),
+            "current_memory_excerpt": target_excerpts.get(target, "")[:800],
+            "signal_count": signal_count,
+            "occasion_count": occasion_count,
+        }
+        if op.operation == "add":
+            cards.append(
+                MemorySweepReviewCard(
+                    **base,
+                    content=op.new_text,
+                    operation="add",
+                    status_recommendation="promote",
+                    can_apply=True,
+                )
+            )
+        elif op.operation == "update":
+            cards.append(
+                MemorySweepReviewCard(
+                    **base,
+                    content=op.new_text,
+                    operation="adjust",
+                    replaces_content=memory_index.get(op.memory_id or "", ""),
+                    status_recommendation="promote",
+                    can_apply=True,
+                )
+            )
+        elif op.operation == "delete":
+            removed = memory_index.get(op.memory_id or "", "")
+            cards.append(
+                MemorySweepReviewCard(
+                    **base,
+                    content=primary["text"],
+                    operation="needs_decision",
+                    status_recommendation="needs_decision",
+                    can_apply=False,
+                    review_only_reason=(
+                        "The sweep suggests removing an outdated note: "
+                        f"“{removed[:160]}”. Decide in the detail card."
+                    ),
+                )
+            )
+        else:  # none
+            # Synthetic student-summary claims have no ledger rows to retire;
+            # a "nothing changed" outcome should be silence, not a card.
+            if all(
+                is_synthetic_student_summary_candidate_id(cid)
+                for cid in candidate_ids
+            ):
+                continue
+            cards.append(
+                MemorySweepReviewCard(
+                    **base,
+                    content=primary["text"],
+                    operation="already_covered",
+                    status_recommendation="already_covered",
+                    can_apply=False,
+                    review_only_reason=(
+                        op.rationale
+                        or "Current memory already covers this suggestion."
+                    ),
+                )
+            )
+    return cards
 
 
 def build_sweep_proposals(
@@ -316,107 +463,6 @@ def build_sweep_proposals(
         proposal = _proposal_from_rows(rows)
         grouped.setdefault(proposal.review_queue, []).append(proposal)
     return grouped
-
-
-def build_sweep_packets(
-    grouped: dict[str, list[MemorySweepProposal]],
-    target_excerpts: dict[str, str],
-) -> list[MemorySweepPacket]:
-    """Build bounded target/scope packets for the isolated proposer.
-
-    Packets are grouped by hard target and queue. Semantic grouping remains an
-    LLM responsibility; this step is only token control and context selection.
-    """
-    by_key: dict[tuple[str, str, str], list[MemorySweepProposal]] = {}
-    for proposals in grouped.values():
-        for proposal in proposals:
-            by_key.setdefault(
-                (proposal.review_queue, proposal.target, proposal.section),
-                [],
-            ).append(proposal)
-    packets: list[MemorySweepPacket] = []
-    for (queue, target, section), proposals in sorted(by_key.items()):
-        excerpt = _current_excerpt(target_excerpts, target)
-        for index, chunk in enumerate(_chunks(proposals, SWEEP_PACKET_PROPOSAL_LIMIT)):
-            packet_id = _card_id(
-                f"packet-{index}-{section}",
-                target,
-                [p.candidate_id for p in chunk],
-            )
-            packets.append(
-                MemorySweepPacket(
-                    packet_id=packet_id,
-                    target=target,
-                    section=section,
-                    review_queue=queue,
-                    proposals=[
-                        MemorySweepProposal(
-                            candidate_id=p.candidate_id,
-                            candidate_ids=list(p.candidate_ids),
-                            review_queue=p.review_queue,
-                            channel=p.channel,
-                            target=p.target,
-                            section=p.section,
-                            content=p.content,
-                            evidence_summary=p.evidence_summary,
-                            evidence_refs=list(p.evidence_refs),
-                            confidence=p.confidence,
-                            basis=p.basis,
-                            status=p.status,
-                            signal_count=p.signal_count,
-                            current_memory_excerpt=excerpt,
-                        )
-                        for p in chunk
-                    ],
-                    current_memory_excerpt=excerpt,
-                )
-            )
-    return packets
-
-
-def sweep_packet_payloads(
-    packets: list[MemorySweepPacket],
-) -> dict[str, list[dict[str, Any]]]:
-    """Return the existing proposer payload shape, now packeted by target."""
-    return {
-        packet.packet_id: [
-            {
-                "candidate_id": p.candidate_id,
-                "candidate_ids": list(p.candidate_ids),
-                "signal_count": p.signal_count,
-                "review_queue": p.review_queue,
-                "channel": p.channel,
-                "target": p.target,
-                "section": p.section,
-                "content": p.content,
-                "evidence_summary": p.evidence_summary,
-                "evidence_refs": list(p.evidence_refs),
-                "confidence": p.confidence,
-                "basis": p.basis,
-                "status": p.status,
-                "current_memory_excerpt": p.current_memory_excerpt,
-                "allowed_operations": [
-                    "add",
-                    "adjust",
-                    "already_covered",
-                    "reject_low_signal",
-                    "needs_decision",
-                ],
-                "allowed_status_recommendations": [
-                    "promote",
-                    "already_covered",
-                    "needs_decision",
-                    "reject_low_signal",
-                ],
-            }
-            for p in packet.proposals
-        ]
-        for packet in packets
-    }
-
-
-def sweep_targets(grouped: dict[str, list[MemorySweepProposal]]) -> set[str]:
-    return {p.target for proposals in grouped.values() for p in proposals}
 
 
 def build_student_summary_sweep_proposals(
@@ -499,9 +545,7 @@ def memory_sweep_target_excerpts(
         elif target == "copilot_profile.md":
             excerpts[target] = wiki.read_copilot_profile(class_id)[:1600]
         elif target in {
-            "class_state.md",
             "planning_brief.md",
-            "taught_so_far.md",
             "teaching_patterns.md",
         }:
             key = target.removesuffix(".md")
@@ -519,337 +563,6 @@ def memory_sweep_target_excerpts(
     return excerpts
 
 
-def validate_alignment_output(
-    packet: MemorySweepPacket,
-    output: Any,
-) -> list[MemorySweepAlignmentGroup]:
-    """Validate complete one-time candidate coverage for a packet."""
-    proposal_by_id = _packet_proposal_lookup(packet)
-    input_ids = set(proposal_by_id)
-    groups: list[MemorySweepAlignmentGroup] = []
-    assigned_ids: list[str] = []
-    seen_group_ids: set[str] = set()
-
-    raw_groups = list(getattr(output, "alignment_groups", []) or [])
-    if not raw_groups:
-        raise ValueError("alignment output contained no groups")
-
-    for index, raw_group in enumerate(raw_groups):
-        group_id = str(
-            getattr(raw_group, "group_id", "") or f"group_{index + 1}"
-        ).strip()
-        if not group_id:
-            raise ValueError("alignment group is missing group_id")
-        if group_id in seen_group_ids:
-            raise ValueError(f"duplicate alignment group_id: {group_id}")
-        seen_group_ids.add(group_id)
-
-        raw_ids = [
-            str(candidate_id).strip()
-            for candidate_id in (getattr(raw_group, "ledger_candidate_ids", []) or [])
-            if str(candidate_id).strip()
-        ]
-        if len(raw_ids) != len(set(raw_ids)):
-            raise ValueError(
-                f"alignment group {group_id} assigned duplicate candidate ids"
-            )
-        ids = _unique(raw_ids)
-        if not ids:
-            raise ValueError(f"alignment group {group_id} has no ledger_candidate_ids")
-        unknown = sorted(set(ids) - input_ids)
-        if unknown:
-            raise ValueError(
-                f"alignment group {group_id} used unknown candidate ids: {unknown}"
-            )
-
-        target = canonical_memory_target(
-            str(getattr(raw_group, "target", "") or packet.target).strip()
-        )
-        section = str(getattr(raw_group, "section", "") or "").strip()
-        relationship = str(
-            getattr(raw_group, "relationship", "") or "new_semantic_claim"
-        ).strip()
-        decision = str(getattr(raw_group, "decision", "") or "merge").strip()
-        if relationship not in ALIGNMENT_RELATIONSHIPS:
-            raise ValueError(
-                f"alignment group {group_id} used unsupported relationship: {relationship}"
-            )
-        if decision not in ALIGNMENT_DECISIONS:
-            raise ValueError(
-                f"alignment group {group_id} used unsupported decision: {decision}"
-            )
-        if not is_supported_runtime_target(target):
-            raise ValueError(
-                f"alignment group {group_id} used unsupported target: {target}"
-            )
-        if target != packet.target:
-            raise ValueError(
-                f"alignment group {group_id} changed packet target from {packet.target} to {target}"
-            )
-        if section != packet.section:
-            raise ValueError(
-                f"alignment group {group_id} changed packet section from {packet.section} to {section}"
-            )
-        for candidate_id in ids:
-            proposal = proposal_by_id[candidate_id]
-            if proposal.target != target:
-                raise ValueError(
-                    f"alignment group {group_id} target does not match candidate {candidate_id}"
-                )
-            if proposal.section != section:
-                raise ValueError(
-                    f"alignment group {group_id} section does not match candidate {candidate_id}"
-                )
-
-        surface_labels = _clean_string_list(
-            getattr(raw_group, "surface_labels", []) or []
-        )
-        if decision in {"already_covered", "adjust_existing"} and not surface_labels:
-            raise ValueError(
-                f"alignment group {group_id} marked {decision} but has no surface_labels"
-            )
-        if (
-            decision == "merge"
-            and surface_labels
-            and _current_memory_has_surface_label_bullet(
-                packet.current_memory_excerpt,
-                surface_labels,
-            )
-        ):
-            raise ValueError(
-                f"alignment group {group_id} marked merge but current memory has "
-                "a bullet overlapping its surface_labels"
-            )
-        if decision == "already_covered" and surface_labels:
-            if not _current_memory_covers_surface_labels(
-                packet.current_memory_excerpt,
-                surface_labels,
-            ):
-                raise ValueError(
-                    f"alignment group {group_id} marked already_covered but current "
-                    "memory does not cover all surface_labels"
-                )
-        if (
-            decision == "adjust_existing"
-            and surface_labels
-            and not _current_memory_has_surface_label_bullet(
-                packet.current_memory_excerpt,
-                surface_labels,
-            )
-        ):
-            raise ValueError(
-                f"alignment group {group_id} marked adjust_existing but current "
-                "memory has no bullet overlapping its surface_labels"
-            )
-
-        assigned_ids.extend(ids)
-        groups.append(
-            MemorySweepAlignmentGroup(
-                group_id=group_id,
-                target=target,
-                section=section,
-                ledger_candidate_ids=ids,
-                matched_memory_item_ids=[
-                    str(value).strip()
-                    for value in (
-                        getattr(raw_group, "matched_memory_item_ids", []) or []
-                    )
-                    if str(value).strip()
-                ],
-                relationship=relationship,
-                decision=decision,
-                group_label=str(getattr(raw_group, "group_label", "") or "").strip(),
-                surface_labels=surface_labels,
-                shared_attributes=_clean_string_list(
-                    getattr(raw_group, "shared_attributes", []) or []
-                ),
-                distinguishing_attributes=_clean_string_list(
-                    getattr(raw_group, "distinguishing_attributes", []) or []
-                ),
-                merge_test=str(getattr(raw_group, "merge_test", "") or "").strip(),
-                public_rationale=str(
-                    getattr(raw_group, "public_rationale", "") or ""
-                ).strip(),
-            )
-        )
-
-    if len(assigned_ids) != len(set(assigned_ids)):
-        raise ValueError("alignment assigned a candidate_id more than once")
-    assigned_set = set(assigned_ids)
-    if assigned_set != input_ids:
-        missing = sorted(input_ids - assigned_set)
-        extra = sorted(assigned_set - input_ids)
-        raise ValueError(
-            f"invalid alignment coverage: missing={missing}, extra={extra}"
-        )
-    return groups
-
-
-def alignment_groups_payload(
-    groups: list[MemorySweepAlignmentGroup],
-) -> list[dict[str, Any]]:
-    return [
-        {
-            "group_id": group.group_id,
-            "target": group.target,
-            "section": group.section,
-            "ledger_candidate_ids": list(group.ledger_candidate_ids),
-            "matched_memory_item_ids": list(group.matched_memory_item_ids),
-            "relationship": group.relationship,
-            "decision": group.decision,
-            "group_label": group.group_label,
-            "surface_labels": list(group.surface_labels),
-            "shared_attributes": list(group.shared_attributes),
-            "distinguishing_attributes": list(group.distinguishing_attributes),
-            "merge_test": group.merge_test,
-            "public_rationale": group.public_rationale,
-        }
-        for group in groups
-    ]
-
-
-def validate_cards_against_alignment(
-    packet: MemorySweepPacket,
-    output: Any,
-    alignment_groups: list[MemorySweepAlignmentGroup],
-    target_excerpts: dict[str, str],
-) -> tuple[list[MemorySweepReviewCard], list[str]]:
-    """Validate card output against already-validated alignment groups."""
-    proposal_by_id = _packet_proposal_lookup(packet)
-    group_by_id = {group.group_id: group for group in alignment_groups}
-    remaining_group_ids = set(group_by_id)
-    warnings = list(getattr(output, "warnings", []) or [])
-    cards: list[MemorySweepReviewCard] = []
-    seen_card_ids: set[str] = set()
-
-    for raw_card in getattr(output, "cards", []) or []:
-        group = _card_alignment_group(raw_card, alignment_groups)
-        if group is None:
-            raise ValueError(
-                "card missing source_group_id or exact group candidate_ids"
-            )
-        if group.group_id not in remaining_group_ids:
-            raise ValueError(
-                f"duplicate or unknown card source_group_id: {group.group_id}"
-            )
-        remaining_group_ids.remove(group.group_id)
-
-        card_ids = _card_candidate_ids(raw_card)
-        if set(card_ids) != set(group.ledger_candidate_ids):
-            raise ValueError(
-                f"card {group.group_id} candidate_ids do not match alignment group"
-            )
-        target = _card_target(raw_card, group.target, warnings)
-        section = (getattr(raw_card, "section", "") or group.section).strip()
-        if target != group.target:
-            raise ValueError(
-                f"card {group.group_id} target does not match alignment group"
-            )
-        if section != group.section:
-            raise ValueError(
-                f"card {group.group_id} section does not match alignment group"
-            )
-
-        expected_operation = DECISION_TO_OPERATION[group.decision]
-        operation = _card_operation(raw_card, warnings)
-        if operation != expected_operation:
-            raise ValueError(
-                f"card {group.group_id} operation {operation} does not match decision {group.decision}"
-            )
-        if operation == "add":
-            overlapping_bullet = _existing_named_label_bullet(
-                _current_excerpt(target_excerpts, group.target),
-                group,
-            )
-            if overlapping_bullet:
-                raise ValueError(
-                    "add card overlaps an existing current-memory bullet; "
-                    "use adjust_existing or already_covered instead: "
-                    f"{overlapping_bullet}"
-                )
-        replaces_content = (getattr(raw_card, "replaces_content", "") or "").strip()
-        if operation == "adjust":
-            if not replaces_content:
-                raise ValueError(
-                    f"card {group.group_id} adjust missing replaces_content"
-                )
-            if not _excerpt_has_bullet(
-                _current_excerpt(target_excerpts, group.target),
-                replaces_content,
-            ):
-                raise ValueError(
-                    f"card {group.group_id} replaces_content not found in current memory excerpt"
-                )
-
-        card_id = (getattr(raw_card, "card_id", "") or "").strip() or _card_id(
-            group.target,
-            group.section,
-            group.ledger_candidate_ids,
-        )
-        if card_id in seen_card_ids:
-            raise ValueError(f"duplicate card_id: {card_id}")
-        seen_card_ids.add(card_id)
-        proposal = _merged_proposal(
-            proposal_by_id[group.ledger_candidate_ids[0]],
-            group.ledger_candidate_ids,
-            proposal_by_id,
-        )
-        cards.append(
-            review_card_from_proposal(
-                proposal,
-                target_excerpts=target_excerpts,
-                card_id=card_id,
-                source_group_id=group.group_id,
-                target=group.target,
-                review_queue=queue_for_channel(memory_channel_for_target(group.target)),
-                content=(getattr(raw_card, "content", "") or "").strip(),
-                section=group.section,
-                relationship=group.relationship,
-                group_label=group.group_label,
-                surface_labels=group.surface_labels,
-                shared_attributes=group.shared_attributes,
-                distinguishing_attributes=group.distinguishing_attributes,
-                merge_test=group.merge_test,
-                public_rationale=group.public_rationale,
-                operation=operation,
-                replaces_content=replaces_content if operation == "adjust" else "",
-                status_recommendation=OPERATION_TO_STATUS_RECOMMENDATION[operation],
-                why_now=(
-                    getattr(raw_card, "why_now", "") or group.public_rationale
-                ).strip(),
-            )
-        )
-
-    if remaining_group_ids:
-        raise ValueError(
-            f"missing cards for alignment groups: {sorted(remaining_group_ids)}"
-        )
-    return cards, warnings
-
-
-def unresolved_cards_from_packet(
-    packet: MemorySweepPacket,
-    target_excerpts: dict[str, str],
-    reason: str,
-) -> list[MemorySweepReviewCard]:
-    cards: list[MemorySweepReviewCard] = []
-    for proposal in packet.proposals:
-        cards.append(
-            review_card_from_proposal(
-                proposal,
-                target_excerpts=target_excerpts,
-                source_group_id=f"unresolved_{proposal.candidate_id}",
-                operation="needs_decision",
-                status_recommendation="needs_decision",
-                relationship="possible_conflict",
-                group_label="unresolved_alignment",
-                public_rationale="Memory Sweep alignment could not be validated.",
-                why_now=f"Unresolved Memory Sweep alignment: {reason}",
-            )
-        )
-    return cards
-
-
 def grouped_review_cards(
     cards: Iterable[MemorySweepReviewCard],
 ) -> dict[str, list[MemorySweepReviewCard]]:
@@ -857,64 +570,6 @@ def grouped_review_cards(
     for card in cards:
         grouped.setdefault(card.review_queue, []).append(card)
     return grouped
-
-
-def review_card_from_proposal(
-    proposal: MemorySweepProposal,
-    *,
-    target_excerpts: dict[str, str],
-    card_id: str = "",
-    source_group_id: str = "",
-    target: str = "",
-    review_queue: str = "",
-    content: str = "",
-    section: str = "",
-    relationship: str = "",
-    group_label: str = "",
-    surface_labels: list[str] | None = None,
-    shared_attributes: list[str] | None = None,
-    distinguishing_attributes: list[str] | None = None,
-    merge_test: str = "",
-    public_rationale: str = "",
-    operation: str = "add",
-    replaces_content: str = "",
-    status_recommendation: str = "promote",
-    why_now: str = "",
-) -> MemorySweepReviewCard:
-    candidate_ids = list(proposal.candidate_ids)
-    final_target = target or proposal.target
-    can_apply, review_only_reason = memory_sweep_apply_policy(final_target, operation)
-    return MemorySweepReviewCard(
-        card_id=card_id or _card_id(final_target, proposal.section, candidate_ids),
-        source_group_id=source_group_id,
-        candidate_id=proposal.candidate_id,
-        candidate_ids=candidate_ids,
-        review_queue=review_queue or proposal.review_queue,
-        channel=memory_channel_for_target(final_target),
-        target=final_target,
-        section=section or proposal.section,
-        content=content or proposal.content,
-        evidence_summary=proposal.evidence_summary,
-        evidence_refs=list(proposal.evidence_refs),
-        confidence=proposal.confidence,
-        basis=proposal.basis,
-        status=proposal.status,
-        relationship=relationship,
-        group_label=group_label,
-        surface_labels=list(surface_labels or []),
-        shared_attributes=list(shared_attributes or []),
-        distinguishing_attributes=list(distinguishing_attributes or []),
-        merge_test=merge_test,
-        public_rationale=public_rationale,
-        operation=operation,
-        replaces_content=replaces_content,
-        status_recommendation=status_recommendation,
-        why_now=why_now,
-        current_memory_excerpt=_current_excerpt(target_excerpts, final_target),
-        signal_count=proposal.signal_count,
-        can_apply=can_apply,
-        review_only_reason=review_only_reason,
-    )
 
 
 def queue_for_channel(channel: str) -> str:
@@ -1025,111 +680,6 @@ def _excerpt_has_bullet(excerpt: str, bullet_content: str) -> bool:
         if _normalize_bullet_text(line) == wanted:
             return True
     return False
-
-
-def _existing_named_label_bullet(
-    excerpt: str,
-    group: MemorySweepAlignmentGroup,
-) -> str:
-    labels = [*group.surface_labels, *group.shared_attributes]
-    for line in (excerpt or "").splitlines():
-        if not line.strip().startswith("-"):
-            continue
-        bullet = _normalize_bullet_text(line)
-        if any(_named_label_overlaps_bullet(label, bullet) for label in labels):
-            return bullet
-    return ""
-
-
-def _current_memory_covers_surface_labels(excerpt: str, labels: list[str]) -> bool:
-    labels_with_tokens = [label for label in labels if _label_tokens(label)]
-    if not labels_with_tokens:
-        return True
-    for line in (excerpt or "").splitlines():
-        if not line.strip().startswith("-"):
-            continue
-        bullet = _normalize_bullet_text(line)
-        if all(
-            _named_label_overlaps_bullet(label, bullet) for label in labels_with_tokens
-        ):
-            return True
-    return False
-
-
-def _current_memory_has_surface_label_bullet(excerpt: str, labels: list[str]) -> bool:
-    labels_with_tokens = [label for label in labels if _label_tokens(label)]
-    if not labels_with_tokens:
-        return True
-    for line in (excerpt or "").splitlines():
-        if not line.strip().startswith("-"):
-            continue
-        bullet = _normalize_bullet_text(line)
-        if any(
-            _named_label_overlaps_bullet(label, bullet) for label in labels_with_tokens
-        ):
-            return True
-    return False
-
-
-_LABEL_STOPWORDS = {
-    "and",
-    "for",
-    "the",
-    "this",
-    "that",
-    "with",
-    "use",
-    "uses",
-    "using",
-    "teacher",
-    "prefers",
-    "preference",
-}
-
-
-def _named_label_overlaps_bullet(label: str, bullet: str) -> bool:
-    label_tokens = _label_tokens(label)
-    if not label_tokens:
-        return False
-    bullet_tokens = _label_tokens(bullet)
-    if not bullet_tokens:
-        return False
-    return len(label_tokens & bullet_tokens) >= 2
-
-
-def _label_tokens(value: str) -> set[str]:
-    return {
-        token
-        for token in re.findall(r"[a-z0-9]+", (value or "").lower())
-        if len(token) >= 3 and token not in _LABEL_STOPWORDS
-    }
-
-
-def _normalize_bullet_text(value: str) -> str:
-    text = " ".join((value or "").strip().split())
-    if text.startswith("- "):
-        text = " ".join(text[2:].strip().split())
-    return text
-
-
-def _card_operation(card: Any, warnings: list[str]) -> str:
-    value = str(getattr(card, "operation", "") or "").strip()
-    if value == "add" and not _field_was_provided(card, "operation"):
-        value = ""
-    if value:
-        if value in SWEEP_OPERATIONS:
-            return value
-        warnings.append(f"ignored unsupported Memory Sweep operation: {value}")
-        return "needs_decision"
-    status = str(getattr(card, "status_recommendation", "") or "promote").strip()
-    return STATUS_RECOMMENDATION_TO_OPERATION.get(status, "needs_decision")
-
-
-def _field_was_provided(card: Any, field_name: str) -> bool:
-    fields_set = getattr(card, "model_fields_set", None)
-    if fields_set is None:
-        fields_set = getattr(card, "__fields_set__", set())
-    return field_name in fields_set
 
 
 def _card_target(card: Any, fallback: str, warnings: list[str]) -> str:
@@ -1263,8 +813,210 @@ def _clean_string_list(values: Iterable[Any]) -> list[str]:
     return _unique(str(value).strip() for value in values if str(value).strip())
 
 
-def _chunks(
-    values: list[MemorySweepProposal], size: int
-) -> Iterable[list[MemorySweepProposal]]:
-    for index in range(0, len(values), size):
-        yield values[index : index + size]
+# --- Mem V3 single-call consolidation contract (docs/mem_v3/design.md lane 3)
+#
+# The sweep's one high-reasoning call returns ID-referenced operations
+# against the enumerated current-memory bullets (mem0-style
+# ADD/UPDATE/DELETE/NONE, Apache-2.0 pattern). Validation here is
+# STRUCTURAL ONLY, restoring the docs/2sweep_idea.md §7 contract: no
+# lexical token-overlap second-guessing of the model's semantics — the
+# teacher review is the safety net.
+
+CONSOLIDATION_OPERATIONS = {"add", "update", "delete", "none"}
+
+
+@dataclass(frozen=True)
+class ConsolidationOp:
+    """One validated consolidation decision from the sweep call."""
+
+    claim_ids: list[str]
+    operation: str  # add | update | delete | none
+    target: str
+    section: str
+    memory_id: str | None = None
+    new_text: str = ""
+    rationale: str = ""
+
+
+@dataclass(frozen=True)
+class ConsolidationFailureNotice:
+    """Single teacher-facing notice replacing per-candidate zombie cards."""
+
+    message: str
+    claim_count: int
+
+
+def _op_field(op: Any, name: str, default: Any = None) -> Any:
+    if isinstance(op, dict):
+        return op.get(name, default)
+    return getattr(op, name, default)
+
+
+def validate_consolidation_ops(
+    ops: Iterable[Any],
+    memory_index: dict[str, str],
+    claim_ids: set[str],
+) -> list[ConsolidationOp]:
+    """Structurally validate the single-call sweep output.
+
+    Checks: known operations; update/delete reference an existing memory id
+    from the enumerated index; update/add carry new_text; every input claim
+    id is accounted for exactly once across operations. Raises ValueError
+    with an actionable message (fed back to the model for one retry).
+    """
+    validated: list[ConsolidationOp] = []
+    assigned: list[str] = []
+    for op in ops or []:
+        operation = str(_op_field(op, "operation", "") or "").strip().lower()
+        if operation not in CONSOLIDATION_OPERATIONS:
+            raise ValueError(f"unsupported consolidation operation: {operation!r}")
+        op_claims = [
+            str(cid).strip()
+            for cid in (_op_field(op, "claim_ids", []) or [])
+            if str(cid).strip()
+        ]
+        if not op_claims:
+            raise ValueError(f"{operation} operation lists no claim_ids")
+        memory_id_raw = _op_field(op, "memory_id")
+        memory_id = str(memory_id_raw).strip() if memory_id_raw else None
+        new_text = str(_op_field(op, "new_text", "") or "").strip()
+
+        if operation in {"update", "delete"}:
+            if not memory_id:
+                raise ValueError(f"{operation} operation requires a memory_id")
+            if memory_id not in memory_index:
+                raise ValueError(
+                    f"unknown memory id {memory_id}: reference input memory ids only"
+                )
+        if operation in {"update", "add"} and not new_text:
+            raise ValueError(f"{operation} operation requires new_text")
+        # Deterministic no-op guard: an update whose text matches the
+        # referenced bullet is noise (live runs produced identical student
+        # summary "updates") — demote it to none instead of a card.
+        if operation == "update" and memory_id is not None:
+            existing = " ".join(memory_index[memory_id].strip().lower().split())
+            proposed = " ".join(new_text.strip().lower().split())
+            if existing == proposed:
+                operation = "none"
+                memory_id = None
+                new_text = ""
+
+        assigned.extend(op_claims)
+        validated.append(
+            ConsolidationOp(
+                claim_ids=op_claims,
+                operation=operation,
+                target=str(_op_field(op, "target", "") or "").strip(),
+                section=str(_op_field(op, "section", "") or "").strip(),
+                memory_id=memory_id,
+                new_text=new_text,
+                rationale=str(_op_field(op, "rationale", "") or "").strip(),
+            )
+        )
+
+    if len(assigned) != len(set(assigned)):
+        raise ValueError("a claim id was assigned to more than one operation")
+    assigned_set = set(assigned)
+    if assigned_set != set(claim_ids):
+        missing = sorted(set(claim_ids) - assigned_set)
+        extra = sorted(assigned_set - set(claim_ids))
+        raise ValueError(
+            f"invalid claim coverage: missing={missing}, extra={extra}"
+        )
+    return validated
+
+
+def consolidation_failure_notice(
+    reason: str, claim_count: int
+) -> ConsolidationFailureNotice:
+    """One plain-language notice for a failed consolidation run.
+
+    Raw internal reasons (validator errors, card ids) go to logs, never to
+    the teacher-facing payload.
+    """
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "Memory Sweep consolidation unresolved (%d claims): %s", claim_count, reason
+    )
+    return ConsolidationFailureNotice(
+        message=(
+            f"The sweep could not consolidate {claim_count} suggestions in "
+            "this run. Nothing was lost — run the sweep again, or review "
+            "them later once more evidence has accumulated."
+        ),
+        claim_count=claim_count,
+    )
+
+
+def enumerate_memory_bullets(markdown: str, *, prefix: str = "M") -> dict[str, str]:
+    """Enumerate a memory file's bullets with ephemeral call-time ids.
+
+    No file-format change: ids exist only for one consolidation call so the
+    model can reference bullets precisely (UPDATE/DELETE by id) and the
+    backend can validate references mechanically.
+    """
+    index: dict[str, str] = {}
+    counter = 0
+    for line in (markdown or "").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            continue
+        text = stripped[2:].strip()
+        if not text:
+            continue
+        counter += 1
+        index[f"{prefix}{counter}"] = text
+    return index
+
+
+def _cluster_occasions(cluster: list[MemoryCandidateRow]) -> int:
+    from app.services.memory_gate import distinct_occasions
+
+    return distinct_occasions(cluster)
+
+
+def claims_from_clusters(
+    clusters: list[list[MemoryCandidateRow]],
+    now: Any,
+) -> list[dict[str, Any]]:
+    """Turn gate-passing ledger clusters into the sweep call's claim payload.
+
+    One claim per cluster: the most recent phrasing represents the claim,
+    reinforcement metadata (signal/session counts, first/last seen) gives the
+    model the evidence weight, and candidate ids keep apply/status updates
+    traceable back to ledger rows.
+    """
+    from app.services.memory_gate import cluster_score
+
+    claims: list[dict[str, Any]] = []
+    for position, cluster in enumerate(clusters, start=1):
+        if not cluster:
+            continue
+        newest = max(cluster, key=lambda row: row.created_at)
+        claims.append(
+            {
+                "claim_id": f"C{position}",
+                "cluster_key": newest.cluster_key or newest.id,
+                "target": canonical_memory_target(newest.target),
+                "section": newest.section,
+                "text": newest.candidate_update,
+                "evidence_summary": newest.evidence_summary,
+                "signal_count": len(cluster),
+                "session_count": len(
+                    {row.session_id for row in cluster if row.session_id}
+                ),
+                "occasion_count": _cluster_occasions(cluster),
+                "first_seen": min(row.created_at for row in cluster),
+                "last_seen": newest.created_at,
+                "explicit": any(
+                    is_fast_lane_row(
+                        row.target, row.source, row.evidence_summary, row.fast_lane
+                    )
+                    for row in cluster
+                ),
+                "score": round(cluster_score(cluster, now), 3),
+                "candidate_ids": [row.id for row in cluster],
+            }
+        )
+    return claims

@@ -55,6 +55,10 @@ export function ArtifactSessionPage({
   const [error, setError] = useState<string | null>(null);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const sessionIdRef = useRef("");
+  const inflightBootstrapRef = useRef<{
+    fn: unknown;
+    promise: Promise<unknown>;
+  } | null>(null);
 
   const loadBootstrap = useCallback(
     async (opts?: ArtifactBootstrapOptions) => {
@@ -82,7 +86,20 @@ export function ArtifactSessionPage({
     setSessionNotice(null);
     (async () => {
       try {
-        await loadBootstrap();
+        // React StrictMode runs this effect twice in dev; reuse the in-flight
+        // bootstrap so each page open creates exactly one backend session
+        // (a second POST would leave a ghost session in beta telemetry).
+        let entry = inflightBootstrapRef.current;
+        if (!entry || entry.fn !== loadBootstrap) {
+          const promise = loadBootstrap().finally(() => {
+            if (inflightBootstrapRef.current?.promise === promise) {
+              inflightBootstrapRef.current = null;
+            }
+          });
+          entry = { fn: loadBootstrap, promise };
+          inflightBootstrapRef.current = entry;
+        }
+        await entry.promise;
         if (!cancelled) setError(null);
       } catch (e) {
         if (!cancelled) {

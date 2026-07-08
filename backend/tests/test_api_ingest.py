@@ -5,9 +5,14 @@ Runs fully offline against the stub agent + a tmp copy of the seed wiki.
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
+from app.schemas.api import ApprovedWikiUpdate, CommitIngestRequest
+from app.services.ingest_service import IngestService
+from app.teacher_agent.wiki_store import WikiStore
 from tests.conftest import CLASS_ID, COMPLETE_DIARY, READY_PLAN
+from tests.conftest import StubAgentRunner
 
 
 def test_ingest_full_flow(client: TestClient):
@@ -61,22 +66,20 @@ def test_ingest_full_flow(client: TestClient):
     assert commit_body["log_entry_id"]
     proposal = commit_body["class_memory_proposal"]
     assert proposal["class_id"] == CLASS_ID
-    assert "class_state" in proposal["pages"]
+    # class_state.md / taught_so_far.md were retired (mem_v3 PR2): the refresh
+    # proposal offers the surviving curated pages only.
+    assert "class_state" not in proposal["pages"]
+    assert "taught_so_far" not in proposal["pages"]
+    assert "planning_brief" in proposal["pages"]
     assert "teaching_patterns" in proposal["pages"]
     assert "Peer checking helps reduce balancing errors." in proposal["pages"]["teaching_patterns"]
     assert f"wiki/classes/{CLASS_ID}/memory/class_state.md" not in commit_body["applied_wiki_paths"]
-
-    class_state = client.get(
-        f"/api/classes/{CLASS_ID}/wiki/file",
-        params={"path": f"wiki/classes/{CLASS_ID}/memory/class_state.md"},
-    )
-    assert class_state.status_code == 404
 
     apply_compact = client.post(
         f"/api/classes/{CLASS_ID}/memory/compact/apply",
         json={
             "pages": {
-                "class_state": proposal["pages"]["class_state"],
+                "planning_brief": proposal["pages"]["planning_brief"],
                 "teaching_patterns": proposal["pages"]["teaching_patterns"],
             },
             "source_paths": proposal["source_paths"],
@@ -84,15 +87,15 @@ def test_ingest_full_flow(client: TestClient):
     )
     assert apply_compact.status_code == 200, apply_compact.text
     apply_body = apply_compact.json()
-    assert f"wiki/classes/{CLASS_ID}/memory/class_state.md" in apply_body["applied_wiki_paths"]
+    assert f"wiki/classes/{CLASS_ID}/memory/planning_brief.md" in apply_body["applied_wiki_paths"]
     assert f"wiki/classes/{CLASS_ID}/memory/teaching_patterns.md" in apply_body["applied_wiki_paths"]
 
-    class_state = client.get(
+    planning_brief = client.get(
         f"/api/classes/{CLASS_ID}/wiki/file",
-        params={"path": f"wiki/classes/{CLASS_ID}/memory/class_state.md"},
+        params={"path": f"wiki/classes/{CLASS_ID}/memory/planning_brief.md"},
     )
-    assert class_state.status_code == 200
-    assert "Current unit: redox" in class_state.json()["markdown"]
+    assert planning_brief.status_code == 200
+    assert "Keep contrasting ion charge" in planning_brief.json()["markdown"]
 
 
 def test_compact_memory_apply_rejects_non_compact_memory_pages(client: TestClient):
@@ -386,3 +389,76 @@ def test_validation_error_returns_typed_envelope(client: TestClient):
     )
     assert res.status_code == 422
     assert res.json()["error"]["type"] == "validation_error"
+
+
+@pytest.mark.anyio
+async def test_ingest_commit_rejects_unfinished_streamed_turn(
+    wiki: WikiStore,
+    agents: StubAgentRunner,
+):
+    ingest = IngestService(wiki=wiki, agents=agents)
+    session = await ingest.start_session(CLASS_ID)
+    stream = ingest.chat_stream(session.session_id, "sorry, I forgot one more thing")
+
+    first_line = await anext(stream)
+    assert first_line.startswith("data:")
+    await stream.aclose()
+
+    _, proposals = wiki.compile_from_diary(CLASS_ID, COMPLETE_DIARY)
+    approved = [
+        ApprovedWikiUpdate(
+            wiki_path=p.wiki_path,
+            content=p.proposed_content,
+            approved=True,
+        )
+        for p in proposals
+    ]
+
+    with pytest.raises(ValueError, match="latest chat turn"):
+        ingest.commit(
+            CommitIngestRequest(
+                session_id=session.session_id,
+                diary_markdown=COMPLETE_DIARY,
+                approved_updates=approved,
+            )
+        )
+
+
+@pytest.mark.anyio
+async def test_ingest_allows_retry_after_unfinished_streamed_turn(
+    wiki: WikiStore,
+    agents: StubAgentRunner,
+):
+    ingest = IngestService(wiki=wiki, agents=agents)
+    session = await ingest.start_session(CLASS_ID)
+    stream = ingest.chat_stream(session.session_id, "sorry, I forgot one more thing")
+
+    first_line = await anext(stream)
+    assert first_line.startswith("data:")
+    await stream.aclose()
+
+    retry_events = [
+        line
+        async for line in ingest.chat_stream(
+            session.session_id, "sorry, I forgot one more thing"
+        )
+    ]
+
+    assert any('"type":"final"' in line for line in retry_events)
+    _, proposals = wiki.compile_from_diary(CLASS_ID, COMPLETE_DIARY)
+    approved = [
+        ApprovedWikiUpdate(
+            wiki_path=p.wiki_path,
+            content=p.proposed_content,
+            approved=True,
+        )
+        for p in proposals
+    ]
+    response = ingest.commit(
+        CommitIngestRequest(
+            session_id=session.session_id,
+            diary_markdown=COMPLETE_DIARY,
+            approved_updates=approved,
+        )
+    )
+    assert response.applied_wiki_paths

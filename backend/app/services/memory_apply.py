@@ -40,14 +40,17 @@ class _SweepDecision(Protocol):
 
 def apply_memory_items(
     wiki, class_id: str, items
-) -> tuple[list[str], list[str], list[str]]:
-    """Write supported items; return (applied_paths, skipped, warnings).
+) -> tuple[list[str], list[str], list[str], list[int]]:
+    """Write supported items; return (applied_paths, skipped, warnings, indexes).
+
+    ``indexes`` are the item positions whose write actually landed — the caller
+    closes those items' ledger rows to ``applied`` and leaves skipped/failed
+    items reviewable (mirrors ``apply_memory_sweep_decisions``).
 
     Supported targets:
     - ``teacher_profile.md`` -> global teacher profile (bounded)
     - ``copilot_profile.md`` -> class copilot working agreement (bounded)
-    - ``class_state.md``-> class compact state page (bounded bullet)
-    - ``planning_brief.md`` / ``taught_so_far.md`` / ``teaching_patterns.md``
+    - ``planning_brief.md`` / ``teaching_patterns.md``
       -> bounded compact class memory bullets
     - ``wiki/subjects/{active_subject}.md`` -> bounded subject-guide bullet
 
@@ -56,16 +59,18 @@ def apply_memory_items(
     applied: list[str] = []
     skipped: list[str] = []
     warnings: list[str] = []
+    successful_indexes: list[int] = []
     subject_target = f"wiki/subjects/{wiki.get_class(class_id).subject}.md"
-    for item in items:
+    for index, item in enumerate(items):
         path, skip, warning = _apply_add_item(wiki, class_id, item, subject_target)
         if path:
             applied.append(path)
+            successful_indexes.append(index)
         if skip:
             skipped.append(skip)
         if warning:
             warnings.append(warning)
-    return applied, skipped, warnings
+    return applied, skipped, warnings, successful_indexes
 
 
 def apply_memory_sweep_decisions(

@@ -1,6 +1,7 @@
 # Lesson Timeline
 
 > Class: chemie_9b_2026_27
+> Canonical chronological lesson sequence with dated links, covered content, and concise highlights.
 
 ## 2026-05-29 - Anions and Oxidation State Review
 - [Anions and Oxidation State Review](lessons/2026-05-29/lesson_results.md)
@@ -36,7 +37,3 @@
 - [Reaction Writing Basics](lessons/2026-04-24/lesson_results.md)
 - Covered: Word prompts, symbols, and skeleton equations
 - Highlight: Students could write the base equations before balancing
-
-## 2027-02-03 — Lesson Results
-- [Lesson Results](lessons/2027-02-03/lesson_results.md)
-- Lesson logged.

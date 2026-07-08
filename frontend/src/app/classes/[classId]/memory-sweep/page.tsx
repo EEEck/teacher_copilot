@@ -2,12 +2,18 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
+import { MemorySweepBrief } from "@/components/klassenpilot/memory-sweep-brief";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   client,
   type MemorySweepCandidate,
@@ -15,12 +21,26 @@ import {
   type MemorySweepProposalResponse,
 } from "@/lib/api";
 
+const MEMORY_SWEEP_QUEUES = [
+  "Class Evolution",
+  "Subject Concepts",
+  "Teacher/Copilot Preferences",
+  "Wiki Review",
+  "Memory Sweep",
+];
+const REVIEW_LATER_TOOLTIP =
+  "Hide while the system waits for more evidence. It returns when newer matching evidence arrives, or after 7 days if it still needs review.";
+
 function canApply(candidate: MemorySweepCandidate): boolean {
   return Boolean(candidate.can_apply);
 }
 
 function cardKey(candidate: MemorySweepCandidate): string {
   return candidate.card_id || candidate.candidate_id;
+}
+
+function cardDomId(candidate: MemorySweepCandidate): string {
+  return `memory-sweep-card-${cardKey(candidate).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
 function representedCandidateIds(candidate: MemorySweepCandidate): string[] {
@@ -32,6 +52,48 @@ function representedCandidateIds(candidate: MemorySweepCandidate): string[] {
 function countCandidates(proposal: MemorySweepProposalResponse | null): number {
   if (!proposal) return 0;
   return Object.values(proposal.queues).reduce((sum, queue) => sum + queue.length, 0);
+}
+
+function mergeProposal(
+  current: MemorySweepProposalResponse | null,
+  next: MemorySweepProposalResponse,
+): MemorySweepProposalResponse {
+  const queues = { ...(current?.queues ?? {}) };
+  for (const [queue, candidates] of Object.entries(next.queues)) {
+    queues[queue] = candidates;
+  }
+  return {
+    class_id: next.class_id || current?.class_id || "",
+    subject: next.subject || current?.subject || "",
+    queues,
+    warnings: [...(current?.warnings ?? []), ...(next.warnings ?? [])],
+  };
+}
+
+function warningCardLinks(proposal: MemorySweepProposalResponse | null): {
+  warning: string;
+  card: MemorySweepCandidate;
+}[] {
+  if (!proposal) return [];
+  const items: { warning: string; card: MemorySweepCandidate }[] = [];
+  const seen = new Set<string>();
+  for (const candidates of Object.values(proposal.queues)) {
+    for (const candidate of candidates) {
+      for (const warning of candidate.warnings ?? []) {
+        const key = `${cardKey(candidate)}:${warning}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push({ warning, card: candidate });
+      }
+    }
+  }
+  return items;
+}
+
+function uniqueWarningCount(
+  items: { warning: string; card: MemorySweepCandidate }[],
+): number {
+  return new Set(items.map((item) => item.warning)).size;
 }
 
 function buildDecision(
@@ -52,12 +114,188 @@ function buildDecision(
   };
 }
 
+function CandidateCard({
+  candidate,
+  draft,
+  decision,
+  busy,
+  onDraftChange,
+  onDecision,
+  onClear,
+}: {
+  candidate: MemorySweepCandidate;
+  draft: string;
+  decision: MemorySweepDecision | undefined;
+  busy: boolean;
+  onDraftChange: (value: string) => void;
+  onDecision: (action: MemorySweepDecision["action"]) => void;
+  onClear: () => void;
+}) {
+  const applicable = canApply(candidate);
+  return (
+    <Card id={cardDomId(candidate)} className="scroll-mt-6">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">{candidate.target}</CardTitle>
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <span>{candidate.section}</span>
+          <span>{candidate.channel}</span>
+          <span>{candidate.basis}</span>
+          <span>{candidate.confidence} confidence</span>
+          <span>{candidate.operation ?? "add"}</span>
+          {candidate.group_label && <span>{candidate.group_label}</span>}
+          <span>{candidate.status_recommendation}</span>
+          {(candidate.occasion_count ?? 1) > 1 && (
+            <span>{candidate.occasion_count} occasions</span>
+          )}
+          {!applicable && (
+            <span>{candidate.review_only_reason || "review only"}</span>
+          )}
+          {decision && <span>selected: {decision.action}</span>}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {applicable ? (
+          <div className="space-y-3">
+            {(candidate.operation ?? "add") === "adjust" && (
+              <div className="rounded border bg-muted/40 p-3 text-xs">
+                <div className="mb-1 font-medium text-foreground">Replace</div>
+                <p className="whitespace-pre-wrap text-muted-foreground">
+                  {candidate.replaces_content || "Missing replacement source"}
+                </p>
+                <div className="mb-1 mt-3 font-medium text-foreground">With</div>
+              </div>
+            )}
+            <Textarea
+              value={draft}
+              onChange={(e) => onDraftChange(e.target.value)}
+              disabled={busy}
+              className="min-h-24 text-sm"
+            />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm">{candidate.content}</p>
+            <p className="text-xs text-muted-foreground">
+              This suggestion cannot be added automatically. Choose whether it
+              is already in memory, not needed, should be reviewed later while
+              more evidence accumulates, or should be removed from the review
+              list.
+            </p>
+          </div>
+        )}
+        {candidate.evidence_summary && (
+          <p className="text-xs text-muted-foreground">
+            {candidate.evidence_summary}
+          </p>
+        )}
+        {candidate.why_now && (
+          <p className="text-xs text-muted-foreground">
+            Why now: {candidate.why_now}
+          </p>
+        )}
+        {(candidate.warnings ?? []).map((warning) => (
+          <Alert key={warning} className="border-border bg-muted">
+            <AlertDescription>
+              <div className="space-y-1">
+                <div className="text-xs font-semibold text-foreground">
+                  Warning
+                </div>
+                <p>{warning}</p>
+              </div>
+            </AlertDescription>
+          </Alert>
+        ))}
+        {candidate.public_rationale && (
+          <p className="text-xs text-muted-foreground">
+            Rationale: {candidate.public_rationale}
+          </p>
+        )}
+        {candidate.current_memory_excerpt && (
+          <div className="rounded border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <div className="mb-1 font-medium text-foreground">
+              Current memory excerpt
+            </div>
+            <p className="whitespace-pre-wrap">
+              {candidate.current_memory_excerpt}
+            </p>
+          </div>
+        )}
+        {candidate.evidence_refs.length > 0 && (
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            {candidate.evidence_refs.map((ref) => (
+              <span key={ref} className="rounded bg-muted px-2 py-1">
+                {ref}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {applicable && (
+            <Button onClick={() => onDecision("apply")} disabled={busy}>
+              {(candidate.operation ?? "add") === "adjust"
+                ? "Apply adjustment"
+                : "Add memory"}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => onDecision("already_covered")}
+            disabled={busy}
+          >
+            Already in memory
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => onDecision("reject")}
+            disabled={busy}
+          >
+            Not needed
+          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                onClick={() => onDecision("snooze")}
+                disabled={busy}
+              >
+                Review later
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-72">
+              {REVIEW_LATER_TOOLTIP}
+            </TooltipContent>
+          </Tooltip>
+          <Button
+            variant="outline"
+            onClick={() => onDecision("delete")}
+            disabled={busy}
+          >
+            Remove
+          </Button>
+          {decision && (
+            <Button variant="outline" onClick={onClear} disabled={busy}>
+              Clear
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function MemorySweepPage() {
   const params = useParams();
   const router = useRouter();
   const classId = params.classId as string;
   const [proposal, setProposal] = useState<MemorySweepProposalResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingQueue, setLoadingQueue] = useState<string | null>(null);
+  const [loadedQueueCount, setLoadedQueueCount] = useState(0);
+  const [loadingReason, setLoadingReason] = useState<"refresh" | "submit">(
+    "refresh",
+  );
+  const [showAllWarnings, setShowAllWarnings] = useState(false);
+  const [showReviewHelp, setShowReviewHelp] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -65,27 +303,55 @@ export default function MemorySweepPage() {
   const [decisionsByCard, setDecisionsByCard] = useState<
     Record<string, MemorySweepDecision>
   >({});
+  const [showDetailed, setShowDetailed] = useState(false);
+  const inflightLoadRef = useRef<Promise<void> | null>(null);
 
+  const allCandidates = useMemo(
+    () =>
+      proposal ? Object.values(proposal.queues).flat() : ([] as MemorySweepCandidate[]),
+    [proposal],
+  );
   const total = useMemo(() => countCandidates(proposal), [proposal]);
+  const warningItems = useMemo(() => warningCardLinks(proposal), [proposal]);
+  const warningCount = useMemo(() => uniqueWarningCount(warningItems), [warningItems]);
   const pendingCount = Object.keys(decisionsByCard).length;
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (reason: "refresh" | "submit" = "refresh") => {
     setLoading(true);
+    setLoadingReason(reason);
+    setLoadingQueue(null);
+    setLoadedQueueCount(0);
+    setShowAllWarnings(false);
     setError(null);
+    setNotice(null);
+    setProposal(null);
+    setDraftByCard({});
+    setDecisionsByCard({});
     try {
-      const next = await client.memorySweepPropose(classId);
-      setProposal(next);
-      setDraftByCard({});
-      setDecisionsByCard({});
+      let merged: MemorySweepProposalResponse | null = null;
+      for (const [index, queue] of MEMORY_SWEEP_QUEUES.entries()) {
+        setLoadingQueue(queue);
+        const next = await client.memorySweepPropose(classId, { queue });
+        merged = mergeProposal(merged, next);
+        setProposal(merged);
+        setLoadedQueueCount(index + 1);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load Memory Sweep");
     } finally {
+      setLoadingQueue(null);
       setLoading(false);
     }
   }, [classId]);
 
   useEffect(() => {
-    void load();
+    // StrictMode runs this effect twice in dev; share the in-flight load so
+    // each page open triggers the (LLM-backed) propose calls exactly once.
+    if (!inflightLoadRef.current) {
+      inflightLoadRef.current = load().finally(() => {
+        inflightLoadRef.current = null;
+      });
+    }
   }, [load]);
 
   const setDecision = useCallback(
@@ -128,6 +394,37 @@ export default function MemorySweepPage() {
     });
   }, []);
 
+  const updateDraft = useCallback(
+    (candidate: MemorySweepCandidate, value: string) => {
+      const key = cardKey(candidate);
+      setDraftByCard((current) => ({ ...current, [key]: value }));
+      setDecisionsByCard((current) => {
+        const selected = current[key];
+        if (!selected || selected.action !== "apply") return current;
+        return { ...current, [key]: { ...selected, content: value } };
+      });
+    },
+    [],
+  );
+
+  const renderCandidateCard = useCallback(
+    (candidate: MemorySweepCandidate) => {
+      const key = cardKey(candidate);
+      return (
+        <CandidateCard
+          candidate={candidate}
+          draft={draftByCard[key] ?? candidate.content}
+          decision={decisionsByCard[key]}
+          busy={busy}
+          onDraftChange={(value) => updateDraft(candidate, value)}
+          onDecision={(action) => setDecision(candidate, action)}
+          onClear={() => clearDecision(candidate)}
+        />
+      );
+    },
+    [busy, clearDecision, decisionsByCard, draftByCard, setDecision, updateDraft],
+  );
+
   const submit = useCallback(async () => {
     const decisions = Object.values(decisionsByCard);
     if (!decisions.length) {
@@ -147,7 +444,7 @@ export default function MemorySweepPage() {
       setNotice(
         `Updated ${result.updated_candidate_ids.length} ledger row(s).${appliedText}${skippedText}`,
       );
-      await load();
+      await load("submit");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not submit sweep decisions");
@@ -167,13 +464,47 @@ export default function MemorySweepPage() {
         <Button onClick={() => void load()} disabled={loading || busy}>
           {loading ? "Refreshing..." : "Refresh"}
         </Button>
-        <Button onClick={() => void submit()} disabled={busy || pendingCount === 0}>
-          {busy ? "Submitting..." : `Submit ${pendingCount} decision(s)`}
+        <Button
+          variant="outline"
+          onClick={() => setShowDetailed((current) => !current)}
+          disabled={loading}
+        >
+          {showDetailed ? "Show brief" : "Show detailed cards"}
         </Button>
         <Button variant="outline" asChild>
           <Link href={`/classes/${classId}`}>Back to class</Link>
         </Button>
       </div>
+
+      {showReviewHelp && (
+        <Alert className="mb-4 border-amber-200 bg-amber-50 text-amber-950">
+          <AlertDescription>
+            <div className="flex gap-3">
+              <div className="flex-1 space-y-1">
+                <div className="text-sm font-semibold">How to review</div>
+                <p className="text-sm">
+                  Each line is one suggestion: <span className="font-medium">+</span>{" "}
+                  adds it to memory, <span className="font-medium">×</span> dismisses
+                  it, and the clock postpones it until more evidence arrives.
+                  Anything explicitly requested in chat is pinned at the top.
+                  Open <span className="font-medium">details</span> (or the detailed
+                  cards view) to edit wording or see evidence before you submit.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Dismiss review help"
+                className="shrink-0 text-base leading-none text-amber-900 hover:bg-amber-100/80 hover:text-amber-950"
+                onClick={() => setShowReviewHelp(false)}
+              >
+                ×
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {error && (
         <Alert className="mb-4 border-destructive/40">
@@ -185,217 +516,143 @@ export default function MemorySweepPage() {
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       )}
-      {proposal?.warnings?.map((warning) => (
-        <Alert key={warning} className="mb-4 border-border bg-muted">
-          <AlertDescription>{warning}</AlertDescription>
+      {warningItems.length > 0 && (
+        <Alert className="mb-4 border-border bg-muted">
+          <AlertDescription>
+            <div className="space-y-2">
+              <p>
+                {warningCount} Memory Sweep warning
+                {warningCount === 1 ? "" : "s"} affect
+                {" "}
+                {warningItems.length} card{warningItems.length === 1 ? "" : "s"}.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(showAllWarnings ? warningItems : warningItems.slice(0, 2)).map(({ warning, card }) => (
+                  <a
+                    key={`${cardKey(card)}:${warning}`}
+                    href={`#${cardDomId(card)}`}
+                    className="rounded border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted"
+                  >
+                    {card.target} / {card.section}
+                  </a>
+                ))}
+                {warningItems.length > 2 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-auto px-2 py-1 text-xs"
+                    onClick={() => setShowAllWarnings((current) => !current)}
+                  >
+                    {showAllWarnings
+                      ? "Show fewer"
+                      : `Show ${warningItems.length - 2} more`}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </AlertDescription>
         </Alert>
-      ))}
+      )}
 
-      {loading && <p className="text-sm text-muted-foreground">Loading candidates...</p>}
+      {loading && (
+        <p className="text-sm text-muted-foreground">
+          {loadingQueue
+            ? loadingReason === "submit"
+              ? `Updating review list · Checked ${loadedQueueCount} of ${MEMORY_SWEEP_QUEUES.length} sections · Checking ${loadingQueue}...`
+              : `Loaded ${loadedQueueCount} of ${MEMORY_SWEEP_QUEUES.length} queues · Loading ${loadingQueue}...`
+            : "Loading Memory Sweep queues..."}
+        </p>
+      )}
 
       {!loading && proposal && total === 0 && (
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">
-            No open memory candidates.
+            All caught up. There are no open memory suggestions to review.
           </CardContent>
         </Card>
       )}
 
-      <div className="space-y-6">
-        {proposal &&
-          Object.entries(proposal.queues).map(([queue, candidates]) => (
-            <section key={queue} className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold uppercase tracking-normal text-muted-foreground">
-                  {queue}
-                </h2>
-                <div className="flex flex-wrap gap-2">
-                  {candidates.some(canApply) && (
+      {!loading && !showDetailed && allCandidates.length > 0 && (
+        <MemorySweepBrief
+          candidates={allCandidates}
+          decisions={decisionsByCard}
+          busy={busy}
+          onDecision={setDecision}
+          onClear={clearDecision}
+          onBulk={setMany}
+          onSubmit={() => void submit()}
+          renderDetail={renderCandidateCard}
+        />
+      )}
+
+      {showDetailed && (
+        <div className="space-y-6">
+          {proposal &&
+            Object.entries(proposal.queues).map(([queue, candidates]) => (
+              <section key={queue} className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-sm font-semibold uppercase tracking-normal text-muted-foreground">
+                    {queue}
+                  </h2>
+                  <div className="flex flex-wrap gap-2">
+                    {candidates.some(canApply) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setMany(candidates, "apply")}
+                        disabled={busy}
+                      >
+                        Add suggestions
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setMany(candidates, "apply")}
+                      onClick={() => setMany(candidates, "reject")}
                       disabled={busy}
                     >
-                      Select apply supported
+                      Mark all as not needed
                     </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setMany(candidates, "reject")}
-                    disabled={busy}
-                  >
-                    Select reject queue
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setMany(candidates, "snooze")}
-                    disabled={busy}
-                  >
-                    Select snooze queue
-                  </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMany(candidates, "snooze")}
+                          disabled={busy}
+                        >
+                          Review all later
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-72">
+                        {REVIEW_LATER_TOOLTIP}
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                 </div>
-              </div>
-              <div className="grid gap-3">
-                {candidates.map((candidate) => {
-                  const key = cardKey(candidate);
-                  const applicable = canApply(candidate);
-                  const draft = draftByCard[key] ?? candidate.content;
-                  const decision = decisionsByCard[key];
-                  return (
-                    <Card key={key}>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base">{candidate.target}</CardTitle>
-                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          <span>{candidate.section}</span>
-                          <span>{candidate.channel}</span>
-                          <span>{candidate.basis}</span>
-                          <span>{candidate.confidence} confidence</span>
-                          <span>{candidate.operation ?? "add"}</span>
-                          {candidate.group_label && <span>{candidate.group_label}</span>}
-                          <span>{candidate.status_recommendation}</span>
-                          {candidate.signal_count > 1 && (
-                            <span>{candidate.signal_count} signals</span>
-                          )}
-                          {!applicable && (
-                            <span>{candidate.review_only_reason || "review only"}</span>
-                          )}
-                          {decision && <span>selected: {decision.action}</span>}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {applicable ? (
-                          <div className="space-y-3">
-                            {(candidate.operation ?? "add") === "adjust" && (
-                              <div className="rounded border bg-muted/40 p-3 text-xs">
-                                <div className="mb-1 font-medium text-foreground">
-                                  Replace
-                                </div>
-                                <p className="whitespace-pre-wrap text-muted-foreground">
-                                  {candidate.replaces_content || "Missing replacement source"}
-                                </p>
-                                <div className="mb-1 mt-3 font-medium text-foreground">
-                                  With
-                                </div>
-                              </div>
-                            )}
-                            <Textarea
-                              value={draft}
-                              onChange={(e) => {
-                                const nextDraft = e.target.value;
-                                setDraftByCard((current) => ({
-                                  ...current,
-                                  [key]: nextDraft,
-                                }));
-                                setDecisionsByCard((current) => {
-                                  const selected = current[key];
-                                  if (!selected || selected.action !== "apply") return current;
-                                  return {
-                                    ...current,
-                                    [key]: { ...selected, content: nextDraft },
-                                  };
-                                });
-                              }}
-                              disabled={busy}
-                              className="min-h-24 text-sm"
-                            />
-                          </div>
-                        ) : (
-                          <p className="text-sm">{candidate.content}</p>
-                        )}
-                        {candidate.evidence_summary && (
-                          <p className="text-xs text-muted-foreground">
-                            {candidate.evidence_summary}
-                          </p>
-                        )}
-                        {candidate.why_now && (
-                          <p className="text-xs text-muted-foreground">
-                            Why now: {candidate.why_now}
-                          </p>
-                        )}
-                        {candidate.public_rationale && (
-                          <p className="text-xs text-muted-foreground">
-                            Rationale: {candidate.public_rationale}
-                          </p>
-                        )}
-                        {candidate.current_memory_excerpt && (
-                          <div className="rounded border bg-muted/40 p-3 text-xs text-muted-foreground">
-                            <div className="mb-1 font-medium text-foreground">
-                              Current memory excerpt
-                            </div>
-                            <p className="whitespace-pre-wrap">
-                              {candidate.current_memory_excerpt}
-                            </p>
-                          </div>
-                        )}
-                        {candidate.evidence_refs.length > 0 && (
-                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                            {candidate.evidence_refs.map((ref) => (
-                              <span key={ref} className="rounded bg-muted px-2 py-1">
-                                {ref}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <div className="flex flex-wrap gap-2">
-                          {applicable && (
-                            <Button
-                              onClick={() => setDecision(candidate, "apply")}
-                              disabled={busy}
-                            >
-                              {(candidate.operation ?? "add") === "adjust"
-                                ? "Apply adjustment"
-                                : "Add memory"}
-                            </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            onClick={() => setDecision(candidate, "already_covered")}
-                            disabled={busy}
-                          >
-                            Already covered
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => setDecision(candidate, "reject")}
-                            disabled={busy}
-                          >
-                            Reject
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => setDecision(candidate, "snooze")}
-                            disabled={busy}
-                          >
-                            Snooze
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => setDecision(candidate, "delete")}
-                            disabled={busy}
-                          >
-                            Delete
-                          </Button>
-                          {decision && (
-                            <Button
-                              variant="outline"
-                              onClick={() => clearDecision(candidate)}
-                              disabled={busy}
-                            >
-                              Clear
-                            </Button>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-      </div>
+                <div className="grid gap-3">
+                  {candidates.map((candidate) => (
+                    <div key={cardKey(candidate)}>
+                      {renderCandidateCard(candidate)}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+          <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-t-md border-t border-border bg-background/95 px-3 py-2 backdrop-blur">
+            <span className="text-sm text-muted-foreground">
+              {pendingCount} decision(s) selected
+            </span>
+            <Button
+              onClick={() => void submit()}
+              disabled={busy || pendingCount === 0}
+            >
+              {busy ? "Submitting..." : `Submit ${pendingCount} decision(s)`}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

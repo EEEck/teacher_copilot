@@ -14,6 +14,16 @@ class HealthResponse(BaseModel):
     openai_configured: bool = False
 
 
+class BetaLoginRequest(BaseModel):
+    invite_code: str
+
+
+class BetaIdentityResponse(BaseModel):
+    tester_id: str
+    workspace_id: str
+    role: str
+
+
 class ClassSummary(BaseModel):
     id: str
     label: str
@@ -83,9 +93,12 @@ class ProfileProposalResponse(BaseModel):
 
 
 class MemoryApplyItem(BaseModel):
-    target: str  # teacher_profile.md | copilot_profile.md | class_state.md | wiki/subjects/{subject}.md
+    target: str  # teacher_profile.md | copilot_profile.md | teaching_patterns.md | wiki/subjects/{subject}.md
     section: str = "General"
     content: str
+    # Ledger rows this item was captured from; closed to `applied` when the
+    # write lands, so the sweep never re-proposes an already-applied fact.
+    candidate_ids: list[str] = Field(default_factory=list)
 
 
 class MemoryApplyRequest(BaseModel):
@@ -97,6 +110,7 @@ class MemoryApplyResponse(BaseModel):
     applied_wiki_paths: list[str] = Field(default_factory=list)
     skipped: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    updated_candidate_ids: list[str] = Field(default_factory=list)
 
 
 class MemorySweepCandidate(BaseModel):
@@ -138,8 +152,10 @@ class MemorySweepCandidate(BaseModel):
     why_now: str = ""
     current_memory_excerpt: str = ""
     signal_count: int = 1
+    occasion_count: int = 1
     can_apply: bool = False
     review_only_reason: str = ""
+    warnings: list[str] = Field(default_factory=list)
 
 
 class MemorySweepProposalResponse(BaseModel):

@@ -225,7 +225,21 @@ class StubAgentRunner:
             ),
             new_evidence_briefs=briefs,
             memory_candidates=[
+                # Simulate a well-behaved capture model: a conduct request
+                # addressed to the agent ("from now on ...") is emitted as an
+                # explicit candidate with the teacher's sentence quoted;
+                # anything else stays a weak inferred signal.
                 MemoryCandidate(
+                    target="copilot.md",
+                    candidate_update="Draft early, then refine the markdown directly.",
+                    source="teacher_explicit",
+                    basis="explicit",
+                    confidence="high",
+                    speech_act="conduct_request",
+                    evidence=f"Direct teacher quote: {latest.strip()}",
+                )
+                if "from now on" in latest.lower()
+                else MemoryCandidate(
                     target="copilot.md",
                     candidate_update="Draft early, then refine the markdown directly.",
                     source="inferred_from_session",
@@ -433,11 +447,6 @@ class StubAgentRunner:
         )
         return (
             MemoryCompactOutput(
-                taught_so_far_markdown=(
-                    "# Taught So Far\n\n"
-                    f"> Class: {class_id}\n\n"
-                    "- Reaction writing, balancing, oxidation numbers, and redox have been taught.\n"
-                ),
                 planning_brief_markdown=(
                     "# Planning Brief\n\n"
                     "- Keep contrasting ion charge and oxidation number.\n"
@@ -450,10 +459,6 @@ class StubAgentRunner:
                     "# Class Copilot Profile\n\n"
                     "## Planning Patterns\n"
                     "- Draft early, then refine the markdown artifact directly.\n"
-                ),
-                class_state_markdown=(
-                    "# Class State\n\n"
-                    "- Current unit: redox. Next: practice arrow direction.\n"
                 ),
                 stale_report=[],
                 warnings=[],
@@ -494,118 +499,37 @@ class StubAgentRunner:
             warnings=[],
         )
 
-    async def propose_memory_sweep_cards(
+    async def consolidate_memory_sweep(
         self,
         class_id: str,
         subject: str,
-        grouped_candidates,
-        target_excerpts,
-        alignment_groups=None,
+        claims,
+        memory_indexes,
+        *,
+        applied_history=None,
+        rejected_history=None,
+        budget_usage=None,
+        today: str = "",
         validation_error: str = "",
     ):
-        from app.teacher_agent.models import MemorySweepCardOutput, MemorySweepProposalOutput
-
-        cards = []
-        if alignment_groups:
-            lookup = {
-                item["candidate_id"]: item
-                for proposals in grouped_candidates.values()
-                for item in proposals
-            }
-            for group in alignment_groups:
-                first_id = group["ledger_candidate_ids"][0]
-                item = lookup[first_id]
-                cards.append(
-                    MemorySweepCardOutput(
-                        candidate_id=first_id,
-                        card_id=item.get("card_id", ""),
-                        source_group_id=group["group_id"],
-                        candidate_ids=group["ledger_candidate_ids"],
-                        review_queue=item["review_queue"],
-                        channel=item["channel"],
-                        target=group["target"],
-                        section=group["section"],
-                        content=item["content"],
-                        evidence_summary=item.get("evidence_summary", ""),
-                        evidence_refs=item.get("evidence_refs", []),
-                        confidence=item.get("confidence", "low"),
-                        basis=item.get("basis", "inferred"),
-                        status=item.get("status", "captured"),
-                        relationship=group.get("relationship", ""),
-                        group_label=group.get("group_label", ""),
-                        public_rationale=group.get("public_rationale", ""),
-                        operation={
-                            "merge": "add",
-                            "adjust_existing": "adjust",
-                            "already_covered": "already_covered",
-                            "needs_decision": "needs_decision",
-                            "reject_low_signal": "reject_low_signal",
-                        }.get(group.get("decision", "merge"), "add"),
-                        status_recommendation=item.get(
-                            "status_recommendation", "promote"
-                        ),
-                        why_now="Stub isolated sweep review.",
-                        signal_count=len(group["ledger_candidate_ids"]),
-                    )
-                )
-            return MemorySweepProposalOutput(cards=cards, warnings=[])
-        for proposals in grouped_candidates.values():
-            for item in proposals:
-                cards.append(
-                    MemorySweepCardOutput(
-                        candidate_id=item["candidate_id"],
-                        card_id=item.get("card_id", ""),
-                        candidate_ids=item.get("candidate_ids", [item["candidate_id"]]),
-                        review_queue=item["review_queue"],
-                        channel=item["channel"],
-                        target=item["target"],
-                        section=item["section"],
-                        content=item["content"],
-                        evidence_summary=item.get("evidence_summary", ""),
-                        evidence_refs=item.get("evidence_refs", []),
-                        confidence=item.get("confidence", "low"),
-                        basis=item.get("basis", "inferred"),
-                        status=item.get("status", "captured"),
-                        status_recommendation=item.get(
-                            "status_recommendation", "promote"
-                        ),
-                        why_now="Stub isolated sweep review.",
-                        signal_count=item.get("signal_count", 1),
-                    )
-                )
-        return MemorySweepProposalOutput(cards=cards, warnings=[])
-
-    async def align_memory_sweep_candidates(
-        self,
-        class_id: str,
-        subject: str,
-        grouped_candidates,
-        target_excerpts,
-        validation_error: str = "",
-    ):
+        """Mem V3 single-call stub: one add operation per input claim."""
         from app.teacher_agent.models import (
-            MemorySweepAlignmentGroupOutput,
-            MemorySweepAlignmentOutput,
+            MemoryConsolidationOpOutput,
+            MemoryConsolidationOutput,
         )
 
-        groups = []
-        for proposals in grouped_candidates.values():
-            for item in proposals:
-                groups.append(
-                    MemorySweepAlignmentGroupOutput(
-                        group_id=f"group_{item['candidate_id']}",
-                        target=item["target"],
-                        section=item["section"],
-                        ledger_candidate_ids=item.get(
-                            "candidate_ids", [item["candidate_id"]]
-                        ),
-                        relationship="new_semantic_claim",
-                        decision="merge",
-                        group_label="stub_group",
-                        public_rationale="Stub alignment.",
-                    )
-                )
-        return MemorySweepAlignmentOutput(alignment_groups=groups, warnings=[])
+        operations = [
+            MemoryConsolidationOpOutput(
+                claim_ids=[claim["claim_id"]],
+                operation="add",
+                target=claim["target"],
+                section=claim["section"],
+                new_text=claim["text"],
+                rationale="Stub isolated sweep review.",
+            )
+            for claim in claims
+        ]
+        return MemoryConsolidationOutput(operations=operations, warnings=[])
 
     async def ingest_chat_stream(
         self,

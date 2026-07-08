@@ -108,9 +108,9 @@ class PlanOutput(BaseModel):
 
 
 class MemoryCompactOutput(BaseModel):
-    taught_so_far_markdown: str = Field(
-        description="Compact year-to-date content sequence for the class"
-    )
+    # taught_so_far_markdown and class_state_markdown were retired (mem_v3 PR2):
+    # those facts are derived from the canonical timeline / course_state rollups,
+    # not curated as compact pages.
     planning_brief_markdown: str = Field(
         description="Planning-oriented summary of readiness, open loops, and misconception priorities"
     )
@@ -125,10 +125,6 @@ class MemoryCompactOutput(BaseModel):
             "Copilot working agreement for this class only: planning patterns to apply, "
             "avoid-rules, repeated teacher corrections, agent-behavior preferences"
         )
-    )
-    class_state_markdown: str = Field(
-        default="",
-        description="Derived current-state snapshot for the class (compact)",
     )
     session_summaries_markdown: str = Field(
         default="",
@@ -156,130 +152,43 @@ class ProfileProposalOutput(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
-class MemorySweepAlignmentGroupOutput(BaseModel):
-    group_id: str = Field(description="Stable id for this normalized claim group")
-    target: str
-    section: str = "General"
-    ledger_candidate_ids: list[str] = Field(
-        default_factory=list,
-        description="All ledger candidate IDs assigned to this group, each input ID exactly once.",
-    )
-    matched_memory_item_ids: list[str] = Field(default_factory=list)
-    relationship: str = Field(
-        default="new_semantic_claim",
-        description=(
-            "new_semantic_claim | broadens_existing_memory | already_covered | "
-            "possible_conflict | one_off_or_low_signal | scoped_exception"
-        ),
-    )
-    decision: str = Field(
-        default="merge",
-        description=(
-            "merge | adjust_existing | already_covered | needs_decision | reject_low_signal"
-        ),
-    )
-    group_label: str = Field(
-        default="", description="Short semantic label for the claim"
-    )
-    surface_labels: list[str] = Field(
-        default_factory=list,
-        description="Surface phrasings or labels used by the raw ledger rows in this group.",
-    )
-    shared_attributes: list[str] = Field(
-        default_factory=list,
-        description="Attributes that make the grouped rows one coherent durable claim.",
-    )
-    distinguishing_attributes: list[str] = Field(
-        default_factory=list,
-        description="Meaningful differences that remain after grouping; empty when none matter.",
-    )
-    merge_test: str = Field(
-        default="",
-        description="Short public test explaining why the rows can or cannot be one memory claim.",
-    )
-    public_rationale: str = Field(
-        default="",
-        description="Short teacher/operator-reviewable rationale; no hidden reasoning.",
-    )
+class MemoryConsolidationOpOutput(BaseModel):
+    """One Mem V3 consolidation decision (mem0-style ID-referenced ops)."""
 
-
-class MemorySweepAlignmentOutput(BaseModel):
-    alignment_groups: list[MemorySweepAlignmentGroupOutput] = Field(
-        default_factory=list
+    claim_ids: list[str] = Field(
+        description="Input claim ids this operation resolves. Every input claim id must appear in exactly one operation.",
     )
-    warnings: list[str] = Field(default_factory=list)
-
-
-class MemorySweepCardOutput(BaseModel):
-    candidate_id: str
-    card_id: str = Field(
-        default="",
-        description="Stable review-card id. If omitted, the backend derives one from represented candidate IDs and target.",
-    )
-    source_group_id: str = Field(
-        default="",
-        description="Alignment group id this review card was generated from.",
-    )
-    candidate_ids: list[str] = Field(
-        default_factory=list,
-        description=(
-            "All ledger candidate IDs represented by this review card; include candidate_id. "
-            "When multiple rows support the same durable claim, return one card with all IDs."
-        ),
-    )
-    review_queue: str
-    channel: str
-    target: str
-    section: str = "General"
-    content: str
-    evidence_summary: str = ""
-    evidence_refs: list[str] = Field(default_factory=list)
-    confidence: str = "low"
-    basis: str = "inferred"
-    status: str = "captured"
-    relationship: str = ""
-    group_label: str = ""
-    surface_labels: list[str] = Field(default_factory=list)
-    shared_attributes: list[str] = Field(default_factory=list)
-    distinguishing_attributes: list[str] = Field(default_factory=list)
-    merge_test: str = ""
-    public_rationale: str = ""
     operation: str = Field(
-        default="add",
         description=(
-            "Claim-level sweep operation. add creates a new memory bullet; adjust "
-            "refines an exact existing bullet using replaces_content; already_covered, "
-            "reject_low_signal, and needs_decision do not write memory."
+            "add | update | delete | none. add appends new_text as a new memory "
+            "bullet; update replaces the referenced memory bullet with new_text; "
+            "delete removes the referenced obsolete bullet (prefer update when a "
+            "claim supersedes it); none records that current memory already covers "
+            "the claim or it is not worth writing."
         ),
     )
-    replaces_content: str = Field(
+    target: str = Field(description="Memory file the operation applies to.")
+    section: str = Field(default="", description="Section within the target file.")
+    memory_id: str = Field(
         default="",
         description=(
-            "For operation='adjust', copy the exact existing memory bullet text from "
-            "the current memory excerpt that should be replaced. Leave empty otherwise."
+            "For update/delete: the id of the referenced memory bullet, copied "
+            "EXACTLY from the enumerated current-memory index. Never invent ids."
         ),
     )
-    status_recommendation: str = Field(
-        default="promote",
-        description=(
-            "promote | already_covered | needs_decision | reject_low_signal. "
-            "Compatibility field: add and adjust map to promote. "
-            "use already_covered only when the current memory already captures the generalized claim."
-        ),
-    )
-    why_now: str = Field(
+    new_text: str = Field(
         default="",
         description=(
-            "Concise evidence-grounded reason, including whether this is repeated evidence, "
-            "a refinement of current memory, already covered, ambiguous, or low-signal."
+            "For add/update: the durable memory bullet to write. State the "
+            "underlying claim, not whichever phrasing appeared most often."
         ),
     )
-    signal_count: int = Field(
-        default=1,
-        description="Number of represented ledger rows, not the number of output cards.",
+    rationale: str = Field(
+        default="",
+        description="One teacher-readable sentence explaining the decision.",
     )
 
 
-class MemorySweepProposalOutput(BaseModel):
-    cards: list[MemorySweepCardOutput] = Field(default_factory=list)
+class MemoryConsolidationOutput(BaseModel):
+    operations: list[MemoryConsolidationOpOutput] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

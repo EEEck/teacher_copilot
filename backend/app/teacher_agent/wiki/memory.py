@@ -6,12 +6,13 @@ import re
 from datetime import date
 from typing import Any
 
+# taught_so_far.md and class_state.md were retired (mem_v3 PR2): those facts
+# are derived from the canonical rollups (timeline.md / course_state.md), not
+# curated as compact twins.
 COMPACT_MEMORY_FILES: dict[str, str] = {
-    "taught_so_far": "taught_so_far.md",
     "planning_brief": "planning_brief.md",
     "teaching_patterns": "teaching_patterns.md",
     "copilot_profile": "copilot_profile.md",
-    "class_state": "class_state.md",
     "session_summaries": "session_summaries.md",
 }
 
@@ -31,8 +32,6 @@ MEMORY_PAGE_BUDGETS: dict[str, int] = {
     "user": 1500,
     "copilot_profile": 1500,
     "teaching_patterns": 2200,
-    "class_state": 1800,
-    "taught_so_far": 1500,
     "planning_brief": 1200,
     "session_summaries": 1200,
     "subject_guide": 1400,
@@ -282,9 +281,7 @@ def add_compact_memory_conclusion(
 ) -> str:
     """Add one teacher-approved conclusion to a compact class memory page."""
     if key not in {
-        "class_state",
         "planning_brief",
-        "taught_so_far",
         "teaching_patterns",
     }:
         raise ValueError(f"unsupported compact memory target: {key}")
@@ -299,9 +296,7 @@ def add_compact_memory_conclusion(
         raise ValueError(f"source_path must be under wiki/classes/{class_id}/")
 
     titles = {
-        "class_state": "Class State",
         "planning_brief": "Planning Brief",
-        "taught_so_far": "Taught So Far",
         "teaching_patterns": "Teaching Patterns",
     }
     path = memory_paths(store, class_id)[key]
@@ -339,7 +334,6 @@ def search_personal_memory(
         "copilot_profile",
         "teaching_patterns",
         "planning_brief",
-        "taught_so_far",
         "session_summaries",
     ]
     for key in ordered_keys:
@@ -494,11 +488,9 @@ def commit_memory_compaction(
     store.get_class(class_id)
     allowed = memory_paths(store, class_id)
     titles = {
-        "taught_so_far": "Taught So Far",
         "planning_brief": "Planning Brief",
         "teaching_patterns": "Teaching Patterns",
         "copilot_profile": "Class Copilot Profile",
-        "class_state": "Class State",
         "session_summaries": "Session Summaries",
     }
     applied: list[str] = []

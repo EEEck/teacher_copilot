@@ -12,7 +12,7 @@ def test_context_packages_include_compact_memory_when_present(wiki: WikiStore):
     wiki.commit_memory_compaction(
         CLASS_ID,
         {
-            "taught_so_far": "# Taught So Far\n\n- Compact sequence marker.\n",
+            "session_summaries": "# Session Summaries\n\n- Compact sequence marker.\n",
             "planning_brief": "# Planning Brief\n\n- Planning marker.\n",
             "teaching_patterns": "# Teaching Patterns\n\n- Pattern marker.\n",
             "copilot_profile": "# Class Copilot Profile\n\n- Profile marker.\n",
@@ -35,14 +35,14 @@ def test_memory_compaction_normalizes_duplicate_class_header(wiki: WikiStore):
     wiki.commit_memory_compaction(
         CLASS_ID,
         {
-            "taught_so_far": (
-                f"# Taught So Far\n\n> Class: {CLASS_ID}\n\n"
+            "planning_brief": (
+                f"# Planning Brief\n\n> Class: {CLASS_ID}\n\n"
                 f"> Class: {CLASS_ID}\n\n- Compact sequence marker.\n"
             ),
         },
     )
 
-    written = wiki.read_wiki_page(f"wiki/classes/{CLASS_ID}/memory/taught_so_far.md")
+    written = wiki.read_wiki_page(f"wiki/classes/{CLASS_ID}/memory/planning_brief.md")
     assert written.count(f"> Class: {CLASS_ID}") == 1
     assert "Compact sequence marker" in written
 
@@ -115,5 +115,7 @@ def test_memory_compact_api_writes_only_class_memory(client: TestClient):
     # copilot.md is now the narrowed working agreement (planning patterns, etc.);
     # global teacher preferences live in user.md.
     assert "Planning Patterns" in file_res.json()["markdown"]
-    # class_state is now also produced by compaction.
-    assert f"wiki/classes/{CLASS_ID}/memory/class_state.md" in applied
+    # class_state.md / taught_so_far.md were retired (mem_v3 PR2): compaction
+    # no longer produces them — that state lives in canonical rollups.
+    assert f"wiki/classes/{CLASS_ID}/memory/class_state.md" not in applied
+    assert f"wiki/classes/{CLASS_ID}/memory/taught_so_far.md" not in applied

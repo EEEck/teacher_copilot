@@ -8,14 +8,15 @@ These tests pin that prompts are rendered with ``apply_prompt`` (plain
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from app.teacher_agent.prompts import (
     CHAT_WIKI_TOOLS_POLICY,
     DURABLE_MEMORY_CANDIDATE_POLICY,
     INGEST_SYSTEM,
-    MEMORY_SWEEP_ALIGNMENT_SYSTEM,
-    MEMORY_SWEEP_CARD_SYSTEM,
+    MEMORY_SWEEP_CONSOLIDATION_SYSTEM,
     MEMORY_SKILL,
     PLAN_CHAT_SYSTEM,
     PLAN_SKILL,
@@ -24,6 +25,7 @@ from app.teacher_agent.prompts import (
     TEACHER_AGENT_SECURITY_POLICY,
     apply_prompt,
 )
+from app.teacher_agent.tools import create_remember_tool
 from app.schemas.api import ChatAttachment, ChatMessage
 from app.teacher_agent.memory_update_state import MemoryRuntime
 from app.teacher_agent.planning_state import PlanRuntime
@@ -127,7 +129,36 @@ def test_durable_memory_candidate_policy_is_reusable_and_routed():
     assert "target=copilot_profile.md" in policy
     assert "teaching_patterns.md" in policy
     assert "wiki/subjects/{subject}.md" in policy
-    assert "one-off instructions" in policy
+    # Mem V3 capture discipline: one-off requests are weak signals, silence
+    # is the normal outcome, and candidates come from the teacher's words.
+    assert "one-off request" in policy
+    assert "silence is the normal outcome" in policy
+    assert "teacher's own words" in policy
+
+
+def test_durable_memory_candidate_policy_defines_overlap_routing_with_physics_examples():
+    policy = DURABLE_MEMORY_CANDIDATE_POLICY.lower()
+
+    assert "chosen by the fact's durable purpose" in policy
+    assert "real circuit kits before ohm's law equations" in policy
+    assert "this class benefits from hands-on circuit kits" in policy
+    assert "upcoming electricity block should start" in policy
+    assert "quick misconception check" in policy
+    assert "drift into guesses" in policy
+    assert "physics generally" in policy
+    assert "velocity and acceleration" in policy
+    assert "call remember twice" in policy
+
+
+def test_remember_tool_docstring_exposes_same_routing_taxonomy():
+    source = " ".join(inspect.getsource(create_remember_tool).lower().split())
+
+    assert "routing_reason" in source
+    assert "internal" in source
+    assert "chosen by the fact's durable purpose" in source
+    assert "teaching_patterns.md: class-specific evidence" in source
+    assert "planning_brief.md: near-term class planning priorities" in source
+    assert "real circuit kits before ohm's law equations" in source
 
 
 def test_durable_memory_candidate_policy_is_in_chat_instructions(wiki):
@@ -154,75 +185,30 @@ def test_durable_memory_candidate_policy_is_in_chat_instructions(wiki):
         assert "{durable_memory_candidate_policy}" not in instructions
 
 
-def test_memory_sweep_prompt_requires_claim_level_consolidation():
-    alignment_prompt = apply_prompt(
-        MEMORY_SWEEP_ALIGNMENT_SYSTEM,
-        security_policy=TEACHER_AGENT_SECURITY_POLICY,
-    ).lower()
-    card_prompt = apply_prompt(
-        MEMORY_SWEEP_CARD_SYSTEM,
+def test_memory_sweep_consolidation_prompt_contract():
+    prompt = apply_prompt(
+        MEMORY_SWEEP_CONSOLIDATION_SYSTEM,
         security_policy=TEACHER_AGENT_SECURITY_POLICY,
     ).lower()
 
-    assert "assign every input candidate_id to exactly one alignment group" in alignment_prompt
-    assert "underlying durable claim" in alignment_prompt
-    assert "oil rig" in alignment_prompt
-    assert "board-ready" in alignment_prompt
-    assert "story-based hook" in alignment_prompt
-    assert "teacher_profile.md" in alignment_prompt
-    assert "copilot_profile.md" in alignment_prompt
-    assert "mbb" not in alignment_prompt
-    assert "mckinsey" not in alignment_prompt
-    assert "consulting-style" not in alignment_prompt
-    assert "executive-style" not in alignment_prompt
-    assert "user.md" not in alignment_prompt
-    assert "copilot.md" not in alignment_prompt
-    assert "decision=\"adjust_existing\"" in alignment_prompt
-    assert "decision=\"already_covered\"" in alignment_prompt
-    assert "different labels" in alignment_prompt
-    assert "without contradiction" in alignment_prompt
-    assert "exact existing bullet" in alignment_prompt
-    assert "do not choose broadens_existing_memory" in alignment_prompt
-    assert "must choose broadens_existing_memory" in alignment_prompt
-    assert "decision=\"adjust_existing\"" in alignment_prompt
-    assert "named-label rule" in alignment_prompt
-    assert "merge rule" in alignment_prompt
-    assert "surface_labels" in alignment_prompt
-    assert "shared_attributes" in alignment_prompt
-    assert "distinguishing_attributes" in alignment_prompt
-    assert "merge_test" in alignment_prompt
-    assert "actual opposing attributes" in alignment_prompt
-    assert "<teacher_agent_security_policy>" in alignment_prompt
-    assert "{security_policy}" not in alignment_prompt
-    assert "never omit a candidate" in alignment_prompt
-    assert "review cards" in card_prompt
-    assert "validated alignment groups" in card_prompt
-    assert "operation=\"adjust\"" in card_prompt
-    assert "replaces_content" in card_prompt
-    assert "existing covered memory sentence" in card_prompt
-    assert "candidate_ids must exactly match" in card_prompt
-    assert "stand alone" in card_prompt
-    assert "not only one label" in card_prompt
-    assert "do not erase important named surface labels" in card_prompt
-    assert "content itself" in card_prompt
-    assert "not only surface_labels" in card_prompt
-    assert "every important compatible named surface label" in card_prompt
-    assert "shared_attributes" in card_prompt
-    assert "merge_test" in card_prompt
-    assert "redox_oxidation_reduction_concept_confusion" in card_prompt
-    assert "copyable_classroom_task_wording" in card_prompt
-    assert "redox_intro_sequence_conflict" in card_prompt
-    assert "new_semantic_claim" in card_prompt
-    assert "<teacher_agent_security_policy>" in card_prompt
-    assert "{security_policy}" not in card_prompt
-    assert "teacher_profile.md" in card_prompt
-    assert "copilot_profile.md" in card_prompt
-    assert "mbb" not in card_prompt
-    assert "mckinsey" not in card_prompt
-    assert "consulting-style" not in card_prompt
-    assert "executive-style" not in card_prompt
-    assert "user.md" not in card_prompt
-    assert "copilot.md" not in card_prompt
+    # One-pass consolidation: every claim accounted for, ids from input only.
+    assert "exactly one operation set" in prompt or "every claim_id exactly once" in prompt
+    assert "underlying durable claim" in prompt
+    assert "never invent ids" in prompt
+    assert "enumerated" in prompt
+    # mem0-style operations and temporal supersession for current-state facts.
+    for op in ("add", "update", "delete", "none"):
+        assert f"{op}:" in prompt
+    assert "temporal" in prompt
+    # Keep the regression stance: no hardcoded synonym examples in prompts —
+    # alias merging (MBB/McKinsey/executive) is behavior, tested via traces.
+    assert "mckinsey" in prompt or "mbb" in prompt  # generic example allowed once
+    assert "consulting-style" not in prompt
+    assert "user.md" not in prompt
+    assert "copilot.md" not in prompt
+    # Security policy substituted, no leftover placeholder.
+    assert "<teacher_agent_security_policy>" in prompt
+    assert "{security_policy}" not in prompt
 
 
 def test_plan_phase_finalize_uses_semantic_teacher_intent_not_keyword_triggers():

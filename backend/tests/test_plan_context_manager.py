@@ -582,8 +582,10 @@ def test_build_plan_context_slim_dedup_and_budget(wiki: WikiStore):
     assert len(slim) < 9000
     # Misconceptions header appears once (no 4x duplication).
     assert slim.count("## Top misconceptions") == 1
-    assert "## Taught so far" in slim
-    assert "Reaction Writing Basics" in slim
+    # taught_so_far.md was retired: the taught sequence now surfaces via the
+    # canonical current-unit line + recent lessons, not a compact twin.
+    assert "Current unit:" in slim
+    assert "## Recent lessons" in slim
 
 
 def test_build_plan_context_slim_clamps_oversized_pages(wiki: WikiStore):
@@ -675,6 +677,41 @@ def test_save_surfaces_candidates_without_durable_writes(
     assert before == after, "planning save must not write durable memory"
 
 
+def test_save_surfaces_backend_disciplined_fast_lane_candidate(
+    client: TestClient,
+):
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+    chat = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={
+            "message": (
+                "From now on, always draft early, then refine the markdown "
+                "directly."
+            )
+        },
+    ).json()
+    save = client.post(
+        f"{base}/save",
+        json={
+            "session_id": session_id,
+            "lesson_date": "2026-10-06",
+            "plan_markdown": chat["plan_markdown"],
+        },
+    )
+
+    assert save.status_code == 200, save.text
+    candidates = save.json()["memory_candidates"]
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate["target"] == "copilot.md"
+    assert candidate["source"] == "teacher_explicit"
+    assert candidate["speech_act"] == "conduct_request"
+    assert candidate["fast_lane"] is True
+    assert candidate["candidate_id"]
+    assert candidate["evidence"].startswith("Direct teacher quote:")
+
+
 # --- robustness: state guard + soft caps ------------------------------------
 
 
@@ -722,7 +759,7 @@ def test_memory_candidates_capped():
     cap = get_context_limits().candidates_cap
     rt = PlanRuntime()
     cands = [
-        MemoryCandidate(target="class_state.md", candidate_update=f"fact {i}")
+        MemoryCandidate(target="teaching_patterns.md", candidate_update=f"fact {i}")
         for i in range(cap + 15)
     ]
     _merge(rt, SessionState(), LessonPlanningState(), candidates=cands)

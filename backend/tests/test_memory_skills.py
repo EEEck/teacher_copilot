@@ -1,4 +1,4 @@
-"""Phase 2 tests: class_state refresh proposal, profile proposal, HITL apply.
+"""Phase 2 tests: memory refresh proposal, profile proposal, HITL apply.
 
 All durable writes stay teacher-approved: /memory/refresh and
 /memory/profile/propose never write; only /memory/apply does, via the bounded
@@ -14,7 +14,7 @@ from app.teacher_agent.wiki_store import WikiStore
 from tests.conftest import CLASS_ID
 
 
-# --- class_state refresh proposal (no writes) -------------------------------
+# --- memory refresh proposal (no writes) ------------------------------------
 
 
 def test_memory_refresh_proposes_without_writing(client: TestClient, wiki: WikiStore):
@@ -24,18 +24,24 @@ def test_memory_refresh_proposes_without_writing(client: TestClient, wiki: WikiS
     res = client.post(f"/api/classes/{CLASS_ID}/memory/refresh", json={})
     assert res.status_code == 200, res.text
     body = res.json()
-    assert "class_state" in body["pages"]
-    assert body["pages"]["class_state"].strip()
+    # class_state.md / taught_so_far.md were retired; refresh proposes the
+    # surviving curated pages only.
+    assert "class_state" not in body["pages"]
+    assert "taught_so_far" not in body["pages"]
+    assert "planning_brief" in body["pages"]
+    assert body["pages"]["planning_brief"].strip()
     # Proposal must not write anything.
     assert wiki.read_text(mem["copilot_profile"]) == before
 
 
-def test_memory_compact_writes_class_state(client: TestClient, wiki: WikiStore):
+def test_memory_compact_writes_surviving_pages(client: TestClient, wiki: WikiStore):
     res = client.post(f"/api/classes/{CLASS_ID}/memory/compact", json={})
     assert res.status_code == 200, res.text
-    assert f"wiki/classes/{CLASS_ID}/memory/class_state.md" in res.json()["applied_wiki_paths"]
-    state = wiki.read_text(wiki.memory_paths(CLASS_ID)["class_state"])
-    assert state.strip()
+    applied = res.json()["applied_wiki_paths"]
+    assert f"wiki/classes/{CLASS_ID}/memory/planning_brief.md" in applied
+    assert f"wiki/classes/{CLASS_ID}/memory/class_state.md" not in applied
+    brief = wiki.read_text(wiki.memory_paths(CLASS_ID)["planning_brief"])
+    assert brief.strip()
 
 
 # --- profile proposal (explicit vs inferred, no writes) ---------------------
@@ -51,7 +57,7 @@ def test_profile_proposal_labels_basis(client: TestClient, wiki: WikiStore):
     candidates = res.json()["candidates"]
     assert candidates
     targets = {c["target"] for c in candidates}
-    assert {"user.md", "copilot.md"} <= targets
+    assert {"teacher_profile.md", "copilot_profile.md"} <= targets
     assert {c["basis"] for c in candidates} <= {"explicit", "inferred"}
     # Proposal does not write.
     assert wiki.read_user_profile() == user_before
@@ -154,18 +160,18 @@ def test_apply_memory_items_helper_dispatch(wiki: WikiStore):
         section: str
         content: str
 
-    applied, skipped, warnings = apply_memory_items(
+    applied, skipped, warnings, _ = apply_memory_items(
         wiki,
         CLASS_ID,
         [
             Item("user.md", "Lesson Style", "Prefers concise plans."),
-            Item("class_state.md", "", "Class 9b is mid-redox unit."),
+            Item("teaching_patterns.md", "What Worked", "Class 9b responds to worked examples."),
             Item("canonical_wiki", "", "ignored"),
             Item("user.md", "Lesson Style", "   "),
         ],
     )
     assert "wiki/teacher_profile.md" in applied
-    assert any("class_state.md" in p for p in applied)
+    assert any("teaching_patterns.md" in p for p in applied)
     assert any("canonical_wiki" in s for s in skipped)
     assert "empty item" in skipped
     assert warnings == []

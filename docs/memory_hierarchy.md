@@ -11,6 +11,67 @@ Short rule:
 > are small derived or preference layers. The LLM may propose updates, but the
 > backend validates scope and the teacher approves durable writes.
 
+## Routing Summary
+
+A memory target is chosen by the fact's durable purpose, not by surface wording
+like "next", "remember", or "for this lesson".
+
+- `teacher_profile.md` / `user.md`: stable global teacher preferences across
+  classes: communication style, default lesson structure, workflow preferences,
+  and reusable teacher-facing conventions.
+- `wiki/subjects/{subject}.md`: subject-wide reusable guidance that should
+  apply beyond one class, such as common misconceptions, safety reminders,
+  lesson patterns, and question templates.
+- `course_state.md`: canonical current class state derived from approved
+  lessons: current unit, last lesson, next planned focus, and overall status.
+- `timeline.md`: canonical chronological lesson sequence with dated links,
+  covered content, and concise highlights.
+- `memory/planning_brief.md`: compact near-term planning brief for this class:
+  current priorities, open loops, misconception focus, assessment readiness,
+  and immediate next-step pressure.
+- `memory/teaching_patterns.md`: durable class learning profile: how this class
+  learns, what scaffolds/materials/pacing/activity formats work or fail, and
+  recurring class-specific pedagogy.
+- `memory/copilot_profile.md` / `copilot.md`: class-scoped copilot working
+  agreement: how the agent should plan or behave for this class, including
+  repeated teacher corrections and avoid-rules.
+- `memory/session_summaries.md`: sparse compact summaries of prior workflow
+  sessions when they help continuity; not a transcript store.
+- `lessons/{date}/lesson_results.md`: canonical approved record of what
+  happened in one taught lesson.
+- `lessons/{date}/lesson_plan.md`: saved plan artifact for one lesson; useful
+  evidence, but not itself durable profile memory.
+- `students/S-###.md`: pseudonymous individual student learning trajectory with
+  dated evidence and a reviewed summary.
+- `open_loops.md`: canonical unresolved class follow-ups, questions, and
+  pending teaching tasks derived from lessons.
+- `misconceptions.md`: canonical class misconception rollup grounded in
+  approved lesson evidence.
+- `index.md`: navigation catalog for finding relevant wiki pages; it orients
+  reads but is not the behavioral source of truth.
+
+Overlap rules:
+
+- If a fact is both a durable class learning pattern and an immediate planning
+  priority, capture both with separate concise contents for
+  `teaching_patterns.md` and `planning_brief.md`.
+- If a teacher gives an agent-behavior instruction and explains why it works
+  for the class, capture the behavior in `copilot_profile.md` and the learning
+  pattern in `teaching_patterns.md`.
+- If the teacher says the rule applies across the subject, route to
+  `wiki/subjects/{subject}.md`; if it applies to this class, route to
+  `teaching_patterns.md`; if it applies to the teacher's general style, route
+  to `teacher_profile.md`.
+
+Conflict rule:
+
+- Committed wiki memory is the baseline. If teacher input conflicts with known
+  wiki state, such as a student ID/name that is not on the roster or a class
+  status that contradicts `course_state.md`, treat it as a proposed change and
+  clarify before writing. Deterministic code should detect factual conflicts;
+  the model should phrase the clarification and the teacher confirms the
+  resolution.
+
 ## Memory Layers
 
 ### 1. Global Teacher Profile
@@ -176,25 +237,15 @@ Update paths:
   conclusions to selected compact pages; it is not the full-page replacement
   path.
 
-#### `taught_so_far.md`
+#### `taught_so_far.md` — RETIRED (mem_v3 PR2)
 
-Purpose:
-
-- compact chronological summary of the year's taught content
-- major sequence of concepts
-- recent lesson sequence
-
-Loaded where today:
-
-- Included in the active class core context.
-- Available through `search_memory`.
-- Included in legacy `build_plan_context`.
-- Used by review/query packs.
-
-Good update source:
-
-- memory compaction over approved lesson results and saved plans.
-- reviewed `class_memory_proposal` after an approved lesson-memory commit.
+The taught sequence is a deterministic projection of the canonical lesson
+record, so it now lives in `timeline.md` (and the current unit in
+`course_state.md`) — not in a curated compact twin. Context builders derive the
+sequence from the timeline; the sweep reads the rollups rather than maintaining
+this page. See [`docs/mem_v3/next_implementation.md`](mem_v3/next_implementation.md)
+(the two-axis memory map) and Learning 10 in
+[`docs/mem_v3/learnings.md`](mem_v3/learnings.md).
 
 #### `planning_brief.md`
 
@@ -282,28 +333,15 @@ Do not put here:
 - how the class learns (`teaching_patterns.md`)
 - raw session summaries
 
-#### `class_state.md`
+#### `class_state.md` — RETIRED (mem_v3 PR2)
 
-Purpose:
-
-- shortest current-state snapshot for this class
-- current unit
-- last lesson
-- likely next move
-- active open loops and misconceptions
-
-Loaded where:
-
-- Included in the active class core context if the file exists.
-
-Current observed state:
-
-- In the FCKW trace, `class_state.md` was missing, so it was not included.
-
-Good update source:
-
-- memory refresh/compaction from approved canonical wiki
-- reviewed `class_memory_proposal` after an approved lesson-memory commit
+The "current unit / last lesson / next move / open loops" snapshot duplicated
+the canonical `course_state.md` rollup (diary-derived) — one fact, two homes,
+out of sync by design. It was retired so every such fact has exactly one home in
+the canonical rollups; the sweep and context builders read `course_state.md` /
+`timeline.md` directly. See the two-axis memory map in
+[`docs/mem_v3/next_implementation.md`](mem_v3/next_implementation.md) and
+Learning 10 in [`docs/mem_v3/learnings.md`](mem_v3/learnings.md).
 
 #### `session_summaries.md`
 
@@ -417,22 +455,25 @@ After a plan is saved, profile/memory proposal can suggest:
 
 - `teacher_profile.md` (`user.md` alias): stable global teacher preference
 - `copilot.md`: class-specific copilot behavior preference
-- `class_state.md`: updated current class state
 - `teaching_patterns.md`: stable class learning patterns seen across approved
   lesson evidence
-- `planning_brief.md` / `taught_so_far.md`: compact class-current or sequence
-  updates when the signal is stable enough for teacher review
+- `planning_brief.md`: compact current planning-priority updates when the signal
+  is stable enough for teacher review
 - `canonical_wiki`: only as a suggestion for teacher-approved wiki action, not
   an automatic write
+
+(Current unit / taught sequence is not a proposal target — it is derived from
+the canonical `course_state.md` / `timeline.md` rollups; mem_v3 PR2 retired the
+`class_state.md` / `taught_so_far.md` twins.)
 
 Examples:
 
 - Teacher says: "I always want plans in English."
-  - Target: `teacher_profile.md`
+  - Target: `teacher_profile.md` (the model calls `remember(...)` with this quote)
 - Teacher says: "For 9b, avoid starting too open-ended."
   - Target: `copilot.md`
 - The final plan establishes the next concrete class direction.
-  - Target: `class_state.md`
+  - Not memory: it is captured in the saved plan and the canonical rollups.
 - A lesson was actually taught and logged.
   - Target: canonical wiki through memory-update commit, not planning chat
 
@@ -442,8 +483,11 @@ Examples:
 - Global teacher facts go to `teacher_profile.md`.
 - Class learning facts go to `teaching_patterns.md`.
 - Copilot behavior rules go to `copilot_profile.md`.
-- Current state goes to `class_state.md`.
-- Year-to-date taught sequence goes to `taught_so_far.md`.
+- Current unit / taught sequence is NOT curated memory: it is derived from the
+  canonical `course_state.md` / `timeline.md` rollups (mem_v3 PR2).
+- `remember(...)` capture carries an internal `routing_reason` for traces and
+  eval diagnostics; it helps explain target choice but does not change the
+  allowed target or fast-lane verdict.
 - Review-only lesson facts go to `canonical_wiki` candidates until an ingest
   commit/revise action writes the canonical lesson files.
 - Detailed lesson history stays canonical in `lessons/{date}/`.

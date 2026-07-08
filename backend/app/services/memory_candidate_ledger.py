@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import json
 import hashlib
+import re
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
 
@@ -20,6 +21,7 @@ from app.teacher_agent.memory_targets import (
     is_global_teacher_target,
     is_supported_runtime_target,
     memory_channel_for_target,
+    normalize_section,
 )
 
 if TYPE_CHECKING:
@@ -36,9 +38,15 @@ VALID_STATUSES = {
     "snoozed",
     "deleted",
     "expired",
+    # Mem V3 insert-time folding outcomes (docs/mem_v3/design.md lane 1):
+    "duplicate",  # exact re-capture of an open claim; kept for audit only
+    "suppressed",  # re-capture of a teacher-rejected claim (non-explicit)
+    "already_covered",  # re-capture of an already-applied claim
 }
 
 OPEN_STATUSES = ("captured", "grouped", "proposed", "snoozed")
+REVIEW_STATUSES = ("captured", "grouped", "proposed")
+SNOOZE_DAYS = 7
 
 
 def default_memory_candidate_ledger_path(wiki_root: str | Path) -> Path:
@@ -69,6 +77,15 @@ class MemoryCandidateRow:
     promoted_at: str | None = None
     review_batch_id: str | None = None
     rejection_reason: str | None = None
+    snoozed_until: str | None = None
+    # Mem V3 fast-lane verdict, persisted by discipline_memory_candidates
+    # after speech-act + lane-policy + quote-provenance verification.
+    fast_lane: bool = False
+    # Mem V3 occasion anchor: the artifact the capturing session was about
+    # (e.g. "lesson:2026-07-04"). Reinforcement counts distinct occasions,
+    # not sessions — retries and bursts about the same lesson are one
+    # occasion. Empty = no anchor; the gate falls back to 6h time buckets.
+    occasion_key: str = ""
 
     @classmethod
     def from_sqlite(cls, row: sqlite3.Row) -> "MemoryCandidateRow":
@@ -102,6 +119,12 @@ class MemoryCandidateRow:
             promoted_at=row["promoted_at"],
             review_batch_id=row["review_batch_id"],
             rejection_reason=row["rejection_reason"],
+            snoozed_until=row["snoozed_until"],
+            fast_lane=bool(row["fast_lane"] if "fast_lane" in row.keys() else 0),
+            occasion_key=(
+                row["occasion_key"] if "occasion_key" in row.keys() else ""
+            )
+            or "",
         )
 
 
@@ -138,10 +161,16 @@ class MemoryCandidateLedger:
                   status TEXT NOT NULL,
                   promoted_at TEXT,
                   review_batch_id TEXT,
-                  rejection_reason TEXT
+                  rejection_reason TEXT,
+                  snoozed_until TEXT,
+                  fast_lane INTEGER NOT NULL DEFAULT 0
                 )
                 """
             )
+            self._ensure_column(conn, "snoozed_until", "TEXT")
+            self._ensure_column(conn, "fast_lane", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "occasion_key", "TEXT NOT NULL DEFAULT ''")
+            self._backfill_snoozed_until(conn)
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_memory_candidates_scope_status
@@ -172,14 +201,15 @@ class MemoryCandidateLedger:
                   session_id, turn_index, channel, target, section,
                   candidate_update, evidence_summary, evidence_refs_json,
                   source, basis, confidence, cluster_key, status, promoted_at,
-                  review_batch_id, rejection_reason
+                  review_batch_id, rejection_reason, snoozed_until, fast_lane,
+                  occasion_key
                 ) VALUES (
                   :id, :created_at, :updated_at, :class_id, :subject,
                   :workflow, :session_id, :turn_index, :channel, :target,
                   :section, :candidate_update, :evidence_summary,
                   :evidence_refs_json, :source, :basis, :confidence,
                   :cluster_key, :status, :promoted_at, :review_batch_id,
-                  :rejection_reason
+                  :rejection_reason, :snoozed_until, :fast_lane, :occasion_key
                 )
                 ON CONFLICT(id) DO NOTHING
                 """,
@@ -222,20 +252,68 @@ class MemoryCandidateLedger:
                 MemoryCandidateRow.from_sqlite(row) for row in conn.execute(sql, params)
             ]
 
+    def list_review_candidates(
+        self,
+        *,
+        class_id: str | None = None,
+        subject: str | None = None,
+        include_global: bool = True,
+        now: str | None = None,
+    ) -> list[MemoryCandidateRow]:
+        review_now = now or _utc_now()
+        active_statuses = REVIEW_STATUSES
+        active_placeholders = ", ".join("?" for _ in active_statuses)
+        where = [
+            f"""(
+              status IN ({active_placeholders})
+              OR (status = ? AND snoozed_until IS NOT NULL AND snoozed_until <= ?)
+              OR (
+                status = ?
+                AND EXISTS (
+                  SELECT 1 FROM memory_candidates newer
+                  WHERE newer.status IN ({active_placeholders})
+                    AND newer.created_at > memory_candidates.updated_at
+                    AND COALESCE(newer.class_id, '') = COALESCE(memory_candidates.class_id, '')
+                    AND COALESCE(newer.subject, '') = COALESCE(memory_candidates.subject, '')
+                    AND newer.channel = memory_candidates.channel
+                    AND newer.target = memory_candidates.target
+                    AND newer.section = memory_candidates.section
+                )
+              )
+            )"""
+        ]
+        params = [*active_statuses, "snoozed", review_now, "snoozed", *active_statuses]
+        if class_id is not None:
+            if include_global:
+                where.append("(class_id = ? OR class_id IS NULL)")
+            else:
+                where.append("class_id = ?")
+            params.append(class_id)
+        if subject is not None:
+            where.append("(subject = ? OR subject IS NULL)")
+            params.append(subject)
+        sql = "SELECT * FROM memory_candidates WHERE " + " AND ".join(where)
+        sql += " ORDER BY created_at, id"
+        with self._connect() as conn:
+            return [
+                MemoryCandidateRow.from_sqlite(row) for row in conn.execute(sql, params)
+            ]
+
     def propose_for_sweep(
         self,
         *,
         class_id: str,
         subject: str | None = None,
+        now: str | None = None,
     ) -> dict[str, list["MemorySweepProposal"]]:
         """Compatibility adapter for Memory Sweep grouping."""
         from app.services.memory_sweep import build_sweep_proposals
 
-        candidates = self.list_candidates(
+        candidates = self.list_review_candidates(
             class_id=class_id,
             subject=subject,
-            statuses=OPEN_STATUSES,
             include_global=True,
+            now=now,
         )
         return build_sweep_proposals(candidates)
 
@@ -248,8 +326,13 @@ class MemoryCandidateLedger:
         rejection_reason: str | None = None,
         review_batch_id: str | None = None,
         promoted_at: str | None = None,
+        snoozed_until: str | None = None,
     ) -> None:
         self._validate_status(status)
+        if status == "snoozed" and snoozed_until is None:
+            snoozed_until = _add_days(updated_at, SNOOZE_DAYS)
+        if status != "snoozed":
+            snoozed_until = None
         with self._connect() as conn:
             cursor = conn.execute(
                 """
@@ -258,7 +341,8 @@ class MemoryCandidateLedger:
                     updated_at = ?,
                     rejection_reason = ?,
                     review_batch_id = COALESCE(?, review_batch_id),
-                    promoted_at = COALESCE(?, promoted_at)
+                    promoted_at = COALESCE(?, promoted_at),
+                    snoozed_until = ?
                 WHERE id = ?
                 """,
                 (
@@ -267,6 +351,7 @@ class MemoryCandidateLedger:
                     rejection_reason,
                     review_batch_id,
                     promoted_at,
+                    snoozed_until,
                     candidate_id,
                 ),
             )
@@ -277,6 +362,32 @@ class MemoryCandidateLedger:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    @staticmethod
+    def _ensure_column(conn: sqlite3.Connection, name: str, definition: str) -> None:
+        columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(memory_candidates)")
+        }
+        if name not in columns:
+            conn.execute(f"ALTER TABLE memory_candidates ADD COLUMN {name} {definition}")
+
+    @staticmethod
+    def _backfill_snoozed_until(conn: sqlite3.Connection) -> None:
+        rows = conn.execute(
+            """
+            SELECT id, updated_at FROM memory_candidates
+            WHERE status = 'snoozed' AND snoozed_until IS NULL
+            """
+        ).fetchall()
+        for row in rows:
+            conn.execute(
+                """
+                UPDATE memory_candidates
+                SET snoozed_until = ?
+                WHERE id = ?
+                """,
+                (_add_days(row["updated_at"], SNOOZE_DAYS), row["id"]),
+            )
 
     @staticmethod
     def _to_params(candidate: MemoryCandidateRow) -> dict[str, object]:
@@ -303,6 +414,9 @@ class MemoryCandidateLedger:
             "promoted_at": candidate.promoted_at,
             "review_batch_id": candidate.review_batch_id,
             "rejection_reason": candidate.rejection_reason,
+            "snoozed_until": candidate.snoozed_until,
+            "fast_lane": int(candidate.fast_lane),
+            "occasion_key": candidate.occasion_key or "",
         }
 
     @staticmethod
@@ -332,6 +446,7 @@ def rows_from_runtime_candidates(
     session_id: str,
     turn_index: int,
     now: str | None = None,
+    occasion_key: str = "",
 ) -> list[MemoryCandidateRow]:
     """Convert validated runtime candidates into durable ledger rows.
 
@@ -350,7 +465,9 @@ def rows_from_runtime_candidates(
         if not is_supported_runtime_target(raw_target):
             continue
         target = canonical_memory_target(raw_target)
-        section = _field(candidate, "section") or "General"
+        # Mem V3: normalize free-form LLM section names onto the fixed
+        # per-target vocabulary before cluster keys are derived.
+        section = normalize_section(target, _field(candidate, "section") or "General")
         source = _field(candidate, "source") or "inferred_from_session"
         basis = _field(candidate, "basis") or "inferred"
         confidence = _field(candidate, "confidence") or "low"
@@ -387,9 +504,24 @@ def rows_from_runtime_candidates(
                 confidence=confidence,
                 cluster_key=cluster_key,
                 status="captured",
+                fast_lane=bool(getattr(candidate, "fast_lane", False)),
+                occasion_key=occasion_key,
             )
         )
     return rows
+
+
+def _parse_utc(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _add_days(value: str, days: int) -> str:
+    return (
+        (_parse_utc(value) + timedelta(days=days))
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def _field(candidate: Any, name: str) -> str:
@@ -458,3 +590,179 @@ def _utc_now() -> str:
         .isoformat()
         .replace("+00:00", "Z")
     )
+
+
+# --- Mem V3 insert-time folding (docs/mem_v3/design.md lane 1) --------------
+#
+# Deterministic, no LLM: rephrasings of an open claim join its cluster,
+# re-captures of applied/rejected claims are neutralized on arrival, so the
+# sweep only ever sees one open cluster per underlying claim.
+
+# Calibrated on the recorded beta over-capture fixture
+# (tests/fixtures/mem_v3/organic_chemistry_ledger.json): with stemmed content
+# tokens and the overlap coefficient, rephrasings of the same claim score
+# 0.56–1.00 while genuinely different claims score 0.10–0.25.
+NEAR_DUPLICATE_OVERLAP = 0.55
+
+_CONTENT_STOPWORDS = {
+    "the", "and", "for", "with", "that", "this", "into", "from", "are",
+    "was", "were", "has", "have", "had", "does", "not", "but", "when",
+    "should", "must", "can", "will", "more", "than", "very", "also",
+    "only", "all", "its", "their", "them", "they", "she", "him", "her",
+    "his", "you", "your", "our", "out", "use", "used", "using",
+}
+
+_STEM_SUFFIXES = ("ing", "es", "ed", "s")
+
+
+def _stem(token: str) -> str:
+    for suffix in _STEM_SUFFIXES:
+        if token.endswith(suffix) and len(token) - len(suffix) >= 3:
+            return token[: len(token) - len(suffix)]
+    return token
+
+
+def _content_tokens(text: str) -> frozenset[str]:
+    return frozenset(
+        _stem(token)
+        for token in re.findall(r"[a-z0-9]+", (text or "").lower())
+        if len(token) >= 3 and token not in _CONTENT_STOPWORDS
+    )
+
+
+def _normalized_update(text: str) -> str:
+    return " ".join((text or "").strip().lower().split())
+
+
+def _content_similarity(a: frozenset[str], b: frozenset[str]) -> float:
+    """Overlap coefficient — robust when one phrasing is much longer."""
+    if not a or not b:
+        return 0.0
+    return len(a & b) / min(len(a), len(b))
+
+
+def _same_scope(a: MemoryCandidateRow, b: MemoryCandidateRow) -> bool:
+    if is_global_teacher_target(a.target):
+        return True
+    return (a.class_id or a.subject or "global") == (
+        b.class_id or b.subject or "global"
+    )
+
+
+def insert_with_folding(
+    ledger: MemoryCandidateLedger,
+    candidate: MemoryCandidateRow,
+    *,
+    canonical_bullets: list[str] | None = None,
+) -> MemoryCandidateRow:
+    """Store a candidate with deterministic dedup against ledger history.
+
+    Outcomes (by precedence):
+    - already written to the target file (``canonical_bullets``, B2) or matches
+      an ``applied`` row -> stored as ``already_covered``
+    - matches a ``rejected`` row     -> stored as ``suppressed`` unless the
+      new capture has the backend-verified fast-lane verdict
+    - exact text match to an open row from the SAME session -> ``duplicate``
+      (within-session noise)
+    - exact or near duplicate of an open row from another session -> stored
+      open, adopting the matched row's cluster_key (reinforcement: an
+      identical re-statement in a new session is the strongest signal)
+    - otherwise                      -> stored as-is (new claim)
+
+    ``canonical_bullets`` are the bullets already present in the target's
+    curated file; passing them realizes ``dedup_scope="ledger+canonical"`` (B2)
+    so a re-capture of a fact already written (e.g. by compaction) folds instead
+    of being re-proposed. The caller supplies them only for curated targets.
+
+    Sections are normalized onto the per-target vocabulary first so
+    free-form LLM section names cannot fragment clusters.
+    """
+    from dataclasses import replace as _replace
+
+    candidate = _replace(
+        candidate,
+        section=normalize_section(candidate.target, candidate.section),
+    )
+    canonical_target = canonical_memory_target(candidate.target)
+    new_norm = _normalized_update(candidate.candidate_update)
+    new_tokens = _content_tokens(candidate.candidate_update)
+    explicit = candidate.fast_lane
+
+    # B2: a fact already present in the target's curated file is covered — the
+    # strongest "already covered" signal there is (stronger than a ledger row).
+    canonical_covered = any(
+        _normalized_update(bullet) == new_norm
+        or _content_similarity(new_tokens, _content_tokens(bullet))
+        >= NEAR_DUPLICATE_OVERLAP
+        for bullet in (canonical_bullets or [])
+        if _normalized_update(bullet)
+    )
+
+    existing = [
+        row
+        for row in ledger.list_candidates()
+        if canonical_memory_target(row.target) == canonical_target
+        and _same_scope(candidate, row)
+    ]
+
+    applied_match: MemoryCandidateRow | None = None
+    rejected_match: MemoryCandidateRow | None = None
+    open_exact: MemoryCandidateRow | None = None
+    open_near: MemoryCandidateRow | None = None
+    for row in sorted(existing, key=lambda r: r.created_at, reverse=True):
+        exact = _normalized_update(row.candidate_update) == new_norm
+        similar = exact or (
+            _content_similarity(new_tokens, _content_tokens(row.candidate_update))
+            >= NEAR_DUPLICATE_OVERLAP
+        )
+        if not similar:
+            continue
+        if row.status == "applied" and applied_match is None:
+            applied_match = row
+        elif row.status == "rejected" and rejected_match is None:
+            rejected_match = row
+        elif row.status in OPEN_STATUSES:
+            same_session = (
+                candidate.session_id is not None
+                and row.session_id == candidate.session_id
+            )
+            if exact and same_session and open_exact is None:
+                open_exact = row
+            elif open_near is None:
+                open_near = row
+
+    if applied_match is not None or canonical_covered:
+        if applied_match is not None:
+            cluster_key = applied_match.cluster_key or candidate.cluster_key
+            reason = f"auto: duplicate of applied candidate {applied_match.id}"
+        else:
+            cluster_key = candidate.cluster_key
+            reason = f"auto: already present in {canonical_target}"
+        candidate = _replace(
+            candidate,
+            status="already_covered",
+            cluster_key=cluster_key,
+            rejection_reason=reason,
+        )
+    elif rejected_match is not None and not explicit:
+        candidate = _replace(
+            candidate,
+            status="suppressed",
+            cluster_key=rejected_match.cluster_key or candidate.cluster_key,
+            rejection_reason=f"auto: matches rejected candidate {rejected_match.id}",
+        )
+    elif open_exact is not None:
+        candidate = _replace(
+            candidate,
+            status="duplicate",
+            cluster_key=open_exact.cluster_key or candidate.cluster_key,
+            rejection_reason=f"auto: exact duplicate of {open_exact.id}",
+        )
+    elif open_near is not None:
+        candidate = _replace(
+            candidate,
+            cluster_key=open_near.cluster_key or candidate.cluster_key,
+        )
+
+    ledger.add(candidate)
+    return candidate

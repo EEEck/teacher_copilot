@@ -107,12 +107,31 @@ cd backend
 Uses real `AgentRunner` (OpenAI Agents SDK) still **in-process** via
 `TestClient` — docker does not need to be running.
 
+Live agent evals are production-profile goldens by default: the fixture forces
+`MODEL_PROFILE=production` and ignores local chat/important/utility reasoning
+effort overrides. It still reads normal API key and model-id settings, so
+`OPENAI_STRONG_MODEL` is the production model under test.
+
 ```powershell
 cd backend
 $env:RUN_LIVE_AGENT_EVALS="1"
 $env:RUN_LLM_CHAT_JUDGE="1"          # GEval grounding judge (default on for live)
 $env:OPENAI_API_KEY="sk-..."         # or backend/.env loaded by pydantic-settings
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_chat_live.py -v
+```
+
+Explicit model-profile comparison:
+
+```powershell
+$env:LIVE_AGENT_EVAL_MODEL_PROFILE="economy"
+```
+
+Optional eval-specific reasoning-effort overrides:
+
+```powershell
+$env:LIVE_AGENT_EVAL_CHAT_REASONING_EFFORT="medium"
+$env:LIVE_AGENT_EVAL_IMPORTANT_REASONING_EFFORT="high"
+$env:LIVE_AGENT_EVAL_UTILITY_REASONING_EFFORT="minimal"
 ```
 
 Optional judge model override:
@@ -126,6 +145,32 @@ Disable LLM judge but keep live agent:
 ```powershell
 $env:RUN_LLM_CHAT_JUDGE="0"
 ```
+
+Memory-capture live goldens use component-level tool-call expectations inspired
+by DeepEval tool-correctness evals: a golden can require multiple expected
+memory targets, forbid leakage into other targets, and set a minimum candidate
+count before checking the backend `fast_lane` verdict. This keeps overlap cases
+such as "durable class learning pattern + immediate planning priority" from
+collapsing into a single-target pass.
+
+Wiki-vs-input reconciliation has both deterministic and optional live/LLM judge
+coverage:
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_wiki_reconciliation.py -v
+
+$env:RUN_LIVE_AGENT_EVALS="1"
+$env:RUN_LLM_WIKI_RECONCILIATION_JUDGE="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_wiki_reconciliation.py -rx -v
+```
+
+Known urgent xfail: `non_roster_observation_is_flagged` currently fails the LLM
+judge because the ingest agent silently accepts `S-099` even though the eval
+wiki roster says that student is not enrolled in Chemie 9b. This is a product
+behavior gap, not a flaky test: the next implementation pass should add
+deterministic roster-conflict detection and a teacher clarification path before
+student observations are recorded.
 
 Enable the optional LLM judge for the Student Summary golden:
 
