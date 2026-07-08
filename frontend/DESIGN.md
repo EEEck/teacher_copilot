@@ -43,6 +43,20 @@ Update assistant-ui components: `npx assistant-ui add thread -o -p src/component
 | **Chat canvas** | `bg-background` | Thread root, composer (assistant-ui) |
 | **User bubble** | `bg-muted` | User messages in Thread (do not override) |
 
+## Review Surfaces
+
+Memory review, plan save review, and Memory Sweep are operational surfaces, not
+marketing cards. Put the plain-language brief first, then expose detailed diffs
+or raw review cards as drill-down. Keep action rows stable while teachers make
+decisions: one primary submit button, uniform secondary actions, and no nested
+cards inside the brief.
+
+Current helpers:
+
+- `components/klassenpilot/review/review-brief.tsx` for wiki-file review.
+- `components/klassenpilot/memory-sweep-brief.tsx` for sweep decisions.
+- `lib/review-brief.ts` and `lib/sweep-brief.ts` for grouping and labels.
+
 ## Buttons
 
 | Variant | Look | Use |

@@ -39,10 +39,12 @@ chat/utility on `gpt-5.4-mini` and only the sweep on `gpt-5.5`**. `MODEL_PROFILE
 is unset by default and derives from `APP_ENV` (production→production, else
 economy). `OPENAI_REASONING_EFFORT` optionally overrides the CHAT effort only.
 
-Note (mem_v3 PR4): durable capture is an explicit `remember(...)` tool call in
-the chat turn, and the live judge eval showed the cheaper tier under-emits and
-calls tools unreliably — so run the quality/production profile when verifying
-capture, and rely on the always-strong sweep as the backstop in economy.
+Note (mem_v3 PR4): durable capture is an explicit
+`remember(target, content, speech_act, quote, routing_reason)` tool call in the
+chat turn. The live judge eval showed the cheaper tier under-emits and calls
+tools unreliably, so live agent evals force the production profile by default;
+set `LIVE_AGENT_EVAL_MODEL_PROFILE` only for an explicit model-profile
+comparison. The always-strong sweep remains the backstop in economy.
 
 Complex lesson-planning turns can browse wiki memory, reason over evidence, and
 stream a full artifact. The default `AGENT_TIMEOUT_SECONDS=240` gives those
@@ -99,8 +101,10 @@ invite-code/session resolver, then map provider users back into
 
 Memory Sweep is the slow consolidation layer between captured session signals
 and durable wiki memory. Captured candidates live in the SQLite candidate
-ledger; the sweep proposer groups active candidates into teacher-reviewable
-cards and never writes wiki files directly.
+ledger; insert-time folding, the promotion gate, and silent decay reduce noise
+before review. The sweep proposer runs one high-reasoning consolidation call,
+maps the result into a teacher-first review brief, and never writes wiki files
+directly.
 
 Decision semantics:
 
@@ -324,6 +328,13 @@ Durable memory is captured through the explicit `remember(...)` tool the model
 calls when the teacher gives a standing instruction (mem_v3 PR4); every memory
 write goes through one typed contract (`app/services/memory_skills.py`).
 
+The committed wiki is the baseline for factual continuity. If teacher input
+conflicts with canonical memory, such as a non-roster student ID/name, the
+target behavior is deterministic detection followed by model-written
+clarification and teacher-confirmed resolution before write. The first roster
+reconciliation cases live in the eval suite while detector/UI wiring is still
+pending.
+
 ## Tests
 
 ```bash
@@ -344,11 +355,22 @@ cd backend
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py -v
 ```
 
-Live agent + LLM judge (opt-in, uses `OPENAI_API_KEY` from `backend/.env`):
+Live agent + LLM judge (opt-in, uses `OPENAI_API_KEY` from `backend/.env` and
+defaults to the production model profile):
 
 ```powershell
 $env:RUN_LIVE_AGENT_EVALS="1"
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_chat_live.py -v
+```
+
+Focused Memory V3 live capture and wiki-reconciliation checks:
+
+```powershell
+$env:RUN_LIVE_AGENT_EVALS="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_memory_capture_live.py -rx
+
+$env:RUN_LLM_WIKI_RECONCILIATION_JUDGE="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_wiki_reconciliation.py -rx
 ```
 
 See also [`tests/README.md`](tests/README.md).

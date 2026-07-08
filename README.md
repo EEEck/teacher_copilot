@@ -32,6 +32,13 @@ For common agent debug motions, use the trace bundle scripts documented in
 Update Memory lesson-results scenario, and the Memory Sweep MBB/executive merge
 trace that checks the core backend memory-consolidation behavior.
 
+Current memory work is Memory V3: chat stages review-only candidates through
+`remember(...)`, the ledger/folding/gate layer throttles noise, Memory Sweep
+uses the production-quality consolidation path, and the frontend shows a
+teacher-first review brief before durable writes. The next trust gap is
+input-vs-wiki reconciliation, starting with proactive roster/name mismatch
+clarification.
+
 ## Architecture
 
 - **Backend:** FastAPI + OpenAI Agents SDK (`backend/`)
@@ -167,8 +174,9 @@ Both backend and frontend use **hot reload** in dev - you usually do not restart
 
 1. **Landing** -> select a class
 2. **Class home** -> lesson timeline + status
-3. **Update memory** -> chat + diary draft (right panel) -> review wiki proposals -> save
+3. **Update memory** -> chat + diary draft (right panel) -> review wiki proposals and memory suggestions -> save
 4. **Create lesson plan** -> chat + plan draft (same layout) -> save to a lesson date
+5. **Memory Sweep** -> periodically review accumulated durable-memory signals before applying them
 
 Both chat flows share the same UI shell (`ArtifactSessionWorkspace`: thread left, markdown draft right).
 Update Memory can start free-form from the class header, or from a lesson

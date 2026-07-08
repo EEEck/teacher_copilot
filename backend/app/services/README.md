@@ -20,9 +20,12 @@ wiki storage.
   behavior for lesson diaries.
 - `memory_candidate_ledger.py` - SQLite-backed durable memory candidate ledger
   for cross-session Memory Sweep evidence, grouping, and status transitions.
-- `memory_sweep.py` - two-pass Memory Sweep consolidation helpers: packet
-  building, alignment validation, card validation, unresolved fallback cards,
-  and review-card assembly.
+- `memory_gate.py` - promotion gate and silent decay for ledger candidates.
+- `memory_sweep.py` - V3 single-call Memory Sweep consolidation: builds the
+  gate-passing claim packet, validates ID-referenced operations structurally,
+  and assembles teacher-reviewable cards.
+- `memory_skills.py` - typed memory write/read service contract for curated
+  memory apply paths.
 - `plan_service.py` - lesson-planning adapter around the artifact session core,
   plus plan save and trace response assembly.
 - `memory_apply.py` - teacher-approved durable memory apply dispatcher,
@@ -37,9 +40,10 @@ wiki storage.
   `plan` or `ingest`.
 - `IngestService` and `PlanService` are API-facing adapters.
 - Durable wiki mutations are explicit service methods, not side effects of chat.
-- Memory Sweep treats the candidate ledger as raw evidence. It normalizes rows
-  into validated alignment groups before generating teacher-review cards, then
-  applies only teacher-approved decisions.
+- Memory Sweep treats the candidate ledger as raw evidence. Folding and the
+  promotion gate decide what reaches review; one high-reasoning consolidation
+  call proposes operations; only teacher-approved decisions write durable wiki
+  memory.
 - Update Memory start hints are resolved before the agent turn. Known planned
   or taught lessons can be confirmed and moved to `collect_results`; unknown
   hinted dates must stay in `identify_target` with `needs_confirmation=true`.
@@ -63,4 +67,4 @@ wiki storage.
 - `../teacher_agent/README.md`
 - `../../tests/README.md`
 - `../../../docs/agent_architecture.md`
-- `../../../docs/mem_v2/backend.md`
+- `../../../docs/mem_v3/README.md`

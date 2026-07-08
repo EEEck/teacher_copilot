@@ -2,7 +2,9 @@
 
 Status: **design + eval scaffold, not yet implemented.** Surfaced by beta
 testing (2026-07-07). Owner principle captured below; deterministic detector +
-clarify wiring are a tracked follow-up. Real-user validation deliberately
+clarify wiring are a tracked follow-up. The live LLM judge now documents the
+desired behavior; the non-roster clarify case is an intentional xfail until the
+detector/model-clarify path is wired. Real-user validation deliberately
 deferred (see "Test with real users").
 
 ## The principle

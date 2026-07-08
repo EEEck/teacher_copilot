@@ -305,6 +305,12 @@ Allowed behavior:
 - Use pseudonymous student IDs only.
 - Do not infer sensitive facts beyond what the teacher said.
 - Never write wiki files directly from the chat turn.
+- Treat committed wiki memory as the baseline. If teacher input conflicts with
+  factual wiki state, such as a student ID/name not on the roster or a class
+  state that contradicts the current rollup, surface the discrepancy and ask
+  for resolution before writing. A confirmed new fact can proceed through the
+  normal teacher-approved write path; an unconfirmed conflict should not be
+  silently recorded.
 - The live ingest prompt must include the Teacher Layer and Active Class Core
   exactly once, then add only lightweight task continuity such as previous
   lesson excerpt, bounded roster excerpt, and most recent saved plan. Do not
@@ -335,9 +341,12 @@ Browsing policy:
   raw refs only for exact wording, provenance, or contradiction checks.
 - Add `memory_candidates` for stable durable-memory signals discovered during
   the chat: explicit teacher preferences, repeated communication requests,
-  class learning patterns, copilot working-agreement corrections, current class
-  state, planning priorities, or taught-sequence updates. These are proposed
-  only. The chat turn never writes them.
+  class learning patterns, copilot working-agreement corrections, or current
+  planning priorities. Current class state and taught-sequence updates are not
+  durable-memory candidate targets; they belong in the canonical
+  `course_state.md` / `timeline.md` rollups through the normal lesson commit or
+  revise flow. Candidate writes are proposed only. The chat turn never writes
+  them.
 
 ## Memory Sweep Contract
 
@@ -374,9 +383,13 @@ Writes:
 
 Proposal behavior:
 
-- Backend Memory Sweep grouping owns candidate identity, channel, review queue,
-  target, and status. The SQLite ledger stores evidence rows; the sweep service
-  turns them into bounded target/scope packets.
+- Backend Memory Sweep owns candidate identity, channel, review queue, target,
+  and status. The SQLite ledger stores evidence rows; insert-time folding
+  normalizes section vocabulary and clusters exact/near duplicate captures.
+- The promotion gate decides which rows reach review: explicit teacher asks are
+  eligible immediately, inferred claims need reinforcement across distinct
+  occasions, stale unreinforced singletons expire silently, and rejected
+  clusters resurface only on a fresh explicit ask.
 - Student Memory cards use targets shaped like `students/S-###.md` and section
   `Student Summary`. Their content must be one neutral sentence about current
   learning trajectory and useful support patterns, with recency bias balanced
@@ -385,28 +398,23 @@ Proposal behavior:
   `card_id` is the review-card identity, `candidate_id` is the primary row,
   `candidate_ids` lists all represented rows, and `signal_count` is the count
   of represented evidence rows.
-- Rows with the same backend `cluster_key` are deterministically consolidated
-  before sweep packets are built. Rows without a shared cluster key remain
-  separate at staging time, but can be normalized semantically inside the same
-  packet.
-- The isolated alignment pass groups every candidate in a packet exactly once
-  by underlying durable claim. It compares raw ledger evidence with current
-  target memory and returns relationship/decision metadata such as
-  `new_semantic_claim`, `broadens_existing_memory`, `already_covered`,
-  `possible_conflict`, `merge`, `adjust_existing`, or `needs_decision`.
-- Backend alignment validation rejects missing, duplicated, unknown,
-  cross-target, cross-section, or unsupported assignments. One retry may be
-  attempted with the validation error; if alignment still fails, rows surface as
-  unresolved `needs_decision` cards with warnings.
-- The isolated card pass generates review cards only from validated alignment
-  groups. A card must carry `source_group_id`, and its `candidate_ids`,
-  target, section, and operation must match the source group.
+- Memory Sweep runs one consolidation call over all gate-passing claims,
+  in-scope memory bullets, recent applied/rejected texts, page-budget usage, and
+  today's date. The model returns ID-referenced operations (`add`,
+  `update(id)`, `delete(id)`, or `none`) and must account for every input claim
+  exactly once.
+- Backend validation is structural only: every claim is covered once,
+  referenced memory ids exist, updates quote the existing bullet they replace,
+  targets/sections are allowed, and candidate ownership is preserved. Semantic
+  judgments such as "already covered" or "broaden existing memory" belong to the
+  strong model plus teacher review, not lexical backend validators.
 - Card operations are `add`, `adjust`, `already_covered`, `needs_decision`, or
-  `reject_low_signal`. `status_recommendation` remains compatibility metadata:
-  `add`/`adjust` map to `promote`, while the other operations map directly.
+  `reject_low_signal`. `update(id)` maps to `adjust` with
+  `replaces_content`; `none` maps to `already_covered`; low-signal or invalid
+  cases surface as teacher-visible review decisions rather than hidden writes.
 - For `adjust`, `replaces_content` must exactly match an existing bullet in the
-  current memory excerpt. If validation fails after retry, the affected packet
-  is surfaced as unresolved `needs_decision`, not as misleading `add` cards.
+  current memory excerpt. If validation fails after retry, the run degrades to
+  one plain-language notice rather than multiplying unresolved cards.
 - Route validation preserves backend-owned fields, rejects unsupported targets,
   ignores unknown candidate ids from model output, and preserves evidence
   ownership. A single candidate row may support multiple target-specific review
@@ -414,8 +422,6 @@ Proposal behavior:
 - The UI should submit sweep decisions as a batch. Ledger row status is resolved
   only after the whole decision set is processed, so overlapping evidence does
   not disappear during proposal review.
-- If the isolated proposer is unavailable, the route falls back to the
-  deterministic Memory Sweep grouping and returns unresolved warning cards.
 - `canonical_wiki` remains review-only; it is never converted into a direct
   write target by the proposer.
 - Student summaries must avoid sensitive or high-stakes profiling language:
@@ -456,8 +462,9 @@ Purpose:
 
 - Maintain small derived class memory pages for fast, personalized workflow
   context.
-- Capture stable teaching patterns, current planning priorities, what has been
-  taught so far, and Honcho-style teacher/class copilot profile facts.
+- Capture stable teaching patterns, current planning priorities, and
+  Honcho-style teacher/class copilot profile facts. Current unit and taught
+  sequence stay in canonical rollups, not compact memory.
 
 Reads:
 

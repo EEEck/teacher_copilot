@@ -105,6 +105,11 @@ KlassenPilot uses a tiered memory model.
   planning patterns that worked, avoid/watch rules, and useful teacher
   corrections.
 
+- **Review-only candidate memory**
+  Chat can stage durable-memory candidates through `remember(...)`, but the
+  ledger, sweep, review brief, and apply path keep promotion explicit and
+  teacher-approved.
+
 - **Source library**
   Uploaded materials and trusted external resources should carry provenance and
   remain distinguishable from approved class memory.
@@ -130,6 +135,8 @@ class notebook.
 - When memory is sparse, it says so and asks at most one targeted question.
 - When it sees a durable pattern, it may propose a profile update for teacher
   review.
+- When teacher input conflicts with committed wiki memory, it treats the wiki
+  as the baseline and asks how to resolve the discrepancy before writing.
 
 The copilot should not silently rewrite the wiki, invent classroom patterns,
 store sensitive student-level conclusions in broad profile memory, or blur the
@@ -146,6 +153,8 @@ line between class memory and external sources.
   turning Update Memory into a wizard.
 - Create lesson plan with read-only wiki access.
 - Compact memory compaction and profile proposal/apply endpoints.
+- Memory V3 candidate capture, ledger folding/gating, and teacher-reviewed
+  Memory Sweep brief.
 - Deterministic source-bearing wiki retrieval.
 - Query packs for planning, ingest, and review.
 - In-memory prototype sessions.
@@ -159,6 +168,8 @@ line between class memory and external sources.
 - Support teacher-approved material ingestion.
 - Add trusted search and resource adaptation.
 - Make profile updates visible and reviewable.
+- Add proactive wiki/input reconciliation, starting with roster/name mismatch
+  detection and teacher-confirmed resolution.
 - Add sparse-memory and stale-open-loop hygiene.
 
 ## Longer-Term Scope

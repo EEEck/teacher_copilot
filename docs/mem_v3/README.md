@@ -6,6 +6,15 @@ high-reasoning sweep, and hard budgets on curated memory. The durable product
 contract still lives in `../agent_contracts.md`; Memory V2 background is in
 `../mem_v2/`.
 
+## Current Status
+
+The core V3 path is shipped on this branch: post-save ledger close,
+`class_state.md` / `taught_so_far.md` retirement, typed memory write/read
+contracts, explicit `remember(..., routing_reason)` capture, production-profile
+live eval defaults, and the teacher-first Memory Sweep brief. The current open
+trust gap is input-vs-wiki reconciliation, starting with proactive non-roster
+student ID/name clarification before writes.
+
 ## Read Order
 
 1. `approach.md` — the teaching guide: the approach from first principles,

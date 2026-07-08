@@ -6,12 +6,14 @@ tests, acceptance) is up top; the full rationale, research, sources, and
 discussion that produced these decisions live in the **appendices** at the
 bottom (folded in from the former `next_steps_tmp.md`).
 
-## Current status & progress (2026-07-06)
+## Current status & progress (2026-07-08)
 
-**Done and green** (committed through `5dee384`): speech-act lanes, verified
-fast lane + quote provenance, occasion-based reinforcement, insert-time
-folding, single-call sweep, the live judge eval. 264 backend / 31 frontend
-tests pass.
+**Done on this branch**: speech-act lanes, verified fast lane + quote
+provenance, occasion-based reinforcement, insert-time folding, single-call
+sweep, post-save ledger close, retired compact state twins, typed memory
+write/read contracts, explicit `remember(..., routing_reason)` capture,
+production-profile live eval defaults, hardened diagnostics, and the
+teacher-first Memory Sweep brief.
 
 **This plan is the next block.** Five PRs, sequenced. State:
 
@@ -19,14 +21,16 @@ tests pass.
 |---|---|---|
 | PR1 | Post-save `/memory/apply` closes ledger rows (B1) | **done** (`686f5eb`) |
 | PR2 | Retire wiki-derived compact files `class_state`/`taught_so_far` (B3) | **done** (`8c037fa`) |
-| PR4 | `remember(...)` capture tool + validation/retry (A — the emission gap) | **done** (`a91a171`) — live emission on gpt-5.5 unverified |
+| PR4 | `remember(...)` capture tool + validation/retry (A — the emission gap) | **done** (`a91a171`, later hardened with routing diagnostics and production-profile live eval defaults) |
 | PR3 | Typed `MemoryWrite`/`MemoryRead` service interface (C step 1) + B2 canonical folding | **done** (`6e9fb60`) |
-| PR5 | Focus-grouped agent skills + subagent capabilities (C step 2) | later — **rediscuss after testing PR1–4** |
+| PR5 | Focus-grouped agent skills + subagent capabilities (C step 2) | later — **rediscuss after the core memory/reconciliation loop is trusted** |
 
 Built in owner-requested order (1, 2, 4, 3). Docs across `docs/` were updated to
-match (`d82bb56`). **Gate:** owner tests PR1–4 (especially PR4's live emission
-via `RUN_LIVE_AGENT_EVALS=1`) before PR5, which is deliberately under-specified
-and to be rediscussed.
+match (`d82bb56`). **Current gate:** PR1-4 are no longer the active gate. The
+next trust gate is input-vs-wiki reconciliation, especially proactive
+non-roster student clarification before write. PR5 remains deliberately
+under-specified and should be rediscussed only after the core memory loop is
+trusted.
 
 Tracked in the roadmap as the current highest-priority block:
 [`docs/claude_todo.md`](../claude_todo.md).
@@ -176,8 +180,8 @@ validation + retry, replacing the brittle passive-field policy.
 
 **Changes**
 - `backend/app/teacher_agent/agents.py` / agent tool defs: add a
-  `remember(target, content, speech_act, quote)` function tool available in
-  ingest + plan turns.
+  `remember(target, content, speech_act, quote, routing_reason)` function tool
+  available in ingest + plan turns.
 - Backend validator (reuse `discipline_memory_candidates` logic): lane
   policy + quote provenance against the actual teacher message. On failure,
   the tool returns a **structured error** ("quote not found in the teacher's
@@ -361,12 +365,12 @@ supported by 2026 practice, and the research points at *why* emission fails:
 1. **Make capture an explicit `remember(...)` tool with backend validation +
    retry feedback (chosen — owner-endorsed).** Replace the brittle
    `DURABLE_MEMORY_CANDIDATE_POLICY` prose + passive field with a small
-   `remember(target, content, speech_act, quote)` tool the model calls when
-   the teacher gives a durable instruction, plus a short contract ("if the
-   teacher tells YOU how to behave or to remember something, call remember
-   with their exact words"). This is the Mem0/Letta/hermes pattern, is
-   model-swappable, and directly targets emission (the model decides once,
-   explicitly).
+   `remember(target, content, speech_act, quote, routing_reason)` tool the
+   model calls when the teacher gives a durable instruction, plus a short
+   contract ("if the teacher tells YOU how to behave or to remember something,
+   call remember with their exact words"). This follows the Mem0/Letta/hermes
+   pattern, stays model-swappable, and directly targets emission (the model
+   decides once, explicitly).
    - **The deterministic validation stays — because it grounds in the
      *teacher's* words, not the model's.** Lane policy + quote provenance
      (the quoted sentence must appear in the teacher message) run as the

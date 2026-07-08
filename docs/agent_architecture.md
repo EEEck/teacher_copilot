@@ -185,9 +185,10 @@ The product uses tiered class memory.
 
 6. **Candidate ledger and Memory Sweep (Memory V3)**
    Planning and Update Memory chats capture review-only durable facts. The
-   **primary path is an explicit `remember(target, content, speech_act, quote)`
-   tool** the model calls the moment the teacher gives a standing instruction
-   (mem_v3 PR4). This replaced a passive `memory_candidates` output field the
+   **primary path is an explicit
+   `remember(target, content, speech_act, quote, routing_reason)` tool** the
+   model calls the moment the teacher gives a standing instruction (mem_v3
+   PR4). This replaced a passive `memory_candidates` output field the
    model reliably forgot to fill while doing planning/ingest work — the measured
    "emission gap" (durable requests understood but never routed, the original V2
    capture-bug shape). The shift matches the 2026 self-editing-memory pattern
@@ -197,7 +198,9 @@ The product uses tiered class memory.
    preference target and **verbatim quote provenance** (the quoted sentence must
    appear in the teacher's real message) — and returns a structured, model-facing
    error so the agent self-corrects and retries within the turn; it never guesses
-   intent. The passive field remains as a fallback. Whichever path emits, the
+   intent. `routing_reason` is an internal one-sentence rationale for traces and
+   eval diagnostics, not teacher-facing reasoning and not a persistence verdict.
+   The passive field remains as a fallback. Whichever path emits, the
    candidate flows through the same review pipeline: candidates must be grounded
    in the teacher's own words (never the agent's own artifact output), silence is
    the normal outcome of a turn, and `teacher_explicit`/high status requires a
@@ -242,6 +245,12 @@ The wiki remains the source of truth. Compact memory is derived and rebuildable.
 Profiles should be small, stable, correctly scoped, and source-backed where
 possible.
 
+Wiki/input reconciliation follows the same authority split. The committed wiki
+is the factual baseline; teacher input that contradicts it is a proposed change
+that needs clarification before write. Deterministic code should detect factual
+mismatches such as non-roster student IDs/names, while the model owns the
+teacher-facing clarification and the teacher confirms the resolution.
+
 ## Retrieval Architecture
 
 The Karpathy-style wiki is the readable map; deterministic retrieval tools are
@@ -282,13 +291,13 @@ Design rules:
   planned or taught lesson, and the shared memory search/page/raw-evidence
   pattern for continuity.
 - Capture is a tool, not a passive field. `remember(target, content,
-  speech_act, quote)` is the one write-capable tool on both chat surfaces, and
-  even it writes nothing durable — it stages a review-only candidate grounded in
-  the teacher's verbatim words, with a deterministic guard that returns a
-  structured error for the model to retry (mem_v3 PR4). Making the durable-memory
-  decision an explicit, salient tool call is what closed the emission gap; a
-  field the model must remember to fill while doing other work does not survive
-  contact with a real turn.
+  speech_act, quote, routing_reason)` is the one write-capable tool on both chat
+  surfaces, and even it writes nothing durable: it stages a review-only
+  candidate grounded in the teacher's verbatim words, with a deterministic guard
+  that returns a structured error for the model to retry (mem_v3 PR4). Making
+  the durable-memory decision an explicit, salient tool call is what closed the
+  emission gap; `routing_reason` gives live evals and traces a compact rationale
+  for wrong-target failures without exposing model reasoning to teachers.
 - Put capability semantics in tool docstrings and output shapes. Example:
   `list_lessons` is the sequence-map tool; `read_lesson_range` is the
   multi-lesson evidence tool; `search_memory` is the broad topic pathfinder.
@@ -397,6 +406,7 @@ should receive enough context to start well and use tools for the long tail.
 - Compact memory + budgets/clamp + bounded profile writers: `backend/app/teacher_agent/wiki/memory.py`
 - Shared memory candidate capture + discipline + `remember(...)` validation (`validate_remember_call`): `backend/app/teacher_agent/memory_capture.py`
 - `remember(...)` capture tool wiring: `backend/app/teacher_agent/tools.py` (`create_remember_tool`)
+- Wiki/input reconciliation eval scaffold: `backend/tests/evals/test_klassenpilot_wiki_reconciliation.py`
 - Post-save `/memory/apply` ledger-close (mem_v3 PR1): `backend/app/api/routes.py` (`apply_memory`)
 - Memory candidate ledger + insert-time folding: `backend/app/services/memory_candidate_ledger.py`
 - Promotion gate and silent decay: `backend/app/services/memory_gate.py`

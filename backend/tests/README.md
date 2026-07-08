@@ -69,6 +69,8 @@ Additional deterministic goldens:
 | **Wiki search (stub, CI)** | `9b_misconception_charge_vs_oxidation`, `9b_redox_date_range_pathfinder`, `10c_subject_bound_search` | Source-bounded wiki pathfinding and class isolation |
 | **Workflow E2E (stub, CI)** | `9b_plan_fckw_3turn_e2e`, `9b_memory_update_3turn_e2e` | Complete multi-turn workflow state, evidence, and final artifact |
 | **Memory Sweep (stub, CI)** | `9b_memory_sweep_routes_channels`, `9b_memory_sweep_subject_vs_class_boundary`, `9b_memory_sweep_rejected_stays_rejected` | Candidate queue routing, class-vs-subject write boundaries, rejected-candidate suppression |
+| **Memory capture routing (stub/live)** | memory-capture goldens in `goldens/memory_capture.py` | `remember(...)` target routing, dual routing for class pattern + planning priority, forbidden leakage, and non-durable traps |
+| **Wiki input reconciliation** | `wiki_input_reconciliation.py` | Deterministic roster mismatch detection plus optional LLM judge for clarify/accept behavior |
 | **Student Summary judge (stub, CI)** | `s045_balanced_learning_and_support_trajectory` | S-045 summary preserves improving written trajectory and recent disruption as a neutral support pattern |
 
 The chat-turn family also includes `9b_ingest_turn3_ready`, which checks final
@@ -88,11 +90,18 @@ cd backend
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_layers.py tests/evals/test_klassenpilot_context.py tests/evals/test_klassenpilot_chat_stub.py tests/evals/test_klassenpilot_wiki_search.py tests/evals/test_klassenpilot_workflows_stub.py -v
 ```
 
-Memory V2 deterministic evals:
+Memory sweep deterministic evals:
 
 ```powershell
 cd backend
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_memory_sweep_stub.py -v
+```
+
+Memory V3 capture and wiki-reconciliation deterministic checks:
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests/evals/test_memory_capture_golden_contract.py tests/evals/test_memory_capture_live_diagnostics.py tests/evals/test_klassenpilot_memory_capture_stub.py tests/evals/test_klassenpilot_wiki_reconciliation.py -v
 ```
 
 Student Summary judge golden:
@@ -151,6 +160,28 @@ Live agent evals force the production model profile by default, ignoring local
 `MODEL_PROFILE` and local reasoning-effort overrides. Set
 `LIVE_AGENT_EVAL_MODEL_PROFILE=economy` only when the point of the run is an
 explicit model-profile comparison.
+
+Focused live capture:
+
+```powershell
+cd backend
+$env:RUN_LIVE_AGENT_EVALS="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_memory_capture_live.py -rx
+```
+
+Optional wiki-reconciliation LLM judge:
+
+```powershell
+cd backend
+$env:RUN_LIVE_AGENT_EVALS="1"
+$env:RUN_LLM_WIKI_RECONCILIATION_JUDGE="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_wiki_reconciliation.py -rx
+```
+
+The non-roster-student clarify scenario is currently documented as an xfail:
+the desired behavior is to flag/clarify before writing, while the current agent
+still silently accepts the non-roster ID. This is an urgent product trust gap,
+not a reason to weaken the golden.
 
 Each chat golden scores three metrics:
 

@@ -239,8 +239,10 @@ The useful pattern is a candidate ledger:
 1. During an active chat, the model calls the explicit `remember(...)` tool the
    moment the teacher gives a durable instruction (mem_v3 PR4 — capture is a
    tool the model *decides* to invoke, not a passive field it forgets while
-   working; a `memory_candidates` output field remains as a fallback). Either
-   path stages a candidate alongside the artifact and runtime `state_patch`.
+   working; a `memory_candidates` output field remains as a fallback). The tool
+   includes an internal `routing_reason` so traces can explain why a target was
+   chosen without exposing model reasoning to the teacher. Either path stages a
+   candidate alongside the artifact and runtime `state_patch`.
 2. The backend stores them in session runtime, dedupes them, caps the list, and
    returns them to the UI.
 3. After the teacher saves a plan or commits lesson memory, the UI presents
@@ -279,6 +281,27 @@ state must survive backend restarts, persist it outside canonical wiki memory
 with an app-owned store such as SQLite session storage or a gitignored workflow
 ledger, then feed only reviewed candidates into memory apply.
 
+## Input-Vs-Wiki Reconciliation
+
+The same split applies when a teacher's new input contradicts committed memory.
+The wiki is the baseline until the teacher confirms a change. A non-roster
+student ID/name, a lesson date that does not exist, or a current-unit claim that
+conflicts with `course_state.md` should be treated as a proposed correction, not
+silently accepted as truth.
+
+The useful division of labor:
+
+- deterministic code detects factual mismatches against known state, such as
+  roster membership
+- the model writes the human clarification in a teacher-friendly way
+- the teacher confirms whether the input was a typo, a one-off exception, or a
+  real wiki change
+- backend write paths apply only the confirmed resolution
+
+This is the same lesson as `remember(...)`: do not rely on the model's attention
+for crisp factual checks the backend can perform exactly. Use LLM judges to test
+the teacher-facing behavior, but keep membership/conflict detection deterministic.
+
 ## Memory Sweep Lessons From The MBB/Executive Failure
 
 > Historical note (2026-07): this section describes the Memory V2 two-pass
@@ -314,7 +337,7 @@ The important lesson:
 > If normalization matters, make it a first-class contract. Do not hide it as a
 > sentence inside a card-generation prompt.
 
-The fixed pattern is a two-pass sweep:
+The fixed V2 pattern was a two-pass sweep:
 
 1. **Alignment / normalization pass**: assign every candidate id exactly once to
    an underlying durable claim group. This is where aliases such as MBB,

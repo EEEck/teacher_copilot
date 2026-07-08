@@ -19,8 +19,10 @@ follow the local README closest to the code you are changing.
 - `agent_learning_guide.md` - optional learning/reference notes.
 - `student_learning_copilot_v2.md` - researched V2 expansion note for a
   student-facing formative learning copilot with separate student memory.
-- `mem_v2/` - Memory V2 design, backend/frontend maps, tests, traces, and bug
-  reports.
+- `mem_v3/` - current memory-capture, ledger, sweep, testing, and
+  input-reconciliation design notes.
+- `mem_v2/` - historical Memory V2 design, backend/frontend maps, tests,
+  traces, and bug reports.
 
 Use `../implementation_plans/` for the backlog and concrete implementation
 plans only.
@@ -58,8 +60,8 @@ plans only.
   `../implementation_plans/product_backlog.md`.
 - Memory scope or loading changes should update `memory_hierarchy.md` and/or
   `context_management.md`.
-- Memory V2 architecture, backend/frontend integration, or trace changes should
-  update `mem_v2/`.
+- Current memory-capture, Memory Sweep, or wiki/input reconciliation changes
+  should update `mem_v3/`; `mem_v2/` is historical background.
 - Agents SDK integration changes should update `agent_sdk_practices_review.md`
   when they change orchestration, session strategy, guardrails, approvals,
   tracing, or eval expectations.

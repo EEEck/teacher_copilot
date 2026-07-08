@@ -33,6 +33,12 @@ Shipped:
 - **Beta review tooling**: CLI Markdown reports over telemetry and wiki diffs,
   plus Memory Sweep review UX with card warnings, stepwise loading, clearer
   teacher-facing decisions, and seven-day deferral for uncertain signals.
+- **Memory V3 backend and review loop**: explicit `remember(...)` capture,
+  typed memory write/read contracts, ledger folding, promotion gate,
+  single-call high-reasoning sweep, and the teacher-first Memory Sweep brief.
+- **Model call-class routing**: production/economy profiles split chat,
+  important consolidation, and utility calls; live agent evals default to the
+  production profile unless the run explicitly compares models.
 - Timeline/detail shortcuts for adding results to planned lessons or correcting
   taught lessons.
 - Karpathy-style compiled wiki with compact class memory pages.
@@ -47,6 +53,8 @@ Known PM gaps:
 - Evidence is mostly embedded in agent output, not first-class UI metadata.
 - Wiki viewer is functional but not a teacher-friendly memory explorer.
 - Memory compaction/profile learning exists but is only partly productized.
+- Wiki/input conflicts are detected only in eval scaffolding today; proactive
+  roster/name mismatch clarification is the next trust gap.
 
 ---
 
@@ -67,6 +75,7 @@ Primary items:
 | **Plan quality review** | Lightweight post-generation sanity pass: duration, lesson phases, citations, open loops, misconceptions, and teacher constraints. |
 | **Test / exam generation** | New artifact workflow using `ArtifactSpec`; ground in taught sequence, misconceptions, and assessment readiness. Include answer key/rubric where useful. |
 | **Visible memory/profile suggestions** | Productize the existing profile-proposal/apply flow so the teacher sees "copilot learned this" suggestions after save. |
+| **Input-vs-wiki reconciliation v1** | Treat the committed wiki as baseline. Start with deterministic roster/name mismatch detection, model-written clarification, explicit teacher confirmation for new/changed students, and removal-on-revise tombstone handling. |
 | **Wiki health check / lint** | Expose `LINT_SYSTEM` as a bounded teacher/admin action. Report only; no silent mutation. |
 | **Playwright smoke tests** | Cover ingest commit, plan save, and source/review UI paths. |
 | **Session persistence decision** | Add SQLite/app-owned persistence only if real testing shows restart/session loss hurts usage. |

@@ -63,6 +63,15 @@ Overlap rules:
   `teaching_patterns.md`; if it applies to the teacher's general style, route
   to `teacher_profile.md`.
 
+Conflict rule:
+
+- Committed wiki memory is the baseline. If teacher input conflicts with known
+  wiki state, such as a student ID/name that is not on the roster or a class
+  status that contradicts `course_state.md`, treat it as a proposed change and
+  clarify before writing. Deterministic code should detect factual conflicts;
+  the model should phrase the clarification and the teacher confirms the
+  resolution.
+
 ## Memory Layers
 
 ### 1. Global Teacher Profile
@@ -476,6 +485,9 @@ Examples:
 - Copilot behavior rules go to `copilot_profile.md`.
 - Current unit / taught sequence is NOT curated memory: it is derived from the
   canonical `course_state.md` / `timeline.md` rollups (mem_v3 PR2).
+- `remember(...)` capture carries an internal `routing_reason` for traces and
+  eval diagnostics; it helps explain target choice but does not change the
+  allowed target or fast-lane verdict.
 - Review-only lesson facts go to `canonical_wiki` candidates until an ingest
   commit/revise action writes the canonical lesson files.
 - Detailed lesson history stays canonical in `lessons/{date}/`.

@@ -66,6 +66,15 @@ for explicit model-profile comparison runs.
   expected memory targets, forbidden targets, minimum candidate count for
   overlap cases, emitted `speech_act`, and internal `routing_reason`; then
   assert the backend-computed `fast_lane` verdict, not raw model `source`.
+- Wiki input reconciliation judge (opt-in): run
+  `test_klassenpilot_wiki_reconciliation.py` with
+  `RUN_LLM_WIKI_RECONCILIATION_JUDGE=1`. The non-roster clarify scenario is an
+  intentional xfail until detector + clarify wiring lands; valid roster and
+  explicit-new-student scenarios should hard-pass.
+
+Live agent evals force the production model profile by default, independent of
+local `MODEL_PROFILE` or reasoning-effort overrides. Set
+`LIVE_AGENT_EVAL_MODEL_PROFILE` only for explicit model-profile comparisons.
 
 ## Telemetry as the production feedback loop
 
