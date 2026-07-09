@@ -105,7 +105,7 @@ export const Thread: FC<{
             />
           </div>
 
-          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 mt-auto flex shrink-0 flex-col gap-4 overflow-visible rounded-t-(--composer-radius) bg-background pb-4 md:pb-6">
+          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer mt-auto flex shrink-0 flex-col gap-4 overflow-visible rounded-t-(--composer-radius) bg-background pb-4 md:pb-6">
             <ThreadScrollToBottom />
             <Composer />
           </ThreadPrimitive.ViewportFooter>
@@ -207,7 +207,7 @@ const ThreadWelcome: FC<{
   showSuggestions?: boolean;
 }> = ({ welcome, extra, showSuggestions = true }) => {
   return (
-    <div className="aui-thread-welcome-root my-auto flex grow flex-col">
+    <div className="aui-thread-welcome-root my-auto flex grow flex-col pb-28">
       <div className="aui-thread-welcome-center flex w-full grow flex-col items-center justify-center">
         <div className="aui-thread-welcome-message flex size-full flex-col justify-center px-4">
           <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both font-semibold text-2xl duration-200">

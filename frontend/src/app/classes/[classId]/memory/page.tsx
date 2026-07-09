@@ -28,6 +28,12 @@ import {
   type MemoryProposalResponse,
   type WikiUpdateProposal,
 } from "@/lib/api";
+import { markClassHomeTimelineRefresh } from "@/lib/class-home-refresh";
+import { memoryDiscardRedirectHref } from "@/lib/memory-discard-routing";
+import {
+  getReadyToSaveButtonLabel,
+  type MemoryFooterOperation,
+} from "@/lib/memory-footer-state";
 import {
   isMemoryReCommitBlocked,
   isMemoryReviewSaveDisabled,
@@ -54,31 +60,28 @@ const COMPACT_PAGE_LABELS: Record<string, string> = {
   session_summaries: "Session summaries",
 };
 
-function ReadyToSaveButton({ onReady, loading }: { onReady: () => void; loading: boolean }) {
-  const { isUpdating, readyToSave } = useArtifactSession();
+function ReadyToSaveButton({
+  onReady,
+  operation,
+  disabled = false,
+}: {
+  onReady: () => void;
+  operation: MemoryFooterOperation;
+  disabled?: boolean;
+}) {
+  const { isUpdating } = useArtifactSession();
   const hasDraftMessage = useAuiState((s) => !s.composer.isEmpty);
+  const compiling = operation === "compiling";
 
   return (
-    <div className="flex flex-col gap-1">
-      <Button
-        type="button"
-        className="w-fit"
-        onClick={onReady}
-        disabled={loading || isUpdating || hasDraftMessage}
-      >
-        {loading ? "Compiling wiki updates…" : "Ready to save memory"}
-      </Button>
-      {hasDraftMessage && !loading && !isUpdating && (
-        <p className="text-xs text-muted-foreground">
-          Send or clear the draft message before preparing wiki updates.
-        </p>
-      )}
-      {readyToSave && !loading && (
-        <p className="text-xs text-primary">
-          All sections filled — compile and review wiki file changes before saving.
-        </p>
-      )}
-    </div>
+    <Button
+      type="button"
+      className="w-fit"
+      onClick={onReady}
+      disabled={disabled || compiling || isUpdating || hasDraftMessage}
+    >
+      {getReadyToSaveButtonLabel(operation)}
+    </Button>
   );
 }
 
@@ -225,10 +228,12 @@ function MemoryTargetStatus() {
 function MemoryWorkspace({
   classId,
   reviewStorageKey,
+  discardRedirectHref,
   onError,
 }: {
   classId: string;
   reviewStorageKey: string;
+  discardRedirectHref?: string | null;
   onError: (message: string | null) => void;
 }) {
   const router = useRouter();
@@ -238,11 +243,13 @@ function MemoryWorkspace({
     artifactHash,
     artifactMarkdown: diaryMarkdown,
     isUpdating,
+    readyToSave,
     runWithSessionRecovery,
     setArtifactMarkdown,
   } = useArtifactSession();
   const [proposals, setProposals] = useState<WikiUpdateProposal[]>([]);
   const [loading, setLoading] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
   const [inReview, setInReview] = useState(false);
   const [editingWiki, setEditingWiki] = useState(false);
   const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
@@ -420,20 +427,25 @@ function MemoryWorkspace({
 
   const handleDiscardDraft = useCallback(async () => {
     if (!draftId) return;
-    setLoading(true);
+    setDiscarding(true);
     onError(null);
     try {
       await client.discardWorkflowDraft(classId, draftId);
       if (typeof window !== "undefined") {
         clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
         window.sessionStorage.removeItem(`kp:composer:${draftId}`);
-        window.location.reload();
+        markClassHomeTimelineRefresh(window.sessionStorage, classId);
+        if (discardRedirectHref) {
+          router.replace(discardRedirectHref);
+        } else {
+          window.location.reload();
+        }
       }
     } catch (e) {
       onError(e instanceof Error ? e.message : "Could not discard draft");
-      setLoading(false);
+      setDiscarding(false);
     }
-  }, [classId, draftId, onError, reviewStorageKey]);
+  }, [classId, discardRedirectHref, draftId, onError, reviewStorageKey, router]);
 
   // After a successful commit, bring the "Memory saved" confirmation into view
   // so the save is unmissable (beta: teachers re-clicked Save when the card
@@ -653,16 +665,32 @@ function MemoryWorkspace({
         draftPanel={draftPanel}
         footer={
           !inReview ? (
-            <div className="flex flex-wrap items-start gap-3">
-              <ReadyToSaveButton onReady={handleReadyToSave} loading={loading} />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleDiscardDraft}
-                disabled={loading || isUpdating || !draftId}
-              >
-                Discard draft
-              </Button>
+            <div className="flex min-w-0 flex-col gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <ReadyToSaveButton
+                  onReady={handleReadyToSave}
+                  operation={loading ? "compiling" : discarding ? "discarding" : "idle"}
+                  disabled={discarding}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDiscardDraft}
+                  disabled={loading || discarding || isUpdating || !draftId}
+                >
+                  {discarding ? "Discarding..." : "Discard draft"}
+                </Button>
+              </div>
+              {hasDraftMessage && !loading && !isUpdating && (
+                <p className="text-xs text-muted-foreground">
+                  Send or clear the draft message before preparing wiki updates.
+                </p>
+              )}
+              {readyToSave && !loading && !hasDraftMessage && (
+                <p className="text-xs text-primary">
+                  All sections filled - compile and review wiki file changes before saving.
+                </p>
+              )}
             </div>
           ) : null
         }
@@ -797,6 +825,14 @@ function MemoryPageContent() {
       source: "timeline_hint",
     };
   }, [searchParams]);
+  const discardRedirectHref = useMemo(
+    () =>
+      memoryDiscardRedirectHref({
+        classId,
+        hasTimelineHint: Boolean(startHint?.lesson_date),
+      }),
+    [classId, startHint],
+  );
 
   const bootstrap = useCallback(
     async (opts?: { preserveMarkdown?: string }) => {
@@ -859,6 +895,7 @@ function MemoryPageContent() {
         <MemoryWorkspace
           classId={classId}
           reviewStorageKey={reviewStorageKey}
+          discardRedirectHref={discardRedirectHref}
           onError={onError}
         />
       )}

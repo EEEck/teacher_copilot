@@ -138,6 +138,7 @@ export function createArtifactRuntimeConfig(args: {
 
   if (mode === "ingest") {
     return {
+      mode,
       classId,
       sessionId,
       draftId,
@@ -168,6 +169,7 @@ export function createArtifactRuntimeConfig(args: {
   }
 
   return {
+    mode,
     classId,
     sessionId,
     draftId,

@@ -9,6 +9,10 @@ import {
 } from "@/components/assistant-ui/artifact-runtime-config";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  clearPendingChatTurn,
+  pendingTurnKey,
+} from "@/lib/pending-chat-turns";
 import type { ChatMessage, CompletenessChecklist } from "@/lib/api";
 
 export type ArtifactBootstrapOptions = {
@@ -35,10 +39,6 @@ export type ArtifactSessionBodyProps = {
   openingMessage: string;
   onError: (message: string | null) => void;
 };
-
-function pendingTurnKey(draftId: string | undefined, sessionId: string): string {
-  return `kp:turn-pending:${draftId || sessionId}`;
-}
 
 /**
  * Shared shell for every artifact-session route (update memory, plan lesson, …).
@@ -162,7 +162,7 @@ export function ArtifactSessionPage({
     if (typeof window === "undefined") return;
     const key = pendingTurnKey(data.draftId, data.sessionId);
     if (!window.sessionStorage.getItem(key)) return;
-    window.sessionStorage.removeItem(key);
+    clearPendingChatTurn(window.sessionStorage, key);
     toast.success(mode === "plan" ? "Lesson plan done" : "Draft update done");
   }, [data, mode]);
 

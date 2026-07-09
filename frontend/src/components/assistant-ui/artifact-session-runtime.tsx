@@ -17,9 +17,19 @@ import {
   type ThreadMessageLike,
   type ThreadMessage,
 } from "@assistant-ui/react";
+import { toast } from "sonner";
 import { isUnknownSessionError, type ChatMessage, type CompletenessChecklist } from "@/lib/api";
 import type { MemoryCandidate } from "@/lib/api";
 import type { ChatStreamChunk } from "@/components/assistant-ui/artifact-runtime-config";
+import type { ArtifactMode } from "@/components/assistant-ui/artifact-runtime-config";
+import {
+  chatCompletionToastLabel,
+  initialAssistantRunContent,
+} from "@/lib/chat-run-feedback";
+import {
+  clearPendingChatTurn,
+  markPendingChatTurn,
+} from "@/lib/pending-chat-turns";
 import { extractSessionAttachments, type SessionAttachment } from "@/lib/session-attachments";
 import { streamPartsToRunContent } from "@/lib/sse-chat";
 
@@ -37,6 +47,7 @@ export type ArtifactChatResult = {
 };
 
 export type ArtifactSessionConfig = {
+  mode: ArtifactMode;
   classId: string;
   sessionId: string;
   draftId?: string;
@@ -68,10 +79,6 @@ export type ArtifactSessionConfig = {
 
 const CHAT_ERROR_REPLY =
   "I could not finish that turn. Your draft is unchanged — try a shorter message or one topic at a time.";
-
-function pendingTurnKey(draftId: string, sessionId: string): string {
-  return `kp:turn-pending:${draftId || sessionId}`;
-}
 
 function friendlyChatError(err: unknown): string {
   const raw = err instanceof Error ? err.message : "Something went wrong";
@@ -147,6 +154,7 @@ export function ArtifactSessionRuntimeProvider({
 }) {
   const {
     classId,
+    mode,
     sessionId,
     draftId = "",
     artifactRevision = 0,
@@ -317,12 +325,21 @@ export function ArtifactSessionRuntimeProvider({
         if (!last || last.role !== "user") return;
 
         setIsUpdating(true);
-        const pendingKey = pendingTurnKey(activeDraftIdRef.current, sessionIdRef.current);
+        const pendingKey =
+          typeof window !== "undefined"
+            ? markPendingChatTurn(window.sessionStorage, {
+                mode,
+                classId,
+                sessionId: sessionIdRef.current,
+                draftId: activeDraftIdRef.current || undefined,
+              })
+            : "";
         if (typeof window !== "undefined") {
           window.sessionStorage.setItem(pendingKey, "1");
         }
         let clearPending = false;
         try {
+          yield { content: initialAssistantRunContent() };
           const text = extractText(last);
           const attachments = await extractSessionAttachments(last);
           const currentMd =
@@ -347,6 +364,7 @@ export function ArtifactSessionRuntimeProvider({
             lastSyncedRef.current = chunk.result.artifactMarkdown;
             applyDraftMetadata(chunk.result);
             applyMeta(chunk.result.completeness ?? null, chunk.result.readyToSave, chunk.result);
+            toast.success(chatCompletionToastLabel(mode));
             const content = chunk.content;
             yield {
               content:
@@ -366,13 +384,21 @@ export function ArtifactSessionRuntimeProvider({
           yield { content: [{ type: "text", text: message }] };
         } finally {
           if (clearPending && typeof window !== "undefined") {
-            window.sessionStorage.removeItem(pendingKey);
+            clearPendingChatTurn(window.sessionStorage, pendingKey);
           }
           setIsUpdating(false);
         }
       },
     }),
-    [chatStream, initialMarkdown, pushMarkdown, applyMeta, applyDraftMetadata],
+    [
+      chatStream,
+      classId,
+      initialMarkdown,
+      mode,
+      pushMarkdown,
+      applyMeta,
+      applyDraftMetadata,
+    ],
   );
 
   const initialThreadMessages = useMemo(

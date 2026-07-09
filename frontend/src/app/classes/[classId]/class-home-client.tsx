@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ActionLink } from "@/components/klassenpilot/action-link";
 import {
@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { client, type ClassMemorySnapshot, type ClassTimeline } from "@/lib/api";
+import { consumeClassHomeTimelineRefresh } from "@/lib/class-home-refresh";
 
 type ClassHomeClientProps = {
   classId: string;
@@ -41,13 +42,26 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
   );
   const [error, setError] = useState<string | null>(null);
 
+  const fetchClassHome = useCallback(
+    async (opts?: { snapshot?: boolean }) => {
+      const includeSnapshot = opts?.snapshot !== false;
+      const requests = includeSnapshot
+        ? Promise.all([client.getTimeline(classId), client.getSnapshot(classId)])
+        : client.getTimeline(classId).then((timelineData) => [timelineData, null] as const);
+
+      const [timelineData, snapshotData] = await requests;
+      return { timelineData, snapshotData };
+    },
+    [classId],
+  );
+
   useEffect(() => {
     let cancelled = false;
-    Promise.all([client.getTimeline(classId), client.getSnapshot(classId)])
-      .then(([timelineData, snapshotData]) => {
+    fetchClassHome()
+      .then(({ timelineData, snapshotData }) => {
         if (!cancelled) {
           setTimeline(timelineData);
-          setSnapshot(snapshotData);
+          if (snapshotData) setSnapshot(snapshotData);
           setError(null);
         }
       })
@@ -59,7 +73,37 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
     return () => {
       cancelled = true;
     };
-  }, [classId]);
+  }, [fetchClassHome]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const refreshIfMarked = () => {
+      if (!consumeClassHomeTimelineRefresh(window.sessionStorage, classId)) return;
+      void fetchClassHome({ snapshot: false })
+        .then(({ timelineData }) => {
+          setTimeline(timelineData);
+          setError(null);
+        })
+        .catch((e: unknown) => {
+          setError(e instanceof Error ? e.message : "Failed to refresh timeline");
+        });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") refreshIfMarked();
+    };
+
+    window.addEventListener("pageshow", refreshIfMarked);
+    window.addEventListener("focus", refreshIfMarked);
+    document.addEventListener("visibilitychange", handleVisibility);
+    refreshIfMarked();
+    return () => {
+      window.removeEventListener("pageshow", refreshIfMarked);
+      window.removeEventListener("focus", refreshIfMarked);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [classId, fetchClassHome]);
 
   const timelineEntries = timeline.entries ?? [];
   const timelineMonths = timeline.months ?? [];
