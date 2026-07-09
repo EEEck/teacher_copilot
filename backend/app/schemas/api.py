@@ -209,6 +209,43 @@ class MemorySweepApplyResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+MemorySweepReviewStatus = Literal[
+    "generating",
+    "ready",
+    "stale",
+    "applying",
+    "completed",
+    "discarded",
+    "failed",
+    "none",
+]
+
+
+class MemorySweepReviewOpenRequest(BaseModel):
+    refresh: bool = False
+    keep_stale: bool = False
+
+
+class MemorySweepReviewPatchRequest(BaseModel):
+    decisions: list[MemorySweepDecision] = Field(default_factory=list)
+
+
+class MemorySweepReviewResponse(BaseModel):
+    review_id: str = ""
+    class_id: str
+    status: MemorySweepReviewStatus
+    source_fingerprint: str = ""
+    generated_at: str | None = None
+    updated_at: str | None = None
+    completed_at: str | None = None
+    is_stale: bool = False
+    has_teacher_edits: bool = False
+    queues: dict[str, list[MemorySweepCandidate]] = Field(default_factory=dict)
+    decisions: list[MemorySweepDecision] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    error: str = ""
+
+
 class TimelineEntry(BaseModel):
     date: str
     title: str

@@ -52,6 +52,7 @@ from app.teacher_agent.planning_state import (
 )
 from app.services.ingest_service import IngestService
 from app.services.memory_candidate_ledger import MemoryCandidateLedger
+from app.services.memory_sweep_reviews import MemorySweepReviewStore
 from app.services.plan_service import PlanService
 from app.services.workflow_drafts import (
     WorkflowDraftStore,
@@ -746,11 +747,19 @@ def workflow_drafts(wiki: WikiStore) -> WorkflowDraftStore:
 
 
 @pytest.fixture
+def memory_sweep_reviews(wiki: WikiStore) -> MemorySweepReviewStore:
+    store = MemorySweepReviewStore(wiki.root / "workflow" / "memory_sweep_reviews.sqlite")
+    store.initialize()
+    return store
+
+
+@pytest.fixture
 def client(
     wiki: WikiStore,
     agents: StubAgentRunner,
     memory_candidate_ledger: MemoryCandidateLedger,
     workflow_drafts: WorkflowDraftStore,
+    memory_sweep_reviews: MemorySweepReviewStore,
 ) -> Iterator[TestClient]:
     ingest = IngestService(
         wiki=wiki,
@@ -771,6 +780,9 @@ def client(
         lambda: memory_candidate_ledger
     )
     app.dependency_overrides[deps.get_workflow_draft_store] = lambda: workflow_drafts
+    app.dependency_overrides[deps.get_memory_sweep_review_store] = (
+        lambda: memory_sweep_reviews
+    )
     app.dependency_overrides[deps.get_ingest_service] = lambda: ingest
     app.dependency_overrides[deps.get_plan_service] = lambda: plan
     try:

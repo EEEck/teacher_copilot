@@ -10,6 +10,10 @@ from app.services.memory_candidate_ledger import (
     MemoryCandidateLedger,
     default_memory_candidate_ledger_path,
 )
+from app.services.memory_sweep_reviews import (
+    MemorySweepReviewStore,
+    default_memory_sweep_review_store_path,
+)
 from app.services.plan_service import PlanService
 from app.services.workflow_drafts import (
     WorkflowDraftStore,
@@ -20,6 +24,7 @@ from app.teacher_agent.wiki_store import WikiStore
 
 _AGENT_CACHE: dict[str, AgentRunner] = {}
 _LEDGER_CACHE: dict[str, MemoryCandidateLedger] = {}
+_MEMORY_SWEEP_REVIEW_CACHE: dict[str, MemorySweepReviewStore] = {}
 _WORKFLOW_DRAFT_CACHE: dict[str, WorkflowDraftStore] = {}
 _INGEST_CACHE: dict[str, IngestService] = {}
 _PLAN_CACHE: dict[str, PlanService] = {}
@@ -101,6 +106,18 @@ def get_memory_candidate_ledger(
     ledger.initialize()
     _LEDGER_CACHE[key] = ledger
     return ledger
+
+
+def get_memory_sweep_review_store(
+    wiki: WikiStore = Depends(get_wiki),
+) -> MemorySweepReviewStore:
+    key = str(wiki.root.resolve())
+    if key in _MEMORY_SWEEP_REVIEW_CACHE:
+        return _MEMORY_SWEEP_REVIEW_CACHE[key]
+    store = MemorySweepReviewStore(default_memory_sweep_review_store_path(wiki.root))
+    store.initialize()
+    _MEMORY_SWEEP_REVIEW_CACHE[key] = store
+    return store
 
 
 def get_workflow_draft_store(

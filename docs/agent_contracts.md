@@ -405,8 +405,14 @@ Reads:
 Writes:
 
 - `/memory/sweep/propose` writes nothing.
-- `/memory/sweep/apply` accepts a teacher-reviewed decision set, applies
-  approved memory writes first, then updates represented ledger rows.
+- `/memory/sweep/review` is the normal UI entrypoint. It opens or creates a
+  backend-owned saved review for the current ledger/wiki fingerprint and stores
+  generated cards, teacher edits, and selected decisions in SQLite.
+- `/memory/sweep/review/{review_id}/apply` applies backend-stored decisions
+  only if the current ledger/wiki fingerprint still matches the saved review.
+  Stale reviews return `409 stale_review`.
+- `/memory/sweep/propose` and `/memory/sweep/apply` remain compatibility/debug
+  routes. New UI code should not use them as the authoritative review state.
 - Approved student-summary decisions update only `## Student Summary` in the
   affected `students/S-###.md`, then rebuild `students.md` from those approved
   summaries.
@@ -420,6 +426,11 @@ Proposal behavior:
 - Backend Memory Sweep owns candidate identity, channel, review queue, target,
   and status. The SQLite ledger stores evidence rows; insert-time folding
   normalizes section vocabulary and clusters exact/near duplicate captures.
+- A saved Memory Sweep review is generated once for an unchanged ledger/wiki
+  fingerprint. Returning to the page resumes the saved review instead of
+  rerunning consolidation. If the source fingerprint changed, unedited reviews
+  may refresh automatically; edited reviews surface as stale until the teacher
+  chooses refresh, keep reviewing, or discard.
 - The promotion gate decides which rows reach review: explicit teacher asks are
   eligible immediately, inferred claims need reinforcement across distinct
   occasions, stale unreinforced singletons expire silently, and rejected
@@ -453,9 +464,10 @@ Proposal behavior:
   ignores unknown candidate ids from model output, and preserves evidence
   ownership. A single candidate row may support multiple target-specific review
   cards only when those target scopes are explicit and validated.
-- The UI should submit sweep decisions as a batch. Ledger row status is resolved
-  only after the whole decision set is processed, so overlapping evidence does
-  not disappear during proposal review.
+- The UI should persist sweep decisions to the saved review and apply them as a
+  batch by `review_id`. Ledger row status is resolved only after the whole
+  decision set is processed, so overlapping evidence does not disappear during
+  proposal review.
 - `canonical_wiki` remains review-only; it is never converted into a direct
   write target by the proposer.
 - Student summaries must avoid sensitive or high-stakes profiling language:

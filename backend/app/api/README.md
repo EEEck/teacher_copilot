@@ -17,7 +17,8 @@ Routes should be thin adapters over services and wiki facades.
   propose, commit.
 - Plan sessions: start, chat, stream, draft, save, trace.
 - Memory maintenance: compact, refresh, profile propose, apply, Memory Sweep
-  propose/apply, and candidate status updates.
+  saved review open/patch/apply/discard, compatibility propose/apply, and
+  candidate status updates.
 
 ## Conventions
 
@@ -31,6 +32,8 @@ Routes should be thin adapters over services and wiki facades.
   normalized later.
 - Do not add hidden writes to chat routes. Durable memory writes belong to
   explicit commit/apply endpoints.
+- Memory Sweep UI state should go through the saved review endpoints. The
+  backend review snapshot is authoritative; frontend caches are visual only.
 - Debug endpoints that expose prompts, raw tool output, or messages should be
   gated by settings.
 

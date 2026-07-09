@@ -19,15 +19,9 @@ import {
   type MemorySweepCandidate,
   type MemorySweepDecision,
   type MemorySweepProposalResponse,
+  type MemorySweepReviewResponse,
 } from "@/lib/api";
 
-const MEMORY_SWEEP_QUEUES = [
-  "Class Evolution",
-  "Subject Concepts",
-  "Teacher/Copilot Preferences",
-  "Wiki Review",
-  "Memory Sweep",
-];
 const REVIEW_LATER_TOOLTIP =
   "Hide while the system waits for more evidence. It returns when newer matching evidence arrives, or after 7 days if it still needs review.";
 
@@ -54,22 +48,6 @@ function countCandidates(proposal: MemorySweepProposalResponse | null): number {
   return Object.values(proposal.queues).reduce((sum, queue) => sum + queue.length, 0);
 }
 
-function mergeProposal(
-  current: MemorySweepProposalResponse | null,
-  next: MemorySweepProposalResponse,
-): MemorySweepProposalResponse {
-  const queues = { ...(current?.queues ?? {}) };
-  for (const [queue, candidates] of Object.entries(next.queues)) {
-    queues[queue] = candidates;
-  }
-  return {
-    class_id: next.class_id || current?.class_id || "",
-    subject: next.subject || current?.subject || "",
-    queues,
-    warnings: [...(current?.warnings ?? []), ...(next.warnings ?? [])],
-  };
-}
-
 function warningCardLinks(proposal: MemorySweepProposalResponse | null): {
   warning: string;
   card: MemorySweepCandidate;
@@ -88,6 +66,26 @@ function warningCardLinks(proposal: MemorySweepProposalResponse | null): {
     }
   }
   return items;
+}
+
+function proposalFromReview(review: MemorySweepReviewResponse): MemorySweepProposalResponse {
+  return {
+    class_id: review.class_id,
+    subject: "",
+    queues: review.queues ?? {},
+    warnings: review.warnings ?? [],
+  };
+}
+
+function decisionsByCardFromList(
+  decisions: MemorySweepDecision[],
+): Record<string, MemorySweepDecision> {
+  const keyed: Record<string, MemorySweepDecision> = {};
+  for (const decision of decisions) {
+    const key = decision.card_id || decision.candidate_ids[0];
+    if (key) keyed[key] = decision;
+  }
+  return keyed;
 }
 
 function uniqueWarningCount(
@@ -287,10 +285,9 @@ export default function MemorySweepPage() {
   const params = useParams();
   const router = useRouter();
   const classId = params.classId as string;
+  const [review, setReview] = useState<MemorySweepReviewResponse | null>(null);
   const [proposal, setProposal] = useState<MemorySweepProposalResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingQueue, setLoadingQueue] = useState<string | null>(null);
-  const [loadedQueueCount, setLoadedQueueCount] = useState(0);
   const [loadingReason, setLoadingReason] = useState<"refresh" | "submit">(
     "refresh",
   );
@@ -315,34 +312,51 @@ export default function MemorySweepPage() {
   const warningItems = useMemo(() => warningCardLinks(proposal), [proposal]);
   const warningCount = useMemo(() => uniqueWarningCount(warningItems), [warningItems]);
   const pendingCount = Object.keys(decisionsByCard).length;
+  const reviewId = review?.review_id || "";
+  const staleReview = Boolean(review?.is_stale || review?.status === "stale");
 
-  const load = useCallback(async (reason: "refresh" | "submit" = "refresh") => {
+  const applyReview = useCallback((next: MemorySweepReviewResponse) => {
+    setReview(next);
+    setProposal(proposalFromReview(next));
+    const nextDecisions = decisionsByCardFromList(next.decisions ?? []);
+    setDecisionsByCard(nextDecisions);
+    setDraftByCard((current) => {
+      const drafts = { ...current };
+      for (const decision of Object.values(nextDecisions)) {
+        const key = decision.card_id || decision.candidate_ids[0];
+        if (key && decision.content) drafts[key] = decision.content;
+      }
+      return drafts;
+    });
+  }, []);
+
+  const load = useCallback(async (
+    reason: "refresh" | "submit" = "refresh",
+    options?: { refresh?: boolean; keepStale?: boolean },
+  ) => {
     setLoading(true);
     setLoadingReason(reason);
-    setLoadingQueue(null);
-    setLoadedQueueCount(0);
     setShowAllWarnings(false);
     setError(null);
     setNotice(null);
-    setProposal(null);
-    setDraftByCard({});
-    setDecisionsByCard({});
     try {
-      let merged: MemorySweepProposalResponse | null = null;
-      for (const [index, queue] of MEMORY_SWEEP_QUEUES.entries()) {
-        setLoadingQueue(queue);
-        const next = await client.memorySweepPropose(classId, { queue });
-        merged = mergeProposal(merged, next);
-        setProposal(merged);
-        setLoadedQueueCount(index + 1);
+      const opened = await client.openMemorySweepReview(classId, options);
+      applyReview(opened);
+      if (opened.status === "generating") {
+        const pollUntil = Date.now() + 120000;
+        let current = opened;
+        while (current.status === "generating" && Date.now() < pollUntil) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          current = await client.getMemorySweepReview(classId);
+          applyReview(current);
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load Memory Sweep");
     } finally {
-      setLoadingQueue(null);
       setLoading(false);
     }
-  }, [classId]);
+  }, [applyReview, classId]);
 
   useEffect(() => {
     // StrictMode runs this effect twice in dev; share the in-flight load so
@@ -354,16 +368,32 @@ export default function MemorySweepPage() {
     }
   }, [load]);
 
+  const persistDecisions = useCallback(
+    (next: Record<string, MemorySweepDecision>) => {
+      if (!reviewId) return;
+      void client.patchMemorySweepReview(classId, reviewId, Object.values(next)).catch(
+        (e) => {
+          setError(e instanceof Error ? e.message : "Could not save review choices");
+        },
+      );
+    },
+    [classId, reviewId],
+  );
+
   const setDecision = useCallback(
     (candidate: MemorySweepCandidate, action: MemorySweepDecision["action"]) => {
       const key = cardKey(candidate);
       const draft = draftByCard[key] ?? candidate.content;
-      setDecisionsByCard((current) => ({
-        ...current,
-        [key]: buildDecision(candidate, action, draft),
-      }));
+      setDecisionsByCard((current) => {
+        const next = {
+          ...current,
+          [key]: buildDecision(candidate, action, draft),
+        };
+        persistDecisions(next);
+        return next;
+      });
     },
-    [draftByCard],
+    [draftByCard, persistDecisions],
   );
 
   const setMany = useCallback(
@@ -379,10 +409,11 @@ export default function MemorySweepPage() {
             draftByCard[key] ?? candidate.content,
           );
         }
+        persistDecisions(next);
         return next;
       });
     },
-    [draftByCard],
+    [draftByCard, persistDecisions],
   );
 
   const clearDecision = useCallback((candidate: MemorySweepCandidate) => {
@@ -390,9 +421,10 @@ export default function MemorySweepPage() {
     setDecisionsByCard((current) => {
       const next = { ...current };
       delete next[key];
+      persistDecisions(next);
       return next;
     });
-  }, []);
+  }, [persistDecisions]);
 
   const updateDraft = useCallback(
     (candidate: MemorySweepCandidate, value: string) => {
@@ -401,10 +433,12 @@ export default function MemorySweepPage() {
       setDecisionsByCard((current) => {
         const selected = current[key];
         if (!selected || selected.action !== "apply") return current;
-        return { ...current, [key]: { ...selected, content: value } };
+        const next = { ...current, [key]: { ...selected, content: value } };
+        persistDecisions(next);
+        return next;
       });
     },
-    [],
+    [persistDecisions],
   );
 
   const renderCandidateCard = useCallback(
@@ -427,6 +461,10 @@ export default function MemorySweepPage() {
 
   const submit = useCallback(async () => {
     const decisions = Object.values(decisionsByCard);
+    if (!reviewId) {
+      setError("No saved Memory Sweep review is open.");
+      return;
+    }
     if (!decisions.length) {
       setError("No Memory Sweep decisions selected.");
       return;
@@ -434,7 +472,8 @@ export default function MemorySweepPage() {
     setBusy(true);
     setError(null);
     try {
-      const result = await client.memorySweepApply(classId, decisions);
+      await client.patchMemorySweepReview(classId, reviewId, decisions);
+      const result = await client.applyMemorySweepReview(classId, reviewId);
       const appliedText = result.applied_wiki_paths.length
         ? ` Applied to ${[...new Set(result.applied_wiki_paths)].join(", ")}.`
         : "";
@@ -451,7 +490,26 @@ export default function MemorySweepPage() {
     } finally {
       setBusy(false);
     }
-  }, [classId, decisionsByCard, load, router]);
+  }, [classId, decisionsByCard, load, reviewId, router]);
+
+  const discard = useCallback(async () => {
+    if (!reviewId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await client.discardMemorySweepReview(classId, reviewId);
+      setReview(null);
+      setProposal(null);
+      setDraftByCard({});
+      setDecisionsByCard({});
+      setNotice("Memory Sweep draft discarded.");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not discard review");
+    } finally {
+      setBusy(false);
+    }
+  }, [classId, reviewId, router]);
 
   return (
     <div>
@@ -461,9 +519,17 @@ export default function MemorySweepPage() {
       />
 
       <div className="mb-6 flex flex-wrap gap-3">
-        <Button onClick={() => void load()} disabled={loading || busy}>
-          {loading ? "Refreshing..." : "Refresh"}
+        <Button
+          onClick={() => void load("refresh", { refresh: true })}
+          disabled={loading || busy}
+        >
+          {loading ? "Refreshing..." : "Refresh sweep"}
         </Button>
+        {reviewId && (
+          <Button variant="outline" onClick={() => void discard()} disabled={loading || busy}>
+            Discard draft
+          </Button>
+        )}
         <Button
           variant="outline"
           onClick={() => setShowDetailed((current) => !current)}
@@ -516,6 +582,47 @@ export default function MemorySweepPage() {
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       )}
+      {staleReview && (
+        <Alert className="mb-4 border-amber-200 bg-amber-50 text-amber-950">
+          <AlertDescription>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm">
+                This Memory Sweep draft was generated from older memory state.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void load("refresh", { refresh: true })}
+                  disabled={loading || busy}
+                >
+                  Refresh sweep
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void load("refresh", { keepStale: true })}
+                  disabled={loading || busy}
+                >
+                  Keep reviewing
+                </Button>
+                {reviewId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void discard()}
+                    disabled={loading || busy}
+                  >
+                    Discard
+                  </Button>
+                )}
+              </div>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
       {warningItems.length > 0 && (
         <Alert className="mb-4 border-border bg-muted">
           <AlertDescription>
@@ -557,11 +664,9 @@ export default function MemorySweepPage() {
 
       {loading && (
         <p className="text-sm text-muted-foreground">
-          {loadingQueue
-            ? loadingReason === "submit"
-              ? `Updating review list · Checked ${loadedQueueCount} of ${MEMORY_SWEEP_QUEUES.length} sections · Checking ${loadingQueue}...`
-              : `Loaded ${loadedQueueCount} of ${MEMORY_SWEEP_QUEUES.length} queues · Loading ${loadingQueue}...`
-            : "Loading Memory Sweep queues..."}
+          {loadingReason === "submit"
+            ? "Updating saved Memory Sweep review..."
+            : "Opening saved Memory Sweep review..."}
         </p>
       )}
 

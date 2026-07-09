@@ -314,6 +314,30 @@ export type MemorySweepApplyResponse = {
   skipped: string[];
   warnings: string[];
 };
+export type MemorySweepReviewStatus =
+  | "generating"
+  | "ready"
+  | "stale"
+  | "applying"
+  | "completed"
+  | "discarded"
+  | "failed"
+  | "none";
+export type MemorySweepReviewResponse = {
+  review_id: string;
+  class_id: string;
+  status: MemorySweepReviewStatus;
+  source_fingerprint: string;
+  generated_at?: string | null;
+  updated_at?: string | null;
+  completed_at?: string | null;
+  is_stale: boolean;
+  has_teacher_edits: boolean;
+  queues: Record<string, MemorySweepCandidate[]>;
+  decisions: MemorySweepDecision[];
+  warnings: string[];
+  error: string;
+};
 export type MemoryProposalResponse = {
   class_id: string;
   pages: Record<string, string>;
@@ -600,6 +624,46 @@ export const client = {
       },
     );
   },
+  getMemorySweepReview: (classId: string) =>
+    api<MemorySweepReviewResponse>(
+      `/api/classes/${classId}/memory/sweep/review`,
+    ),
+  openMemorySweepReview: (
+    classId: string,
+    options?: { refresh?: boolean; keepStale?: boolean },
+  ) =>
+    api<MemorySweepReviewResponse>(
+      `/api/classes/${classId}/memory/sweep/review`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          refresh: Boolean(options?.refresh),
+          keep_stale: Boolean(options?.keepStale),
+        }),
+      },
+    ),
+  patchMemorySweepReview: (
+    classId: string,
+    reviewId: string,
+    decisions: MemorySweepDecision[],
+  ) =>
+    api<MemorySweepReviewResponse>(
+      `/api/classes/${classId}/memory/sweep/review/${reviewId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ decisions }),
+      },
+    ),
+  applyMemorySweepReview: (classId: string, reviewId: string) =>
+    api<MemorySweepApplyResponse>(
+      `/api/classes/${classId}/memory/sweep/review/${reviewId}/apply`,
+      { method: "POST" },
+    ),
+  discardMemorySweepReview: (classId: string, reviewId: string) =>
+    api<MemorySweepReviewResponse>(
+      `/api/classes/${classId}/memory/sweep/review/${reviewId}/discard`,
+      { method: "POST" },
+    ),
   memoryCandidateStatus: (
     classId: string,
     candidateId: string,
