@@ -11,11 +11,16 @@ from app.services.memory_candidate_ledger import (
     default_memory_candidate_ledger_path,
 )
 from app.services.plan_service import PlanService
+from app.services.workflow_drafts import (
+    WorkflowDraftStore,
+    default_workflow_draft_store_path,
+)
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.wiki_store import WikiStore
 
 _AGENT_CACHE: dict[str, AgentRunner] = {}
 _LEDGER_CACHE: dict[str, MemoryCandidateLedger] = {}
+_WORKFLOW_DRAFT_CACHE: dict[str, WorkflowDraftStore] = {}
 _INGEST_CACHE: dict[str, IngestService] = {}
 _PLAN_CACHE: dict[str, PlanService] = {}
 
@@ -98,12 +103,26 @@ def get_memory_candidate_ledger(
     return ledger
 
 
+def get_workflow_draft_store(
+    wiki: WikiStore = Depends(get_wiki),
+) -> WorkflowDraftStore:
+    key = str(wiki.root.resolve())
+    if key in _WORKFLOW_DRAFT_CACHE:
+        return _WORKFLOW_DRAFT_CACHE[key]
+    store = WorkflowDraftStore(default_workflow_draft_store_path(wiki.root))
+    store.initialize()
+    _WORKFLOW_DRAFT_CACHE[key] = store
+    return store
+
+
 def get_ingest_service(
+    identity: RequestIdentity = Depends(get_request_identity),
     wiki: WikiStore = Depends(get_wiki),
     agents: AgentRunner = Depends(get_agents),
     memory_candidate_ledger: MemoryCandidateLedger = Depends(
         get_memory_candidate_ledger
     ),
+    workflow_drafts: WorkflowDraftStore = Depends(get_workflow_draft_store),
 ) -> IngestService:
     key = str(wiki.root.resolve())
     if key in _INGEST_CACHE:
@@ -112,17 +131,21 @@ def get_ingest_service(
         wiki=wiki,
         agents=agents,
         memory_candidate_ledger=memory_candidate_ledger,
+        workflow_drafts=workflow_drafts,
+        workspace_id=identity.workspace_id,
     )
     _INGEST_CACHE[key] = service
     return service
 
 
 def get_plan_service(
+    identity: RequestIdentity = Depends(get_request_identity),
     wiki: WikiStore = Depends(get_wiki),
     agents: AgentRunner = Depends(get_agents),
     memory_candidate_ledger: MemoryCandidateLedger = Depends(
         get_memory_candidate_ledger
     ),
+    workflow_drafts: WorkflowDraftStore = Depends(get_workflow_draft_store),
 ) -> PlanService:
     key = str(wiki.root.resolve())
     if key in _PLAN_CACHE:
@@ -131,6 +154,8 @@ def get_plan_service(
         wiki=wiki,
         agents=agents,
         memory_candidate_ledger=memory_candidate_ledger,
+        workflow_drafts=workflow_drafts,
+        workspace_id=identity.workspace_id,
     )
     _PLAN_CACHE[key] = service
     return service

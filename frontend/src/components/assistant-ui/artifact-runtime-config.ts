@@ -2,7 +2,12 @@ import type {
   ArtifactChatResult,
   ArtifactSessionConfig,
 } from "@/components/assistant-ui/artifact-session-runtime";
-import { client, isUnknownSessionError, type CompletenessChecklist } from "@/lib/api";
+import {
+  client,
+  isUnknownSessionError,
+  type ChatMessage,
+  type CompletenessChecklist,
+} from "@/lib/api";
 import { readSseJsonStream, StreamPartsAccumulator, type StreamPart } from "@/lib/sse-chat";
 import type { SessionAttachment } from "@/lib/session-attachments";
 
@@ -34,6 +39,12 @@ export function createArtifactRuntimeConfig(args: {
   mode: ArtifactMode;
   classId: string;
   sessionId: string;
+  draftId?: string;
+  artifactRevision?: number;
+  artifactHash?: string;
+  turnInProgress?: boolean;
+  latestTurnComplete?: boolean;
+  initialMessages?: ChatMessage[];
   getSessionId?: () => string;
   onSessionLost?: (preserveMarkdown: string) => Promise<void>;
   initialMarkdown: string;
@@ -45,6 +56,12 @@ export function createArtifactRuntimeConfig(args: {
     mode,
     classId,
     sessionId,
+    draftId = "",
+    artifactRevision = 0,
+    artifactHash = "",
+    turnInProgress = false,
+    latestTurnComplete = true,
+    initialMessages,
     getSessionId = () => sessionId,
     onSessionLost,
     initialMarkdown,
@@ -101,6 +118,9 @@ export function createArtifactRuntimeConfig(args: {
           result: {
             reply: event.reply,
             artifactMarkdown: event.artifact_markdown,
+            draftId: event.draft_id ?? undefined,
+            artifactRevision: event.artifact_revision ?? undefined,
+            artifactHash: event.artifact_hash ?? undefined,
             readyToSave: event.ready,
             completeness: event.completeness ?? null,
             lastChangeSummary: event.last_change_summary ?? null,
@@ -120,6 +140,12 @@ export function createArtifactRuntimeConfig(args: {
     return {
       classId,
       sessionId,
+      draftId,
+      artifactRevision,
+      artifactHash,
+      turnInProgress,
+      latestTurnComplete,
+      initialMessages,
       initialMarkdown,
       initialCompleteness,
       initialMemoryState,
@@ -130,7 +156,13 @@ export function createArtifactRuntimeConfig(args: {
           client.ingestUpdateDraft(classId, sid, markdown),
         );
         const ready = draft.completeness.items.every((i) => !i.required || i.complete);
-        return { completeness: draft.completeness, readyToSave: ready };
+        return {
+          completeness: draft.completeness,
+          readyToSave: ready,
+          draftId: draft.draft_id,
+          artifactRevision: draft.artifact_revision,
+          artifactHash: draft.artifact_hash,
+        };
       },
     };
   }
@@ -138,13 +170,23 @@ export function createArtifactRuntimeConfig(args: {
   return {
     classId,
     sessionId,
+    draftId,
+    artifactRevision,
+    artifactHash,
+    turnInProgress,
+    latestTurnComplete,
+    initialMessages,
     initialMarkdown,
     chatStream,
     patchDraft: async (markdown: string) => {
-      await withSessionRecovery(getSessionId, onSessionLost, markdown, (sid) =>
+      const draft = await withSessionRecovery(getSessionId, onSessionLost, markdown, (sid) =>
         client.planUpdateDraft(classId, sid, markdown),
       );
-      return {};
+      return {
+        draftId: draft.draft_id,
+        artifactRevision: draft.artifact_revision,
+        artifactHash: draft.artifact_hash,
+      };
     },
   };
 }

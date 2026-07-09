@@ -14,6 +14,7 @@ from app.api.deps import (
     get_ingest_service,
     get_memory_candidate_ledger,
     get_plan_service,
+    get_workflow_draft_store,
     get_wiki,
 )
 from app.config import get_settings
@@ -77,6 +78,7 @@ from app.services.memory_sweep import (
     synthetic_student_summary_candidate_ids,
 )
 from app.services.plan_service import PlanService
+from app.services.workflow_drafts import WorkflowDraftStore
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.memory_targets import canonical_memory_target, compact_key_for_target
 from app.teacher_agent.stream_events import SseError, sse_encode
@@ -314,6 +316,12 @@ def _sse_final_payload(line: str) -> dict | None:
     return _sse_payload_of_type(line, "final")
 
 
+def _raise_workflow_value_error(exc: ValueError, *, default_status: int) -> None:
+    if str(exc) == "draft_changed_since_review_created":
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    raise HTTPException(status_code=default_status, detail=str(exc)) from exc
+
+
 async def _stream_chat_with_beta_telemetry(
     stream: AsyncIterator[str],
     *,
@@ -507,10 +515,21 @@ def list_classes(wiki: WikiStore = Depends(get_wiki)) -> ClassesResponse:
 
 
 @router.get("/classes/{class_id}/timeline", response_model=ClassTimeline)
-def get_timeline(class_id: str, wiki: WikiStore = Depends(get_wiki)) -> ClassTimeline:
+def get_timeline(
+    class_id: str,
+    wiki: WikiStore = Depends(get_wiki),
+    workflow_drafts: WorkflowDraftStore = Depends(get_workflow_draft_store),
+) -> ClassTimeline:
     try:
         wiki.get_class(class_id)
-        return wiki.get_timeline(class_id)
+        timeline = wiki.get_timeline(class_id)
+        active_by_date: dict[str, str] = {}
+        for draft in workflow_drafts.list_active_for_class(class_id, mode="ingest"):
+            if draft.lesson_date and draft.lesson_date not in active_by_date:
+                active_by_date[draft.lesson_date] = draft.draft_id
+        for entry in timeline.entries:
+            entry.memory_draft_id = active_by_date.get(entry.date)
+        return timeline
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -597,6 +616,22 @@ def get_wiki_file(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post("/classes/{class_id}/workflow-drafts/{draft_id}/discard")
+def discard_workflow_draft(
+    class_id: str,
+    draft_id: str,
+    store: WorkflowDraftStore = Depends(get_workflow_draft_store),
+) -> dict[str, str]:
+    try:
+        row = store.get(draft_id)
+        if row.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Workflow draft not found")
+        row = store.discard(draft_id)
+        return {"draft_id": row.draft_id, "status": row.status}
+    except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
@@ -1421,7 +1456,7 @@ async def ingest_commit(
             )
         return response
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        _raise_workflow_value_error(e, default_status=400)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -1711,7 +1746,7 @@ def plan_save(
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
+        _raise_workflow_value_error(e, default_status=422)
 
 
 @router.post("/classes/{class_id}/plan-lesson", response_model=LessonPlan)

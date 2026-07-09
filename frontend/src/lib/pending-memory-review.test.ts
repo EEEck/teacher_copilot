@@ -27,6 +27,9 @@ class MemoryStorage {
 const review: Omit<PendingMemoryReview, "version" | "savedAt"> = {
   classId: "chemie_9b_2026_27",
   routeKey: "/classes/chemie_9b_2026_27/memory?lessonDate=2026-07-04",
+  draftId: "draft-1",
+  sourceArtifactRevision: 2,
+  sourceArtifactHash: "hash-2",
   diaryMarkdown: "# Lesson results\n\nStudent note.",
   proposals: [
     {
@@ -58,9 +61,26 @@ describe("pending memory review storage", () => {
       loadPendingMemoryReview(storage, review.classId, review.routeKey, 1_500),
     ).toMatchObject({
       ...review,
-      version: 1,
+      version: 2,
       savedAt: 1_000,
     });
+  });
+
+  it("does not restore reviews without a backend snapshot", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      pendingMemoryReviewKey(review.classId, review.routeKey),
+      JSON.stringify({
+        ...review,
+        version: 2,
+        savedAt: 1_000,
+        sourceArtifactRevision: undefined,
+      }),
+    );
+
+    expect(
+      loadPendingMemoryReview(storage, review.classId, review.routeKey, 1_500),
+    ).toBeNull();
   });
 
   it("does not restore stale reviews", () => {

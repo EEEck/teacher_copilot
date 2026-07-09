@@ -53,6 +53,10 @@ from app.teacher_agent.planning_state import (
 from app.services.ingest_service import IngestService
 from app.services.memory_candidate_ledger import MemoryCandidateLedger
 from app.services.plan_service import PlanService
+from app.services.workflow_drafts import (
+    WorkflowDraftStore,
+    default_workflow_draft_store_path,
+)
 from app.teacher_agent.stream_events import (
     SseFinal,
     SseReasoningDelta,
@@ -735,20 +739,30 @@ def memory_candidate_ledger(tmp_path: Path) -> MemoryCandidateLedger:
 
 
 @pytest.fixture
+def workflow_drafts(wiki: WikiStore) -> WorkflowDraftStore:
+    store = WorkflowDraftStore(default_workflow_draft_store_path(wiki.root))
+    store.initialize()
+    return store
+
+
+@pytest.fixture
 def client(
     wiki: WikiStore,
     agents: StubAgentRunner,
     memory_candidate_ledger: MemoryCandidateLedger,
+    workflow_drafts: WorkflowDraftStore,
 ) -> Iterator[TestClient]:
     ingest = IngestService(
         wiki=wiki,
         agents=agents,
         memory_candidate_ledger=memory_candidate_ledger,
+        workflow_drafts=workflow_drafts,
     )
     plan = PlanService(
         wiki=wiki,
         agents=agents,
         memory_candidate_ledger=memory_candidate_ledger,
+        workflow_drafts=workflow_drafts,
     )
 
     app.dependency_overrides[deps.get_wiki] = lambda: wiki
@@ -756,6 +770,7 @@ def client(
     app.dependency_overrides[deps.get_memory_candidate_ledger] = (
         lambda: memory_candidate_ledger
     )
+    app.dependency_overrides[deps.get_workflow_draft_store] = lambda: workflow_drafts
     app.dependency_overrides[deps.get_ingest_service] = lambda: ingest
     app.dependency_overrides[deps.get_plan_service] = lambda: plan
     try:

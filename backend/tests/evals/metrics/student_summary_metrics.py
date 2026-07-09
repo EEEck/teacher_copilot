@@ -8,6 +8,7 @@ import re
 from deepeval.metrics import BaseMetric, GEval
 from deepeval.test_case import LLMTestCase, SingleTurnParams
 
+from tests.eval.model_config import build_deepeval_model
 from tests.evals.goldens.student_summary import StudentSummaryGolden
 
 
@@ -52,7 +53,6 @@ class StudentSummaryJudgeMetric(BaseMetric):
         if not self.golden.geval_criteria:
             return None
 
-        model = os.getenv("DEEPEVAL_MODEL") or os.getenv("OPENAI_FAST_MODEL", "gpt-4o-mini")
         return GEval(
             name=f"StudentSummaryJudge[{self.golden.golden_id}]",
             criteria=self.golden.geval_criteria,
@@ -62,7 +62,7 @@ class StudentSummaryJudgeMetric(BaseMetric):
                 SingleTurnParams.ACTUAL_OUTPUT,
             ],
             threshold=0.75,
-            model=model,
+            model=build_deepeval_model(),
         )
 
     def measure(self, test_case: LLMTestCase) -> float:

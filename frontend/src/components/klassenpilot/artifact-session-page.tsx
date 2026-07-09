@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { ArtifactSessionRuntimeProvider } from "@/components/assistant-ui/artifact-session-runtime";
 import {
   createArtifactRuntimeConfig,
@@ -8,7 +9,7 @@ import {
 } from "@/components/assistant-ui/artifact-runtime-config";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import type { CompletenessChecklist } from "@/lib/api";
+import type { ChatMessage, CompletenessChecklist } from "@/lib/api";
 
 export type ArtifactBootstrapOptions = {
   /** Re-apply draft after the server lost the in-memory session (e.g. backend restart). */
@@ -17,6 +18,12 @@ export type ArtifactBootstrapOptions = {
 
 export type ArtifactBootstrap = {
   sessionId: string;
+  draftId?: string;
+  artifactRevision?: number;
+  artifactHash?: string;
+  turnInProgress?: boolean;
+  latestTurnComplete?: boolean;
+  initialMessages?: ChatMessage[];
   initialMarkdown: string;
   initialCompleteness?: CompletenessChecklist | null;
   initialMemoryState?: Record<string, unknown> | null;
@@ -28,6 +35,10 @@ export type ArtifactSessionBodyProps = {
   openingMessage: string;
   onError: (message: string | null) => void;
 };
+
+function pendingTurnKey(draftId: string | undefined, sessionId: string): string {
+  return `kp:turn-pending:${draftId || sessionId}`;
+}
 
 /**
  * Shared shell for every artifact-session route (update memory, plan lesson, …).
@@ -41,6 +52,7 @@ export function ArtifactSessionPage({
   title,
   description,
   bootstrap,
+  refreshDraft,
   renderBody,
 }: {
   mode: ArtifactMode;
@@ -48,6 +60,7 @@ export function ArtifactSessionPage({
   title: string;
   description?: string;
   bootstrap: (opts?: ArtifactBootstrapOptions) => Promise<ArtifactBootstrap>;
+  refreshDraft?: (sessionId: string) => Promise<Partial<ArtifactBootstrap>>;
   renderBody: (props: ArtifactSessionBodyProps) => ReactNode;
 }) {
   const [data, setData] = useState<ArtifactBootstrap | null>(null);
@@ -74,7 +87,7 @@ export function ArtifactSessionPage({
     async (preserveMarkdown: string) => {
       await loadBootstrap({ preserveMarkdown });
       setSessionNotice(
-        "Server session was reset (e.g. after a restart). Your draft was restored — chat history from this tab was cleared.",
+        "Server session was reset. Your draft and saved chat state were restored.",
       );
     },
     [loadBootstrap],
@@ -114,6 +127,45 @@ export function ArtifactSessionPage({
     };
   }, [classId, loadBootstrap]);
 
+  useEffect(() => {
+    if (!data || data.turnInProgress !== true || !refreshDraft) return;
+    let cancelled = false;
+    const interval = window.setInterval(() => {
+      void (async () => {
+        try {
+          const refreshed = await refreshDraft(data.sessionId);
+          if (cancelled) return;
+          setData((current) =>
+            current?.sessionId === data.sessionId ? { ...current, ...refreshed } : current,
+          );
+          if (refreshed.latestTurnComplete) {
+            window.clearInterval(interval);
+            toast.success(mode === "plan" ? "Lesson plan done" : "Draft update done");
+          }
+        } catch (e) {
+          if (!cancelled) {
+            setError(e instanceof Error ? e.message : "Could not refresh draft");
+          }
+        }
+      })();
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [data, mode, refreshDraft]);
+
+  useEffect(() => {
+    if (!data || data.latestTurnComplete !== true || data.turnInProgress === true) {
+      return;
+    }
+    if (typeof window === "undefined") return;
+    const key = pendingTurnKey(data.draftId, data.sessionId);
+    if (!window.sessionStorage.getItem(key)) return;
+    window.sessionStorage.removeItem(key);
+    toast.success(mode === "plan" ? "Lesson plan done" : "Draft update done");
+  }, [data, mode]);
+
   const config = useMemo(
     () =>
       data
@@ -121,6 +173,12 @@ export function ArtifactSessionPage({
             mode,
             classId,
             sessionId: data.sessionId,
+            draftId: data.draftId,
+            artifactRevision: data.artifactRevision,
+            artifactHash: data.artifactHash,
+            turnInProgress: data.turnInProgress,
+            latestTurnComplete: data.latestTurnComplete,
+            initialMessages: data.initialMessages,
             getSessionId: () => sessionIdRef.current,
             onSessionLost,
             initialMarkdown: data.initialMarkdown,
@@ -170,7 +228,18 @@ export function ArtifactSessionPage({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <ArtifactSessionRuntimeProvider config={config}>
+      {data.latestTurnComplete === false && data.turnInProgress !== true && (
+        <Alert className="mb-6 border-destructive/30 bg-[var(--error-bg)] text-destructive">
+          <AlertDescription>
+            The previous chat turn was interrupted before it reached the draft. Send
+            that note again, or discard the draft to start cleanly.
+          </AlertDescription>
+        </Alert>
+      )}
+      <ArtifactSessionRuntimeProvider
+        key={`${data.sessionId}:${data.artifactRevision ?? 0}:${data.latestTurnComplete ?? true}`}
+        config={config}
+      >
         {renderBody({
           sessionId: data.sessionId,
           openingMessage: data.openingMessage ?? "",

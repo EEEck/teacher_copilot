@@ -22,6 +22,40 @@ For file-by-file memory scope and update rules, see `memory_hierarchy.md`.
 - Ask at most one targeted question when blocked.
 - Never silently mutate wiki files from a planning turn.
 
+## Workflow Draft Persistence Contract
+
+Artifact-style workflows use a shared backend-owned `WorkflowDraft` store under
+the wiki `workflow/` directory. The store is the source of truth for chat
+messages, the markdown artifact, runtime JSON, status, and artifact
+revision/hash metadata during draft and review.
+
+- Existing start-session endpoints are open-or-resume for active drafts. The
+  draft identity is workflow-generic: `workspace_id`, `class_id`, `mode`,
+  `intent`, optional `target_kind`, and optional `lesson_date`.
+- Frontend caches are convenience only. Session storage may hold unsent composer
+  text and a visual pending-review cache, but it must not authorize writes.
+- Review and save actions must include the expected artifact revision/hash. If
+  the artifact changed after review was prepared, the backend rejects the write
+  with `draft_changed_since_review_created`.
+- Update Memory commit uses the backend-stored diary markdown when a draft id
+  and revision/hash are present. Client-supplied markdown is legacy fallback,
+  not the authoritative write source.
+- Lesson Plan save follows the same revision/hash guard and saves the
+  backend-stored plan markdown for draft-aware clients.
+- Streamed chat turns are backend-owned once accepted. The browser stream is a
+  subscriber, so navigating away must not cancel an in-flight model turn; the
+  final assistant message and artifact update are persisted to the draft when
+  the turn completes.
+- If a backend restart or crash leaves a draft with an incomplete latest turn,
+  review/save remains blocked until the teacher retries the note or discards the
+  draft. The frontend may show this as an interrupted-turn state, but it must
+  not treat the partial client transcript as authoritative.
+- A discarded or committed/saved draft is terminal and must not be resumed by a
+  later page bootstrap.
+- Future workflows should reuse this store through `ArtifactSessionService` and
+  `ArtifactSpec` runtime dump/load hooks instead of creating workflow-local
+  session stores.
+
 ## Teacher-Agent Security Contract
 
 The lightweight security source of truth is
@@ -631,7 +665,7 @@ Purpose:
 Plan trace endpoint:
 
 - `GET /classes/{id}/plan/sessions/{session_id}/trace` returns a read-only
-  debug bundle for the in-memory planning session.
+  debug bundle for the active planning session.
 - The bundle includes prompt stack sections, current `lessonplan.md`, compact
   runtime state, recent messages, captured streamed events, evidence briefs, and
   raw evidence refs.

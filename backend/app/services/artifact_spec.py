@@ -21,8 +21,22 @@ from app.schemas.api import (
     PlanDraft,
 )
 
-from app.teacher_agent.memory_update_state import MemoryRuntime, memory_api_payload
-from app.teacher_agent.planning_state import PlanRuntime, planning_api_payload
+from app.teacher_agent.memory_capture import MemoryCandidate
+from app.teacher_agent.memory_update_state import (
+    LessonResultState,
+    MemoryEvidenceBrief,
+    MemoryRuntime,
+    MemorySessionState,
+    MemoryTargetState,
+    memory_api_payload,
+)
+from app.teacher_agent.planning_state import (
+    EvidenceBrief,
+    LessonPlanningState,
+    PlanRuntime,
+    SessionState,
+    planning_api_payload,
+)
 from app.teacher_agent.prompt_trace import (
     build_ingest_chat_prompt_trace,
     build_plan_chat_prompt_trace,
@@ -100,6 +114,8 @@ class ArtifactSpec:
     opening: Optional[Callable[["AgentRunner", str], Awaitable[str]]] = None
     lazy_opening: Optional[Callable[["AgentRunner", str], Awaitable[str]]] = None
     runtime_factory: Optional[Callable[[], Any]] = None
+    runtime_dump: Optional[Callable[[Any], dict]] = None
+    runtime_load: Optional[Callable[[dict], Any]] = None
     prompt_trace: Optional[PromptTraceHook] = None
     stream_turn: Optional[
         Callable[
@@ -210,6 +226,48 @@ def _ingest_prompt_trace(
     )
 
 
+def _memory_runtime_dump(runtime: Any) -> dict:
+    if not isinstance(runtime, MemoryRuntime):
+        return {}
+    return {
+        "target": runtime.target.model_dump(),
+        "session_state": runtime.session_state.model_dump(),
+        "lesson_result_state": runtime.lesson_result_state.model_dump(),
+        "evidence_briefs": [brief.model_dump() for brief in runtime.evidence_briefs],
+        "memory_candidates": [candidate.model_dump() for candidate in runtime.memory_candidates],
+        "raw_store": dict(runtime.raw_store),
+        "diary_version": runtime.diary_version,
+        "last_change_summary": runtime.last_change_summary,
+        "unsupported_intent_reason": runtime.unsupported_intent_reason,
+        "raw_counter": runtime._raw_counter,
+    }
+
+
+def _memory_runtime_load(data: dict) -> MemoryRuntime:
+    runtime = MemoryRuntime()
+    if not isinstance(data, dict):
+        return runtime
+    runtime.target = MemoryTargetState(**_dict_field(data, "target"))
+    runtime.session_state = MemorySessionState(**_dict_field(data, "session_state"))
+    runtime.lesson_result_state = LessonResultState(**_dict_field(data, "lesson_result_state"))
+    runtime.evidence_briefs = [
+        MemoryEvidenceBrief(**item)
+        for item in _list_dict_field(data, "evidence_briefs")
+    ]
+    runtime.memory_candidates = [
+        MemoryCandidate(**item) for item in _list_dict_field(data, "memory_candidates")
+    ]
+    runtime.raw_store = {
+        str(key): str(value)
+        for key, value in _dict_field(data, "raw_store").items()
+    }
+    runtime.diary_version = int(data.get("diary_version") or 0)
+    runtime.last_change_summary = str(data.get("last_change_summary") or "")
+    runtime.unsupported_intent_reason = str(data.get("unsupported_intent_reason") or "")
+    runtime._raw_counter = int(data.get("raw_counter") or 0)
+    return runtime
+
+
 # --- plan (lesson plan) ----------------------------------------------------
 
 
@@ -304,6 +362,57 @@ def _plan_prompt_trace(
     )
 
 
+def _plan_runtime_dump(runtime: Any) -> dict:
+    if not isinstance(runtime, PlanRuntime):
+        return {}
+    return {
+        "session_state": runtime.session_state.model_dump(),
+        "lesson_planning_state": runtime.lesson_planning_state.model_dump(),
+        "evidence_briefs": [brief.model_dump() for brief in runtime.evidence_briefs],
+        "raw_store": dict(runtime.raw_store),
+        "memory_candidates": [candidate.model_dump() for candidate in runtime.memory_candidates],
+        "plan_version": runtime.plan_version,
+        "last_change_summary": runtime.last_change_summary,
+        "raw_counter": runtime._raw_counter,
+    }
+
+
+def _plan_runtime_load(data: dict) -> PlanRuntime:
+    runtime = PlanRuntime()
+    if not isinstance(data, dict):
+        return runtime
+    runtime.session_state = SessionState(**_dict_field(data, "session_state"))
+    runtime.lesson_planning_state = LessonPlanningState(
+        **_dict_field(data, "lesson_planning_state")
+    )
+    runtime.evidence_briefs = [
+        EvidenceBrief(**item) for item in _list_dict_field(data, "evidence_briefs")
+    ]
+    runtime.raw_store = {
+        str(key): str(value)
+        for key, value in _dict_field(data, "raw_store").items()
+    }
+    runtime.memory_candidates = [
+        MemoryCandidate(**item) for item in _list_dict_field(data, "memory_candidates")
+    ]
+    runtime.plan_version = int(data.get("plan_version") or 0)
+    runtime.last_change_summary = str(data.get("last_change_summary") or "")
+    runtime._raw_counter = int(data.get("raw_counter") or 0)
+    return runtime
+
+
+def _dict_field(data: dict, key: str) -> dict:
+    value = data.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _list_dict_field(data: dict, key: str) -> list[dict]:
+    value = data.get(key)
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
 INGEST_SPEC = ArtifactSpec(
     mode="ingest",
     chatting_status="chatting",
@@ -316,6 +425,8 @@ INGEST_SPEC = ArtifactSpec(
     run_turn=_ingest_run_turn,
     opening=None,
     runtime_factory=MemoryRuntime,
+    runtime_dump=_memory_runtime_dump,
+    runtime_load=_memory_runtime_load,
     prompt_trace=_ingest_prompt_trace,
     stream_turn=_ingest_stream_turn,
     final_event_to_turn_result=_ingest_final_event_to_turn_result,
@@ -354,6 +465,8 @@ PLAN_SPEC = ArtifactSpec(
     opening=None,
     lazy_opening=_plan_opening,
     runtime_factory=PlanRuntime,
+    runtime_dump=_plan_runtime_dump,
+    runtime_load=_plan_runtime_load,
     prompt_trace=_plan_prompt_trace,
     stream_turn=_plan_stream_turn,
     final_event_to_turn_result=_plan_final_event_to_turn_result,

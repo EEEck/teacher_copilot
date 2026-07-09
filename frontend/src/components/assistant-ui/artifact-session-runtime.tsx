@@ -14,9 +14,10 @@ import {
   AssistantRuntimeProvider,
   useLocalRuntime,
   type ChatModelAdapter,
+  type ThreadMessageLike,
   type ThreadMessage,
 } from "@assistant-ui/react";
-import { isUnknownSessionError, type CompletenessChecklist } from "@/lib/api";
+import { isUnknownSessionError, type ChatMessage, type CompletenessChecklist } from "@/lib/api";
 import type { MemoryCandidate } from "@/lib/api";
 import type { ChatStreamChunk } from "@/components/assistant-ui/artifact-runtime-config";
 import { extractSessionAttachments, type SessionAttachment } from "@/lib/session-attachments";
@@ -25,6 +26,9 @@ import { streamPartsToRunContent } from "@/lib/sse-chat";
 export type ArtifactChatResult = {
   reply: string;
   artifactMarkdown: string;
+  draftId?: string;
+  artifactRevision?: number;
+  artifactHash?: string;
   completeness?: CompletenessChecklist | null;
   readyToSave?: boolean;
   lastChangeSummary?: string | null;
@@ -35,7 +39,13 @@ export type ArtifactChatResult = {
 export type ArtifactSessionConfig = {
   classId: string;
   sessionId: string;
+  draftId?: string;
+  artifactRevision?: number;
+  artifactHash?: string;
+  turnInProgress?: boolean;
+  latestTurnComplete?: boolean;
   initialMarkdown: string;
+  initialMessages?: ChatMessage[];
   initialCompleteness?: CompletenessChecklist | null;
   initialMemoryState?: Record<string, unknown> | null;
   chatStream: (args: {
@@ -47,6 +57,9 @@ export type ArtifactSessionConfig = {
   patchDraft?: (markdown: string) => Promise<{
     completeness?: CompletenessChecklist;
     readyToSave?: boolean;
+    draftId?: string;
+    artifactRevision?: number;
+    artifactHash?: string;
   }>;
   getSessionId?: () => string;
   onSessionLost?: (preserveMarkdown: string) => Promise<void>;
@@ -55,6 +68,10 @@ export type ArtifactSessionConfig = {
 
 const CHAT_ERROR_REPLY =
   "I could not finish that turn. Your draft is unchanged — try a shorter message or one topic at a time.";
+
+function pendingTurnKey(draftId: string, sessionId: string): string {
+  return `kp:turn-pending:${draftId || sessionId}`;
+}
 
 function friendlyChatError(err: unknown): string {
   const raw = err instanceof Error ? err.message : "Something went wrong";
@@ -70,6 +87,11 @@ function friendlyChatError(err: unknown): string {
 type ArtifactSessionContextValue = {
   classId: string;
   sessionId: string;
+  draftId: string;
+  artifactRevision: number;
+  artifactHash: string;
+  turnInProgress: boolean;
+  latestTurnComplete: boolean;
   /** Retries once after re-creating the server session when the backend was restarted. */
   runWithSessionRecovery: <T>(
     run: (sessionId: string) => Promise<T>,
@@ -104,6 +126,16 @@ function extractText(message: ThreadMessage): string {
     .join("\n");
 }
 
+function toThreadMessageLike(messages: ChatMessage[] | undefined): ThreadMessageLike[] {
+  return (messages ?? [])
+    .filter((message) => message.role === "assistant" || message.role === "user")
+    .map((message, index) => ({
+      id: `persisted-${index}`,
+      role: message.role as "assistant" | "user",
+      content: message.content,
+    }));
+}
+
 type EditorState = { history: string[]; index: number };
 
 export function ArtifactSessionRuntimeProvider({
@@ -116,7 +148,13 @@ export function ArtifactSessionRuntimeProvider({
   const {
     classId,
     sessionId,
+    draftId = "",
+    artifactRevision = 0,
+    artifactHash = "",
+    turnInProgress = false,
+    latestTurnComplete = true,
     initialMarkdown,
+    initialMessages,
     initialCompleteness = null,
     initialMemoryState = null,
     chatStream,
@@ -129,11 +167,32 @@ export function ArtifactSessionRuntimeProvider({
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = configGetSessionId?.() ?? sessionId;
   const [activeSessionId, setActiveSessionId] = useState(sessionId);
+  const [activeDraftId, setActiveDraftId] = useState(draftId);
+  const [activeArtifactRevision, setActiveArtifactRevision] = useState(artifactRevision);
+  const [activeArtifactHash, setActiveArtifactHash] = useState(artifactHash);
+  const [activeTurnInProgress, setActiveTurnInProgress] = useState(turnInProgress);
+  const [activeLatestTurnComplete, setActiveLatestTurnComplete] =
+    useState(latestTurnComplete);
+  const activeDraftIdRef = useRef(draftId);
+  activeDraftIdRef.current = activeDraftId;
 
   useEffect(() => {
     sessionIdRef.current = configGetSessionId?.() ?? sessionId;
     setActiveSessionId(sessionIdRef.current);
-  }, [sessionId, configGetSessionId]);
+    setActiveDraftId(draftId);
+    setActiveArtifactRevision(artifactRevision);
+    setActiveArtifactHash(artifactHash);
+    setActiveTurnInProgress(turnInProgress);
+    setActiveLatestTurnComplete(latestTurnComplete);
+  }, [
+    sessionId,
+    configGetSessionId,
+    draftId,
+    artifactRevision,
+    artifactHash,
+    turnInProgress,
+    latestTurnComplete,
+  ]);
 
   const [editor, setEditor] = useState<EditorState>({
     history: [initialMarkdown],
@@ -208,6 +267,30 @@ export function ArtifactSessionRuntimeProvider({
     [onCompletenessChange],
   );
 
+  const applyDraftMetadata = useCallback(
+    (metadata?: {
+      draftId?: string;
+      artifactRevision?: number;
+      artifactHash?: string;
+      turnInProgress?: boolean;
+      latestTurnComplete?: boolean;
+    }) => {
+      if (!metadata) return;
+      if (metadata.draftId !== undefined) setActiveDraftId(metadata.draftId);
+      if (metadata.artifactRevision !== undefined) {
+        setActiveArtifactRevision(metadata.artifactRevision);
+      }
+      if (metadata.artifactHash !== undefined) setActiveArtifactHash(metadata.artifactHash);
+      if (metadata.turnInProgress !== undefined) {
+        setActiveTurnInProgress(metadata.turnInProgress);
+      }
+      if (metadata.latestTurnComplete !== undefined) {
+        setActiveLatestTurnComplete(metadata.latestTurnComplete);
+      }
+    },
+    [],
+  );
+
   const runWithSessionRecovery = useCallback(
     async <T,>(run: (sessionId: string) => Promise<T>, preserveMarkdown?: string): Promise<T> => {
       const markdown =
@@ -234,6 +317,11 @@ export function ArtifactSessionRuntimeProvider({
         if (!last || last.role !== "user") return;
 
         setIsUpdating(true);
+        const pendingKey = pendingTurnKey(activeDraftIdRef.current, sessionIdRef.current);
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(pendingKey, "1");
+        }
+        let clearPending = false;
         try {
           const text = extractText(last);
           const attachments = await extractSessionAttachments(last);
@@ -254,8 +342,10 @@ export function ArtifactSessionRuntimeProvider({
               continue;
             }
             finalResult = chunk.result;
+            clearPending = true;
             pushMarkdown(chunk.result.artifactMarkdown, "agent");
             lastSyncedRef.current = chunk.result.artifactMarkdown;
+            applyDraftMetadata(chunk.result);
             applyMeta(chunk.result.completeness ?? null, chunk.result.readyToSave, chunk.result);
             const content = chunk.content;
             yield {
@@ -266,21 +356,30 @@ export function ArtifactSessionRuntimeProvider({
             };
           }
           if (!finalResult && !abortSignal?.aborted) {
+            clearPending = true;
             yield { content: [{ type: "text", text: CHAT_ERROR_REPLY }] };
           }
         } catch (err) {
           const message = friendlyChatError(err);
           if (abortSignal?.aborted) return;
+          clearPending = true;
           yield { content: [{ type: "text", text: message }] };
         } finally {
+          if (clearPending && typeof window !== "undefined") {
+            window.sessionStorage.removeItem(pendingKey);
+          }
           setIsUpdating(false);
         }
       },
     }),
-    [chatStream, initialMarkdown, pushMarkdown, applyMeta],
+    [chatStream, initialMarkdown, pushMarkdown, applyMeta, applyDraftMetadata],
   );
 
-  const runtime = useLocalRuntime(adapter);
+  const initialThreadMessages = useMemo(
+    () => toThreadMessageLike(initialMessages),
+    [initialMessages],
+  );
+  const runtime = useLocalRuntime(adapter, { initialMessages: initialThreadMessages });
 
   useEffect(() => {
     if (!patchDraft) return;
@@ -296,6 +395,7 @@ export function ArtifactSessionRuntimeProvider({
       try {
         const draft = await patchDraft(artifactMarkdown);
         lastSyncedRef.current = artifactMarkdown;
+        applyDraftMetadata(draft);
         applyMeta(draft.completeness, draft.readyToSave);
         setSyncStatus("idle");
       } catch {
@@ -305,12 +405,17 @@ export function ArtifactSessionRuntimeProvider({
     return () => {
       if (patchTimerRef.current) clearTimeout(patchTimerRef.current);
     };
-  }, [artifactMarkdown, patchDraft, applyMeta]);
+  }, [artifactMarkdown, patchDraft, applyMeta, applyDraftMetadata]);
 
   const ctx = useMemo<ArtifactSessionContextValue>(
     () => ({
       classId,
       sessionId: activeSessionId,
+      draftId: activeDraftId,
+      artifactRevision: activeArtifactRevision,
+      artifactHash: activeArtifactHash,
+      turnInProgress: activeTurnInProgress,
+      latestTurnComplete: activeLatestTurnComplete,
       runWithSessionRecovery,
       artifactMarkdown,
       setArtifactMarkdown,
@@ -328,6 +433,11 @@ export function ArtifactSessionRuntimeProvider({
     [
       classId,
       activeSessionId,
+      activeDraftId,
+      activeArtifactRevision,
+      activeArtifactHash,
+      activeTurnInProgress,
+      activeLatestTurnComplete,
       runWithSessionRecovery,
       artifactMarkdown,
       setArtifactMarkdown,

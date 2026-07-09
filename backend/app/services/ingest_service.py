@@ -28,6 +28,11 @@ from app.services.artifact_session_service import (
     ArtifactSessionService,
 )
 from app.services.memory_candidate_ledger import MemoryCandidateLedger
+from app.services.workflow_drafts import (
+    WorkflowDraftConflict,
+    WorkflowDraftIdentity,
+    WorkflowDraftStore,
+)
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.memory_update_state import (
     LessonResultPatch,
@@ -76,11 +81,19 @@ class IngestService:
         wiki: WikiStore,
         agents: AgentRunner,
         memory_candidate_ledger: MemoryCandidateLedger | None = None,
+        workflow_drafts: WorkflowDraftStore | None = None,
+        workspace_id: str = "local",
     ) -> None:
         self.wiki = wiki
         self.agents = agents
+        self.workflow_drafts = workflow_drafts
+        self.workspace_id = workspace_id
         self.core = ArtifactSessionService(
-            wiki, agents, memory_candidate_ledger=memory_candidate_ledger
+            wiki,
+            agents,
+            memory_candidate_ledger=memory_candidate_ledger,
+            workflow_drafts=workflow_drafts,
+            workspace_id=workspace_id,
         )
 
     def _to_model(self, s: ArtifactSession) -> IngestSession:
@@ -91,6 +104,11 @@ class IngestService:
         )
         return IngestSession(
             session_id=s.session_id,
+            draft_id=s.draft_id,
+            artifact_revision=s.artifact_revision,
+            artifact_hash=s.artifact_hash,
+            turn_in_progress=s.turn_in_progress,
+            latest_turn_complete=s.latest_turn_complete,
             class_id=s.class_id,
             status=IngestSessionStatus(s.status),
             messages=s.messages,
@@ -186,6 +204,13 @@ class IngestService:
         resolved = self._resolve_start_hint(session.class_id, hint)
         if resolved is None:
             return
+        self._apply_start_hint_resolution(session, resolved)
+
+    def _apply_start_hint_resolution(
+        self, session: ArtifactSession, resolved: IngestStartHintResolution
+    ) -> None:
+        if not isinstance(session.runtime, MemoryRuntime):
+            return
         session.partial_markdown = resolved.draft_markdown
         decisions = []
         open_questions = []
@@ -240,9 +265,41 @@ class IngestService:
     async def start_session(
         self, class_id: str, hint: IngestSessionStartRequest | None = None
     ) -> IngestSession:
-        session = await self.core.start_session(MODE, class_id)
-        if hint is not None:
-            self._apply_start_hint(session, hint)
+        if isinstance(hint, dict):
+            hint = IngestSessionStartRequest(**hint)
+        resolved = self._resolve_start_hint(class_id, hint) if hint is not None else None
+        runtime = MemoryRuntime()
+        initial_markdown = self.wiki.empty_diary_template()
+        identity = WorkflowDraftIdentity(
+            workspace_id=self.workspace_id,
+            class_id=class_id,
+            mode=MODE,
+            intent=resolved.intent if resolved else "free_entry",
+            target_kind=resolved.target_kind if resolved else "",
+            lesson_date=resolved.lesson_date if resolved else "",
+            lesson_title=resolved.lesson_title if resolved else "",
+        )
+        session = ArtifactSession(
+            session_id="",
+            class_id=class_id,
+            mode=MODE,
+            status="chatting",
+            partial_markdown=initial_markdown,
+            runtime=runtime,
+        )
+        if resolved is not None:
+            self._apply_start_hint_resolution(session, resolved)
+            initial_markdown = session.partial_markdown
+            runtime = session.runtime
+        session = await self.core.start_session(
+            MODE,
+            class_id,
+            draft_identity=identity if self.workflow_drafts is not None else None,
+            initial_markdown=initial_markdown,
+            initial_runtime=runtime,
+        )
+        if self.workflow_drafts is None and resolved is not None:
+            self._apply_start_hint_resolution(session, resolved)
         return self._to_model(session)
 
     def get_session(self, session_id: str) -> ArtifactSession:
@@ -256,12 +313,16 @@ class IngestService:
         attachments: list[ChatAttachment] | None = None,
     ) -> ChatResponse:
         result = await self.core.chat(session_id, message, diary_markdown, attachments)
+        session = self.core.get_session(session_id)
         completeness = result.completeness or self.wiki.checklist_from_diary(
             result.markdown
         )
         return ChatResponse(
             reply=result.reply,
             diary_markdown=result.markdown,
+            draft_id=session.draft_id,
+            artifact_revision=session.artifact_revision,
+            artifact_hash=session.artifact_hash,
             completeness=completeness,
             ready_to_propose=result.ready,
             last_change_summary=(result.memory or {}).get("last_change_summary", ""),
@@ -302,6 +363,13 @@ class IngestService:
                 session.class_id, session.messages
             )
         draft = self.core.update_draft(session_id, diary_md)
+        session = self.core.get_session(session_id)
+        if self.workflow_drafts is not None and session.draft_id:
+            self.workflow_drafts.mark_review_snapshot(
+                session.draft_id,
+                revision=session.artifact_revision,
+                artifact_hash_value=session.artifact_hash,
+            )
         self.core.set_status(session_id, IngestSessionStatus.reviewing.value)
         assert isinstance(draft, IngestDraft)
         if isinstance(session.runtime, MemoryRuntime):
@@ -371,18 +439,52 @@ class IngestService:
     def commit(self, req: CommitIngestRequest) -> CommitIngestResponse:
         session = self.core.get_session(req.session_id)
         self.core.require_latest_turn_complete(req.session_id, "save memory")
+        diary_markdown = req.diary_markdown
+        if req.draft_id:
+            if req.draft_id != session.draft_id:
+                raise KeyError("Draft/session mismatch")
+            expected_revision = (
+                req.source_artifact_revision
+                if req.source_artifact_revision is not None
+                else req.expected_artifact_revision
+            )
+            expected_hash = (
+                req.source_artifact_hash
+                if req.source_artifact_hash is not None
+                else req.expected_artifact_hash
+            )
+            if expected_revision is None or expected_hash is None:
+                raise ValueError("draft revision/hash required")
+            if self.workflow_drafts is None:
+                if (
+                    session.artifact_revision != expected_revision
+                    or session.artifact_hash != expected_hash
+                ):
+                    raise ValueError("draft_changed_since_review_created")
+            else:
+                try:
+                    row = self.workflow_drafts.validate_review_snapshot(
+                        req.draft_id,
+                        expected_revision=expected_revision,
+                        expected_hash=expected_hash,
+                    )
+                except WorkflowDraftConflict as exc:
+                    raise ValueError(str(exc)) from exc
+                diary_markdown = row.artifact_markdown
         lesson_date = (
-            self.wiki.extract_date_from_diary(req.diary_markdown)
+            self.wiki.extract_date_from_diary(diary_markdown)
             or date.today().isoformat()
         )
-        title = self.wiki.extract_title(req.diary_markdown) or "Lesson"
+        title = self.wiki.extract_title(diary_markdown) or "Lesson"
         raw_path, applied, log_id = self.wiki.commit_ingest(
             session.class_id,
-            req.diary_markdown,
+            diary_markdown,
             req.approved_updates,
             req.session_id,
         )
         self.core.set_status(req.session_id, IngestSessionStatus.committed.value)
+        if self.workflow_drafts is not None and session.draft_id:
+            self.workflow_drafts.mark_committed(session.draft_id)
         return CommitIngestResponse(
             raw_diary_path=raw_path,
             applied_wiki_paths=applied,
@@ -390,3 +492,10 @@ class IngestService:
             lesson_date=lesson_date,
             title=title,
         )
+
+    def discard_draft(self, draft_id: str) -> None:
+        if self.workflow_drafts is None:
+            raise KeyError(f"Unknown workflow draft: {draft_id}")
+        row = self.workflow_drafts.discard(draft_id)
+        if row.backend_session_id in self.core.sessions:
+            del self.core.sessions[row.backend_session_id]

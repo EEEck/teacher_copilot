@@ -51,6 +51,9 @@ export type SseEvent =
       type: "final";
       reply: string;
       artifact_markdown: string;
+      draft_id?: string | null;
+      artifact_revision?: number | null;
+      artifact_hash?: string | null;
       ready: boolean;
       completeness?: CompletenessChecklist | null;
       phase?: string | null;
@@ -77,6 +80,9 @@ export type StreamPart =
 export type StreamChatFinal = {
   reply: string;
   artifactMarkdown: string;
+  draftId?: string;
+  artifactRevision?: number;
+  artifactHash?: string;
   readyToSave?: boolean;
   completeness?: CompletenessChecklist | null;
   phase?: string | null;
@@ -208,6 +214,9 @@ export async function consumeArtifactChatStream(
       final = {
         reply: event.reply,
         artifactMarkdown: event.artifact_markdown,
+        draftId: event.draft_id ?? undefined,
+        artifactRevision: event.artifact_revision ?? undefined,
+        artifactHash: event.artifact_hash ?? undefined,
         readyToSave: event.ready,
         completeness: event.completeness ?? null,
         phase: event.phase ?? null,

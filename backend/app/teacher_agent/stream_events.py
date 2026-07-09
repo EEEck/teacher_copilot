@@ -35,6 +35,9 @@ class SseFinal(BaseModel):
     type: Literal["final"] = "final"
     reply: str
     artifact_markdown: str
+    draft_id: str | None = None
+    artifact_revision: int | None = None
+    artifact_hash: str | None = None
     ready: bool
     completeness: CompletenessChecklist | None = None
     # Plan mode only: runtime context-manager state surfaced to the client.

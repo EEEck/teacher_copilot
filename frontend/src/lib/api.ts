@@ -31,6 +31,7 @@ export type TimelineEntry = {
   status: "taught" | "planned";
   committed_at?: string | null;
   wiki_paths: string[];
+  memory_draft_id?: string | null;
 };
 export type ClassTimeline = {
   class_id: string;
@@ -72,6 +73,11 @@ export type CompletenessItem = {
 };
 export type CompletenessChecklist = { items: CompletenessItem[] };
 export type ChatMessage = { role: string; content: string };
+export type DraftMetadata = {
+  draft_id: string;
+  artifact_revision: number;
+  artifact_hash: string;
+};
 export type IngestStartHint = {
   lesson_date?: string;
   lesson_title?: string;
@@ -81,6 +87,11 @@ export type IngestStartHint = {
 };
 export type IngestSession = {
   session_id: string;
+  draft_id: string;
+  artifact_revision: number;
+  artifact_hash: string;
+  turn_in_progress?: boolean;
+  latest_turn_complete?: boolean;
   class_id: string;
   status: string;
   messages: ChatMessage[];
@@ -104,6 +115,12 @@ export function uniqueWikiProposals(proposals: WikiUpdateProposal[]): WikiUpdate
   return [...byPath.values()];
 }
 export type IngestDraft = {
+  draft_id: string;
+  artifact_revision: number;
+  artifact_hash: string;
+  turn_in_progress?: boolean;
+  latest_turn_complete?: boolean;
+  messages?: ChatMessage[];
   diary_markdown: string;
   wiki_proposals: WikiUpdateProposal[];
   completeness: CompletenessChecklist;
@@ -119,6 +136,9 @@ export type ChatAttachment = { filename: string; content: string };
 export type ChatResponse = {
   reply: string;
   diary_markdown: string;
+  draft_id: string;
+  artifact_revision: number;
+  artifact_hash: string;
   completeness: CompletenessChecklist;
   ready_to_propose: boolean;
   last_change_summary?: string;
@@ -127,15 +147,31 @@ export type ChatResponse = {
 };
 export type PlanSession = {
   session_id: string;
+  draft_id: string;
+  artifact_revision: number;
+  artifact_hash: string;
+  turn_in_progress?: boolean;
+  latest_turn_complete?: boolean;
   class_id: string;
   status: string;
   messages: ChatMessage[];
   opening_message: string;
 };
-export type PlanDraft = { plan_markdown: string };
+export type PlanDraft = {
+  draft_id: string;
+  artifact_revision: number;
+  artifact_hash: string;
+  turn_in_progress?: boolean;
+  latest_turn_complete?: boolean;
+  messages?: ChatMessage[];
+  plan_markdown: string;
+};
 export type PlanChatResponse = {
   reply: string;
   plan_markdown: string;
+  draft_id: string;
+  artifact_revision: number;
+  artifact_hash: string;
   ready_to_save: boolean;
   phase?: string | null;
   last_change_summary?: string;
@@ -392,47 +428,6 @@ async function apiStreamPost(path: string, body: object, signal?: AbortSignal): 
   return res;
 }
 
-/** Backfill fields when an older API instance is still bound to port 8001. */
-function normalizeTimelineEntry(raw: Partial<TimelineEntry> & Pick<TimelineEntry, "date" | "title">): TimelineEntry {
-  const month_key = raw.month_key ?? raw.date.slice(0, 7);
-  const covered = raw.covered ?? [];
-  const status = raw.status === "planned" ? "planned" : "taught";
-  const summary =
-    raw.summary?.trim() ||
-    (status === "planned"
-      ? "Planned — not taught yet."
-      : covered.length > 0
-        ? `Covered: ${covered[0]}`
-        : `Lesson: ${raw.title}`);
-  return {
-    date: raw.date,
-    title: raw.title,
-    month_key,
-    summary,
-    highlights: raw.highlights ?? (covered[0] ? [covered[0]] : []),
-    issues: raw.issues ?? [],
-    follow_ups: raw.follow_ups ?? [],
-    covered,
-    homework: raw.homework ?? null,
-    raw_path: raw.raw_path ?? null,
-    has_plan: raw.has_plan ?? false,
-    status,
-    committed_at: raw.committed_at ?? null,
-    wiki_paths: raw.wiki_paths ?? [],
-  };
-}
-
-function normalizeTimeline(raw: Partial<ClassTimeline> & { class_id: string }): ClassTimeline {
-  const entries = (raw.entries ?? []).map((e) =>
-    normalizeTimelineEntry(e as Partial<TimelineEntry> & Pick<TimelineEntry, "date" | "title">),
-  );
-  const months =
-    raw.months && raw.months.length > 0
-      ? raw.months
-      : [...new Set(entries.map((e) => e.month_key))].sort().reverse();
-  return { class_id: raw.class_id, entries, months };
-}
-
 export const client = {
   betaLogin: (inviteCode: string) =>
     api<BetaIdentity>("/api/beta/login", {
@@ -442,12 +437,8 @@ export const client = {
   betaLogout: () => api<{ status: string }>("/api/beta/logout", { method: "POST" }),
   betaMe: () => api<BetaIdentity>("/api/beta/me"),
   getClasses: () => api<{ classes: ClassSummary[] }>("/api/classes"),
-  getTimeline: async (classId: string) => {
-    const raw = await api<Partial<ClassTimeline> & { class_id: string }>(
-      `/api/classes/${classId}/timeline`,
-    );
-    return normalizeTimeline(raw);
-  },
+  getTimeline: (classId: string) =>
+    api<ClassTimeline>(`/api/classes/${classId}/timeline`),
   getSnapshot: (classId: string) => api<ClassMemorySnapshot>(`/api/classes/${classId}/snapshot`),
   getLessonDetail: (classId: string, lessonDate: string) =>
     api<LessonDetail>(`/api/classes/${classId}/lessons/${lessonDate}`),
@@ -460,21 +451,6 @@ export const client = {
     api<IngestSession>(`/api/classes/${classId}/ingest/sessions`, {
       method: "POST",
       body: hint ? JSON.stringify(hint) : undefined,
-    }),
-  ingestChat: (
-    classId: string,
-    sessionId: string,
-    message: string,
-    diaryMarkdown?: string,
-    attachments?: ChatAttachment[],
-  ) =>
-    api<ChatResponse>(`/api/classes/${classId}/ingest/sessions/${sessionId}/chat`, {
-      method: "POST",
-      body: JSON.stringify({
-        message,
-        diary_markdown: diaryMarkdown ?? null,
-        attachments: attachments ?? [],
-      }),
     }),
   ingestChatStream: (
     classId: string,
@@ -513,6 +489,13 @@ export const client = {
     sessionId: string,
     diaryMarkdown: string,
     approvedUpdates: ApprovedWikiUpdate[],
+    metadata?: {
+      draftId?: string;
+      expectedArtifactRevision?: number;
+      expectedArtifactHash?: string;
+      sourceArtifactRevision?: number;
+      sourceArtifactHash?: string;
+    },
   ) =>
     api<CommitIngestResponse>(
       `/api/classes/${classId}/ingest/commit`,
@@ -522,26 +505,21 @@ export const client = {
           session_id: sessionId,
           diary_markdown: diaryMarkdown,
           approved_updates: approvedUpdates,
+          draft_id: metadata?.draftId ?? null,
+          expected_artifact_revision: metadata?.expectedArtifactRevision ?? null,
+          expected_artifact_hash: metadata?.expectedArtifactHash ?? null,
+          source_artifact_revision: metadata?.sourceArtifactRevision ?? null,
+          source_artifact_hash: metadata?.sourceArtifactHash ?? null,
         }),
       },
     ),
+  discardWorkflowDraft: (classId: string, draftId: string) =>
+    api<{ draft_id: string; status: string }>(
+      `/api/classes/${classId}/workflow-drafts/${draftId}/discard`,
+      { method: "POST" },
+    ),
   startPlanSession: (classId: string) =>
     api<PlanSession>(`/api/classes/${classId}/plan/sessions`, { method: "POST" }),
-  planChat: (
-    classId: string,
-    sessionId: string,
-    message: string,
-    planMarkdown?: string,
-    attachments?: ChatAttachment[],
-  ) =>
-    api<PlanChatResponse>(`/api/classes/${classId}/plan/sessions/${sessionId}/chat`, {
-      method: "POST",
-      body: JSON.stringify({
-        message,
-        plan_markdown: planMarkdown ?? null,
-        attachments: attachments ?? [],
-      }),
-    }),
   planChatStream: (
     classId: string,
     sessionId: string,
@@ -573,6 +551,11 @@ export const client = {
     sessionId: string,
     lessonDate: string,
     planMarkdown: string,
+    metadata?: {
+      draftId?: string;
+      expectedArtifactRevision?: number;
+      expectedArtifactHash?: string;
+    },
   ) =>
     api<SavePlanResponse>(`/api/classes/${classId}/plan/save`, {
       method: "POST",
@@ -580,6 +563,9 @@ export const client = {
         session_id: sessionId,
         lesson_date: lessonDate,
         plan_markdown: planMarkdown,
+        draft_id: metadata?.draftId ?? null,
+        expected_artifact_revision: metadata?.expectedArtifactRevision ?? null,
+        expected_artifact_hash: metadata?.expectedArtifactHash ?? null,
       }),
     }),
   memoryProfilePropose: (
