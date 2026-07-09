@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 VerificationCategory = Literal[
     "scope",
@@ -37,12 +37,27 @@ class ExecutiveFinding(BaseModel):
         return self
 
 
+class ExecutiveResolution(BaseModel):
+    finding_id: str
+    resolution: str
+
+
 class ExecutivePatch(BaseModel):
     checked_categories: list[VerificationCategory] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
     findings: list[ExecutiveFinding] = Field(default_factory=list)
-    resolved_findings: dict[str, str] = Field(default_factory=dict)
+    resolved_findings: list[ExecutiveResolution] = Field(default_factory=list)
     verification_summary: str = ""
+
+    @field_validator("resolved_findings", mode="before")
+    @classmethod
+    def accept_legacy_resolution_map(cls, value):
+        if isinstance(value, dict):
+            return [
+                {"finding_id": finding_id, "resolution": resolution}
+                for finding_id, resolution in value.items()
+            ]
+        return value
 
 
 @dataclass
@@ -77,11 +92,11 @@ def apply_executive_patch(
             runtime.assumptions.append(text)
     for finding in patch.findings:
         runtime.findings[finding.finding_id] = finding
-    for finding_id, resolution in patch.resolved_findings.items():
-        existing = runtime.findings.get(finding_id)
-        text = _clean(resolution)
+    for resolved in patch.resolved_findings:
+        existing = runtime.findings.get(resolved.finding_id)
+        text = _clean(resolved.resolution)
         if existing and text:
-            runtime.findings[finding_id] = existing.model_copy(
+            runtime.findings[resolved.finding_id] = existing.model_copy(
                 update={"status": "resolved", "resolution": text}
             )
     summary = _clean(patch.verification_summary)

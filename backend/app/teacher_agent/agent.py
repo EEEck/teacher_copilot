@@ -47,9 +47,14 @@ def chat_model_settings(reasoning_effort: str) -> ModelSettings | None:
     Set effort to ``none`` to match the API default and skip hidden reasoning
     tokens. Non-reasoning models ignore this when unsupported. Call classes pass
     their profile-resolved effort (chat/important/utility — see config.py).
+    ``minimal`` is accepted as a legacy/local alias and normalized to ``low``,
+    because current GPT-5.5 reasoning models reject ``minimal`` at the API
+    boundary.
     """
     if reasoning_effort == "none":
         return None
+    if reasoning_effort == "minimal":
+        reasoning_effort = "low"
     return ModelSettings(reasoning=Reasoning(effort=reasoning_effort, summary="auto"))
 
 
