@@ -81,6 +81,16 @@ class WikiStore:
     def is_class_memory_path(self, class_id, relative_path):
         return search.is_class_memory_path(self, class_id, relative_path)
 
+    def resolve_wiki_references(
+        self, active_class_id, *, references, scope="active_class"
+    ):
+        return search.resolve_wiki_references(
+            self,
+            active_class_id=active_class_id,
+            references=references,
+            scope=scope,
+        )
+
     def list_classes(self):
         return registry.list_classes(self)
 

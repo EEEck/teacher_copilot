@@ -6,8 +6,9 @@ import re
 import math
 from collections import Counter
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
+from pydantic import BaseModel, Field
 
 from app.teacher_agent.wiki.constants import (
     INDEX_WIKI_PATH_RE,
@@ -45,6 +46,152 @@ _SEARCH_STOPWORDS = {
     "with",
 }
 _SEARCH_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9.+/_-]*")
+
+ReferenceKind = Literal["class", "student", "lesson"]
+ReferenceScope = Literal["active_class", "workspace"]
+ResolutionStatus = Literal[
+    "active_class_match", "cross_class_match", "ambiguous", "unresolved"
+]
+
+
+class ReferenceQuery(BaseModel):
+    kind: ReferenceKind
+    value: str
+
+
+class ReferenceMatch(BaseModel):
+    class_id: str
+    canonical_value: str
+    label: str
+    evidence_path: str
+
+
+class ResolvedReference(BaseModel):
+    query: ReferenceQuery
+    status: ResolutionStatus
+    matches: list[ReferenceMatch] = Field(default_factory=list)
+
+
+class ReferenceResolution(BaseModel):
+    active_class_id: str
+    items: list[ResolvedReference] = Field(default_factory=list)
+
+
+def _normalized_reference(value: str) -> str:
+    return " ".join((value or "").casefold().split())
+
+
+def _normalized_student_id(value: str) -> str:
+    match = re.fullmatch(r"s[\s-]*0*(\d{1,3})", value.strip(), re.I)
+    if not match:
+        return ""
+    return f"S-{int(match.group(1)):03d}"
+
+
+def _student_matches(store, class_id: str, value: str) -> list[ReferenceMatch]:
+    path = store.roll_up_paths(class_id)["students"]
+    text = store.read_text(path)
+    requested_id = _normalized_student_id(value)
+    requested_name = _normalized_reference(value)
+    matches: list[ReferenceMatch] = []
+    for line in text.splitlines():
+        if not line.strip().startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        student_id = _normalized_student_id(cells[0])
+        name = cells[1].strip()
+        if not student_id:
+            continue
+        if requested_id == student_id or requested_name == _normalized_reference(name):
+            matches.append(
+                ReferenceMatch(
+                    class_id=class_id,
+                    canonical_value=student_id,
+                    label=name or student_id,
+                    evidence_path=store.rel_wiki(path),
+                )
+            )
+    return matches
+
+
+def _class_matches(store, class_id: str, value: str) -> list[ReferenceMatch]:
+    cls = store.get_class(class_id)
+    requested = _normalized_reference(value)
+    if requested not in {
+        _normalized_reference(cls.id),
+        _normalized_reference(cls.label),
+    }:
+        return []
+    return [
+        ReferenceMatch(
+            class_id=class_id,
+            canonical_value=cls.id,
+            label=cls.label,
+            evidence_path=store.rel_wiki(store.class_config_path(class_id)),
+        )
+    ]
+
+
+def _lesson_matches(store, class_id: str, value: str) -> list[ReferenceMatch]:
+    requested = _normalized_reference(value)
+    path = store.timeline_path(class_id)
+    matches: list[ReferenceMatch] = []
+    for entry in store.get_timeline(class_id).entries:
+        if requested not in {
+            _normalized_reference(entry.date),
+            _normalized_reference(entry.title),
+        }:
+            continue
+        matches.append(
+            ReferenceMatch(
+                class_id=class_id,
+                canonical_value=entry.date,
+                label=entry.title,
+                evidence_path=store.rel_wiki(path),
+            )
+        )
+    return matches
+
+
+def resolve_wiki_references(
+    store,
+    *,
+    active_class_id: str,
+    references: list[ReferenceQuery],
+    scope: ReferenceScope = "active_class",
+) -> ReferenceResolution:
+    class_ids = [active_class_id]
+    if scope == "workspace":
+        class_ids.extend(
+            cls.id for cls in store.list_classes() if cls.id != active_class_id
+        )
+    resolvers = {
+        "class": _class_matches,
+        "student": _student_matches,
+        "lesson": _lesson_matches,
+    }
+    resolved: list[ResolvedReference] = []
+    for query in references:
+        matches: list[ReferenceMatch] = []
+        for class_id in class_ids:
+            matches.extend(resolvers[query.kind](store, class_id, query.value))
+        active_matches = [
+            match for match in matches if match.class_id == active_class_id
+        ]
+        if len(matches) > 1:
+            status: ResolutionStatus = "ambiguous"
+        elif active_matches:
+            status = "active_class_match"
+        elif matches:
+            status = "cross_class_match"
+        else:
+            status = "unresolved"
+        resolved.append(
+            ResolvedReference(query=query, status=status, matches=matches)
+        )
+    return ReferenceResolution(active_class_id=active_class_id, items=resolved)
 
 
 def _query_terms(query: str) -> list[str]:

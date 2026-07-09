@@ -267,6 +267,7 @@ class IngestService:
             last_change_summary=(result.memory or {}).get("last_change_summary", ""),
             memory_state=result.memory,
             memory_candidates=(result.memory or {}).get("memory_candidates", []),
+            executive_state=result.executive,
         )
 
     async def chat_stream(
@@ -360,6 +361,7 @@ class IngestService:
                 messages=session.messages,
                 current_diary=session.partial_markdown,
                 runtime=runtime,
+                executive=session.executive,
             ),
             runtime=runtime_payload,
             messages=session.messages,

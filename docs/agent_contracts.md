@@ -62,6 +62,45 @@ Teacher-visible stream/output contract:
 - On final-output violation, return the safe fallback reply and preserve the
   previous artifact draft.
 
+## Executive Verification Contract
+
+Every class-scoped workflow completes the foreground task while maintaining
+class-state integrity. This is a shared agent foundation, alongside memory
+behavior, rather than a workflow-specific validation mode.
+
+- Teacher intent controls the current task, requested artifact, local style,
+  and explicit corrections.
+- Committed wiki state is the baseline for existing class identity, roster,
+  lesson sequence, and taught concepts.
+- A conflicting teacher factual statement is a candidate update or correction
+  until reconciled; the teacher may confirm that the wiki is stale.
+- Profiles and inferred preferences are advisory.
+- The agent uses injected context first and retrieves only when a
+  decision-relevant claim needs evidence.
+- Aligned and non-conflicting input proceeds without visible bureaucracy.
+- Safe assumptions may be noted without blocking.
+- Consequential mismatches produce at most one consolidated clarification.
+- Chat never silently changes class, student attribution, lesson history,
+  roster, or durable preference.
+
+The product motto is: **Do the busywork invisibly. Surface only the decisions.**
+The operating rule is: **Verify continuously. Interrupt selectively.**
+
+Checkpoint B enforcement is shared by all registered artifact workflows:
+
+- `ExecutiveRuntime` persists assumptions, checked categories, and findings
+  separately from `PlanRuntime` / `MemoryRuntime`.
+- `resolve_wiki_references` deterministically resolves class, student, and
+  lesson identifiers from committed indexes; semantic concepts continue to use
+  existing search/read tools.
+- `report_verification_finding` explicitly records advisory or blocking
+  discrepancies.
+- Open blocking findings make a structurally complete artifact not ready and
+  return the session to chatting; advisories do not block.
+
+Exact-draft fingerprint verification immediately before durable writes remains
+Checkpoint C. Prompt instructions alone are not the final safety boundary.
+
 ## Agents SDK Integration Contract
 
 KlassenPilot uses the OpenAI Agents SDK as a code-first orchestration layer, but

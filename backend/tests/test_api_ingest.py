@@ -98,6 +98,20 @@ def test_ingest_full_flow(client: TestClient):
     assert "Keep contrasting ion charge" in planning_brief.json()["markdown"]
 
 
+def test_blocking_executive_finding_prevents_ingest_readiness(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/ingest"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+
+    chat = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={"message": "S-999 understood the lesson well."},
+    )
+
+    assert chat.status_code == 200, chat.text
+    assert chat.json()["ready_to_propose"] is False
+    assert chat.json()["executive_state"]["status"] == "needs_decision"
+
+
 def test_compact_memory_apply_rejects_non_compact_memory_pages(client: TestClient):
     res = client.post(
         f"/api/classes/{CLASS_ID}/memory/compact/apply",

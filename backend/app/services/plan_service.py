@@ -97,6 +97,7 @@ class PlanService:
             session_state=planning.get("session_state"),
             lesson_planning_state=planning.get("lesson_planning_state"),
             memory_candidates=planning.get("memory_candidates", []),
+            executive_state=result.executive,
         )
 
     async def chat_stream(
@@ -156,6 +157,7 @@ class PlanService:
                 messages=session.messages,
                 current_plan=session.partial_markdown,
                 runtime=runtime,
+                executive=session.executive,
             ),
             runtime=runtime_payload,
             messages=session.messages,

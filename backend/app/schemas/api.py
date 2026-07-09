@@ -384,6 +384,7 @@ class ChatResponse(BaseModel):
     last_change_summary: str = ""
     memory_state: Optional[dict] = None
     memory_candidates: list[dict] = Field(default_factory=list)
+    executive_state: Optional[dict] = None
 
 
 class UpdateDraftRequest(BaseModel):
@@ -424,6 +425,7 @@ class PlanChatResponse(BaseModel):
     session_state: Optional[dict] = None
     lesson_planning_state: Optional[dict] = None
     memory_candidates: list[dict] = Field(default_factory=list)
+    executive_state: Optional[dict] = None
 
 
 class UpdatePlanDraftRequest(BaseModel):

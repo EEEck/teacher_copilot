@@ -39,6 +39,7 @@ StreamTurn = Callable[
         str,
         list[ChatAttachment],
         Any,
+        Any,
     ],
     AsyncIterator[SseEvent],
 ]
@@ -54,3 +55,4 @@ class WorkflowContract:
     trace: WorkflowTraceContract
     stream_turn: StreamTurn
     final_event_to_turn_result: FinalEventToTurnResult
+    executive_verification: bool

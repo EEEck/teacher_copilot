@@ -19,7 +19,9 @@ def test_registered_workflows_declare_runtime_trace_and_stream_contracts():
         assert spec.final_event_to_turn_result is not None
         assert spec.workflow_contract is not None
         assert spec.workflow_contract.trace.expected_sections
+        assert "Executive state" in spec.workflow_contract.trace.expected_sections
         assert spec.workflow_contract.history.conversation_turns_setting
+        assert spec.workflow_contract.executive_verification is True
         assert spec.workflow_contract.history.artifact_location in {
             "system_prompt",
             "user_input",

@@ -163,7 +163,29 @@ The product uses tiered class memory.
    planned or taught lesson is found. Unknown hinted dates may seed a dated
    draft, but remain unconfirmed and stay in target discovery.
 
-5. **Profiles (three clearly-scoped files)**
+5. **Shared executive verification runtime**
+
+   Every registered artifact workflow also receives one `ExecutiveRuntime`
+   owned by `ArtifactSession`, separate from its workflow-specific runtime.
+   It records authority-aware assumptions and advisory/blocking findings across
+   turns. A small deterministic resolver checks class, student, and lesson
+   references against committed wiki indexes; existing search/read tools remain
+   responsible for broader teaching concepts and history.
+
+   ```text
+   ArtifactSession
+   ├── ExecutiveRuntime
+   ├── PlanRuntime | MemoryRuntime | future workflow runtime
+   ├── authority-labeled wiki context
+   └── shared verification + workflow-specific tools
+   ```
+
+   Open blocking findings prevent readiness but do not discard the foreground
+   artifact. Advisory findings allow work to continue. Durable-write
+   fingerprint verification is a later boundary and remains separate from this
+   proactive chat loop.
+
+6. **Profiles (three clearly-scoped files)**
    - `user.md` (`wiki/teacher_profile.md`, GLOBAL): teacher communication style,
      stable preferences, default lesson structure.
    - `teaching_patterns.md` (class + subject): how this class learns and which
@@ -183,7 +205,7 @@ The product uses tiered class memory.
    `teaching_patterns.md`, or `planning_brief.md`. `canonical_wiki` remains
    review-only in this path.
 
-6. **Candidate ledger and Memory Sweep (Memory V3)**
+7. **Candidate ledger and Memory Sweep (Memory V3)**
    Planning and Update Memory chats capture review-only durable facts. The
    **primary path is an explicit
    `remember(target, content, speech_act, quote, routing_reason)` tool** the

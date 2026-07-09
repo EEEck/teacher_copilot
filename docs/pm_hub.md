@@ -93,6 +93,9 @@ Core implementation shape:
 
 - **Teacher stays in control**: no hidden writes and no irreversible autonomous
   actions.
+- **Executive assistant, not passive chatbot**: complete the foreground task,
+  verify class-state details in the background, and surface only consequential
+  teacher decisions.
 - **Class memory compounds**: every approved update should improve future work.
 - **Start from the class, not a blank prompt**: context should load
   automatically.

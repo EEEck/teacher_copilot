@@ -67,6 +67,7 @@ def build_ingest_agent(
         messages=[],
         current_diary="",
         runtime=rt,
+        executive=ctx.executive,
         attachments=[],
     )
     instructions = assembly["instructions"]
@@ -98,6 +99,7 @@ def build_plan_chat_agent(
         messages=[],
         current_plan=current_plan,
         runtime=rt,
+        executive=ctx.executive,
         attachments=[],
     )
     instructions = assembly["instructions"]

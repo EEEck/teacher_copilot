@@ -1,6 +1,10 @@
 """Tests for chat wiki tool wiring."""
 
-from app.teacher_agent.tools import WikiToolContext, create_chat_wiki_tools
+from app.teacher_agent.tools import (
+    WikiToolContext,
+    create_chat_wiki_tools,
+    create_memory_update_tools,
+)
 from app.teacher_agent.wiki_store import WikiStore
 from pathlib import Path
 
@@ -21,4 +25,14 @@ def test_create_chat_wiki_tools_exposes_mvp_names():
         "read_memory_page",
         "get_raw_evidence",
         "remember",
+        "report_verification_finding",
+        "resolve_wiki_references",
     }
+
+
+def test_memory_update_tools_include_shared_verification_tools():
+    wiki = WikiStore(root=_WIKI_ROOT)
+    ctx = WikiToolContext(wiki=wiki, class_id=CLASS_ID)
+    names = {tool.name for tool in create_memory_update_tools(ctx)}
+
+    assert {"resolve_wiki_references", "report_verification_finding"} <= names

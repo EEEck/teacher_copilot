@@ -60,6 +60,57 @@ def test_plan_chat_unknown_session_returns_typed_404(client: TestClient):
     assert "Unknown session" in body["error"]["message"]
 
 
+def test_blocking_executive_finding_prevents_plan_readiness(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+
+    chat = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={"message": "Plan this for student S-999."},
+    )
+
+    assert chat.status_code == 200, chat.text
+    assert chat.json()["ready_to_save"] is False
+    assert chat.json()["executive_state"]["status"] == "needs_decision"
+    assert chat.json()["executive_state"]["open_findings"][0]["category"] == "identity"
+
+
+def test_advisory_executive_finding_does_not_block_plan(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+
+    chat = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={"message": "Start the new organic chemistry unit after redox."},
+    )
+
+    assert chat.status_code == 200, chat.text
+    assert chat.json()["ready_to_save"] is True
+    assert chat.json()["executive_state"]["status"] == "advisory"
+
+
+def test_blocking_finding_returns_previously_ready_session_to_chatting(
+    client: TestClient,
+):
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+    first = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={"message": "Plan the next lesson."},
+    )
+    assert first.json()["ready_to_save"] is True
+
+    second = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={"message": "Add a note for student S-999."},
+    )
+    assert second.json()["ready_to_save"] is False
+
+    trace = client.get(f"{base}/sessions/{session_id}/trace")
+    assert trace.status_code == 200
+    assert trace.json()["status"] == "chatting"
+
+
 def test_plan_save_rejects_invalid_lesson_date(client: TestClient):
     base = f"/api/classes/{CLASS_ID}/plan"
     start = client.post(f"{base}/sessions")

@@ -7,6 +7,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from app.schemas.api import LessonFlowPhase
+from app.teacher_agent.executive_verification import ExecutivePatch
 from app.teacher_agent.memory_capture import MemoryCandidate
 from app.teacher_agent.memory_update_state import (
     MemoryEvidenceBrief,
@@ -58,6 +59,7 @@ class IngestTurnOutput(BaseModel):
         default="",
         description="Set only when the teacher asks for an update-memory task outside the MVP scope.",
     )
+    executive_patch: ExecutivePatch = Field(default_factory=ExecutivePatch)
 
 
 class PlanTurnOutput(BaseModel):
@@ -91,6 +93,7 @@ class PlanTurnOutput(BaseModel):
             "emitted here in the same turn."
         ),
     )
+    executive_patch: ExecutivePatch = Field(default_factory=ExecutivePatch)
 
 
 class PlanOutput(BaseModel):

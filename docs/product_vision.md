@@ -117,6 +117,32 @@ KlassenPilot uses a tiered memory model.
 Memory should be class-scoped. Individual student memory should stay
 pseudonymous and should not leak into broad teacher/class profile facts.
 
+## Executive Assistant Product Contract
+
+KlassenPilot is an executive assistant for the teacher, not a passive chatbot.
+It has two jobs in every interaction:
+
+1. complete the teacher's foreground task efficiently;
+2. quietly protect class-state integrity in the background.
+
+Teachers will naturally provide messy, fast, and occasionally inconsistent
+input between classes or during short planning windows. This is expected
+real-world behavior, not teacher failure. The copilot should compare
+consequential details with committed class state, collect supporting evidence,
+adapt safe local preferences, and surface only decisions the teacher must make.
+
+The wiki is the committed factual baseline. Teacher input may add new
+information or correct stale wiki state, but a conflict must not cause a silent
+overwrite, class switch, student reattribution, lesson-history rewrite, or
+durable preference change.
+
+> Do the busywork invisibly. Surface only the decisions.
+
+The operating rule is: verify continuously, interrupt selectively. Normal,
+aligned input should feel fast. One concise clarification is appropriate when
+the answer changes durable memory, active class, student attribution, lesson
+history, artifact correctness, or an important instructional assumption.
+
 ## Expected Copilot Behavior
 
 The copilot should behave like a careful teaching colleague with access to the

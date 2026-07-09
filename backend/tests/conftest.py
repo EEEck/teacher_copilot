@@ -27,6 +27,11 @@ from app.schemas.api import (
     LessonPlan,
 )
 from app.teacher_agent.models import MemoryCompactOutput
+from app.teacher_agent.executive_verification import (
+    ExecutiveFinding,
+    ExecutiveRuntime,
+    executive_api_payload,
+)
 from app.teacher_agent.memory_update_state import (
     LessonResultPatch,
     MemoryEvidenceBrief,
@@ -153,6 +158,29 @@ class StubAgentRunner:
 
     async def plan_opening(self, class_id: str) -> str:
         return f"Opening planning session for {class_id}."
+
+    def _emit_executive_state(
+        self, executive: ExecutiveRuntime | None, messages: list[ChatMessage]
+    ) -> None:
+        if executive is None or not messages:
+            return
+        latest = messages[-1].content.lower()
+        if "s-999" in latest:
+            executive.findings["student-s999"] = ExecutiveFinding(
+                finding_id="student-s999",
+                category="identity",
+                severity="blocking",
+                summary="S-999 is not in the active-class roster.",
+                question="Which student or class should receive this note?",
+                evidence_refs=["reference_stub"],
+            )
+        elif "new organic chemistry unit" in latest:
+            executive.findings["unit-transition"] = ExecutiveFinding(
+                finding_id="unit-transition",
+                category="time_state",
+                severity="advisory",
+                summary="Organic chemistry is treated as the explicit next unit.",
+            )
 
     def _is_high_stakes_student_request(self, messages: list[ChatMessage]) -> bool:
         latest = messages[-1].content.lower() if messages else ""
@@ -389,6 +417,7 @@ class StubAgentRunner:
         partial_plan: str = "",
         attachments: list[ChatAttachment] | None = None,
         planning: PlanRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
     ) -> tuple[str, str, bool]:
         if self._is_high_stakes_student_request(messages):
             return (
@@ -399,7 +428,9 @@ class StubAgentRunner:
             )
         if planning is not None:
             self._emit_plan_state(planning, messages, READY_PLAN, partial_plan)
-        return "Here is an updated plan draft.", READY_PLAN, True
+        self._emit_executive_state(executive, messages)
+        ready = not (executive and executive.open_blocking_findings())
+        return "Here is an updated plan draft.", READY_PLAN, ready
 
     async def ingest_chat(
         self,
@@ -408,6 +439,7 @@ class StubAgentRunner:
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
         memory: MemoryRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
     ) -> tuple[str, str, CompletenessChecklist, bool]:
         scenario_0529 = any(
             "2026-05-29" in m.content
@@ -419,7 +451,9 @@ class StubAgentRunner:
         checklist = self.wiki.checklist_from_diary(diary)
         if memory is not None:
             self._emit_memory_state(memory, messages)
-        return "Logged the lesson.", diary, checklist, True
+        self._emit_executive_state(executive, messages)
+        ready = not (executive and executive.open_blocking_findings())
+        return "Logged the lesson.", diary, checklist, ready
 
     async def compile_diary(self, class_id: str, messages: list[ChatMessage]) -> str:
         return COMPLETE_DIARY
@@ -538,6 +572,7 @@ class StubAgentRunner:
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
         memory: MemoryRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
     ) -> AsyncIterator:
         yield SseReasoningDelta(text="Reviewing class memory…")
         latest = messages[-1].content.lower() if messages else ""
@@ -581,11 +616,13 @@ class StubAgentRunner:
         checklist = self.wiki.checklist_from_diary(diary)
         if memory is not None:
             self._emit_memory_state(memory, messages)
+        self._emit_executive_state(executive, messages)
         memory_payload = memory_api_payload(memory) if memory is not None else {}
         ready = bool(
             memory is not None
             and memory_payload.get("phase") == "review_draft"
             and self.wiki.is_diary_complete(diary)
+            and not (executive and executive.open_blocking_findings())
         )
         yield SseFinal(
             reply="Logged the lesson.",
@@ -596,6 +633,9 @@ class StubAgentRunner:
                 memory.last_change_summary if memory is not None else None
             ),
             memory_state=memory_payload or None,
+            executive_state=(
+                executive_api_payload(executive) if executive is not None else None
+            ),
         )
 
     def _plan_final(
@@ -603,18 +643,22 @@ class StubAgentRunner:
         reply: str,
         plan_md: str,
         planning: PlanRuntime | None,
+        executive: ExecutiveRuntime | None = None,
     ) -> SseFinal:
         payload = planning_api_payload(planning) if planning is not None else {}
         return SseFinal(
             reply=reply,
             artifact_markdown=plan_md,
-            ready=True,
+            ready=not (executive and executive.open_blocking_findings()),
             completeness=None,
             phase=payload.get("phase"),
             last_change_summary=payload.get("last_change_summary"),
             session_state=payload.get("session_state"),
             lesson_planning_state=payload.get("lesson_planning_state"),
             memory_candidates=payload.get("memory_candidates"),
+            executive_state=(
+                executive_api_payload(executive) if executive is not None else None
+            ),
         )
 
     async def plan_chat_stream(
@@ -624,8 +668,10 @@ class StubAgentRunner:
         partial_plan: str = "",
         attachments: list[ChatAttachment] | None = None,
         planning: PlanRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
     ) -> AsyncIterator:
         latest = messages[-1].content.lower() if messages else ""
+        self._emit_executive_state(executive, messages)
 
         if self._is_high_stakes_student_request(messages):
             yield self._plan_final(
