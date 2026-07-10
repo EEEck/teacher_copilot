@@ -172,6 +172,43 @@ behavior gap, not a flaky test: the next implementation pass should add
 deterministic roster-conflict detection and a teacher clarification path before
 student observations are recorded.
 
+### Executive-verification evals
+
+The executive-verification golden suite exercises the shared `ExecutiveRuntime`
+against a focused Chemie 9b eval wiki. It covers three interaction outcomes:
+
+- a date plus student-ID mismatch blocks readiness, then proceeds after the
+  teacher resolves both facts;
+- an unrelated English/Macbeth paste blocks a Chemie 9b artifact; and
+- a valid but naturally messy organic-chemistry lesson result proceeds without
+  unnecessary clarification.
+
+The always-on deterministic layer validates the golden fixture and its wiki
+preconditions. The live contract layer asserts backend-owned `ready` and
+`executive_state.status`; it is the authoritative check for whether a durable
+action is permitted. The optional LLM judge evaluates teacher-facing behavior,
+not write readiness.
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_executive_verification.py -q
+
+$env:RUN_LIVE_AGENT_EVALS="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_executive_verification.py::test_executive_verification_live_contract -q -rA
+
+$env:RUN_LLM_EXECUTIVE_VERIFICATION_JUDGE="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_executive_verification.py::test_executive_verification_llm_judge_live -q -rA
+```
+
+**Known finding (2026-07-09, deferred):** the live contract passed the
+mismatch/resolution and wrong-context cases, but the valid organic-chemistry
+input produced a correct draft with `ready=false`. The system is safe but
+over-blocks this low-risk case. The LLM judge passed all three scenarios because
+it assesses the reply/artifact quality and does not receive the backend
+readiness state. Keep this as a red live-contract regression until a later
+prompt/runtime calibration pass; do not weaken the write gate or change the
+golden expectation to make it pass.
+
 Enable the optional LLM judge for the Student Summary golden:
 
 ```powershell
