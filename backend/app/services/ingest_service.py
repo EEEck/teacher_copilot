@@ -43,6 +43,11 @@ from app.teacher_agent.memory_update_state import (
     render_memory_target_state,
     render_memory_runtime,
 )
+from app.teacher_agent.executive_verification import (
+    WriteVerificationBlocked,
+    apply_write_verification,
+    evaluate_write_gate,
+)
 from app.teacher_agent.prompt_trace import build_ingest_chat_prompt_trace
 from app.teacher_agent.wiki import parsing as wiki_parsing
 from app.teacher_agent.wiki_store import WikiStore
@@ -302,6 +307,24 @@ class IngestService:
             diary_md = await self.agents.compile_diary(
                 session.class_id, session.messages
             )
+        verification = await self.agents.verify_artifact_for_write(
+            session.class_id, "lesson results", diary_md, session.executive
+        )
+        apply_write_verification(
+            session.executive,
+            artifact=diary_md,
+            patch=verification.patch,
+            message=verification.message,
+        )
+        gate = evaluate_write_gate(
+            session.executive,
+            diary_md,
+            structurally_ready=self.wiki.is_diary_complete(diary_md),
+        )
+        if not gate.allowed:
+            raise WriteVerificationBlocked(
+                "ingest_propose", verification, gate, session.executive
+            )
         draft = self.core.update_draft(session_id, diary_md)
         self.core.set_status(session_id, IngestSessionStatus.reviewing.value)
         assert isinstance(draft, IngestDraft)
@@ -370,9 +393,27 @@ class IngestService:
             raw_evidence=dict(runtime.raw_store) if runtime else {},
         )
 
-    def commit(self, req: CommitIngestRequest) -> CommitIngestResponse:
+    async def commit(self, req: CommitIngestRequest) -> CommitIngestResponse:
         session = self.core.get_session(req.session_id)
         self.core.require_latest_turn_complete(req.session_id, "save memory")
+        verification = await self.agents.verify_artifact_for_write(
+            session.class_id, "lesson results", req.diary_markdown, session.executive
+        )
+        apply_write_verification(
+            session.executive,
+            artifact=req.diary_markdown,
+            patch=verification.patch,
+            message=verification.message,
+        )
+        gate = evaluate_write_gate(
+            session.executive,
+            req.diary_markdown,
+            structurally_ready=self.wiki.is_diary_complete(req.diary_markdown),
+        )
+        if not gate.allowed:
+            raise WriteVerificationBlocked(
+                "ingest_commit", verification, gate, session.executive
+            )
         lesson_date = (
             self.wiki.extract_date_from_diary(req.diary_markdown)
             or date.today().isoformat()

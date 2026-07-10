@@ -98,8 +98,14 @@ Checkpoint B enforcement is shared by all registered artifact workflows:
 - Open blocking findings make a structurally complete artifact not ready and
   return the session to chatting; advisories do not block.
 
-Exact-draft fingerprint verification immediately before durable writes remains
-Checkpoint C. Prompt instructions alone are not the final safety boundary.
+Checkpoint C adds exact-draft verification immediately before plan save, ingest
+proposal, and ingest commit. The backend hashes the submitted artifact,
+freshly verifies it with read-only class context, and allows the side effect
+only when that exact fingerprint is clear of blocking findings and meets the
+workflow's structural readiness rule. A blocked action returns typed HTTP 409
+with a concise teacher-visible recovery message and preserved draft; it never
+silently edits or discards teacher text. Prompt instructions alone are not the
+final safety boundary.
 
 ## Agents SDK Integration Contract
 

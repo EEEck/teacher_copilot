@@ -2,7 +2,10 @@ from app.teacher_agent.executive_verification import (
     ExecutiveFinding,
     ExecutivePatch,
     ExecutiveRuntime,
+    apply_write_verification,
+    artifact_fingerprint,
     apply_executive_patch,
+    evaluate_write_gate,
     executive_api_payload,
     render_executive_runtime,
 )
@@ -93,3 +96,36 @@ def test_rendered_runtime_exposes_open_findings_without_hidden_reasoning():
     assert rendered.startswith("<executive_state>")
     assert '"finding_id": "scope-1"' in rendered
     assert rendered.endswith("</executive_state>")
+
+
+def test_write_gate_requires_current_fingerprint_and_no_blocking_findings():
+    runtime = ExecutiveRuntime()
+
+    apply_write_verification(runtime, artifact="# Draft\n", patch=ExecutivePatch())
+
+    assert evaluate_write_gate(runtime, "# Draft\n", structurally_ready=True).allowed
+    changed = evaluate_write_gate(runtime, "# Changed\n", structurally_ready=True)
+    assert changed.allowed is False
+    assert changed.reason == "artifact_changed_since_verification"
+
+
+def test_write_gate_blocks_open_finding_even_when_fingerprint_matches():
+    runtime = ExecutiveRuntime()
+    patch = ExecutivePatch(
+        findings=[
+            ExecutiveFinding(
+                finding_id="student-s999",
+                category="identity",
+                severity="blocking",
+                summary="S-999 is not resolved in the active class.",
+                question="Which student should receive this note?",
+            )
+        ]
+    )
+
+    apply_write_verification(runtime, artifact="# Draft\n", patch=patch)
+
+    gate = evaluate_write_gate(runtime, "# Draft\n", structurally_ready=True)
+    assert gate.allowed is False
+    assert gate.reason == "unresolved_blocking_finding"
+    assert runtime.write_verification_fingerprint == artifact_fingerprint("# Draft\n")

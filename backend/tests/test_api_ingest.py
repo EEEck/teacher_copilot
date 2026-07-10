@@ -112,6 +112,54 @@ def test_blocking_executive_finding_prevents_ingest_readiness(client: TestClient
     assert chat.json()["executive_state"]["status"] == "needs_decision"
 
 
+def test_ingest_propose_manual_unknown_student_returns_409(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/ingest"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+    chat = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={"message": "We covered Topic A today."},
+    )
+    edited = chat.json()["diary_markdown"] + "\n- S-999 needs support.\n"
+    update = client.patch(
+        f"{base}/sessions/{session_id}/draft",
+        json={"diary_markdown": edited},
+    )
+    assert update.status_code == 200, update.text
+
+    propose = client.post(f"{base}/sessions/{session_id}/propose")
+
+    assert propose.status_code == 409, propose.text
+    body = propose.json()
+    assert body["code"] == "write_verification_blocked"
+    assert body["action"] == "ingest_propose"
+    assert "S-999" in body["message"]
+
+
+def test_ingest_commit_rechecks_manual_unknown_student_before_write(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/ingest"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+    chat = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={"message": "We covered Topic A today."},
+    )
+    edited = chat.json()["diary_markdown"] + "\n- S-999 needs support.\n"
+
+    commit = client.post(
+        f"{base}/commit",
+        json={
+            "session_id": session_id,
+            "diary_markdown": edited,
+            "approved_updates": [],
+        },
+    )
+
+    assert commit.status_code == 409, commit.text
+    body = commit.json()
+    assert body["code"] == "write_verification_blocked"
+    assert body["action"] == "ingest_commit"
+    assert "S-999" in body["message"]
+
+
 def test_compact_memory_apply_rejects_non_compact_memory_pages(client: TestClient):
     res = client.post(
         f"/api/classes/{CLASS_ID}/memory/compact/apply",
@@ -429,7 +477,7 @@ async def test_ingest_commit_rejects_unfinished_streamed_turn(
     ]
 
     with pytest.raises(ValueError, match="latest chat turn"):
-        ingest.commit(
+        await ingest.commit(
             CommitIngestRequest(
                 session_id=session.session_id,
                 diary_markdown=COMPLETE_DIARY,
@@ -468,7 +516,7 @@ async def test_ingest_allows_retry_after_unfinished_streamed_turn(
         )
         for p in proposals
     ]
-    response = ingest.commit(
+    response = await ingest.commit(
         CommitIngestRequest(
             session_id=session.session_id,
             diary_markdown=COMPLETE_DIARY,

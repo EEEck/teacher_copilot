@@ -29,7 +29,10 @@ from app.schemas.api import (
 from app.teacher_agent.models import MemoryCompactOutput
 from app.teacher_agent.executive_verification import (
     ExecutiveFinding,
+    ExecutivePatch,
     ExecutiveRuntime,
+    WriteVerificationResult,
+    artifact_fingerprint,
     executive_api_payload,
 )
 from app.teacher_agent.memory_update_state import (
@@ -158,6 +161,39 @@ class StubAgentRunner:
 
     async def plan_opening(self, class_id: str) -> str:
         return f"Opening planning session for {class_id}."
+
+    async def verify_artifact_for_write(
+        self,
+        class_id: str,
+        artifact_kind: str,
+        markdown: str,
+        executive: ExecutiveRuntime,
+    ) -> WriteVerificationResult:
+        if "S-999" in markdown:
+            patch = ExecutivePatch(
+                findings=[
+                    ExecutiveFinding(
+                        finding_id="student-s999-write",
+                        category="identity",
+                        severity="blocking",
+                        summary="S-999 is not in the active-class roster.",
+                        question="Which student or class should receive this note?",
+                        evidence_refs=["reference_stub"],
+                    )
+                ]
+            )
+            message = (
+                "I didn't save this yet: S-999 is not in the active-class roster. "
+                "Which student should receive this note?"
+            )
+        else:
+            patch = ExecutivePatch()
+            message = "The draft is ready for the requested action."
+        return WriteVerificationResult(
+            artifact_fingerprint=artifact_fingerprint(markdown),
+            patch=patch,
+            message=message,
+        )
 
     def _emit_executive_state(
         self, executive: ExecutiveRuntime | None, messages: list[ChatMessage]

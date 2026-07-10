@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from typing import Literal
@@ -66,6 +67,8 @@ class ExecutiveRuntime:
     checked_categories: set[str] = field(default_factory=set)
     assumptions: list[str] = field(default_factory=list)
     verification_summary: str = ""
+    write_verification_fingerprint: str = ""
+    write_verification_message: str = ""
 
     def open_findings(self) -> list[ExecutiveFinding]:
         return [item for item in self.findings.values() if item.status == "open"]
@@ -76,6 +79,43 @@ class ExecutiveRuntime:
             for item in self.open_findings()
             if item.severity == "blocking"
         ]
+
+
+@dataclass(frozen=True)
+class WriteGateResult:
+    allowed: bool
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class WriteVerificationResult:
+    artifact_fingerprint: str
+    patch: ExecutivePatch
+    message: str
+
+
+class WriteVerificationBlocked(RuntimeError):
+    """Raised before a durable action when exact-draft verification blocks it."""
+
+    def __init__(
+        self,
+        action: str,
+        result: WriteVerificationResult,
+        gate: WriteGateResult,
+        runtime: ExecutiveRuntime,
+    ) -> None:
+        self.action = action
+        self.result = result
+        self.gate = gate
+        self.runtime = runtime
+        message = result.message or "I didn't save this yet; one detail needs your call."
+        super().__init__(message)
+
+
+def artifact_fingerprint(markdown: str) -> str:
+    """Return the backend-owned digest for one exact artifact submission."""
+    normalized = (markdown or "").replace("\r\n", "\n").strip()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _clean(value: str) -> str:
@@ -103,6 +143,44 @@ def apply_executive_patch(
     if summary:
         runtime.verification_summary = summary
     return runtime
+
+
+def apply_write_verification(
+    runtime: ExecutiveRuntime,
+    *,
+    artifact: str,
+    patch: ExecutivePatch,
+    message: str = "",
+) -> ExecutiveRuntime:
+    """Replace open artifact findings with a fresh exact-draft verification."""
+    for finding_id, finding in list(runtime.findings.items()):
+        if finding.status == "open":
+            runtime.findings[finding_id] = finding.model_copy(
+                update={
+                    "status": "dismissed",
+                    "resolution": "Superseded by fresh write verification.",
+                }
+            )
+    apply_executive_patch(runtime, patch)
+    runtime.write_verification_fingerprint = artifact_fingerprint(artifact)
+    runtime.write_verification_message = _clean(message)
+    return runtime
+
+
+def evaluate_write_gate(
+    runtime: ExecutiveRuntime,
+    artifact: str,
+    *,
+    structurally_ready: bool,
+) -> WriteGateResult:
+    """Allow a durable action only for the current verified artifact."""
+    if not structurally_ready:
+        return WriteGateResult(False, "artifact_not_ready")
+    if runtime.write_verification_fingerprint != artifact_fingerprint(artifact):
+        return WriteGateResult(False, "artifact_changed_since_verification")
+    if runtime.open_blocking_findings():
+        return WriteGateResult(False, "unresolved_blocking_finding")
+    return WriteGateResult(True)
 
 
 def executive_api_payload(runtime: ExecutiveRuntime) -> dict:

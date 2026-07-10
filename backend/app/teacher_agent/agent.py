@@ -14,9 +14,11 @@ from app.teacher_agent.models import (
     PlanOutput,
     PlanTurnOutput,
     ProfileProposalOutput,
+    WriteVerificationOutput,
 )
 from app.teacher_agent.memory_update_state import MemoryRuntime
 from app.teacher_agent.planning_state import PlanRuntime
+from app.teacher_agent.executive_verification import render_executive_runtime
 from app.teacher_agent.prompt_assembly import (
     build_ingest_chat_prompt_assembly,
     build_plan_chat_prompt_assembly,
@@ -29,6 +31,7 @@ from app.teacher_agent.prompts import (
     PROFILE_PROPOSAL_SYSTEM,
     PLAN_OPENING_SYSTEM,
     PLAN_SYSTEM,
+    WRITE_VERIFICATION_SYSTEM,
     apply_prompt,
     TEACHER_AGENT_SECURITY_POLICY,
 )
@@ -116,6 +119,30 @@ def build_plan_chat_agent(
         **({"model_settings": settings} if settings else {}),
         tools=create_chat_wiki_tools(ctx),
         output_type=PlanTurnOutput,
+    )
+
+
+def build_write_verification_agent(
+    ctx: WikiToolContext,
+    artifact_kind: str,
+    active_class_core: str,
+    model: str,
+    *,
+    reasoning_effort: str = "medium",
+) -> Agent:
+    return Agent(
+        name="KlassenPilot Write Verifier",
+        instructions=apply_prompt(
+            WRITE_VERIFICATION_SYSTEM,
+            artifact_kind=artifact_kind,
+            active_class_core=active_class_core,
+            executive_state=render_executive_runtime(ctx.executive),
+            security_policy=TEACHER_AGENT_SECURITY_POLICY,
+        ),
+        model=model,
+        **_reasoning(reasoning_effort),
+        tools=create_chat_wiki_tools(ctx),
+        output_type=WriteVerificationOutput,
     )
 
 

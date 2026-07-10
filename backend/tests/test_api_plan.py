@@ -130,6 +130,39 @@ def test_plan_save_rejects_invalid_lesson_date(client: TestClient):
     assert "lesson_date must be YYYY-MM-DD" in save.text
 
 
+def test_plan_save_manual_unknown_student_returns_409_without_write(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+    chat = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={"message": "Plan the next lesson."},
+    )
+    edited = chat.json()["plan_markdown"] + "\nStudent note: S-999 needs support.\n"
+
+    save = client.post(
+        f"{base}/save",
+        json={
+            "session_id": session_id,
+            "lesson_date": "2026-10-05",
+            "plan_markdown": edited,
+        },
+    )
+
+    assert save.status_code == 409, save.text
+    body = save.json()
+    assert body["code"] == "write_verification_blocked"
+    assert body["action"] == "plan_save"
+    assert "S-999" in body["message"]
+
+    saved = client.get(
+        f"/api/classes/{CLASS_ID}/wiki/file",
+        params={
+            "path": f"wiki/classes/{CLASS_ID}/lessons/2026-10-05/lesson_plan.md"
+        },
+    )
+    assert saved.status_code == 404
+
+
 def test_profile_proposal_normalizes_human_label_targets(
     client: TestClient, agents
 ):

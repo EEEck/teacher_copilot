@@ -449,6 +449,14 @@ class SavePlanResponse(BaseModel):
     memory_candidates: list[dict] = Field(default_factory=list)
 
 
+class WriteVerificationBlockedResponse(BaseModel):
+    code: Literal["write_verification_blocked"] = "write_verification_blocked"
+    action: Literal["plan_save", "ingest_propose", "ingest_commit"]
+    artifact_fingerprint: str
+    executive_state: dict = Field(default_factory=dict)
+    message: str
+
+
 class AgentTraceResponse(BaseModel):
     """Debug/review bundle for one artifact-agent session."""
 

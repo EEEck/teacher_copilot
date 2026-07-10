@@ -96,6 +96,19 @@ class PlanTurnOutput(BaseModel):
     executive_patch: ExecutivePatch = Field(default_factory=ExecutivePatch)
 
 
+class WriteVerificationOutput(BaseModel):
+    """Read-only check of the exact artifact submitted for a durable action."""
+
+    executive_patch: ExecutivePatch = Field(default_factory=ExecutivePatch)
+    message: str = Field(
+        default="Verification complete.",
+        description=(
+            "One concise teacher-visible outcome. If blocking, name the mismatch "
+            "and ask the smallest decision needed; never claim a write occurred."
+        ),
+    )
+
+
 class PlanOutput(BaseModel):
     title: str
     lesson_date: Optional[str] = None

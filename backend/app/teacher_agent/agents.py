@@ -30,6 +30,7 @@ from app.teacher_agent.agent import (
     build_plan_lesson_agent,
     build_plan_opening_agent,
     build_profile_proposal_agent,
+    build_write_verification_agent,
 )
 from app.teacher_agent.models import (
     CompileOutput,
@@ -38,6 +39,7 @@ from app.teacher_agent.models import (
     PlanOutput,
     PlanTurnOutput,
     ProfileProposalOutput,
+    WriteVerificationOutput,
 )
 from app.context_limits import apply_char_limit, get_context_limits
 from app.teacher_agent.prompt_assembly import (
@@ -52,6 +54,8 @@ from app.teacher_agent.memory_update_state import (
 )
 from app.teacher_agent.executive_verification import (
     ExecutiveRuntime,
+    WriteVerificationResult,
+    artifact_fingerprint,
     apply_executive_patch,
     executive_api_payload,
 )
@@ -795,6 +799,36 @@ class AgentRunner:
         if not isinstance(parsed, PlanOutput):
             raise RuntimeError("Failed to generate lesson plan")
         return LessonPlan(**parsed.model_dump())
+
+    async def verify_artifact_for_write(
+        self,
+        class_id: str,
+        artifact_kind: str,
+        markdown: str,
+        executive: ExecutiveRuntime,
+    ) -> WriteVerificationResult:
+        """Run the isolated read-only verifier for one exact durable draft."""
+        context = self.wiki.build_active_class_core_context_trace(class_id)["text"]
+        agent = build_write_verification_agent(
+            self._wiki_ctx(class_id, executive=executive),
+            artifact_kind,
+            context,
+            self.chat_model,
+            reasoning_effort=self.chat_effort,
+        )
+        prompt = (
+            f"Artifact kind: {artifact_kind}\n\n"
+            "Exact submitted artifact (inspect this text, do not rewrite it):\n"
+            f"{markdown}\n"
+        )
+        parsed = await self._run_structured(agent, prompt)
+        if not isinstance(parsed, WriteVerificationOutput):
+            raise RuntimeError("Failed to verify artifact for write")
+        return WriteVerificationResult(
+            artifact_fingerprint=artifact_fingerprint(markdown),
+            patch=parsed.executive_patch,
+            message=parsed.message.strip() or "Verification complete.",
+        )
 
     async def lint_wiki(self, class_id: str) -> str:
         context = self.wiki.read_wiki_index(class_id)

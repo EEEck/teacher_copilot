@@ -34,6 +34,11 @@ from app.teacher_agent.planning_state import (
     render_lesson_planning_state,
     render_session_state,
 )
+from app.teacher_agent.executive_verification import (
+    WriteVerificationBlocked,
+    apply_write_verification,
+    evaluate_write_gate,
+)
 from app.teacher_agent.prompt_trace import build_plan_chat_prompt_trace
 from app.teacher_agent.wiki_store import WikiStore
 from app.teacher_agent.memory_capture import (
@@ -166,7 +171,7 @@ class PlanService:
             raw_evidence=dict(runtime.raw_store) if runtime else {},
         )
 
-    def save(self, class_id: str, req: SavePlanRequest) -> SavePlanResponse:
+    async def save(self, class_id: str, req: SavePlanRequest) -> SavePlanResponse:
         session = self.core.get_session(req.session_id)
         if session.class_id != class_id:
             raise KeyError("Session class mismatch")
@@ -174,6 +179,24 @@ class PlanService:
             lesson_date = date.fromisoformat(req.lesson_date).isoformat()
         except ValueError as exc:
             raise ValueError("lesson_date must be YYYY-MM-DD") from exc
+        verification = await self.agents.verify_artifact_for_write(
+            class_id, "lesson plan", req.plan_markdown, session.executive
+        )
+        apply_write_verification(
+            session.executive,
+            artifact=req.plan_markdown,
+            patch=verification.patch,
+            message=verification.message,
+        )
+        gate = evaluate_write_gate(
+            session.executive,
+            req.plan_markdown,
+            structurally_ready=self.wiki.is_plan_ready(req.plan_markdown),
+        )
+        if not gate.allowed:
+            raise WriteVerificationBlocked(
+                "plan_save", verification, gate, session.executive
+            )
         title = self.wiki.extract_title(req.plan_markdown) or "Lesson plan"
         path = self.wiki.save_lesson_plan(class_id, lesson_date, req.plan_markdown)
         self.core.set_status(req.session_id, PlanSessionStatus.saved.value)

@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator, Callable
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.api.deps import (
     get_agents,
@@ -61,6 +61,7 @@ from app.schemas.api import (
     SavePlanResponse,
     UpdateDraftRequest,
     UpdatePlanDraftRequest,
+    WriteVerificationBlockedResponse,
     WikiFileResponse,
     WikiLintResponse,
 )
@@ -80,6 +81,10 @@ from app.services.plan_service import PlanService
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.memory_targets import canonical_memory_target, compact_key_for_target
 from app.teacher_agent.stream_events import SseError, sse_encode
+from app.teacher_agent.executive_verification import (
+    WriteVerificationBlocked,
+    executive_api_payload,
+)
 from app.teacher_agent.wiki_store import WikiStore
 
 logger = logging.getLogger(__name__)
@@ -1321,6 +1326,16 @@ async def ingest_propose(
         return draft
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except WriteVerificationBlocked as exc:
+        return JSONResponse(
+            status_code=409,
+            content=WriteVerificationBlockedResponse(
+                action=exc.action,
+                artifact_fingerprint=exc.result.artifact_fingerprint,
+                executive_state=executive_api_payload(exc.runtime),
+                message=str(exc),
+            ).model_dump(),
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -1387,7 +1402,7 @@ async def ingest_commit(
             path: _read_wiki_rel(wiki, path)
             for path in approved_paths
         }
-        response = ingest.commit(body)
+        response = await ingest.commit(body)
         _record_beta_wiki_diff(
             request,
             beta_auth,
@@ -1422,6 +1437,16 @@ async def ingest_commit(
         return response
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except WriteVerificationBlocked as exc:
+        return JSONResponse(
+            status_code=409,
+            content=WriteVerificationBlockedResponse(
+                action=exc.action,
+                artifact_fingerprint=exc.result.artifact_fingerprint,
+                executive_state=executive_api_payload(exc.runtime),
+                message=str(exc),
+            ).model_dump(),
+        )
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -1676,7 +1701,7 @@ def plan_update_draft(
 
 
 @router.post("/classes/{class_id}/plan/save", response_model=SavePlanResponse)
-def plan_save(
+async def plan_save(
     class_id: str,
     body: SavePlanRequest,
     request: Request,
@@ -1694,7 +1719,7 @@ def plan_save(
             wiki.lesson_dir(class_id, lesson_date) / "lesson_plan.md"
         )
         before_by_path = {rel_path: _read_wiki_rel(wiki, rel_path)}
-        response = plan_svc.save(class_id, body)
+        response = await plan_svc.save(class_id, body)
         _record_beta_wiki_diff(
             request,
             beta_auth,
@@ -1710,6 +1735,16 @@ def plan_save(
         return response
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except WriteVerificationBlocked as exc:
+        return JSONResponse(
+            status_code=409,
+            content=WriteVerificationBlockedResponse(
+                action=exc.action,
+                artifact_fingerprint=exc.result.artifact_fingerprint,
+                executive_state=executive_api_payload(exc.runtime),
+                message=str(exc),
+            ).model_dump(),
+        )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 

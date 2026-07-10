@@ -209,6 +209,13 @@ readiness state. Keep this as a red live-contract regression until a later
 prompt/runtime calibration pass; do not weaken the write gate or change the
 golden expectation to make it pass.
 
+Milestone C adds deterministic API coverage for the write boundary: a manual
+draft edit that introduces an unknown student must return HTTP 409 with
+`write_verification_blocked` and must not write the plan, create an ingest
+review, or commit wiki files. These checks use the stub verifier and remain
+network-free; an opt-in live manual-edit recovery golden follows once the
+verifier behavior is calibrated.
+
 Enable the optional LLM judge for the Student Summary golden:
 
 ```powershell
