@@ -241,6 +241,42 @@ class ClassMemorySnapshot(BaseModel):
     recent_lessons: list[str] = Field(default_factory=list)
 
 
+class ClassBriefAction(BaseModel):
+    label: str
+    href: str = ""
+    rationale: str = ""
+
+
+class ClassBriefResponse(BaseModel):
+    class_id: str
+    summary: str
+    recommended_action: ClassBriefAction
+    reasons: list[str] = Field(default_factory=list)
+    watch_items: list[str] = Field(default_factory=list)
+    source_paths: list[str] = Field(default_factory=list)
+    generated_at: str
+    cached: bool = False
+
+
+class ClassDiscussionSession(BaseModel):
+    session_id: str
+    class_id: str
+    messages: list[dict] = Field(default_factory=list)
+
+
+class ClassDiscussionChatRequest(BaseModel):
+    message: str
+
+
+class ClassDiscussionChatResponse(BaseModel):
+    reply: str
+    discussion_state: dict = Field(default_factory=dict)
+    evidence_briefs: list[dict] = Field(default_factory=list)
+    memory_candidates: list[dict] = Field(default_factory=list)
+    source_paths: list[str] = Field(default_factory=list)
+    suggested_actions: list[ClassBriefAction] = Field(default_factory=list)
+
+
 class RollupExcerpt(BaseModel):
     wiki_path: str
     label: str

@@ -34,12 +34,17 @@ Non-goals for beta:
 - Production-grade session history UX.
 - Voice, Telegram, broad open-web browsing, or assessment generation unless core
   loop testing is already healthy.
-- Real student names or sensitive real student records.
+- Real external student names or sensitive real student records. The mock beta
+  seed may use synthetic real-looking names for usability, but those names are
+  test data.
 
 ## Fixed Beta Assumptions
 
 - Testers: 2-3 beta testers.
 - Class data: one mock class only, `chemie_9b_2026_27`.
+- Mock student display names are allowed in the seed wiki when they are
+  synthetic. Candidate ledgers are not seed data and must not be copied into new
+  tester workspaces.
 - Persistence visible to testers: no polished saved chat-history product UX.
 - Persistence for operator/research: transcripts, events, artifacts, memory
   states, wiki diffs, and errors are stored for analysis.

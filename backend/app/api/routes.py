@@ -9,6 +9,8 @@ from fastapi.responses import StreamingResponse
 from app.api.deps import (
     get_agents,
     get_beta_auth_service,
+    get_class_brief_service,
+    get_class_discussion_service,
     get_ingest_service,
     get_memory_candidate_ledger,
     get_plan_service,
@@ -17,11 +19,16 @@ from app.api.deps import (
 from app.config import get_settings
 from app.openai_bootstrap import is_openai_configured
 from app.schemas.api import (
+    AgentTraceResponse,
     BetaIdentityResponse,
     BetaLoginRequest,
     ChatRequest,
     ChatResponse,
     ClassesResponse,
+    ClassBriefResponse,
+    ClassDiscussionChatRequest,
+    ClassDiscussionChatResponse,
+    ClassDiscussionSession,
     ClassMemorySnapshot,
     ClassTimeline,
     CommitIngestRequest,
@@ -63,6 +70,8 @@ from app.schemas.api import (
     WikiLintResponse,
 )
 from app.services.beta import BetaAuthService
+from app.services.class_brief_service import ClassBriefService
+from app.services.class_discussion_service import ClassDiscussionService
 from app.services.ingest_service import IngestService
 from app.services.memory_apply import apply_memory_items, apply_memory_sweep_decisions
 from app.services.memory_candidate_ledger import MemoryCandidateLedger, OPEN_STATUSES
@@ -470,6 +479,114 @@ def get_snapshot(
 ) -> ClassMemorySnapshot:
     try:
         return wiki.get_snapshot(class_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.get("/classes/{class_id}/brief", response_model=ClassBriefResponse)
+async def get_class_brief(
+    class_id: str,
+    brief_service: ClassBriefService = Depends(get_class_brief_service),
+) -> ClassBriefResponse:
+    try:
+        return await brief_service.get_brief(class_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post("/classes/{class_id}/brief/refresh", response_model=ClassBriefResponse)
+async def refresh_class_brief(
+    class_id: str,
+    request: Request,
+    brief_service: ClassBriefService = Depends(get_class_brief_service),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> ClassBriefResponse:
+    try:
+        response = await brief_service.refresh_brief(class_id)
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="class_brief_refreshed",
+            class_id=class_id,
+            app_session_id=None,
+            mode="brief",
+            payload={"source_paths": response.source_paths},
+        )
+        return response
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post(
+    "/classes/{class_id}/discussion/sessions",
+    response_model=ClassDiscussionSession,
+)
+def start_class_discussion(
+    class_id: str,
+    discussion_service: ClassDiscussionService = Depends(
+        get_class_discussion_service
+    ),
+) -> ClassDiscussionSession:
+    try:
+        return discussion_service.start_session(class_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post(
+    "/classes/{class_id}/discussion/sessions/{session_id}/chat",
+    response_model=ClassDiscussionChatResponse,
+)
+async def class_discussion_chat(
+    class_id: str,
+    session_id: str,
+    body: ClassDiscussionChatRequest,
+    request: Request,
+    discussion_service: ClassDiscussionService = Depends(
+        get_class_discussion_service
+    ),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> ClassDiscussionChatResponse:
+    try:
+        session = discussion_service.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Discussion session not found")
+        response = await discussion_service.chat(session_id, body.message)
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="class_discussion_turn",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode="discussion",
+            payload={
+                "source_paths": response.source_paths,
+                "memory_candidate_count": len(response.memory_candidates),
+            },
+        )
+        return response
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get(
+    "/classes/{class_id}/discussion/sessions/{session_id}/trace",
+    response_model=AgentTraceResponse,
+)
+def class_discussion_trace(
+    class_id: str,
+    session_id: str,
+    discussion_service: ClassDiscussionService = Depends(
+        get_class_discussion_service
+    ),
+) -> AgentTraceResponse:
+    try:
+        session = discussion_service.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Discussion session not found")
+        return discussion_service.trace(session_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 

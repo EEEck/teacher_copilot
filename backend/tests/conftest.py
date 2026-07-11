@@ -26,7 +26,15 @@ from app.schemas.api import (
     LessonFlowPhase,
     LessonPlan,
 )
-from app.teacher_agent.models import MemoryCompactOutput
+from app.teacher_agent.models import (
+    ClassBriefOutput,
+    ClassDiscussionOutput,
+    MemoryCompactOutput,
+)
+from app.teacher_agent.class_discussion_state import (
+    ClassDiscussionStatePatch,
+    merge_class_discussion_turn,
+)
 from app.teacher_agent.memory_update_state import (
     LessonResultPatch,
     MemoryEvidenceBrief,
@@ -153,6 +161,94 @@ class StubAgentRunner:
 
     async def plan_opening(self, class_id: str) -> str:
         return f"Opening planning session for {class_id}."
+
+    def _class_brief_fallback(self, class_id: str) -> ClassBriefOutput:
+        return ClassBriefOutput(
+            summary="Chemie 9b is working on redox and needs another concrete practice step.",
+            recommended_action_label="Create lesson plan",
+            recommended_action_href=f"/classes/{class_id}/plan",
+            recommended_action_rationale="The current open loops point to oxidation number versus charge practice.",
+            reasons=["Recent lessons show redox vocabulary needs reinforcement."],
+            watch_items=["Ion charge versus oxidation number."],
+            source_paths=[
+                f"wiki/classes/{class_id}/memory/class_state.md",
+                f"wiki/classes/{class_id}/memory/planning_brief.md",
+            ],
+        )
+
+    async def class_brief(self, class_id: str) -> ClassBriefOutput:
+        return self._class_brief_fallback(class_id)
+
+    async def class_discussion_chat(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        runtime=None,
+    ) -> ClassDiscussionOutput:
+        if self._is_high_stakes_student_request(messages):
+            output = ClassDiscussionOutput(
+                reply="I cannot make high-stakes student decisions. I can help review evidence for teacher judgment.",
+                state_patch=ClassDiscussionStatePatch(
+                    current_focus="Review class evidence without high-stakes decisions",
+                    open_questions=["Which evidence should we inspect together?"],
+                ),
+                source_paths=[],
+                suggested_actions=["Review class evidence"],
+            )
+            if runtime is not None:
+                merge_class_discussion_turn(
+                    runtime,
+                    state_patch=output.state_patch,
+                    new_evidence_briefs=output.new_evidence_briefs,
+                    memory_candidates=output.memory_candidates,
+                )
+            return output
+        if runtime is not None:
+            runtime.raw_store["discussion_stub"] = "Planning brief: focus redox practice."
+        latest = messages[-1].content if messages else ""
+        memory_candidates = []
+        if "going forward" in latest.lower() or "remember" in latest.lower():
+            memory_candidates.append(
+                MemoryCandidate(
+                    target="teaching_patterns.md",
+                    section="Retrieval Practice",
+                    candidate_update=(
+                        "Use short retrieval checks before symbolic redox notation."
+                    ),
+                    evidence=latest,
+                    source="teacher_explicit",
+                    basis="explicit",
+                    confidence="high",
+                )
+            )
+        output = ClassDiscussionOutput(
+            reply="Focus next on ion charge versus oxidation number with concrete redox practice.",
+            state_patch=ClassDiscussionStatePatch(
+                current_focus="Ion charge versus oxidation number",
+                answered_questions=[latest[:180]] if latest else [],
+                key_observations=[
+                    "short retrieval checks before symbolic redox notation"
+                ]
+                if memory_candidates
+                else ["Students need concrete redox practice."],
+                confusion_signals=["Ion charge versus oxidation number"],
+                next_best_actions=["Create lesson plan", "Update memory"],
+            ),
+            memory_candidates=memory_candidates,
+            source_paths=[
+                f"wiki/classes/{class_id}/memory/planning_brief.md",
+                f"wiki/classes/{class_id}/memory/teaching_patterns.md",
+            ],
+            suggested_actions=["Create lesson plan", "Update memory"],
+        )
+        if runtime is not None:
+            merge_class_discussion_turn(
+                runtime,
+                state_patch=output.state_patch,
+                new_evidence_briefs=output.new_evidence_briefs,
+                memory_candidates=output.memory_candidates,
+            )
+        return output
 
     def _is_high_stakes_student_request(self, messages: list[ChatMessage]) -> bool:
         latest = messages[-1].content.lower() if messages else ""

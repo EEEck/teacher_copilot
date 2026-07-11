@@ -5,6 +5,8 @@ from fastapi import Depends, HTTPException, Request
 
 from app.config import get_settings
 from app.services.beta import BetaAuthService, RequestIdentity
+from app.services.class_brief_service import ClassBriefService
+from app.services.class_discussion_service import ClassDiscussionService
 from app.services.ingest_service import IngestService
 from app.services.memory_candidate_ledger import (
     MemoryCandidateLedger,
@@ -18,6 +20,8 @@ _AGENT_CACHE: dict[str, AgentRunner] = {}
 _LEDGER_CACHE: dict[str, MemoryCandidateLedger] = {}
 _INGEST_CACHE: dict[str, IngestService] = {}
 _PLAN_CACHE: dict[str, PlanService] = {}
+_BRIEF_CACHE: dict[str, ClassBriefService] = {}
+_DISCUSSION_CACHE: dict[str, ClassDiscussionService] = {}
 
 
 def _resolved_wiki_root() -> Path:
@@ -133,4 +137,35 @@ def get_plan_service(
         memory_candidate_ledger=memory_candidate_ledger,
     )
     _PLAN_CACHE[key] = service
+    return service
+
+
+def get_class_brief_service(
+    wiki: WikiStore = Depends(get_wiki),
+    agents: AgentRunner = Depends(get_agents),
+) -> ClassBriefService:
+    key = str(wiki.root.resolve())
+    if key in _BRIEF_CACHE:
+        return _BRIEF_CACHE[key]
+    service = ClassBriefService(wiki=wiki, agents=agents)
+    _BRIEF_CACHE[key] = service
+    return service
+
+
+def get_class_discussion_service(
+    wiki: WikiStore = Depends(get_wiki),
+    agents: AgentRunner = Depends(get_agents),
+    memory_candidate_ledger: MemoryCandidateLedger = Depends(
+        get_memory_candidate_ledger
+    ),
+) -> ClassDiscussionService:
+    key = str(wiki.root.resolve())
+    if key in _DISCUSSION_CACHE:
+        return _DISCUSSION_CACHE[key]
+    service = ClassDiscussionService(
+        wiki=wiki,
+        agents=agents,
+        memory_candidate_ledger=memory_candidate_ledger,
+    )
+    _DISCUSSION_CACHE[key] = service
     return service

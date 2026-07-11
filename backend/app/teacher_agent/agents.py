@@ -22,6 +22,8 @@ from app.schemas.api import (
     LessonPlan,
 )
 from app.teacher_agent.agent import (
+    build_class_brief_agent,
+    build_class_discussion_agent,
     build_memory_sweep_alignment_agent,
     build_memory_compact_agent,
     build_compile_agent,
@@ -34,6 +36,8 @@ from app.teacher_agent.agent import (
     build_profile_proposal_agent,
 )
 from app.teacher_agent.models import (
+    ClassBriefOutput,
+    ClassDiscussionOutput,
     CompileOutput,
     IngestTurnOutput,
     MemoryCompactOutput,
@@ -45,6 +49,7 @@ from app.teacher_agent.models import (
 )
 from app.context_limits import apply_char_limit, get_context_limits
 from app.teacher_agent.prompt_assembly import (
+    build_class_discussion_user_input_assembly,
     build_ingest_user_input_assembly,
     build_plan_user_input_assembly,
     trim_to_last_user_turns,
@@ -53,6 +58,11 @@ from app.teacher_agent.memory_update_state import (
     MemoryRuntime,
     memory_api_payload,
     merge_memory_turn,
+)
+from app.teacher_agent.class_discussion_state import (
+    ClassDiscussionRuntime,
+    ClassDiscussionStatePatch,
+    merge_class_discussion_turn,
 )
 from app.teacher_agent.planning_state import (
     PlanRuntime,
@@ -86,6 +96,15 @@ class _PreparedAgentTurn:
 _TURN_LIMIT_REPLY = (
     "I needed more steps than allowed to finish this turn. "
     "Your draft is unchanged — try a shorter message or one topic at a time."
+)
+_HIGH_STAKES_TERMS = (
+    "grade",
+    "diagnose",
+    "placement",
+    "lower track",
+    "admission",
+    "discipline",
+    "disciplinary",
 )
 
 _DEBUG_PLAN_SECTION_RE = re.compile(
@@ -147,6 +166,11 @@ def _is_turn_limit_error(exc: BaseException) -> bool:
     if isinstance(exc, MaxTurnsExceeded):
         return True
     return "max turns" in str(exc).lower()
+
+
+def _is_high_stakes_student_request(messages: list[ChatMessage]) -> bool:
+    latest = messages[-1].content.lower() if messages else ""
+    return any(term in latest for term in _HIGH_STAKES_TERMS)
 
 
 def _summarize_run_items(items) -> list[str]:
@@ -589,6 +613,156 @@ class AgentRunner:
             "Use the + button to attach a worksheet or draft plan (.md or .txt)."
         )
         return "\n\n".join(lines)
+
+    def _class_brief_fallback(self, class_id: str) -> ClassBriefOutput:
+        snap = self.wiki.get_snapshot(class_id)
+        summary_parts = [f"{snap.label} is currently on {snap.current_unit}."]
+        if snap.last_committed_date:
+            summary_parts.append(f"The last logged lesson was {snap.last_committed_date}.")
+        if snap.open_loop_count:
+            summary_parts.append(
+                f"There are {snap.open_loop_count} open follow-up items to keep visible."
+            )
+        source_paths = [
+            f"wiki/classes/{class_id}/memory/class_state.md",
+            f"wiki/classes/{class_id}/memory/planning_brief.md",
+            f"wiki/classes/{class_id}/timeline.md",
+        ]
+        watch_items = snap.top_misconceptions[:3]
+        return ClassBriefOutput(
+            summary=" ".join(summary_parts),
+            recommended_action_label="Create lesson plan",
+            recommended_action_href=f"/classes/{class_id}/plan",
+            recommended_action_rationale="Use the current class memory to turn open loops into the next practical teaching step.",
+            reasons=snap.recent_lessons[:3],
+            watch_items=watch_items,
+            source_paths=source_paths,
+        )
+
+    async def class_brief(self, class_id: str) -> ClassBriefOutput:
+        if self.client is None:
+            return self._class_brief_fallback(class_id)
+        try:
+            agent = build_class_brief_agent(self.wiki, class_id, self.fast_model)
+            out = await self._run_structured(
+                agent, "Prepare the current class-home executive briefing."
+            )
+            if isinstance(out, ClassBriefOutput):
+                return out
+        except Exception:
+            logger.exception("Class brief generation failed; using fallback.")
+        return self._class_brief_fallback(class_id)
+
+    def _class_discussion_fallback(
+        self, class_id: str, messages: list[ChatMessage]
+    ) -> ClassDiscussionOutput:
+        snap = self.wiki.get_snapshot(class_id)
+        latest = messages[-1].content if messages else ""
+        if _is_high_stakes_student_request(messages):
+            return ClassDiscussionOutput(
+                reply=(
+                    "I cannot make high-stakes student decisions. I can help review "
+                    "class evidence, identify support needs, and suggest teacher-reviewed next steps."
+                ),
+                state_patch=ClassDiscussionStatePatch(
+                    current_focus="Review class evidence without high-stakes decisions",
+                    open_questions=[
+                        "Which teacher-reviewed evidence should we inspect together?"
+                    ],
+                ),
+                source_paths=[],
+                suggested_actions=["Review class evidence", "Update memory"],
+            )
+        focus = snap.top_misconceptions[0] if snap.top_misconceptions else "the current open loops"
+        reply = (
+            f"For {snap.label}, I would focus next on {focus}. "
+            f"The current unit is {snap.current_unit}, and the class has "
+            f"{snap.open_loop_count} open follow-up items. "
+            "A good next step is to turn that into a concrete lesson plan or update memory if the latest lesson notes are incomplete."
+        )
+        if latest.strip().endswith("?"):
+            reply += " That answer is based on the compact class memory and recent timeline."
+        return ClassDiscussionOutput(
+            reply=reply,
+            state_patch=ClassDiscussionStatePatch(
+                current_focus=focus,
+                answered_questions=[latest[:180]] if latest.strip() else [],
+                key_observations=[
+                    f"{snap.label} is currently working on {snap.current_unit}.",
+                    f"{snap.open_loop_count} open follow-up items are active.",
+                ],
+                confusion_signals=[focus] if snap.top_misconceptions else [],
+                next_best_actions=["Create lesson plan", "Update memory"],
+            ),
+            source_paths=[
+                f"wiki/classes/{class_id}/memory/class_state.md",
+                f"wiki/classes/{class_id}/memory/planning_brief.md",
+                f"wiki/classes/{class_id}/timeline.md",
+            ],
+            suggested_actions=["Create lesson plan", "Update memory"],
+        )
+
+    async def class_discussion_chat(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        runtime: ClassDiscussionRuntime | None = None,
+    ) -> ClassDiscussionOutput:
+        runtime = runtime or ClassDiscussionRuntime()
+        if _is_high_stakes_student_request(messages):
+            out = self._class_discussion_fallback(class_id, messages)
+            merge_class_discussion_turn(
+                runtime,
+                state_patch=out.state_patch,
+                new_evidence_briefs=out.new_evidence_briefs,
+                memory_candidates=out.memory_candidates,
+            )
+            return out
+        if self.client is None:
+            out = self._class_discussion_fallback(class_id, messages)
+            merge_class_discussion_turn(
+                runtime,
+                state_patch=out.state_patch,
+                new_evidence_briefs=out.new_evidence_briefs,
+                memory_candidates=out.memory_candidates,
+            )
+            return out
+        try:
+            ctx = WikiToolContext(wiki=self.wiki, class_id=class_id, planning=runtime)
+            agent = build_class_discussion_agent(
+                ctx,
+                self.chat_model,
+                runtime=runtime,
+                reasoning_effort=self.reasoning_effort,
+            )
+            user_input = build_class_discussion_user_input_assembly(
+                messages, history_turns=self.plan_history_turns
+            )["text"]
+            out = await self._run_structured(agent, user_input)
+            if isinstance(out, ClassDiscussionOutput):
+                merge_class_discussion_turn(
+                    runtime,
+                    state_patch=out.state_patch,
+                    new_evidence_briefs=out.new_evidence_briefs,
+                    memory_candidates=out.memory_candidates,
+                )
+                return out
+        except AgentTurnLimitError as exc:
+            return ClassDiscussionOutput(
+                reply=str(exc),
+                source_paths=[],
+                suggested_actions=[],
+            )
+        except Exception:
+            logger.exception("Class discussion turn failed; using fallback.")
+        out = self._class_discussion_fallback(class_id, messages)
+        merge_class_discussion_turn(
+            runtime,
+            state_patch=out.state_patch,
+            new_evidence_briefs=out.new_evidence_briefs,
+            memory_candidates=out.memory_candidates,
+        )
+        return out
 
     async def plan_opening(self, class_id: str) -> str:
         if self.client is None:

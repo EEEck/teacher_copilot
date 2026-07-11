@@ -339,6 +339,64 @@ Browsing policy:
   state, planning priorities, or taught-sequence updates. These are proposed
   only. The chat turn never writes them.
 
+## Class Discussion Contract
+
+Purpose:
+
+- Let the teacher ask quick questions about class state from the class home.
+- Provide an executive-assistant read on recent lessons, open loops,
+  misconceptions, student support patterns, and likely next teaching moves.
+- Help the teacher decide whether to update memory, create a lesson plan, or
+  review memory without starting a saveable artifact workflow.
+
+Reads:
+
+- Global teacher profile from `build_teacher_context_trace()`.
+- Active class core from `build_active_class_core_context_trace(class_id)`:
+  class identity, selected subject guide, and compact class memory under
+  `wiki/classes/{class_id}/memory/*.md`.
+- Class-scoped lesson/memory evidence through the same read-only browsing tools
+  used by planning.
+
+Writes:
+
+- Class discussion never writes wiki files, updates compact memory, saves
+  plans, or commits lesson results.
+- It may emit review-only `memory_candidates` using the shared
+  `MemoryCandidate` schema when the teacher reveals durable teacher, class, or
+  copilot information. Candidates go to the candidate ledger and require later
+  teacher review before any wiki write.
+- If the teacher asks to directly edit the wiki/class memory from discussion,
+  refuse the direct edit and offer to capture a review candidate or move to
+  Update Memory.
+- It may recommend Update Memory, Create Lesson Plan, or Memory Sweep as the
+  next workflow.
+
+Allowed tools:
+
+- `list_lessons(start_date?, end_date?, topic?, max_results?)`
+- `read_lesson(lesson_date)`
+- `read_lesson_range(start_date, end_date, topic?, max_lessons?)`
+- `search_memory(query, max_results?)`
+- `read_memory_page(path)`
+- `get_raw_evidence(raw_ref)`
+
+Output contract:
+
+- Return a conversational `reply`.
+- Return compact `discussion_state` updates for current focus, answered
+  questions, key observations, confusion signals, open questions, and next best
+  actions.
+- Return `memory_candidates` for durable signals using the same review-only
+  lifecycle as lesson planning and update-memory.
+- Return `source_paths` for class memory or lessons that materially shaped the
+  answer.
+- Return short `suggested_actions` when a full workflow is the natural next
+  step.
+- Do not produce a markdown artifact or a save/commit-ready output.
+- High-stakes student decisions remain unsupported; redirect to teacher review
+  and evidence gathering.
+
 ## Memory Sweep Contract
 
 Purpose:

@@ -49,6 +49,34 @@ export type ClassMemorySnapshot = {
   top_misconceptions: string[];
   recent_lessons: string[];
 };
+export type ClassBriefAction = {
+  label: string;
+  href: string;
+  rationale: string;
+};
+export type ClassBrief = {
+  class_id: string;
+  summary: string;
+  recommended_action: ClassBriefAction;
+  reasons: string[];
+  watch_items: string[];
+  source_paths: string[];
+  generated_at: string;
+  cached: boolean;
+};
+export type ClassDiscussionSession = {
+  session_id: string;
+  class_id: string;
+  messages: ChatMessage[];
+};
+export type ClassDiscussionResponse = {
+  reply: string;
+  discussion_state: Record<string, unknown>;
+  evidence_briefs: Record<string, unknown>[];
+  memory_candidates: Record<string, unknown>[];
+  source_paths: string[];
+  suggested_actions: ClassBriefAction[];
+};
 export type RollupExcerpt = { wiki_path: string; label: string; markdown: string };
 export type LessonDetail = {
   class_id: string;
@@ -443,6 +471,21 @@ export const client = {
     return normalizeTimeline(raw);
   },
   getSnapshot: (classId: string) => api<ClassMemorySnapshot>(`/api/classes/${classId}/snapshot`),
+  getClassBrief: (classId: string) => api<ClassBrief>(`/api/classes/${classId}/brief`),
+  refreshClassBrief: (classId: string) =>
+    api<ClassBrief>(`/api/classes/${classId}/brief/refresh`, { method: "POST" }),
+  startClassDiscussion: (classId: string) =>
+    api<ClassDiscussionSession>(`/api/classes/${classId}/discussion/sessions`, {
+      method: "POST",
+    }),
+  classDiscussionChat: (classId: string, sessionId: string, message: string) =>
+    api<ClassDiscussionResponse>(
+      `/api/classes/${classId}/discussion/sessions/${sessionId}/chat`,
+      {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      },
+    ),
   getLessonDetail: (classId: string, lessonDate: string) =>
     api<LessonDetail>(`/api/classes/${classId}/lessons/${lessonDate}`),
   reviseLesson: (classId: string, lessonDate: string, diaryMarkdown: string) =>

@@ -10,6 +10,10 @@ from __future__ import annotations
 
 from app.context_limits import apply_char_limit, get_context_limits
 from app.schemas.api import ChatAttachment, ChatMessage
+from app.teacher_agent.class_discussion_state import (
+    ClassDiscussionRuntime,
+    render_class_discussion_state,
+)
 from app.teacher_agent.memory_update_state import (
     MemoryRuntime,
     render_lesson_result_state,
@@ -25,6 +29,9 @@ from app.teacher_agent.planning_state import (
     render_session_state,
 )
 from app.teacher_agent.prompts import (
+    CLASS_BRIEF_SYSTEM,
+    CLASS_DISCUSSION_SYSTEM,
+    CLASS_DISCUSSION_WIKI_TOOLS_POLICY,
     DURABLE_MEMORY_CANDIDATE_POLICY,
     INGEST_SYSTEM,
     INGEST_WIKI_TOOLS_POLICY,
@@ -583,4 +590,193 @@ def build_plan_opening_prompt_assembly(wiki, class_id: str) -> dict:
             ),
         ],
         "nested": {"active_class_core": class_trace, "class_slice": class_trace},
+    }
+
+
+def build_class_discussion_user_input_assembly(
+    messages: list[ChatMessage],
+    *,
+    history_turns: int | None = None,
+) -> dict:
+    lim = get_context_limits()
+    turn_limit = lim.plan_history_turns if history_turns is None else history_turns
+    trimmed = trim_to_last_user_turns(messages, turn_limit)
+    convo_lines = ["Recent class-state discussion (most recent last):"]
+    for message in trimmed:
+        convo_lines.append(f"{message.role}: {message.content}")
+    rendered = "\n".join(convo_lines)
+    return {
+        "function": "build_class_discussion_user_input_assembly",
+        "chars": len(rendered),
+        "text": rendered,
+        "sections": [
+            _section(
+                name="Recent discussion window",
+                function="build_class_discussion_user_input_assembly",
+                source=f"last {turn_limit} user turns",
+                text=rendered,
+            )
+        ],
+    }
+
+
+def build_class_discussion_prompt_assembly(
+    wiki,
+    class_id: str,
+    *,
+    messages: list[ChatMessage],
+    runtime: ClassDiscussionRuntime | None = None,
+    history_turns: int | None = None,
+) -> dict:
+    rt = runtime or ClassDiscussionRuntime()
+    teacher_trace = wiki.build_teacher_context_trace()
+    class_trace = wiki.build_active_class_core_context_trace(class_id)
+    user_input = build_class_discussion_user_input_assembly(
+        messages, history_turns=history_turns
+    )
+    discussion_state = render_class_discussion_state(rt.discussion_state)
+    evidence = render_briefs(rt.evidence_briefs)
+    memory_candidates = render_memory_candidates(rt.memory_candidates)
+    instructions = apply_prompt(
+        CLASS_DISCUSSION_SYSTEM,
+        teacher_context=teacher_trace["text"],
+        active_class_core=class_trace["text"],
+        security_policy=TEACHER_AGENT_SECURITY_POLICY,
+        wiki_tools_policy=CLASS_DISCUSSION_WIKI_TOOLS_POLICY,
+        durable_memory_candidate_policy=DURABLE_MEMORY_CANDIDATE_POLICY,
+        discussion_state=discussion_state,
+        evidence=evidence,
+        memory_candidates=memory_candidates,
+    )
+    sections = [
+        _section(
+            name="Class discussion system template",
+            function="build_class_discussion_agent",
+            source="prompts.CLASS_DISCUSSION_SYSTEM",
+            text=CLASS_DISCUSSION_SYSTEM,
+        ),
+        _section(
+            name="Teacher-agent security policy",
+            function="build_class_discussion_agent",
+            source="prompts.TEACHER_AGENT_SECURITY_POLICY",
+            text=TEACHER_AGENT_SECURITY_POLICY,
+        ),
+        _section(
+            name="Teacher layer",
+            function="wiki.build_teacher_context_trace",
+            source="wiki/teacher_profile.md",
+            text=teacher_trace["text"],
+        ),
+        _section(
+            name="Active class core",
+            function="wiki.build_active_class_core_context_trace",
+            source=f"wiki/classes/{class_id}/memory/*.md + selected subject guide",
+            text=class_trace["text"],
+        ),
+        _section(
+            name="Class discussion state",
+            function="render_class_discussion_state",
+            source="ClassDiscussionRuntime.discussion_state",
+            text=discussion_state,
+        ),
+        _section(
+            name="Discussion evidence briefs",
+            function="render_briefs",
+            source="ClassDiscussionRuntime.evidence_briefs",
+            text=evidence,
+        ),
+        _section(
+            name="Memory candidates",
+            function="render_memory_candidates",
+            source="ClassDiscussionRuntime.memory_candidates",
+            text=memory_candidates,
+        ),
+        _section(
+            name="Class discussion tools policy",
+            function="build_class_discussion_agent",
+            source="prompts.CLASS_DISCUSSION_WIKI_TOOLS_POLICY",
+            text=CLASS_DISCUSSION_WIKI_TOOLS_POLICY,
+        ),
+        _section(
+            name="User input",
+            function="build_class_discussion_user_input_assembly",
+            source="ClassDiscussionSession.messages",
+            text=user_input["text"],
+        ),
+    ]
+    return {
+        "stage": "class_discussion_chat",
+        "model_call": "KlassenPilot Class Discussion",
+        "instruction_chars": len(instructions),
+        "user_input_chars": len(user_input["text"]),
+        "instructions": instructions,
+        "user_input": user_input["text"],
+        "sections": sections,
+        "nested": {
+            "teacher_context": teacher_trace,
+            "active_class_core": class_trace,
+            "user_input": user_input,
+            "discussion_state": {
+                "text": discussion_state,
+                "chars": len(discussion_state),
+            },
+            "evidence_briefs": {"text": evidence, "chars": len(evidence)},
+            "memory_candidates": {
+                "text": memory_candidates,
+                "chars": len(memory_candidates),
+            },
+        },
+    }
+
+
+def build_class_brief_prompt_assembly(wiki, class_id: str) -> dict:
+    teacher_trace = wiki.build_teacher_context_trace()
+    class_trace = wiki.build_active_class_core_context_trace(class_id)
+    instructions = apply_prompt(
+        CLASS_BRIEF_SYSTEM,
+        teacher_context=teacher_trace["text"],
+        active_class_core=class_trace["text"],
+        security_policy=TEACHER_AGENT_SECURITY_POLICY,
+    )
+    user_input = "Prepare the current class-home executive briefing."
+    return {
+        "stage": "class_brief",
+        "model_call": "KlassenPilot Class Brief",
+        "instruction_chars": len(instructions),
+        "user_input_chars": len(user_input),
+        "instructions": instructions,
+        "user_input": user_input,
+        "sections": [
+            _section(
+                name="Class brief system template",
+                function="build_class_brief_agent",
+                source="prompts.CLASS_BRIEF_SYSTEM",
+                text=CLASS_BRIEF_SYSTEM,
+            ),
+            _section(
+                name="Teacher-agent security policy",
+                function="build_class_brief_agent",
+                source="prompts.TEACHER_AGENT_SECURITY_POLICY",
+                text=TEACHER_AGENT_SECURITY_POLICY,
+            ),
+            _section(
+                name="Teacher layer",
+                function="wiki.build_teacher_context_trace",
+                source="wiki/teacher_profile.md",
+                text=teacher_trace["text"],
+            ),
+            _section(
+                name="Active class core",
+                function="wiki.build_active_class_core_context_trace",
+                source=f"wiki/classes/{class_id}/memory/*.md + selected subject guide",
+                text=class_trace["text"],
+            ),
+            _section(
+                name="User input",
+                function="AgentRunner.class_brief",
+                source="constant",
+                text=user_input,
+            ),
+        ],
+        "nested": {"teacher_context": teacher_trace, "active_class_core": class_trace},
     }
