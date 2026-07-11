@@ -332,6 +332,7 @@ export type MemorySweepReviewResponse = {
   updated_at?: string | null;
   completed_at?: string | null;
   is_stale: boolean;
+  stale_reasons: string[];
   has_teacher_edits: boolean;
   queues: Record<string, MemorySweepCandidate[]>;
   decisions: MemorySweepDecision[];

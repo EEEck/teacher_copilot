@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Loader2Icon } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
-import { MemorySweepBrief } from "@/components/klassenpilot/memory-sweep-brief";
+import {
+  MemorySweepBrief,
+  MemorySweepBulkToolbar,
+} from "@/components/klassenpilot/memory-sweep-brief";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +25,14 @@ import {
   type MemorySweepProposalResponse,
   type MemorySweepReviewResponse,
 } from "@/lib/api";
+import {
+  memorySweepLoadingSavedText,
+  memorySweepProgressText,
+} from "@/lib/memory-sweep-review-status";
+import {
+  clearPendingMemorySweep,
+  markPendingMemorySweep,
+} from "@/lib/pending-chat-turns";
 
 const REVIEW_LATER_TOOLTIP =
   "Hide while the system waits for more evidence. It returns when newer matching evidence arrives, or after 7 days if it still needs review.";
@@ -314,6 +326,8 @@ export default function MemorySweepPage() {
   const pendingCount = Object.keys(decisionsByCard).length;
   const reviewId = review?.review_id || "";
   const staleReview = Boolean(review?.is_stale || review?.status === "stale");
+  const isGenerating = review?.status === "generating";
+  const progressText = memorySweepProgressText(review);
 
   const applyReview = useCallback((next: MemorySweepReviewResponse) => {
     setReview(next);
@@ -328,7 +342,14 @@ export default function MemorySweepPage() {
       }
       return drafts;
     });
-  }, []);
+    if (typeof window === "undefined") return;
+    if (next.status === "generating" && next.review_id) {
+      markPendingMemorySweep(window.sessionStorage, {
+        classId,
+        reviewId: next.review_id,
+      });
+    }
+  }, [classId]);
 
   const load = useCallback(async (
     reason: "refresh" | "submit" = "refresh",
@@ -339,18 +360,12 @@ export default function MemorySweepPage() {
     setShowAllWarnings(false);
     setError(null);
     setNotice(null);
+    if (options?.refresh && typeof window !== "undefined") {
+      clearPendingMemorySweep(window.sessionStorage, classId);
+    }
     try {
       const opened = await client.openMemorySweepReview(classId, options);
       applyReview(opened);
-      if (opened.status === "generating") {
-        const pollUntil = Date.now() + 120000;
-        let current = opened;
-        while (current.status === "generating" && Date.now() < pollUntil) {
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-          current = await client.getMemorySweepReview(classId);
-          applyReview(current);
-        }
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load Memory Sweep");
     } finally {
@@ -367,6 +382,26 @@ export default function MemorySweepPage() {
       });
     }
   }, [load]);
+
+  useEffect(() => {
+    if (!isGenerating) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const next = await client.getMemorySweepReview(classId);
+        if (!cancelled) applyReview(next);
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Could not refresh Memory Sweep");
+        }
+      }
+    };
+    const interval = window.setInterval(() => void poll(), 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [applyReview, classId, isGenerating]);
 
   const persistDecisions = useCallback(
     (next: Record<string, MemorySweepDecision>) => {
@@ -498,6 +533,9 @@ export default function MemorySweepPage() {
     setError(null);
     try {
       await client.discardMemorySweepReview(classId, reviewId);
+      if (typeof window !== "undefined") {
+        clearPendingMemorySweep(window.sessionStorage, classId);
+      }
       setReview(null);
       setProposal(null);
       setDraftByCard({});
@@ -521,22 +559,15 @@ export default function MemorySweepPage() {
       <div className="mb-6 flex flex-wrap gap-3">
         <Button
           onClick={() => void load("refresh", { refresh: true })}
-          disabled={loading || busy}
+          disabled={loading || busy || isGenerating}
         >
-          {loading ? "Refreshing..." : "Refresh sweep"}
+          {loading && review ? "Refreshing..." : reviewId ? "Refresh sweep" : "Start new sweep"}
         </Button>
         {reviewId && (
-          <Button variant="outline" onClick={() => void discard()} disabled={loading || busy}>
+          <Button variant="outline" onClick={() => void discard()} disabled={busy}>
             Discard draft
           </Button>
         )}
-        <Button
-          variant="outline"
-          onClick={() => setShowDetailed((current) => !current)}
-          disabled={loading}
-        >
-          {showDetailed ? "Show brief" : "Show detailed cards"}
-        </Button>
         <Button variant="outline" asChild>
           <Link href={`/classes/${classId}`}>Back to class</Link>
         </Button>
@@ -553,8 +584,10 @@ export default function MemorySweepPage() {
                   adds it to memory, <span className="font-medium">×</span> dismisses
                   it, and the clock postpones it until more evidence arrives.
                   Anything explicitly requested in chat is pinned at the top.
-                  Open <span className="font-medium">details</span> (or the detailed
-                  cards view) to edit wording or see evidence before you submit.
+                  Open <span className="font-medium">details</span> on a row to edit
+                  wording or see evidence; switch to{" "}
+                  <span className="font-medium">Detailed</span> for the full card
+                  layout.
                 </p>
               </div>
               <Button
@@ -589,6 +622,13 @@ export default function MemorySweepPage() {
               <p className="text-sm">
                 This Memory Sweep draft was generated from older memory state.
               </p>
+              {review?.stale_reasons?.length ? (
+                <ul className="w-full list-disc space-y-1 pl-5 text-sm">
+                  {review.stale_reasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -620,6 +660,14 @@ export default function MemorySweepPage() {
                 )}
               </div>
             </div>
+          </AlertDescription>
+        </Alert>
+      )}
+      {isGenerating && (
+        <Alert className="mb-4 border-border bg-muted">
+          <AlertDescription className="flex items-center gap-2 text-sm">
+            <Loader2Icon className="size-4 shrink-0 animate-spin" />
+            <span>{progressText}</span>
           </AlertDescription>
         </Alert>
       )}
@@ -662,15 +710,15 @@ export default function MemorySweepPage() {
         </Alert>
       )}
 
-      {loading && (
+      {loading && !review && (
         <p className="text-sm text-muted-foreground">
           {loadingReason === "submit"
             ? "Updating saved Memory Sweep review..."
-            : "Opening saved Memory Sweep review..."}
+            : memorySweepLoadingSavedText()}
         </p>
       )}
 
-      {!loading && proposal && total === 0 && (
+      {!loading && !isGenerating && proposal && total === 0 && (
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">
             All caught up. There are no open memory suggestions to review.
@@ -678,64 +726,38 @@ export default function MemorySweepPage() {
         </Card>
       )}
 
-      {!loading && !showDetailed && allCandidates.length > 0 && (
+      {!loading && !isGenerating && allCandidates.length > 0 && (
+        <div className="mb-4">
+          <MemorySweepBulkToolbar
+            candidates={allCandidates}
+            busy={busy}
+            viewMode={showDetailed ? "detailed" : "simple"}
+            onViewModeChange={(mode) => setShowDetailed(mode === "detailed")}
+            onBulk={setMany}
+          />
+        </div>
+      )}
+
+      {!loading && !isGenerating && !showDetailed && allCandidates.length > 0 && (
         <MemorySweepBrief
           candidates={allCandidates}
           decisions={decisionsByCard}
           busy={busy}
           onDecision={setDecision}
           onClear={clearDecision}
-          onBulk={setMany}
           onSubmit={() => void submit()}
           renderDetail={renderCandidateCard}
         />
       )}
 
-      {showDetailed && (
+      {!loading && !isGenerating && showDetailed && allCandidates.length > 0 && (
         <div className="space-y-6">
           {proposal &&
             Object.entries(proposal.queues).map(([queue, candidates]) => (
               <section key={queue} className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-sm font-semibold uppercase tracking-normal text-muted-foreground">
-                    {queue}
-                  </h2>
-                  <div className="flex flex-wrap gap-2">
-                    {candidates.some(canApply) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setMany(candidates, "apply")}
-                        disabled={busy}
-                      >
-                        Add suggestions
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setMany(candidates, "reject")}
-                      disabled={busy}
-                    >
-                      Mark all as not needed
-                    </Button>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setMany(candidates, "snooze")}
-                          disabled={busy}
-                        >
-                          Review all later
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-72">
-                        {REVIEW_LATER_TOOLTIP}
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                </div>
+                <h2 className="text-sm font-semibold uppercase tracking-normal text-muted-foreground">
+                  {queue}
+                </h2>
                 <div className="grid gap-3">
                   {candidates.map((candidate) => (
                     <div key={cardKey(candidate)}>

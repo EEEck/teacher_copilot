@@ -34,6 +34,10 @@ revision/hash metadata during draft and review.
   `intent`, optional `target_kind`, and optional `lesson_date`.
 - Frontend caches are convenience only. Session storage may hold unsent composer
   text and a visual pending-review cache, but it must not authorize writes.
+  Plan and Update Memory chat render through a Zustand draft snapshot cache and
+  assistant-ui `useExternalStoreRuntime`; the backend `WorkflowDraft` remains
+  authoritative. Background-turn completion toasts are owned by one app-level
+  notifier that claims a locally initiated pending-turn marker exactly once.
 - Review and save actions must include the expected artifact revision/hash. If
   the artifact changed after review was prepared, the backend rejects the write
   with `draft_changed_since_review_created`.
@@ -46,10 +50,12 @@ revision/hash metadata during draft and review.
   subscriber, so navigating away must not cancel an in-flight model turn; the
   final assistant message and artifact update are persisted to the draft when
   the turn completes.
-- If a backend restart or crash leaves a draft with an incomplete latest turn,
-  review/save remains blocked until the teacher retries the note or discards the
-  draft. The frontend may show this as an interrupted-turn state, but it must
-  not treat the partial client transcript as authoritative.
+- A streamed turn persists its attachment payload before execution. If a backend
+  restart interrupts it, reopening the same draft resumes that pending turn from
+  the backend-owned messages/runtime rather than leaving a permanent loading
+  state. Legacy incomplete rows without a persisted pending-turn payload resolve
+  to the interrupted-turn state; review/save remains blocked until retry or
+  discard.
 - A discarded or committed/saved draft is terminal and must not be resumed by a
   later page bootstrap.
 - Future workflows should reuse this store through `ArtifactSessionService` and
@@ -430,7 +436,8 @@ Proposal behavior:
   fingerprint. Returning to the page resumes the saved review instead of
   rerunning consolidation. If the source fingerprint changed, unedited reviews
   may refresh automatically; edited reviews surface as stale until the teacher
-  chooses refresh, keep reviewing, or discard.
+  chooses refresh, keep reviewing, or discard. A stale response names the
+  changed candidate, memory-page, or student-summary inputs.
 - The promotion gate decides which rows reach review: explicit teacher asks are
   eligible immediately, inferred claims need reinforcement across distinct
   occasions, stale unreinforced singletons expire silently, and rejected

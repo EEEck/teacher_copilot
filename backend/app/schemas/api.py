@@ -239,6 +239,7 @@ class MemorySweepReviewResponse(BaseModel):
     updated_at: str | None = None
     completed_at: str | None = None
     is_stale: bool = False
+    stale_reasons: list[str] = Field(default_factory=list)
     has_teacher_edits: bool = False
     queues: dict[str, list[MemorySweepCandidate]] = Field(default_factory=dict)
     decisions: list[MemorySweepDecision] = Field(default_factory=list)

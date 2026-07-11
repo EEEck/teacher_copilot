@@ -169,9 +169,13 @@ function PlanSaveFooter({
 
 function PlanWorkspace({
   classId,
+  lessonDate,
+  setLessonDate,
   onError,
 }: {
   classId: string;
+  lessonDate: string;
+  setLessonDate: (value: string) => void;
   onError: (message: string | null) => void;
 }) {
   const router = useRouter();
@@ -183,7 +187,6 @@ function PlanWorkspace({
     runWithSessionRecovery,
   } = useArtifactSession();
   const [inReview, setInReview] = useState(false);
-  const [lessonDate, setLessonDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [beforePlan, setBeforePlan] = useState("");
   const [approved, setApproved] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -385,6 +388,7 @@ function PlanWorkspace({
 export default function PlanPage() {
   const params = useParams();
   const classId = params.classId as string;
+  const [lessonDate, setLessonDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const bootstrap = useCallback(
     async (opts?: { preserveMarkdown?: string }) => {
@@ -409,22 +413,6 @@ export default function PlanPage() {
     [classId],
   );
 
-  const refreshDraft = useCallback(
-    async (sessionId: string) => {
-      const draft = await client.planGetDraft(classId, sessionId);
-      return {
-        draftId: draft.draft_id,
-        artifactRevision: draft.artifact_revision,
-        artifactHash: draft.artifact_hash,
-        turnInProgress: draft.turn_in_progress,
-        latestTurnComplete: draft.latest_turn_complete,
-        initialMessages: draft.messages,
-        initialMarkdown: draft.plan_markdown,
-      };
-    },
-    [classId],
-  );
-
   return (
     <ArtifactSessionPage
       mode="plan"
@@ -432,9 +420,14 @@ export default function PlanPage() {
       title="Create lesson plan"
       description="Chat to plan the next lesson, refine the draft on the right, then save to a lesson date."
       bootstrap={bootstrap}
-      refreshDraft={refreshDraft}
+      lessonDate={lessonDate}
       renderBody={({ onError }: ArtifactSessionBodyProps) => (
-        <PlanWorkspace classId={classId} onError={onError} />
+        <PlanWorkspace
+          classId={classId}
+          lessonDate={lessonDate}
+          setLessonDate={setLessonDate}
+          onError={onError}
+        />
       )}
     />
   );

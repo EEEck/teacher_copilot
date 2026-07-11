@@ -13,7 +13,7 @@ services:
       - ./backend/teacher_wiki:/data/teacher_wiki
       - ./backend/beta_data:/data/beta_data
     ports:
-      - "8010:8010"
+      - "127.0.0.1:8010:8010"
     healthcheck:
       test:
         [
@@ -40,7 +40,7 @@ services:
       - /app/node_modules
       - /app/.next
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       backend:
         condition: service_healthy

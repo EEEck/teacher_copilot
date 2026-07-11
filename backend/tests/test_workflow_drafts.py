@@ -188,6 +188,44 @@ async def test_streamed_turn_continues_after_client_stops_consuming(wiki, agents
 
 
 @pytest.mark.anyio
+async def test_inflight_turn_resumes_after_service_restart(wiki, agents):
+    store = WorkflowDraftStore(wiki.root / "workflow" / "workflow_drafts.sqlite")
+    store.initialize()
+    first = PlanService(wiki=wiki, agents=agents, workflow_drafts=store)
+
+    started = await first.start_session(CLASS_ID)
+    store.save_from_session(
+        draft_id=started.draft_id,
+        status=started.status.value,
+        artifact_markdown="",
+        runtime_json={},
+        messages_json=[
+            *[message.model_dump() for message in started.messages],
+            {"role": "user", "content": "review the last 4 lectures"},
+        ],
+        backend_session_id=started.session_id,
+        pending_turn_json={"attachments": []},
+        turn_in_progress=True,
+        latest_turn_complete=False,
+    )
+
+    resumed = PlanService(wiki=wiki, agents=agents, workflow_drafts=store)
+    await resumed.start_session(CLASS_ID)
+
+    for _ in range(50):
+        row = store.get(started.draft_id)
+        if row.latest_turn_complete and not row.turn_in_progress:
+            break
+        await anyio.sleep(0.01)
+    else:
+        pytest.fail("resumed streamed turn did not finish after service restart")
+
+    row = store.get(started.draft_id)
+    assert row.messages_json[-1]["role"] == "assistant"
+    assert "Review of recent lessons" in row.artifact_markdown
+
+
+@pytest.mark.anyio
 async def test_ingest_commit_uses_backend_draft_when_revision_present(wiki, agents):
     store = WorkflowDraftStore(wiki.root / "workflow" / "workflow_drafts.sqlite")
     store.initialize()

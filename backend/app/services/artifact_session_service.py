@@ -63,6 +63,7 @@ class ArtifactSession:
     opening_message: str = ""
     turn_in_progress: bool = False
     latest_turn_complete: bool = True
+    pending_turn: dict = field(default_factory=dict)
     # Optional mode-specific runtime state. Plan mode uses this for structured
     # planning state, evidence briefs, raw refs, and memory candidates.
     runtime: object | None = None
@@ -134,9 +135,12 @@ class ArtifactSessionService:
                 messages_json=[message.model_dump() for message in messages],
             )
             if opened.row.backend_session_id in self.sessions:
-                return self.sessions[opened.row.backend_session_id]
+                session = self.sessions[opened.row.backend_session_id]
+                await self._resume_pending_turn_if_needed(session)
+                return session
             session = self._session_from_draft_row(opened.row)
             self.sessions[session.session_id] = session
+            await self._resume_pending_turn_if_needed(session)
             return session
 
         session_id = str(uuid.uuid4())
@@ -176,6 +180,7 @@ class ArtifactSessionService:
             runtime=runtime,
             turn_in_progress=row.turn_in_progress,
             latest_turn_complete=row.latest_turn_complete,
+            pending_turn=row.pending_turn_json,
             draft_id=row.draft_id,
             artifact_revision=row.artifact_revision,
             artifact_hash=row.artifact_hash,
@@ -197,6 +202,7 @@ class ArtifactSessionService:
             runtime_json=self._dump_runtime(session.mode, session.runtime),
             messages_json=[message.model_dump() for message in session.messages],
             backend_session_id=session.session_id,
+            pending_turn_json=session.pending_turn,
             turn_in_progress=session.turn_in_progress,
             latest_turn_complete=session.latest_turn_complete,
         )
@@ -244,6 +250,30 @@ class ArtifactSessionService:
 
     def _end_turn(self, session: ArtifactSession) -> None:
         session.turn_in_progress = False
+
+    async def _resume_pending_turn_if_needed(self, session: ArtifactSession) -> None:
+        if not session.turn_in_progress or session.session_id in self._stream_tasks:
+            return
+        if not session.pending_turn:
+            # Older durable rows did not preserve enough input to continue. Do
+            # not leave a permanent spinner after a backend restart.
+            self._end_turn(session)
+            self._persist_session(session)
+            return
+        attachments = [
+            ChatAttachment(**payload)
+            for payload in session.pending_turn.get("attachments", [])
+            if isinstance(payload, dict)
+        ]
+        self._stream_tasks[session.session_id] = asyncio.create_task(
+            self._run_stream_turn(
+                session.session_id,
+                "",
+                None,
+                attachments,
+                resume=True,
+            )
+        )
 
     async def _ensure_lazy_opening(self, session: ArtifactSession) -> None:
         spec = self.specs[session.mode]
@@ -528,10 +558,12 @@ class ArtifactSessionService:
         message: str,
         markdown: str | None,
         attachments: list[ChatAttachment] | None,
+        *,
+        resume: bool = False,
     ) -> None:
         try:
             async for line in self._execute_chat_stream_turn(
-                session_id, message, markdown, attachments
+                session_id, message, markdown, attachments, resume=resume
             ):
                 self._publish_stream_line(session_id, line)
         except Exception:  # noqa: BLE001 - keep background failures visible to subscribers
@@ -597,15 +629,21 @@ class ArtifactSessionService:
         message: str,
         markdown: str | None = None,
         attachments: list[ChatAttachment] | None = None,
+        *,
+        resume: bool = False,
     ) -> AsyncIterator[str]:
         """Run one chat turn and produce SSE lines for active subscribers."""
         session = self.get_session(session_id)
-        if markdown is not None:
-            session.partial_markdown = markdown
-        await self._ensure_lazy_opening(session)
-        self._begin_turn(session)
-        session.messages.append(ChatMessage(role="user", content=message))
-        self._persist_session(session)
+        if not resume:
+            if markdown is not None:
+                session.partial_markdown = markdown
+            await self._ensure_lazy_opening(session)
+            self._begin_turn(session)
+            session.messages.append(ChatMessage(role="user", content=message))
+            session.pending_turn = {
+                "attachments": [attachment.model_dump() for attachment in attachments or []]
+            }
+            self._persist_session(session)
         stage = "plan_chat" if session.mode == "plan" else f"{session.mode}_chat"
         self._record_prompt_assembly(session, stage, attachments or [])
 
@@ -619,6 +657,7 @@ class ArtifactSessionService:
                 )
             finally:
                 self._end_turn(session)
+                session.pending_turn = {}
                 self._persist_session(session)
             return
         stream = spec.stream_turn(
@@ -659,6 +698,7 @@ class ArtifactSessionService:
                 yield sse_encode(event)
         finally:
             self._end_turn(session)
+            session.pending_turn = {}
             self._persist_session(session)
 
     def update_draft(self, session_id: str, markdown: str) -> object:

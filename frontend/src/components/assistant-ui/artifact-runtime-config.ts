@@ -44,6 +44,8 @@ export function createArtifactRuntimeConfig(args: {
   artifactHash?: string;
   turnInProgress?: boolean;
   latestTurnComplete?: boolean;
+  lessonDate?: string;
+  lessonTitle?: string;
   initialMessages?: ChatMessage[];
   getSessionId?: () => string;
   onSessionLost?: (preserveMarkdown: string) => Promise<void>;
@@ -61,6 +63,8 @@ export function createArtifactRuntimeConfig(args: {
     artifactHash = "",
     turnInProgress = false,
     latestTurnComplete = true,
+    lessonDate = "",
+    lessonTitle = "",
     initialMessages,
     getSessionId = () => sessionId,
     onSessionLost,
@@ -146,6 +150,8 @@ export function createArtifactRuntimeConfig(args: {
       artifactHash,
       turnInProgress,
       latestTurnComplete,
+      lessonDate,
+      lessonTitle,
       initialMessages,
       initialMarkdown,
       initialCompleteness,
@@ -177,6 +183,8 @@ export function createArtifactRuntimeConfig(args: {
     artifactHash,
     turnInProgress,
     latestTurnComplete,
+    lessonDate,
+    lessonTitle,
     initialMessages,
     initialMarkdown,
     chatStream,

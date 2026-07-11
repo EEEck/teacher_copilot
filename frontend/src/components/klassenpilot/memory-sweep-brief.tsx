@@ -10,6 +10,7 @@ import {
 import { useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { SegmentedToggle } from "@/components/ui/segmented-toggle";
 import {
   Tooltip,
   TooltipContent,
@@ -189,16 +190,87 @@ function BriefRow({
  * Teacher-first Memory Sweep triage: explicit asks pinned first, then
  * new / changed (old → new) / retired rows with three uniform actions and a
  * sticky submit bar. The full detail cards stay available per row and via
- * the page-level "detailed cards" toggle — this is presentation only; all
- * decision state lives in the page (docs/mem_v3, M1b).
+ * the Simple / Detailed toggle — this is presentation only; all decision state
+ * lives in the page (docs/mem_v3, M1b).
  */
+export function MemorySweepBulkToolbar({
+  candidates,
+  busy,
+  viewMode,
+  onViewModeChange,
+  onBulk,
+}: {
+  candidates: MemorySweepCandidate[];
+  busy?: boolean;
+  viewMode: "simple" | "detailed";
+  onViewModeChange: (value: "simple" | "detailed") => void;
+  onBulk: (
+    candidates: MemorySweepCandidate[],
+    action: MemorySweepDecision["action"],
+  ) => void;
+}) {
+  const applyable = candidates.filter((c) => c.can_apply);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-sm text-muted-foreground">
+        {candidates.length} suggestion{candidates.length === 1 ? "" : "s"} to
+        review — add, dismiss, or postpone each one, then submit.
+      </p>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {applyable.length > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onBulk(applyable, "apply")}
+            disabled={busy}
+          >
+            <PlusIcon className="size-3" /> Add all ({applyable.length})
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onBulk(candidates, "reject")}
+          disabled={busy}
+        >
+          <XIcon className="size-3" /> None needed
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onBulk(candidates, "snooze")}
+          disabled={busy}
+        >
+          <ClockIcon className="size-3" /> All later
+        </Button>
+        <SegmentedToggle
+          className="ml-1"
+          size="sm"
+          value={viewMode}
+          onValueChange={(value) => {
+            if (busy) return;
+            onViewModeChange(value === "detailed" ? "detailed" : "simple");
+          }}
+          options={[
+            { value: "simple", label: "Simple" },
+            { value: "detailed", label: "Detailed" },
+          ]}
+          aria-label="Memory Sweep view mode"
+        />
+      </div>
+    </div>
+  );
+}
+
 export function MemorySweepBrief({
   candidates,
   decisions,
   busy,
   onDecision,
   onClear,
-  onBulk,
   onSubmit,
   renderDetail,
 }: {
@@ -210,58 +282,15 @@ export function MemorySweepBrief({
     action: MemorySweepDecision["action"],
   ) => void;
   onClear: (candidate: MemorySweepCandidate) => void;
-  onBulk: (
-    candidates: MemorySweepCandidate[],
-    action: MemorySweepDecision["action"],
-  ) => void;
   onSubmit: () => void;
   renderDetail: (candidate: MemorySweepCandidate) => ReactNode;
 }) {
   const rows = useMemo(() => sweepBriefRows(candidates), [candidates]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const pendingCount = Object.keys(decisions).length;
-  const applyable = candidates.filter((c) => c.can_apply);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">
-          {rows.length} suggestion{rows.length === 1 ? "" : "s"} to review —
-          add, dismiss, or postpone each one, then submit.
-        </p>
-        <div className="flex flex-wrap gap-2 text-xs">
-          {applyable.length > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onBulk(applyable, "apply")}
-              disabled={busy}
-            >
-              <PlusIcon className="size-3" /> Add all ({applyable.length})
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onBulk(candidates, "reject")}
-            disabled={busy}
-          >
-            <XIcon className="size-3" /> None needed
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onBulk(candidates, "snooze")}
-            disabled={busy}
-          >
-            <ClockIcon className="size-3" /> All later
-          </Button>
-        </div>
-      </div>
-
       {SWEEP_SECTION_ORDER.map((section) => {
         const sectionRows = rows.filter((row) => row.section === section);
         if (sectionRows.length === 0) return null;

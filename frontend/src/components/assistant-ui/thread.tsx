@@ -20,6 +20,7 @@ import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { workflowTurnActivity } from "@/features/workflow-drafts/workflow-turn-activity";
 import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
@@ -170,7 +171,10 @@ export function shouldShowResumedTurnStatus(
   backgroundTurnInProgress: boolean,
   localRuntimeRunning: boolean,
 ): boolean {
-  return backgroundTurnInProgress && !localRuntimeRunning;
+  return workflowTurnActivity({
+    localStreamActive: localRuntimeRunning,
+    backendTurnInProgress: backgroundTurnInProgress,
+  }).showResumedTurnStatus;
 }
 
 export const ThreadRunningIndicator: FC<{

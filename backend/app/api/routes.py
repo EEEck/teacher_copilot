@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator, Callable
@@ -86,7 +87,9 @@ from app.services.memory_sweep_reviews import (
     MemorySweepReviewStore,
     build_memory_sweep_source_snapshot,
     memory_sweep_source_fingerprint,
+    memory_sweep_stale_reasons,
 )
+from app.services.memory_gate import expire_stale_candidates
 from app.services.plan_service import PlanService
 from app.services.workflow_drafts import WorkflowDraftStore
 from app.teacher_agent.agents import AgentRunner
@@ -137,6 +140,7 @@ def _memory_sweep_review_response(
     *,
     class_id: str,
     is_stale: bool = False,
+    stale_reasons: list[str] | None = None,
 ) -> MemorySweepReviewResponse:
     if record is None:
         return MemorySweepReviewResponse(class_id=class_id, status="none")
@@ -154,6 +158,7 @@ def _memory_sweep_review_response(
         updated_at=record.updated_at,
         completed_at=record.completed_at,
         is_stale=is_stale or record.status == "stale",
+        stale_reasons=stale_reasons or [],
         has_teacher_edits=record.has_teacher_edits,
         queues={
             queue: [MemorySweepCandidate(**card) for card in cards]
@@ -1120,6 +1125,9 @@ def _memory_sweep_source(
     ledger: MemoryCandidateLedger,
     class_id: str,
 ) -> tuple[dict, str]:
+    # The sweep itself expires stale singleton candidates. Do that before
+    # snapshotting so its own housekeeping cannot stale a newly created review.
+    expire_stale_candidates(ledger, datetime.now(timezone.utc))
     source = build_memory_sweep_source_snapshot(
         wiki=wiki,
         ledger=ledger,
@@ -1128,7 +1136,7 @@ def _memory_sweep_source(
     return source, memory_sweep_source_fingerprint(source)
 
 
-async def _create_memory_sweep_review(
+def _create_memory_sweep_review(
     *,
     class_id: str,
     source: dict,
@@ -1143,6 +1151,29 @@ async def _create_memory_sweep_review(
         source_fingerprint=fingerprint,
         source=source,
     )
+    asyncio.create_task(
+        _generate_memory_sweep_review(
+            review_id=review.review_id,
+            class_id=class_id,
+            wiki=wiki,
+            ledger=ledger,
+            agents=agents,
+            store=store,
+        ),
+        name=f"memory-sweep-review:{review.review_id}",
+    )
+    return review
+
+
+async def _generate_memory_sweep_review(
+    *,
+    review_id: str,
+    class_id: str,
+    wiki: WikiStore,
+    ledger: MemoryCandidateLedger,
+    agents: AgentRunner,
+    store: MemorySweepReviewStore,
+) -> None:
     try:
         result = await propose_memory_sweep_review(
             wiki=wiki,
@@ -1158,8 +1189,8 @@ async def _create_memory_sweep_review(
             ]
             for queue, cards in result.cards_by_queue.items()
         }
-        return store.mark_ready(
-            review.review_id,
+        store.mark_ready(
+            review_id,
             proposals={
                 "class_id": result.class_id,
                 "subject": result.subject,
@@ -1169,7 +1200,7 @@ async def _create_memory_sweep_review(
         )
     except Exception as exc:
         logger.exception("Memory Sweep review generation failed")
-        return store.mark_failed(review.review_id, error=str(exc))
+        store.mark_failed(review_id, error=str(exc))
 
 
 @router.get(
@@ -1189,11 +1220,21 @@ def get_memory_sweep_review(
     active = store.get_active(class_id)
     if active is None:
         return _memory_sweep_review_response(None, class_id=class_id)
-    _, fingerprint = _memory_sweep_source(wiki=wiki, ledger=ledger, class_id=class_id)
+    # A review generation already owns a source snapshot. Rebuilding it on
+    # every frontend status poll is expensive and cannot affect the result in
+    # flight; validate freshness once generation has reached a terminal state.
+    if active.status == "generating":
+        return _memory_sweep_review_response(active, class_id=class_id)
+    source, fingerprint = _memory_sweep_source(wiki=wiki, ledger=ledger, class_id=class_id)
     is_stale = active.source_fingerprint != fingerprint
     if is_stale and active.status != "stale":
         active = store.mark_stale(active.review_id)
-    return _memory_sweep_review_response(active, class_id=class_id, is_stale=is_stale)
+    return _memory_sweep_review_response(
+        active,
+        class_id=class_id,
+        is_stale=is_stale,
+        stale_reasons=memory_sweep_stale_reasons(active.source, source) if is_stale else [],
+    )
 
 
 @router.post(
@@ -1223,9 +1264,14 @@ async def open_memory_sweep_review(
     if active is not None and active.source_fingerprint != fingerprint:
         if active.has_teacher_edits and not request_body.keep_stale:
             stale = store.mark_stale(active.review_id)
-            return _memory_sweep_review_response(stale, class_id=class_id, is_stale=True)
+            return _memory_sweep_review_response(
+                stale,
+                class_id=class_id,
+                is_stale=True,
+                stale_reasons=memory_sweep_stale_reasons(active.source, source),
+            )
         store.discard(active.review_id)
-    review = await _create_memory_sweep_review(
+    review = _create_memory_sweep_review(
         class_id=class_id,
         source=source,
         fingerprint=fingerprint,

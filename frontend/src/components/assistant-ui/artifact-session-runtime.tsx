@@ -12,26 +12,26 @@ import {
 } from "react";
 import {
   AssistantRuntimeProvider,
-  useLocalRuntime,
-  type ChatModelAdapter,
-  type ThreadMessageLike,
-  type ThreadMessage,
+  type AppendMessage,
 } from "@assistant-ui/react";
-import { toast } from "sonner";
 import { isUnknownSessionError, type ChatMessage, type CompletenessChecklist } from "@/lib/api";
 import type { MemoryCandidate } from "@/lib/api";
 import type { ChatStreamChunk } from "@/components/assistant-ui/artifact-runtime-config";
 import type { ArtifactMode } from "@/components/assistant-ui/artifact-runtime-config";
-import {
-  chatCompletionToastLabel,
-  initialAssistantRunContent,
-} from "@/lib/chat-run-feedback";
+import { initialAssistantRunContent, lessonContextFromMemoryState } from "@/lib/chat-run-feedback";
 import {
   clearPendingChatTurn,
   markPendingChatTurn,
 } from "@/lib/pending-chat-turns";
 import { extractSessionAttachments, type SessionAttachment } from "@/lib/session-attachments";
 import { streamPartsToRunContent } from "@/lib/sse-chat";
+import { useWorkflowChatRuntime, type UpdateWorkflowThread } from "@/features/workflow-drafts/workflow-chat-runtime";
+import { workflowTurnActivity } from "@/features/workflow-drafts/workflow-turn-activity";
+import {
+  newThreadMessageId,
+  replaceLastAssistantContent,
+} from "@/features/workflow-drafts/thread-messages";
+import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 
 export type ArtifactChatResult = {
   reply: string;
@@ -55,6 +55,9 @@ export type ArtifactSessionConfig = {
   artifactHash?: string;
   turnInProgress?: boolean;
   latestTurnComplete?: boolean;
+  /** Plan-page lesson date used for pending-turn labels when memory state has none. */
+  lessonDate?: string;
+  lessonTitle?: string;
   initialMarkdown: string;
   initialMessages?: ChatMessage[];
   initialCompleteness?: CompletenessChecklist | null;
@@ -126,21 +129,12 @@ export function useArtifactSession() {
   return ctx;
 }
 
-function extractText(message: ThreadMessage): string {
-  return message.content
+function extractText(message: AppendMessage): string {
+  const content = Array.isArray(message.content) ? message.content : [];
+  return content
     .filter((part): part is { type: "text"; text: string } => part.type === "text")
     .map((part) => part.text)
     .join("\n");
-}
-
-function toThreadMessageLike(messages: ChatMessage[] | undefined): ThreadMessageLike[] {
-  return (messages ?? [])
-    .filter((message) => message.role === "assistant" || message.role === "user")
-    .map((message, index) => ({
-      id: `persisted-${index}`,
-      role: message.role as "assistant" | "user",
-      content: message.content,
-    }));
 }
 
 type EditorState = { history: string[]; index: number };
@@ -161,6 +155,8 @@ export function ArtifactSessionRuntimeProvider({
     artifactHash = "",
     turnInProgress = false,
     latestTurnComplete = true,
+    lessonDate: configLessonDate = "",
+    lessonTitle: configLessonTitle = "",
     initialMarkdown,
     initialMessages,
     initialCompleteness = null,
@@ -183,6 +179,9 @@ export function ArtifactSessionRuntimeProvider({
     useState(latestTurnComplete);
   const activeDraftIdRef = useRef(draftId);
   activeDraftIdRef.current = activeDraftId;
+  const storedDraft = useWorkflowDraftStore(
+    (state) => state.draftsById[activeDraftId || activeSessionId],
+  );
 
   useEffect(() => {
     sessionIdRef.current = configGetSessionId?.() ?? sessionId;
@@ -212,6 +211,12 @@ export function ArtifactSessionRuntimeProvider({
   const [memoryState, setMemoryState] = useState<Record<string, unknown> | null>(
     initialMemoryState,
   );
+  const memoryStateRef = useRef(memoryState);
+  memoryStateRef.current = memoryState;
+  const configLessonDateRef = useRef(configLessonDate);
+  configLessonDateRef.current = configLessonDate;
+  const configLessonTitleRef = useRef(configLessonTitle);
+  configLessonTitleRef.current = configLessonTitle;
   const [isUpdating, setIsUpdating] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "error">("idle");
 
@@ -233,6 +238,26 @@ export function ArtifactSessionRuntimeProvider({
       return { history: [...base, markdown], index: base.length };
     });
   }, []);
+
+  useEffect(() => {
+    if (!storedDraft) return;
+    setActiveSessionId(storedDraft.sessionId);
+    setActiveDraftId(storedDraft.draftId);
+    setActiveArtifactRevision(storedDraft.artifactRevision);
+    setActiveArtifactHash(storedDraft.artifactHash);
+    setActiveTurnInProgress(storedDraft.turnInProgress);
+    setActiveLatestTurnComplete(storedDraft.latestTurnComplete);
+    if (storedDraft.artifactMarkdown !== lastSyncedRef.current) {
+      pushMarkdown(storedDraft.artifactMarkdown, "agent");
+    }
+  }, [storedDraft, pushMarkdown]);
+
+  // Backend draft refreshes (background turn completion) must update the editor
+  // without remounting the assistant-ui runtime.
+  useEffect(() => {
+    if (initialMarkdown === lastSyncedRef.current) return;
+    pushMarkdown(initialMarkdown, "agent");
+  }, [artifactRevision, artifactHash, initialMarkdown, pushMarkdown]);
 
   const setArtifactMarkdown = useCallback(
     (value: string, source: "manual" | "agent" = "manual") => {
@@ -318,94 +343,127 @@ export function ArtifactSessionRuntimeProvider({
     [initialMarkdown, onSessionLost, configGetSessionId, sessionId],
   );
 
-  const adapter = useMemo<ChatModelAdapter>(
-    () => ({
-      async *run({ messages, abortSignal }) {
-        const last = messages.at(-1);
-        if (!last || last.role !== "user") return;
+  const onNew = useCallback(
+    async (message: AppendMessage, updateThread: UpdateWorkflowThread) => {
+      if (message.role !== "user") return;
 
-        setIsUpdating(true);
-        const pendingKey =
-          typeof window !== "undefined"
-            ? markPendingChatTurn(window.sessionStorage, {
-                mode,
-                classId,
-                sessionId: sessionIdRef.current,
-                draftId: activeDraftIdRef.current || undefined,
-              })
-            : "";
-        if (typeof window !== "undefined") {
-          window.sessionStorage.setItem(pendingKey, "1");
-        }
-        let clearPending = false;
-        try {
-          yield { content: initialAssistantRunContent() };
-          const text = extractText(last);
-          const attachments = await extractSessionAttachments(last);
-          const currentMd =
-            editorRef.current.history[editorRef.current.index] ?? initialMarkdown;
-          let finalResult: ArtifactChatResult | null = null;
-          for await (const chunk of chatStream({
-            message: text,
-            currentMarkdown: currentMd,
-            attachments: attachments.length ? attachments : undefined,
-            signal: abortSignal,
-          })) {
-            if (abortSignal?.aborted) return;
-            if (chunk.kind === "progress") {
-              if (chunk.content.length > 0) {
-                yield { content: streamPartsToRunContent(chunk.content) };
-              }
-              continue;
+      const userContent = message.content ?? [];
+      const startingContent = initialAssistantRunContent() ?? [];
+
+      updateThread((messages) => [
+        ...messages,
+        {
+          id: newThreadMessageId("user"),
+          role: "user",
+          content: userContent,
+        },
+        {
+          id: newThreadMessageId("assistant"),
+          role: "assistant",
+          content: startingContent,
+        },
+      ]);
+      setIsUpdating(true);
+      const fromMemory = lessonContextFromMemoryState(memoryStateRef.current);
+      const lessonDate =
+        fromMemory.lessonDate ||
+        configLessonDateRef.current.trim() ||
+        undefined;
+      const lessonTitle =
+        fromMemory.lessonTitle ||
+        configLessonTitleRef.current.trim() ||
+        undefined;
+      const pendingKey =
+        typeof window !== "undefined"
+          ? markPendingChatTurn(window.sessionStorage, {
+              mode,
+              classId,
+              sessionId: sessionIdRef.current,
+              draftId: activeDraftIdRef.current || undefined,
+              lessonDate,
+              lessonTitle,
+              resumeHref: `${window.location.pathname}${window.location.search}`,
+            })
+          : "";
+      // Successful turns leave the pending marker for PendingTurnNotifier.
+      // Failed client streams clear it so the notifier does not toast a false completion.
+      let turnFailed = false;
+      try {
+        const text = extractText(message);
+        const attachments = await extractSessionAttachments(
+          message as unknown as Parameters<typeof extractSessionAttachments>[0],
+        );
+        const currentMd =
+          editorRef.current.history[editorRef.current.index] ?? initialMarkdown;
+        let finalResult: ArtifactChatResult | null = null;
+        for await (const chunk of chatStream({
+          message: text,
+          currentMarkdown: currentMd,
+          attachments: attachments.length ? attachments : undefined,
+        })) {
+          if (chunk.kind === "progress") {
+            if (chunk.content.length > 0) {
+              updateThread((messages) =>
+                replaceLastAssistantContent(
+                  messages,
+                  streamPartsToRunContent(chunk.content) ?? [],
+                ),
+              );
             }
-            finalResult = chunk.result;
-            clearPending = true;
-            pushMarkdown(chunk.result.artifactMarkdown, "agent");
-            lastSyncedRef.current = chunk.result.artifactMarkdown;
-            applyDraftMetadata(chunk.result);
-            applyMeta(chunk.result.completeness ?? null, chunk.result.readyToSave, chunk.result);
-            toast.success(chatCompletionToastLabel(mode));
-            const content = chunk.content;
-            yield {
-              content:
-                content.length > 0
-                  ? streamPartsToRunContent(content)
-                  : [{ type: "text", text: chunk.result.reply }],
-            };
+            continue;
           }
-          if (!finalResult && !abortSignal?.aborted) {
-            clearPending = true;
-            yield { content: [{ type: "text", text: CHAT_ERROR_REPLY }] };
-          }
-        } catch (err) {
-          const message = friendlyChatError(err);
-          if (abortSignal?.aborted) return;
-          clearPending = true;
-          yield { content: [{ type: "text", text: message }] };
-        } finally {
-          if (clearPending && typeof window !== "undefined") {
-            clearPendingChatTurn(window.sessionStorage, pendingKey);
-          }
-          setIsUpdating(false);
+          finalResult = chunk.result;
+          pushMarkdown(chunk.result.artifactMarkdown, "agent");
+          lastSyncedRef.current = chunk.result.artifactMarkdown;
+          applyDraftMetadata(chunk.result);
+          applyMeta(chunk.result.completeness ?? null, chunk.result.readyToSave, chunk.result);
+          const content =
+            chunk.content.length > 0
+              ? streamPartsToRunContent(chunk.content)
+              : [{ type: "text" as const, text: chunk.result.reply }];
+          updateThread((messages) =>
+            replaceLastAssistantContent(messages, content ?? []),
+          );
         }
-      },
-    }),
+        if (!finalResult) {
+          turnFailed = true;
+          updateThread((messages) =>
+            replaceLastAssistantContent(messages, [{ type: "text", text: CHAT_ERROR_REPLY }]),
+          );
+        }
+      } catch (err) {
+        const reply = friendlyChatError(err);
+        turnFailed = true;
+        updateThread((messages) =>
+          replaceLastAssistantContent(messages, [{ type: "text", text: reply }]),
+        );
+      } finally {
+        if (turnFailed && pendingKey && typeof window !== "undefined") {
+          clearPendingChatTurn(window.sessionStorage, pendingKey);
+        }
+        setIsUpdating(false);
+      }
+    },
     [
+      applyDraftMetadata,
+      applyMeta,
       chatStream,
       classId,
       initialMarkdown,
       mode,
       pushMarkdown,
-      applyMeta,
-      applyDraftMetadata,
     ],
   );
 
-  const initialThreadMessages = useMemo(
-    () => toThreadMessageLike(initialMessages),
-    [initialMessages],
-  );
-  const runtime = useLocalRuntime(adapter, { initialMessages: initialThreadMessages });
+  const turnActivity = workflowTurnActivity({
+    localStreamActive: isUpdating,
+    backendTurnInProgress: activeTurnInProgress,
+  });
+  const runtime = useWorkflowChatRuntime({
+    draftId: activeDraftId || activeSessionId,
+    isRunning: turnActivity.runtimeIsRunning,
+    onNew,
+  });
 
   useEffect(() => {
     if (!patchDraft) return;

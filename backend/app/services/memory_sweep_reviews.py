@@ -173,7 +173,7 @@ class MemorySweepReviewStore:
         if warnings is not None and "warnings" not in payload:
             payload["warnings"] = warnings
         now = _utc_now()
-        return self._update(
+        return self._update_while_generating(
             review_id,
             """
             status = ?,
@@ -187,7 +187,7 @@ class MemorySweepReviewStore:
 
     def mark_failed(self, review_id: str, *, error: str) -> MemorySweepReviewRecord:
         now = _utc_now()
-        return self._update(
+        return self._update_while_generating(
             review_id,
             "status = ?, error = ?, updated_at = ?",
             ("failed", error, now),
@@ -238,6 +238,25 @@ class MemorySweepReviewStore:
             )
         if cursor.rowcount != 1:
             raise KeyError(f"Unknown Memory Sweep review: {review_id}")
+        return self.get(review_id)
+
+    def _update_while_generating(
+        self, review_id: str, assignments: str, params: tuple[Any, ...]
+    ) -> MemorySweepReviewRecord:
+        """Finish only the review generation that still owns this record.
+
+        Discarding or refreshing may supersede an in-flight model task. Its
+        eventual completion must not restore that obsolete review.
+        """
+        with self._connect() as conn:
+            conn.execute(
+                f"""
+                UPDATE memory_sweep_review
+                SET {assignments}
+                WHERE review_id = ? AND status = 'generating'
+                """,
+                (*params, review_id),
+            )
         return self.get(review_id)
 
     def _connect(self) -> sqlite3.Connection:
@@ -299,6 +318,60 @@ def build_memory_sweep_source_snapshot(
 
 def memory_sweep_source_fingerprint(source: dict[str, Any]) -> str:
     return _sha256(_dumps(source))
+
+
+def memory_sweep_stale_reasons(
+    previous: dict[str, Any], current: dict[str, Any]
+) -> list[str]:
+    """Return teacher-readable reasons that a saved review no longer matches memory."""
+    reasons: list[str] = []
+    previous_rows = {row["id"]: row for row in previous.get("ledger_rows", [])}
+    current_rows = {row["id"]: row for row in current.get("ledger_rows", [])}
+    added = len(set(current_rows) - set(previous_rows))
+    removed = len(set(previous_rows) - set(current_rows))
+    changed = sum(
+        previous_rows[row_id] != current_rows[row_id]
+        for row_id in set(previous_rows) & set(current_rows)
+    )
+    if added:
+        reasons.append(_counted_reason(added, "new memory candidate arrived after this draft was generated."))
+    if removed:
+        reasons.append(_counted_reason(removed, "memory candidate is no longer open for review."))
+    if changed:
+        reasons.append(_counted_reason(changed, "memory candidate changed after this draft was generated."))
+
+    previous_targets = {
+        item["target"]: item for item in previous.get("wiki_targets", [])
+    }
+    current_targets = {item["target"]: item for item in current.get("wiki_targets", [])}
+    target_changes = sum(
+        previous_targets[target] != current_targets.get(target)
+        for target in set(previous_targets) | set(current_targets)
+    )
+    if target_changes:
+        reasons.append(_counted_reason(target_changes, "memory page changed after this draft was generated."))
+
+    previous_summaries = {
+        item["candidate_id"]: item
+        for item in previous.get("synthetic_student_summaries", [])
+    }
+    current_summaries = {
+        item["candidate_id"]: item
+        for item in current.get("synthetic_student_summaries", [])
+    }
+    summary_changes = sum(
+        previous_summaries[candidate_id] != current_summaries.get(candidate_id)
+        for candidate_id in set(previous_summaries) | set(current_summaries)
+    )
+    if summary_changes:
+        reasons.append(_counted_reason(summary_changes, "student summary changed after this draft was generated."))
+    return reasons
+
+
+def _counted_reason(count: int, singular: str) -> str:
+    if count == 1:
+        return f"1 {singular}"
+    return f"{count} {singular.replace('candidate ', 'candidates ').replace('page ', 'pages ').replace('summary ', 'summaries ').replace(' is ', ' are ').replace(' changed', ' changed')}"
 
 
 def _sha256(value: str) -> str:

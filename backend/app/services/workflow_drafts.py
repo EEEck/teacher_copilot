@@ -67,6 +67,7 @@ class WorkflowDraftRow:
     backend_session_id: str
     turn_in_progress: bool
     latest_turn_complete: bool
+    pending_turn_json: dict[str, Any]
     active_review_revision: int | None
     active_review_hash: str | None
     created_at: str
@@ -95,6 +96,11 @@ class WorkflowDraftRow:
                 bool(row["latest_turn_complete"])
                 if "latest_turn_complete" in row.keys()
                 else True
+            ),
+            pending_turn_json=(
+                _loads_dict(row["pending_turn_json"])
+                if "pending_turn_json" in row.keys()
+                else {}
             ),
             active_review_revision=(
                 int(row["active_review_revision"])
@@ -144,6 +150,7 @@ class WorkflowDraftStore:
                   backend_session_id TEXT NOT NULL DEFAULT '',
                   turn_in_progress INTEGER NOT NULL DEFAULT 0,
                   latest_turn_complete INTEGER NOT NULL DEFAULT 1,
+                  pending_turn_json TEXT NOT NULL DEFAULT '{}',
                   active_review_revision INTEGER,
                   active_review_hash TEXT,
                   created_at TEXT NOT NULL,
@@ -161,6 +168,7 @@ class WorkflowDraftStore:
             )
             self._ensure_column(conn, "turn_in_progress", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(conn, "latest_turn_complete", "INTEGER NOT NULL DEFAULT 1")
+            self._ensure_column(conn, "pending_turn_json", "TEXT NOT NULL DEFAULT '{}'")
 
     def open_draft(
         self,
@@ -274,6 +282,7 @@ class WorkflowDraftStore:
         runtime_json: dict[str, Any] | None,
         messages_json: list[dict[str, Any]],
         backend_session_id: str,
+        pending_turn_json: dict[str, Any] | None = None,
         turn_in_progress: bool = False,
         latest_turn_complete: bool = True,
     ) -> WorkflowDraftRow:
@@ -296,6 +305,7 @@ class WorkflowDraftStore:
                     backend_session_id = ?,
                     turn_in_progress = ?,
                     latest_turn_complete = ?,
+                    pending_turn_json = ?,
                     updated_at = ?
                 WHERE draft_id = ?
                 """,
@@ -309,6 +319,7 @@ class WorkflowDraftStore:
                     backend_session_id,
                     int(turn_in_progress),
                     int(latest_turn_complete),
+                    _dumps(pending_turn_json or {}),
                     now,
                     draft_id,
                 ),

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { toast } from "sonner";
 import { ArtifactSessionRuntimeProvider } from "@/components/assistant-ui/artifact-session-runtime";
 import {
   createArtifactRuntimeConfig,
@@ -9,11 +8,10 @@ import {
 } from "@/components/assistant-ui/artifact-runtime-config";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  clearPendingChatTurn,
-  pendingTurnKey,
-} from "@/lib/pending-chat-turns";
 import type { ChatMessage, CompletenessChecklist } from "@/lib/api";
+import { toWorkflowDraftSnapshot } from "@/features/workflow-drafts/workflow-draft-bootstrap";
+import { workflowDraftRuntimeKey } from "@/features/workflow-drafts/workflow-draft-runtime-key";
+import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 
 export type ArtifactBootstrapOptions = {
   /** Re-apply draft after the server lost the in-memory session (e.g. backend restart). */
@@ -52,7 +50,8 @@ export function ArtifactSessionPage({
   title,
   description,
   bootstrap,
-  refreshDraft,
+  lessonDate,
+  lessonTitle,
   renderBody,
 }: {
   mode: ArtifactMode;
@@ -60,7 +59,8 @@ export function ArtifactSessionPage({
   title: string;
   description?: string;
   bootstrap: (opts?: ArtifactBootstrapOptions) => Promise<ArtifactBootstrap>;
-  refreshDraft?: (sessionId: string) => Promise<Partial<ArtifactBootstrap>>;
+  lessonDate?: string;
+  lessonTitle?: string;
   renderBody: (props: ArtifactSessionBodyProps) => ReactNode;
 }) {
   const [data, setData] = useState<ArtifactBootstrap | null>(null);
@@ -77,10 +77,12 @@ export function ArtifactSessionPage({
     async (opts?: ArtifactBootstrapOptions) => {
       const result = await bootstrap(opts);
       sessionIdRef.current = result.sessionId;
+      const snapshot = toWorkflowDraftSnapshot(mode, classId, result);
+      if (snapshot) useWorkflowDraftStore.getState().upsert(snapshot);
       setData(result);
       return result;
     },
-    [bootstrap],
+    [bootstrap, classId, mode],
   );
 
   const onSessionLost = useCallback(
@@ -127,45 +129,6 @@ export function ArtifactSessionPage({
     };
   }, [classId, loadBootstrap]);
 
-  useEffect(() => {
-    if (!data || data.turnInProgress !== true || !refreshDraft) return;
-    let cancelled = false;
-    const interval = window.setInterval(() => {
-      void (async () => {
-        try {
-          const refreshed = await refreshDraft(data.sessionId);
-          if (cancelled) return;
-          setData((current) =>
-            current?.sessionId === data.sessionId ? { ...current, ...refreshed } : current,
-          );
-          if (refreshed.latestTurnComplete) {
-            window.clearInterval(interval);
-            toast.success(mode === "plan" ? "Lesson plan done" : "Draft update done");
-          }
-        } catch (e) {
-          if (!cancelled) {
-            setError(e instanceof Error ? e.message : "Could not refresh draft");
-          }
-        }
-      })();
-    }, 2000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [data, mode, refreshDraft]);
-
-  useEffect(() => {
-    if (!data || data.latestTurnComplete !== true || data.turnInProgress === true) {
-      return;
-    }
-    if (typeof window === "undefined") return;
-    const key = pendingTurnKey(data.draftId, data.sessionId);
-    if (!window.sessionStorage.getItem(key)) return;
-    clearPendingChatTurn(window.sessionStorage, key);
-    toast.success(mode === "plan" ? "Lesson plan done" : "Draft update done");
-  }, [data, mode]);
-
   const config = useMemo(
     () =>
       data
@@ -178,6 +141,8 @@ export function ArtifactSessionPage({
             artifactHash: data.artifactHash,
             turnInProgress: data.turnInProgress,
             latestTurnComplete: data.latestTurnComplete,
+            lessonDate,
+            lessonTitle,
             initialMessages: data.initialMessages,
             getSessionId: () => sessionIdRef.current,
             onSessionLost,
@@ -186,7 +151,7 @@ export function ArtifactSessionPage({
             initialMemoryState: data.initialMemoryState ?? null,
           })
         : null,
-    [mode, classId, data, onSessionLost],
+    [mode, classId, data, lessonDate, lessonTitle, onSessionLost],
   );
 
   const header = (
@@ -237,7 +202,7 @@ export function ArtifactSessionPage({
         </Alert>
       )}
       <ArtifactSessionRuntimeProvider
-        key={`${data.sessionId}:${data.artifactRevision ?? 0}:${data.latestTurnComplete ?? true}`}
+        key={workflowDraftRuntimeKey(data.draftId, data.sessionId)}
         config={config}
       >
         {renderBody({

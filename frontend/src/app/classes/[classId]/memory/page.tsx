@@ -861,24 +861,6 @@ function MemoryPageContent() {
     [classId, startHint],
   );
 
-  const refreshDraft = useCallback(
-    async (sessionId: string) => {
-      const draft = await client.ingestGetDraft(classId, sessionId);
-      return {
-        draftId: draft.draft_id,
-        artifactRevision: draft.artifact_revision,
-        artifactHash: draft.artifact_hash,
-        turnInProgress: draft.turn_in_progress,
-        latestTurnComplete: draft.latest_turn_complete,
-        initialMessages: draft.messages,
-        initialMarkdown: draft.diary_markdown,
-        initialCompleteness: draft.completeness,
-        initialMemoryState: draft.memory_state ?? null,
-      };
-    },
-    [classId],
-  );
-
   return (
     <ArtifactSessionPage
       mode="ingest"
@@ -890,7 +872,8 @@ function MemoryPageContent() {
           : "Chat through the lesson, edit the diary on the right, then save when ready."
       }
       bootstrap={bootstrap}
-      refreshDraft={refreshDraft}
+      lessonDate={startHint?.lesson_date}
+      lessonTitle={startHint?.lesson_title}
       renderBody={({ onError }: ArtifactSessionBodyProps) => (
         <MemoryWorkspace
           classId={classId}
