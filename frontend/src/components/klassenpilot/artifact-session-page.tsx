@@ -7,7 +7,7 @@ import {
   type ArtifactMode,
 } from "@/components/assistant-ui/artifact-runtime-config";
 import { PageHeader } from "@/components/layout/page-header";
-import { useWideShell } from "@/components/layout/shell-layout";
+import { useArtifactSessionShell } from "@/components/layout/shell-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { ChatMessage, CompletenessChecklist } from "@/lib/api";
 import { toWorkflowDraftSnapshot } from "@/features/workflow-drafts/workflow-draft-bootstrap";
@@ -74,8 +74,8 @@ export function ArtifactSessionPage({
     promise: Promise<unknown>;
   } | null>(null);
 
-  // Plan / Update memory dual-pane needs more width than class home / docs.
-  useWideShell(true);
+  // Plan / Update memory: immersive dual-pane (wider + flush viewport).
+  useArtifactSessionShell(true);
 
   const loadBootstrap = useCallback(
     async (opts?: ArtifactBootstrapOptions) => {
@@ -164,7 +164,8 @@ export function ArtifactSessionPage({
       backLabel="Class home"
       title={title}
       description={description}
-      className="mb-4 shrink-0"
+      variant="compact"
+      className="shrink-0"
     />
   );
 

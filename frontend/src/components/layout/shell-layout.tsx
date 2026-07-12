@@ -3,7 +3,7 @@
 import {
   createContext,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -13,13 +13,20 @@ type ShellLayoutValue = {
   /** Wider main for plan/memory dual-pane sessions. */
   wide: boolean;
   setWide: (wide: boolean) => void;
+  /** Lock viewport height and tighten padding for dual-pane sessions. */
+  flush: boolean;
+  setFlush: (flush: boolean) => void;
 };
 
 const ShellLayoutContext = createContext<ShellLayoutValue | null>(null);
 
 export function ShellLayoutProvider({ children }: { children: ReactNode }) {
   const [wide, setWide] = useState(false);
-  const value = useMemo(() => ({ wide, setWide }), [wide]);
+  const [flush, setFlush] = useState(false);
+  const value = useMemo(
+    () => ({ wide, setWide, flush, setFlush }),
+    [wide, flush],
+  );
   return (
     <ShellLayoutContext.Provider value={value}>
       {children}
@@ -30,19 +37,36 @@ export function ShellLayoutProvider({ children }: { children: ReactNode }) {
 function useShellLayout(): ShellLayoutValue {
   const ctx = useContext(ShellLayoutContext);
   if (!ctx) {
-    return { wide: false, setWide: () => {} };
+    return {
+      wide: false,
+      setWide: () => {},
+      flush: false,
+      setFlush: () => {},
+    };
   }
   return ctx;
 }
 
-/** Opt the shared AppShell into a wider max width while this page is mounted. */
-export function useWideShell(enabled = true): void {
-  const { setWide } = useShellLayout();
-  useEffect(() => {
+/**
+ * Opt plan/memory into the immersive dual-pane shell: wider content, locked
+ * viewport height, tighter padding. useLayoutEffect avoids a visible narrow flash.
+ */
+export function useArtifactSessionShell(enabled = true): void {
+  const { setWide, setFlush } = useShellLayout();
+  useLayoutEffect(() => {
     if (!enabled) return;
     setWide(true);
-    return () => setWide(false);
-  }, [enabled, setWide]);
+    setFlush(true);
+    return () => {
+      setWide(false);
+      setFlush(false);
+    };
+  }, [enabled, setWide, setFlush]);
+}
+
+/** @deprecated Prefer useArtifactSessionShell for plan/memory. */
+export function useWideShell(enabled = true): void {
+  useArtifactSessionShell(enabled);
 }
 
 export { useShellLayout };

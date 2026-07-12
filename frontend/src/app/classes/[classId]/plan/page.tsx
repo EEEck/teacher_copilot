@@ -335,45 +335,47 @@ function PlanWorkspace({
   }
 
   return (
-    <ArtifactSessionWorkspace
-      thread={<PlanThread />}
-      draftPanel={
-        <ArtifactDraftPanel
-          title="Lesson plan"
-          placeholder="Your lesson plan will build here as you chat, or type directly…"
-          updatingLabel="Updating plan from chat…"
-        />
-      }
-      footer={
-        <PlanSaveFooter
-          classId={classId}
-          onError={onError}
-          inReview={inReview}
-          setInReview={setInReview}
-          lessonDate={lessonDate}
-          setLessonDate={setLessonDate}
-          setBeforePlan={setBeforePlan}
-        />
-      }
-      reviewFileList={
-        inReview && fileItem ? (
-          <ReviewBrief
-            items={[fileItem]}
-            selectedPath={fileItem.path}
-            title="Save lesson plan"
-            onSetApproved={(_, v) => setApproved(v)}
-            onUndoAll={() => setInReview(false)}
-            onKeepAll={() => {
-              setApproved(true);
-              void savePlan();
-            }}
-            onSave={savePlan}
-            saving={loading}
-            saveDisabled={!approved}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <ArtifactSessionWorkspace
+        thread={<PlanThread />}
+        draftPanel={
+          <ArtifactDraftPanel
+            title="Lesson plan"
+            placeholder="Your lesson plan will build here as you chat, or type directly…"
+            updatingLabel="Updating plan from chat…"
           />
-        ) : null
-      }
-    />
+        }
+        footer={
+          <PlanSaveFooter
+            classId={classId}
+            onError={onError}
+            inReview={inReview}
+            setInReview={setInReview}
+            lessonDate={lessonDate}
+            setLessonDate={setLessonDate}
+            setBeforePlan={setBeforePlan}
+          />
+        }
+        reviewFileList={
+          inReview && fileItem ? (
+            <ReviewBrief
+              items={[fileItem]}
+              selectedPath={fileItem.path}
+              title="Save lesson plan"
+              onSetApproved={(_, v) => setApproved(v)}
+              onUndoAll={() => setInReview(false)}
+              onKeepAll={() => {
+                setApproved(true);
+                void savePlan();
+              }}
+              onSave={savePlan}
+              saving={loading}
+              saveDisabled={!approved}
+            />
+          ) : null
+        }
+      />
+    </div>
   );
 }
 

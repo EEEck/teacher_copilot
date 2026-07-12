@@ -198,21 +198,19 @@ function MemoryTargetStatus() {
   const confirmed = boolFromRecord(targetRecord.target_confirmed);
 
   return (
-    <Card className="border-border bg-muted/40">
-      <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-1 p-3 text-xs">
-        <span className="font-medium text-foreground">
-          {date ? `Target: ${date}${title ? ` · ${title}` : ""}` : "Target: not selected"}
-        </span>
-        {intent && <span className="text-muted-foreground">Intent: {intent}</span>}
-        {phase && <span className="text-muted-foreground">Phase: {phase}</span>}
-        <span className={confirmed ? "text-primary" : "text-muted-foreground"}>
-          {confirmed ? "Confirmed" : "Needs confirmation"}
-        </span>
-        {lastChangeSummary && (
-          <span className="basis-full text-muted-foreground">{lastChangeSummary}</span>
-        )}
-      </CardContent>
-    </Card>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-[11px] leading-tight">
+      <span className="font-medium text-foreground">
+        {date ? `Target: ${date}${title ? ` · ${title}` : ""}` : "Target: not selected"}
+      </span>
+      {intent && <span className="text-muted-foreground">Intent: {intent}</span>}
+      {phase && <span className="text-muted-foreground">Phase: {phase}</span>}
+      <span className={confirmed ? "text-primary" : "text-muted-foreground"}>
+        {confirmed ? "Confirmed" : "Needs confirmation"}
+      </span>
+      {lastChangeSummary && (
+        <span className="basis-full text-muted-foreground">{lastChangeSummary}</span>
+      )}
+    </div>
   );
 }
 
@@ -650,7 +648,7 @@ function MemoryWorkspace({
     );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="shrink-0">
         <MemoryTargetStatus />
       </div>
