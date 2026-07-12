@@ -122,6 +122,19 @@ def test_executive_assistant_policy_defines_the_shared_product_contract():
     assert "teacher's latest message wins" not in policy
 
 
+def test_executive_assistant_policy_keeps_sessions_in_the_active_class():
+    policy = " ".join(EXECUTIVE_ASSISTANT_POLICY.lower().split())
+
+    assert "strictly limited to its active class" in policy
+    assert "must never search, suggest, or offer to move work to another class" in policy
+    assert "question about what the class covered is an evidence request" in policy
+    assert "leave that fact out of the draft" in policy
+    assert "does not change the artifact" in policy
+    assert "do not offer another class, workspace, or class switch" in policy
+    assert "do not ask whether to add it to the current artifact" in policy
+    assert "do not ask a clarification or follow-up solely because the queried fact is absent" in policy
+
+
 def test_executive_assistant_policy_is_in_both_chat_workflows(wiki):
     plan = build_plan_chat_prompt_assembly(
         wiki,

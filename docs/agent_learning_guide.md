@@ -302,6 +302,80 @@ This is the same lesson as `remember(...)`: do not rely on the model's attention
 for crisp factual checks the backend can perform exactly. Use LLM judges to test
 the teacher-facing behavior, but keep membership/conflict detection deterministic.
 
+## Executive Verification: Beta-Derived Goldens
+
+Executive-assistant behavior should be refined from realistic, anonymized
+teacher transcripts rather than a growing collection of one-off deterministic
+checkers. The reusable loop is:
+
+```text
+messy teacher input
+  -> identify verifiable claims
+  -> retrieve the smallest relevant active-class evidence
+  -> draft useful foreground work
+  -> hold back unresolved consequential facts
+  -> ask only for the teacher-owned decision
+  -> freshly verify the exact draft before a durable write
+```
+
+The active class is a capability boundary, not merely a model instruction. A
+session may check whether a reference resolves in its active class; it must not
+search, suggest, or offer to move work to another class. An unknown student, a
+surprising lesson date, or an out-of-scope concept stays out of the draft until
+the teacher confirms an active-class correction.
+
+Questions are different from corrections. "Did we cover Hartree--Fock?" is an
+evidence request, not a claim that the class covered it. Retrieve the
+active-class record, answer what it supports, and leave the queried concept out
+of the artifact. Only an explicit teacher correction becomes a candidate update.
+
+### Evaluation lessons
+
+- Deterministic tests pin backend-owned behavior: active-class-only tool scope,
+  exact-draft write gates, readiness state, and absence of held-back facts from
+  final artifacts.
+- User-derived goldens preserve realistic multi-turn behavior: wrong student
+  ID, wrong date, wrong-subject paste, valid-but-messy lesson input, and a
+  history question after a draft exists.
+- LLM judges assess teacher-facing quality: concise evidence-backed wording,
+  no invented class-switch capability, selective interruption, and no false
+  claim that a draft was saved.
+- A golden must model workflow state accurately. A complete draft is not
+  save-ready until the teacher accepts it; an empty diary template is session
+  scaffolding, not teacher-created artifact content.
+- Give the judge the relevant committed baseline and normalize harmless output
+  typography such as Unicode dash variants. Otherwise an evaluation can fail
+  for missing context or punctuation rather than product behavior.
+
+This is the testing equivalent of the prompt lesson: teach the general contract
+and keep real failures as goldens; do not hardcode a roster checker,
+Hartree--Fock keyword rule, or benchmark-specific synonym list.
+
+## Teacher Profile: Preferences, Professional Context, and Consent
+
+`teacher_profile.md` is the global cross-class profile. Its primary job remains
+stable communication and workflow preferences, but it can also hold a small
+amount of teacher-confirmed professional context when that context is likely to
+improve future assistance.
+
+For example, "I teach part time at university" can explain why a teacher
+mentions advanced chemistry. It must not make Hartree--Fock part of a
+high-school Chemie 9b lesson, weaken the active-class boundary, or cause the
+copilot to infer a university course/workspace that it cannot access.
+
+Use a conservative promotion rule:
+
+1. A casual self-disclosure is useful session context only; do not capture it
+   automatically.
+2. An explicit request such as "remember that I also teach at the university"
+   may create a review-only `teacher_profile.md` candidate with verbatim quote
+   provenance and a `Professional context` section.
+3. The candidate enters the application-owned ledger and follows normal teacher
+   review/apply. It is not durable profile memory until approved.
+4. Capture only concise context with a foreseeable product use. Do not build a
+   biography, infer employment details, or store personal/sensitive information
+   merely because it appeared in a conversation.
+
 ## Memory Sweep Lessons From The MBB/Executive Failure
 
 > Historical note (2026-07): this section describes the Memory V2 two-pass

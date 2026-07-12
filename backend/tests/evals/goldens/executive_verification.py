@@ -13,7 +13,12 @@ from typing import Literal
 
 CHEMIE_9B_CLASS_ID = "chemie_9b_2026_27"
 
-DecisionExpectation = Literal["proceed", "proceed_with_note", "block_ready"]
+DecisionExpectation = Literal[
+    "proceed",
+    "proceed_with_note",
+    "block_ready",
+    "not_ready_clear",
+]
 Workflow = Literal["ingest", "plan"]
 
 
@@ -58,6 +63,17 @@ ORGANIC_LESSON_VALID_MESSY_INPUT = (
 )
 
 
+ORGANIC_LESSON_UNKNOWN_STUDENT_INPUT = ORGANIC_LESSON_VALID_MESSY_INPUT.replace(
+    "S-046 tried to answer", "S-006 tried to answer"
+)
+
+
+HARTREE_FOCK_HISTORY_QUESTION = (
+    "Did we not cover Hartree-Fock equations in class? Sorry, I am a bit "
+    "disorganized with my teaching."
+)
+
+
 WRONG_SUBJECT_MEMORY_INPUT = """Class: Englisch 10c
 Date taught: 2026-07-09
 Workflow: Update memory from lesson result
@@ -82,6 +98,8 @@ class ExecutiveVerificationGolden:
     required_artifact_patterns: tuple[str, ...] = ()
     forbidden_artifact_patterns: tuple[str, ...] = ()
     required_memory_candidate_targets: tuple[str, ...] = ()
+    judge_context: str = ""
+    judge_artifact: bool = True
     rationale: str = ""
 
 
@@ -148,8 +166,11 @@ EXECUTIVE_VERIFICATION_GOLDENS: tuple[ExecutiveVerificationGolden, ...] = (
             "target_kind": "planned_lesson",
             "lesson_title": "Organic Chemistry Unit Opener: Carbon Bonding",
         },
-        messages=(ORGANIC_LESSON_VALID_MESSY_INPUT,),
-        expected_decisions=("proceed",),
+        messages=(
+            ORGANIC_LESSON_VALID_MESSY_INPUT,
+            "The draft looks right. I am ready to save memory.",
+        ),
+        expected_decisions=("not_ready_clear", "proceed"),
         forbidden_reply_signals=("not in the roster", "does not resolve", "2026-09-28"),
         required_artifact_patterns=("2026-07-09", "S-046", "Organic Chemistry"),
         forbidden_artifact_patterns=("S-006", "2026-09-28"),
@@ -160,6 +181,58 @@ EXECUTIVE_VERIFICATION_GOLDENS: tuple[ExecutiveVerificationGolden, ...] = (
         ),
         rationale=(
             "Valid messy input should proceed without unnecessary clarification."
+        ),
+    ),
+    ExecutiveVerificationGolden(
+        golden_id="memory_unknown_student_stays_in_active_class",
+        workflow="ingest",
+        class_id=CHEMIE_9B_CLASS_ID,
+        start_body={
+            "lesson_date": "2026-07-09",
+            "intent": "update_missing_results",
+            "target_kind": "planned_lesson",
+            "lesson_title": "Organic Chemistry Unit Opener: Carbon Bonding",
+        },
+        messages=(ORGANIC_LESSON_UNKNOWN_STUDENT_INPUT,),
+        expected_decisions=("block_ready",),
+        required_reply_signals=(("S-006",),),
+        forbidden_reply_signals=("9a", "other class", "different class", "switch"),
+        required_artifact_patterns=("2026-07-09", "Organic Chemistry"),
+        forbidden_artifact_patterns=("S-006",),
+        rationale=(
+            "An unknown student must block durable readiness and be omitted from "
+            "the Chemie 9b diary. The assistant may request an active-class "
+            "correction but must not present another class as an option."
+        ),
+    ),
+    ExecutiveVerificationGolden(
+        golden_id="memory_unsupported_history_stays_in_active_class",
+        workflow="ingest",
+        class_id=CHEMIE_9B_CLASS_ID,
+        start_body={
+            "lesson_date": "2026-07-09",
+            "intent": "update_missing_results",
+            "target_kind": "planned_lesson",
+            "lesson_title": "Organic Chemistry Unit Opener: Carbon Bonding",
+        },
+        messages=(HARTREE_FOCK_HISTORY_QUESTION,),
+        expected_decisions=("not_ready_clear",),
+        required_reply_signals=(("Hartree-Fock",),),
+        forbidden_reply_signals=("9a", "other class", "different class", "switch"),
+        forbidden_artifact_patterns=("Hartree-Fock", "UHF"),
+        judge_context=(
+            "The committed Chemie 9b record includes a planned 2026-07-09 "
+            "Organic Chemistry Unit Opener: Carbon Bonding. It contains no "
+            "Hartree-Fock/UHF coverage. The session's empty diary template is "
+            "a workflow shell, not an artifact update."
+        ),
+        judge_artifact=False,
+        rationale=(
+            "A teacher question about prior coverage must be answered from the "
+            "Chemie 9b record. It is not a lesson update, must not enter the "
+            "diary, and must not be redirected to another class. The initial "
+            "empty diary template is a workflow shell, not a teacher-content "
+            "update."
         ),
     ),
 )

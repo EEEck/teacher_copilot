@@ -3,6 +3,7 @@
 from app.teacher_agent.tools import (
     WikiToolContext,
     create_chat_wiki_tools,
+    create_executive_verification_tools,
     create_memory_update_tools,
 )
 from app.teacher_agent.wiki_store import WikiStore
@@ -36,3 +37,15 @@ def test_memory_update_tools_include_shared_verification_tools():
     names = {tool.name for tool in create_memory_update_tools(ctx)}
 
     assert {"resolve_wiki_references", "report_verification_finding"} <= names
+
+
+def test_reference_lookup_tool_is_limited_to_the_active_class():
+    wiki = WikiStore(root=_WIKI_ROOT)
+    ctx = WikiToolContext(wiki=wiki, class_id=CLASS_ID)
+    tool = next(
+        tool
+        for tool in create_executive_verification_tools(ctx)
+        if tool.name == "resolve_wiki_references"
+    )
+
+    assert "scope" not in tool.params_json_schema["properties"]

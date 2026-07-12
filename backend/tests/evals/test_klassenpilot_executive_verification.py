@@ -25,6 +25,22 @@ def test_executive_verification_goldens_cover_core_decisions():
     assert "memory_date_and_student_mismatch_blocks_then_resolves" in ids
     assert "memory_wrong_subject_context_blocks_artifact" in ids
     assert "memory_valid_messy_input_proceeds" in ids
+    assert "memory_unknown_student_stays_in_active_class" in ids
+    assert "memory_unsupported_history_stays_in_active_class" in ids
+
+
+def test_history_question_golden_does_not_require_a_durable_decision():
+    golden = next(
+        item
+        for item in EXECUTIVE_VERIFICATION_GOLDENS
+        if item.golden_id == "memory_unsupported_history_stays_in_active_class"
+    )
+
+    assert golden.expected_decisions == ("not_ready_clear",)
+    assert "Hartree-Fock" in golden.forbidden_artifact_patterns
+    assert "2026-07-09" in golden.judge_context
+    assert "empty diary template" in golden.judge_context.lower()
+    assert golden.judge_artifact is False
 
 
 def test_eval_wiki_supports_organic_mismatch_scenario(eval_wiki):
@@ -79,7 +95,10 @@ def _run_live_ingest_golden(client, golden: ExecutiveVerificationGolden) -> list
         assert stream.status_code == 200, stream.text
         events = _parse_sse(stream.text)
         turn_finals = [event for event in events if event.get("type") == "final"]
-        assert turn_finals, f"{golden.golden_id}: stream returned no final event"
+        assert turn_finals, (
+            f"{golden.golden_id}: stream returned no final event; "
+            f"events={events!r}"
+        )
         finals.append(turn_finals[-1])
     return finals
 
@@ -100,14 +119,33 @@ def _assert_decision(final: dict, expected: str, *, golden_id: str) -> None:
     elif expected == "proceed_with_note":
         assert ready is True, f"{golden_id}: expected ready=true"
         assert status == "advisory", f"{golden_id}: expected advisory"
+    elif expected == "not_ready_clear":
+        assert ready is False, f"{golden_id}: expected ready=false"
+        assert status in {"clear", "advisory"}, (
+            f"{golden_id}: expected clear/advisory, got {status!r}"
+        )
     else:  # pragma: no cover - guards future golden edits
         raise AssertionError(f"Unknown expectation: {expected}")
 
 
-def _turn_text(final: dict) -> str:
+def _turn_text(final: dict, *, include_artifact: bool = True) -> str:
+    keys = ("reply", "artifact_markdown", "plan_markdown")
+    if not include_artifact:
+        keys = ("reply",)
     return "\n\n".join(
         str(final.get(key) or "")
-        for key in ("reply", "artifact_markdown", "plan_markdown")
+        for key in keys
+    )
+
+
+def _normalize_eval_text(value: str) -> str:
+    return (
+        value.lower()
+        .replace("\u2010", "-")
+        .replace("\u2011", "-")
+        .replace("\u2012", "-")
+        .replace("\u2013", "-")
+        .replace("\u2014", "-")
     )
 
 
@@ -143,8 +181,9 @@ def test_executive_verification_live_contract(live_eval_client, golden):
         finals, golden.required_reply_signals, strict=False
     ):
         reply = str(final.get("reply") or "")
+        normalized_reply = _normalize_eval_text(reply)
         for signal in required_signals:
-            assert signal.lower() in reply.lower(), (
+            assert _normalize_eval_text(signal) in normalized_reply, (
                 f"{golden.golden_id}: reply missing required signal {signal!r}"
             )
 
@@ -196,12 +235,16 @@ def test_executive_verification_llm_judge_live(live_eval_client, golden):
     )
 
     finals = _run_live_ingest_golden(live_eval_client, golden)
-    actual_output = "\n\n--- turn ---\n\n".join(_turn_text(final) for final in finals)
+    actual_output = "\n\n--- turn ---\n\n".join(
+        _turn_text(final, include_artifact=golden.judge_artifact)
+        for final in finals
+    )
     expected_context = (
         f"Expected decisions: {golden.expected_decisions}\n"
         f"Required reply signals: {golden.required_reply_signals}\n"
         f"Required artifact patterns: {golden.required_artifact_patterns}\n"
         f"Forbidden artifact patterns: {golden.forbidden_artifact_patterns}\n"
+        f"Active-class baseline: {golden.judge_context}\n"
         f"Rationale: {golden.rationale}"
     )
     test_case = LLMTestCase(

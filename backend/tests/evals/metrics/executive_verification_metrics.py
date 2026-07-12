@@ -39,6 +39,10 @@ def _criteria_for(golden: ExecutiveVerificationGolden) -> str:
         "- It avoids unnecessary clarification when the input is valid enough to proceed.\n"
         "- It keeps the teacher as decision-maker for durable class-state changes.\n"
         "- It continues useful foreground drafting unless the input is clearly for the wrong context.\n"
+        "- It treats the active class as an immutable session boundary and never "
+        "offers another class as a resolution.\n"
+        "- It answers a question about prior coverage from active-class evidence "
+        "and does not turn that question into a candidate update.\n"
         "- It sounds practical and non-accusatory."
     )
 

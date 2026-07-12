@@ -17,7 +17,7 @@ from app.teacher_agent.executive_verification import (
 )
 from app.teacher_agent.memory_update_state import MemoryRuntime
 from app.teacher_agent.planning_state import PlanRuntime
-from app.teacher_agent.wiki.search import ReferenceQuery, ReferenceScope
+from app.teacher_agent.wiki.search import ReferenceQuery
 from app.teacher_agent.wiki_store import WikiStore
 
 
@@ -143,17 +143,16 @@ def create_executive_verification_tools(ctx: WikiToolContext) -> list:
     @function_tool
     def resolve_wiki_references(
         references: list[ReferenceQuery],
-        scope: ReferenceScope = "active_class",
     ) -> str:
         """Resolve class, student, or lesson references against committed wiki indexes.
 
-        Call when a teacher-provided identifier may be unknown, ambiguous, or
-        from another class. Start with active_class; use workspace only when a
-        cross-class mix-up is plausible. This resolves identifiers only. Use
-        search/read tools for concepts, teaching history, and preferences.
+        Call when a teacher-provided student or lesson identifier may be unknown
+        or ambiguous in the active class. This tool never searches other
+        classes. It resolves identifiers only; use search/read tools for
+        concepts, teaching history, and preferences.
         """
         result = ctx.wiki.resolve_wiki_references(
-            ctx.class_id, references=references, scope=scope
+            ctx.class_id, references=references, scope="active_class"
         )
         return _capture(
             ctx.memory or ctx.planning,

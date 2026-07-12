@@ -82,6 +82,17 @@ behavior, rather than a workflow-specific validation mode.
 - Consequential mismatches produce at most one consolidated clarification.
 - Chat never silently changes class, student attribution, lesson history,
   roster, or durable preference.
+- Each workflow session is limited to its backend-owned active class. Reference
+  resolution may establish that an item is not in that class, but chat tools
+  and teacher-facing recovery must not search, suggest, or offer another class
+  or workspace.
+- An unresolved consequential active-class reference is omitted from the draft
+  and durable candidates until the teacher confirms an active-class correction.
+  The foreground artifact otherwise remains intact.
+- A teacher question about prior coverage is an evidence request, not a
+  candidate update: retrieve the active-class record, answer it, and leave an
+  unsupported queried concept out of the artifact. Only an explicit correction
+  may become a candidate update.
 
 The product motto is: **Do the busywork invisibly. Surface only the decisions.**
 The operating rule is: **Verify continuously. Interrupt selectively.**
@@ -90,9 +101,9 @@ Checkpoint B enforcement is shared by all registered artifact workflows:
 
 - `ExecutiveRuntime` persists assumptions, checked categories, and findings
   separately from `PlanRuntime` / `MemoryRuntime`.
-- `resolve_wiki_references` deterministically resolves class, student, and
-  lesson identifiers from committed indexes; semantic concepts continue to use
-  existing search/read tools.
+- `resolve_wiki_references` deterministically resolves student and lesson
+  identifiers from committed active-class indexes; semantic concepts continue
+  to use existing class-scoped search/read tools.
 - `report_verification_finding` explicitly records advisory or blocking
   discrepancies.
 - Open blocking findings make a structurally complete artifact not ready and
