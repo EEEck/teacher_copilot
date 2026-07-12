@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { client } from "./api";
+import { WriteVerificationBlockedError, client } from "./api";
 
 describe("client beta auth transport", () => {
   afterEach(() => {
@@ -62,5 +62,37 @@ describe("client beta auth transport", () => {
     const timeline = await client.getTimeline("chemie_9b_2026_27");
 
     expect(timeline.entries[0].memory_draft_id).toBe("draft-123");
+  });
+
+  it("rethrows WriteVerificationBlockedError for write-gate 409 responses", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "write_verification_blocked",
+          action: "plan_save",
+          artifact_fingerprint: "abc123",
+          executive_state: {
+            status: "needs_decision",
+            open_findings: [{ finding_id: "scope-1" }],
+          },
+          message: "I didn't save this yet; one detail needs your call.",
+        }),
+        { status: 409 },
+      ),
+    );
+
+    try {
+      await client.planSave("chemie_9b_2026_27", "session-1", "2026-07-10", "# Plan");
+      expect.unreachable("expected WriteVerificationBlockedError");
+    } catch (err) {
+      expect(err).toBeInstanceOf(WriteVerificationBlockedError);
+      const blocked = err as WriteVerificationBlockedError;
+      expect(blocked.payload.action).toBe("plan_save");
+      expect(blocked.payload.artifact_fingerprint).toBe("abc123");
+      expect(blocked.payload.executive_state.status).toBe("needs_decision");
+      expect(blocked.message).toBe(
+        "I didn't save this yet; one detail needs your call.",
+      );
+    }
   });
 });

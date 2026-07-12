@@ -50,8 +50,7 @@ from app.teacher_agent.memory_update_state import (
 )
 from app.teacher_agent.executive_verification import (
     WriteVerificationBlocked,
-    apply_write_verification,
-    evaluate_write_gate,
+    enforce_applied_write_verification,
 )
 from app.teacher_agent.prompt_trace import build_ingest_chat_prompt_trace
 from app.teacher_agent.wiki import parsing as wiki_parsing
@@ -371,21 +370,17 @@ class IngestService:
         verification = await self.agents.verify_artifact_for_write(
             session.class_id, "lesson results", diary_md, session.executive
         )
-        apply_write_verification(
-            session.executive,
-            artifact=diary_md,
-            patch=verification.patch,
-            message=verification.message,
-        )
-        gate = evaluate_write_gate(
-            session.executive,
-            diary_md,
-            structurally_ready=self.wiki.is_diary_complete(diary_md),
-        )
-        if not gate.allowed:
-            raise WriteVerificationBlocked(
-                "ingest_propose", verification, gate, session.executive
+        try:
+            enforce_applied_write_verification(
+                session.executive,
+                artifact=diary_md,
+                verification=verification,
+                action="ingest_propose",
+                structurally_ready=self.wiki.is_diary_complete(diary_md),
             )
+        except WriteVerificationBlocked:
+            self.core._persist_session(session)
+            raise
         draft = self.core.update_draft(session_id, diary_md)
         session = self.core.get_session(session_id)
         if self.workflow_drafts is not None and session.draft_id:
@@ -499,21 +494,17 @@ class IngestService:
         verification = await self.agents.verify_artifact_for_write(
             session.class_id, "lesson results", diary_markdown, session.executive
         )
-        apply_write_verification(
-            session.executive,
-            artifact=diary_markdown,
-            patch=verification.patch,
-            message=verification.message,
-        )
-        gate = evaluate_write_gate(
-            session.executive,
-            diary_markdown,
-            structurally_ready=self.wiki.is_diary_complete(diary_markdown),
-        )
-        if not gate.allowed:
-            raise WriteVerificationBlocked(
-                "ingest_commit", verification, gate, session.executive
+        try:
+            enforce_applied_write_verification(
+                session.executive,
+                artifact=diary_markdown,
+                verification=verification,
+                action="ingest_commit",
+                structurally_ready=self.wiki.is_diary_complete(diary_markdown),
             )
+        except WriteVerificationBlocked:
+            self.core._persist_session(session)
+            raise
         lesson_date = (
             self.wiki.extract_date_from_diary(diary_markdown)
             or date.today().isoformat()

@@ -442,7 +442,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
       }
       // Typed envelope { error: { message } }, with fallback to legacy { detail }.
       message = body.error?.message ?? body.detail ?? message;
-    } catch {
+    } catch (err) {
+      if (err instanceof WriteVerificationBlockedError) {
+        throw err;
+      }
       /* use raw text */
     }
     throw new Error(`API ${res.status}: ${message}`);

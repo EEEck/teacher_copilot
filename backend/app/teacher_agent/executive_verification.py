@@ -118,6 +118,70 @@ def artifact_fingerprint(markdown: str) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
+def executive_runtime_dump(runtime: ExecutiveRuntime) -> dict:
+    """Serialize executive state for durable workflow-draft persistence."""
+    return {
+        "findings": {
+            finding_id: finding.model_dump()
+            for finding_id, finding in runtime.findings.items()
+        },
+        "checked_categories": sorted(runtime.checked_categories),
+        "assumptions": list(runtime.assumptions),
+        "verification_summary": runtime.verification_summary,
+        "write_verification_fingerprint": runtime.write_verification_fingerprint,
+        "write_verification_message": runtime.write_verification_message,
+    }
+
+
+def executive_runtime_load(data: dict | None) -> ExecutiveRuntime:
+    """Restore executive state from a workflow-draft payload."""
+    payload = data or {}
+    findings_raw = payload.get("findings") or {}
+    findings: dict[str, ExecutiveFinding] = {}
+    if isinstance(findings_raw, dict):
+        for finding_id, finding in findings_raw.items():
+            if isinstance(finding, dict):
+                findings[str(finding_id)] = ExecutiveFinding.model_validate(finding)
+    categories = payload.get("checked_categories") or []
+    assumptions = payload.get("assumptions") or []
+    return ExecutiveRuntime(
+        findings=findings,
+        checked_categories={str(item) for item in categories},
+        assumptions=[str(item) for item in assumptions],
+        verification_summary=str(payload.get("verification_summary") or ""),
+        write_verification_fingerprint=str(
+            payload.get("write_verification_fingerprint") or ""
+        ),
+        write_verification_message=str(
+            payload.get("write_verification_message") or ""
+        ),
+    )
+
+
+def enforce_applied_write_verification(
+    runtime: ExecutiveRuntime,
+    *,
+    artifact: str,
+    verification: WriteVerificationResult,
+    action: str,
+    structurally_ready: bool,
+) -> None:
+    """Apply exact-draft verification and raise when the write gate blocks."""
+    apply_write_verification(
+        runtime,
+        artifact=artifact,
+        patch=verification.patch,
+        message=verification.message,
+    )
+    gate = evaluate_write_gate(
+        runtime,
+        artifact,
+        structurally_ready=structurally_ready,
+    )
+    if not gate.allowed:
+        raise WriteVerificationBlocked(action, verification, gate, runtime)
+
+
 def _clean(value: str) -> str:
     return " ".join((value or "").split())
 

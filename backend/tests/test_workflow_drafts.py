@@ -32,6 +32,29 @@ async def test_general_ingest_session_resumes_same_durable_draft(wiki, agents):
 
 
 @pytest.mark.anyio
+async def test_executive_findings_survive_workflow_draft_resume(wiki, agents):
+    store = WorkflowDraftStore(wiki.root / "workflow" / "workflow_drafts.sqlite")
+    store.initialize()
+    plan = PlanService(wiki=wiki, agents=agents, workflow_drafts=store)
+
+    session = await plan.start_session(CLASS_ID)
+    await plan.chat(session.session_id, "Add a note for student S-999.")
+    live = plan.core.get_session(session.session_id)
+    assert [item.finding_id for item in live.executive.open_blocking_findings()] == [
+        "student-s999"
+    ]
+
+    resumed_service = PlanService(wiki=wiki, agents=agents, workflow_drafts=store)
+    resumed = await resumed_service.start_session(CLASS_ID)
+    restored = resumed_service.core.get_session(resumed.session_id)
+
+    assert resumed.draft_id == session.draft_id
+    assert [
+        item.finding_id for item in restored.executive.open_blocking_findings()
+    ] == ["student-s999"]
+
+
+@pytest.mark.anyio
 async def test_timeline_ingest_drafts_are_scoped_by_lesson_date(wiki, agents):
     store = WorkflowDraftStore(wiki.root / "workflow" / "workflow_drafts.sqlite")
     store.initialize()

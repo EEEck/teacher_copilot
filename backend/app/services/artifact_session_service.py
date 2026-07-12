@@ -47,7 +47,11 @@ from app.services.stream_safety import (
 from app.services.workflow_drafts import WorkflowDraftIdentity, WorkflowDraftStore
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.executive_verification import ExecutiveRuntime
-from app.teacher_agent.executive_verification import executive_api_payload
+from app.teacher_agent.executive_verification import (
+    executive_api_payload,
+    executive_runtime_dump,
+    executive_runtime_load,
+)
 from app.teacher_agent.wiki_store import WikiStore
 
 _TRACE_EVENT_CAP = 200
@@ -181,6 +185,7 @@ class ArtifactSessionService:
             completeness=spec.completeness_of(self.wiki, row.artifact_markdown),
             opening_message=opening,
             runtime=runtime,
+            executive=executive_runtime_load(row.executive_json),
             turn_in_progress=row.turn_in_progress,
             latest_turn_complete=row.latest_turn_complete,
             pending_turn=row.pending_turn_json,
@@ -203,6 +208,7 @@ class ArtifactSessionService:
             status=session.status,
             artifact_markdown=session.partial_markdown,
             runtime_json=self._dump_runtime(session.mode, session.runtime),
+            executive_json=executive_runtime_dump(session.executive),
             messages_json=[message.model_dump() for message in session.messages],
             backend_session_id=session.session_id,
             pending_turn_json=session.pending_turn,

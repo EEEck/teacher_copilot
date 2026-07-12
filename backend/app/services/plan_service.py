@@ -41,8 +41,7 @@ from app.teacher_agent.planning_state import (
 )
 from app.teacher_agent.executive_verification import (
     WriteVerificationBlocked,
-    apply_write_verification,
-    evaluate_write_gate,
+    enforce_applied_write_verification,
 )
 from app.teacher_agent.prompt_trace import build_plan_chat_prompt_trace
 from app.teacher_agent.wiki_store import WikiStore
@@ -237,21 +236,17 @@ class PlanService:
         verification = await self.agents.verify_artifact_for_write(
             class_id, "lesson plan", plan_markdown, session.executive
         )
-        apply_write_verification(
-            session.executive,
-            artifact=plan_markdown,
-            patch=verification.patch,
-            message=verification.message,
-        )
-        gate = evaluate_write_gate(
-            session.executive,
-            plan_markdown,
-            structurally_ready=self.wiki.is_plan_ready(plan_markdown),
-        )
-        if not gate.allowed:
-            raise WriteVerificationBlocked(
-                "plan_save", verification, gate, session.executive
+        try:
+            enforce_applied_write_verification(
+                session.executive,
+                artifact=plan_markdown,
+                verification=verification,
+                action="plan_save",
+                structurally_ready=self.wiki.is_plan_ready(plan_markdown),
             )
+        except WriteVerificationBlocked:
+            self.core._persist_session(session)
+            raise
         title = self.wiki.extract_title(plan_markdown) or "Lesson plan"
         path = self.wiki.save_lesson_plan(class_id, lesson_date, plan_markdown)
         self.core.set_status(req.session_id, PlanSessionStatus.saved.value)

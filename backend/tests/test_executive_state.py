@@ -1,12 +1,19 @@
+import pytest
+
 from app.teacher_agent.executive_verification import (
     ExecutiveFinding,
     ExecutivePatch,
     ExecutiveRuntime,
+    WriteVerificationBlocked,
+    WriteVerificationResult,
     apply_write_verification,
     artifact_fingerprint,
     apply_executive_patch,
+    enforce_applied_write_verification,
     evaluate_write_gate,
     executive_api_payload,
+    executive_runtime_dump,
+    executive_runtime_load,
     render_executive_runtime,
 )
 
@@ -129,3 +136,66 @@ def test_write_gate_blocks_open_finding_even_when_fingerprint_matches():
     assert gate.allowed is False
     assert gate.reason == "unresolved_blocking_finding"
     assert runtime.write_verification_fingerprint == artifact_fingerprint("# Draft\n")
+
+
+def test_executive_runtime_round_trips_through_dump_and_load():
+    runtime = ExecutiveRuntime(
+        findings={
+            "student-s999": ExecutiveFinding(
+                finding_id="student-s999",
+                category="identity",
+                severity="blocking",
+                summary="S-999 is not resolved.",
+                question="Which student?",
+            )
+        },
+        checked_categories={"identity"},
+        assumptions=["Using current unit."],
+        verification_summary="Needs a roster decision.",
+        write_verification_fingerprint="abc",
+        write_verification_message="Blocked.",
+    )
+
+    restored = executive_runtime_load(executive_runtime_dump(runtime))
+
+    assert restored.open_blocking_findings()[0].finding_id == "student-s999"
+    assert restored.checked_categories == {"identity"}
+    assert restored.assumptions == ["Using current unit."]
+    assert restored.write_verification_fingerprint == "abc"
+    assert restored.write_verification_message == "Blocked."
+
+
+def test_artifact_fingerprint_normalizes_crlf_and_whitespace():
+    assert artifact_fingerprint("a\r\nb\n") == artifact_fingerprint("a\nb")
+    assert artifact_fingerprint("  draft  ") == artifact_fingerprint("draft")
+
+
+def test_enforce_applied_write_verification_raises_when_blocked():
+    runtime = ExecutiveRuntime()
+    verification = WriteVerificationResult(
+        artifact_fingerprint=artifact_fingerprint("# Draft\n"),
+        patch=ExecutivePatch(
+            findings=[
+                ExecutiveFinding(
+                    finding_id="student-s999",
+                    category="identity",
+                    severity="blocking",
+                    summary="S-999 is not resolved.",
+                    question="Which student?",
+                )
+            ]
+        ),
+        message="I didn't save this yet.",
+    )
+
+    with pytest.raises(WriteVerificationBlocked) as exc:
+        enforce_applied_write_verification(
+            runtime,
+            artifact="# Draft\n",
+            verification=verification,
+            action="plan_save",
+            structurally_ready=True,
+        )
+
+    assert exc.value.action == "plan_save"
+    assert runtime.open_blocking_findings()[0].finding_id == "student-s999"

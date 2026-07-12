@@ -7,7 +7,6 @@ artifact markdown, revision/hash guards, and terminal status.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 import uuid
@@ -16,16 +15,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.teacher_agent.executive_verification import artifact_fingerprint as artifact_hash
 
 TERMINAL_STATUSES = {"committed", "saved", "discarded"}
 
 
 def default_workflow_draft_store_path(wiki_root: str | Path) -> Path:
     return Path(wiki_root) / "workflow" / "workflow_drafts.sqlite"
-
-
-def artifact_hash(markdown: str) -> str:
-    return hashlib.sha256((markdown or "").encode("utf-8")).hexdigest()
 
 
 def _utc_now() -> str:
@@ -63,6 +59,7 @@ class WorkflowDraftRow:
     artifact_revision: int
     artifact_hash: str
     runtime_json: dict[str, Any]
+    executive_json: dict[str, Any]
     messages_json: list[dict[str, Any]]
     backend_session_id: str
     turn_in_progress: bool
@@ -89,6 +86,11 @@ class WorkflowDraftRow:
             artifact_revision=int(row["artifact_revision"] or 0),
             artifact_hash=row["artifact_hash"] or artifact_hash(row["artifact_markdown"] or ""),
             runtime_json=_loads_dict(row["runtime_json"]),
+            executive_json=(
+                _loads_dict(row["executive_json"])
+                if "executive_json" in row.keys()
+                else {}
+            ),
             messages_json=_loads_list(row["messages_json"]),
             backend_session_id=row["backend_session_id"] or "",
             turn_in_progress=bool(row["turn_in_progress"]) if "turn_in_progress" in row.keys() else False,
@@ -146,6 +148,7 @@ class WorkflowDraftStore:
                   artifact_revision INTEGER NOT NULL DEFAULT 0,
                   artifact_hash TEXT NOT NULL DEFAULT '',
                   runtime_json TEXT NOT NULL DEFAULT '{}',
+                  executive_json TEXT NOT NULL DEFAULT '{}',
                   messages_json TEXT NOT NULL DEFAULT '[]',
                   backend_session_id TEXT NOT NULL DEFAULT '',
                   turn_in_progress INTEGER NOT NULL DEFAULT 0,
@@ -169,6 +172,7 @@ class WorkflowDraftStore:
             self._ensure_column(conn, "turn_in_progress", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(conn, "latest_turn_complete", "INTEGER NOT NULL DEFAULT 1")
             self._ensure_column(conn, "pending_turn_json", "TEXT NOT NULL DEFAULT '{}'")
+            self._ensure_column(conn, "executive_json", "TEXT NOT NULL DEFAULT '{}'")
 
     def open_draft(
         self,
@@ -285,6 +289,7 @@ class WorkflowDraftStore:
         pending_turn_json: dict[str, Any] | None = None,
         turn_in_progress: bool = False,
         latest_turn_complete: bool = True,
+        executive_json: dict[str, Any] | None = None,
     ) -> WorkflowDraftRow:
         current = self.get(draft_id)
         new_hash = artifact_hash(artifact_markdown)
@@ -301,6 +306,7 @@ class WorkflowDraftStore:
                     artifact_revision = ?,
                     artifact_hash = ?,
                     runtime_json = ?,
+                    executive_json = ?,
                     messages_json = ?,
                     backend_session_id = ?,
                     turn_in_progress = ?,
@@ -315,6 +321,7 @@ class WorkflowDraftStore:
                     revision,
                     new_hash,
                     _dumps(runtime_json or {}),
+                    _dumps(executive_json or {}),
                     _dumps(messages_json),
                     backend_session_id,
                     int(turn_in_progress),
