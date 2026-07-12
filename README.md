@@ -67,8 +67,8 @@ docker compose up --build
 ./scripts/docker-dev.sh
 ```
 
-- App: http://localhost:3000  
-- API health: http://localhost:8010/api/health  
+- App: http://localhost:3000
+- API health: http://localhost:8010/api/health
 - Wiki files: `backend/teacher_wiki/` (bind-mounted; edits persist on the host)
 
 Stop: `Ctrl+C` (foreground), `./scripts/docker-dev.sh down`, or `docker compose down`.
@@ -84,6 +84,67 @@ Stop: `Ctrl+C` (foreground), `./scripts/docker-dev.sh down`, or `docker compose 
 Python and frontend code reload automatically inside the containers (see [Developing & restarting](#developing--restarting)). Rebuild a service after dependency changes: `docker compose up --build backend` or `... frontend`.
 
 If Next.js HMR is flaky on Windows Docker, `WATCHPACK_POLLING=true` is already set in [`compose.yaml`](compose.yaml).
+
+#### Multi-worktree Docker stacks
+
+When several Codex agents or developers work in parallel, run one isolated
+Compose stack per Git worktree. The helper script derives a stable Compose
+project name and free host ports from the worktree path, creates an ignored wiki
+sandbox when requested, and prints the URLs to use:
+
+```powershell
+.\scripts\worktree-stack.cmd config
+.\scripts\worktree-stack.cmd up --fresh-wiki
+```
+
+Equivalent Python entry point:
+
+```bash
+python scripts/worktree_stack.py up --fresh-wiki
+```
+
+By default the helper uses:
+
+- ignored wiki sandbox: `backend/teacher_wiki_sandbox/`
+- ignored beta data sandbox when `--beta` is set: `backend/beta_data_sandbox/`
+- app environment: `development`
+- model profile derived from `APP_ENV` unless `--model-profile` is set
+
+Common options:
+
+```powershell
+.\scripts\worktree-stack.cmd up --task-name plan-evidence --model-profile economy
+.\scripts\worktree-stack.cmd up --beta --fresh-beta-data
+.\scripts\worktree-stack.cmd up --app-env production --model-profile production
+.\scripts\worktree-stack.cmd up --wiki baseline --backend-port 8111 --frontend-port 3111
+.\scripts\worktree-stack.cmd down
+```
+
+The script is the preferred path for human-in-the-loop worktree testing because
+it avoids accidental port reuse and keeps mutable memory out of the tracked
+baseline wiki. Direct Compose still works and keeps the original defaults:
+
+```bash
+COMPOSE_PROJECT_NAME=kp_plan_evidence \
+BACKEND_PORT=8111 \
+FRONTEND_PORT=3111 \
+WIKI_HOST_DIR=./backend/teacher_wiki_sandbox \
+docker compose up --build
+```
+
+For direct Compose, create the sandbox first if you want mutable HITL memory
+isolated from the baseline fixture:
+
+```bash
+cp -R backend/teacher_wiki backend/teacher_wiki_sandbox
+```
+
+Model IDs and per-call reasoning overrides stay in `backend/.env`:
+`OPENAI_STRONG_MODEL`, `OPENAI_CHEAP_MODEL`,
+`OPENAI_CHAT_REASONING_EFFORT`, `OPENAI_IMPORTANT_REASONING_EFFORT`, and
+`OPENAI_UTILITY_REASONING_EFFORT`. The helper only sets `MODEL_PROFILE` when
+you pass `--model-profile economy` or `--model-profile production`; otherwise
+the backend derives the profile from `APP_ENV`.
 
 ### Option B - dev scripts (host venv + Node)
 
@@ -345,6 +406,17 @@ comparison run.
 
 Full documentation: [`backend/docs/evals.md`](backend/docs/evals.md),
 [`backend/tests/README.md`](backend/tests/README.md).
+
+### Completion report for agent work
+
+When a Codex agent finishes a task, it should report:
+
+- worktree/branch used
+- tests/evals run
+- whether a Docker app stack was started
+- frontend URL if HITL testing was used
+- any wiki files changed
+- known limitations or follow-up needed
 
 ## Workflow drafts and background jobs
 
