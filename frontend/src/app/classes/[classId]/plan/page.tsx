@@ -21,18 +21,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { client, type MemoryCandidate } from "@/lib/api";
-
-function dedupeMemoryCandidates(candidates: MemoryCandidate[]): MemoryCandidate[] {
-  const seen = new Set<string>();
-  const out: MemoryCandidate[] = [];
-  for (const c of candidates) {
-    const key = `${c.target}::${c.section ?? ""}::${c.candidate_update.trim().toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(c);
-  }
-  return out;
-}
+import { dedupeMemoryCandidates } from "@/lib/memory-candidates";
+import { errorMessageFromUnknown } from "@/lib/write-verification-error";
+import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 
 function PlanSaveFooter({
   classId,
@@ -88,12 +79,13 @@ function PlanSaveFooter({
     onError(null);
     try {
       await client.discardWorkflowDraft(classId, draftId);
+      useWorkflowDraftStore.getState().remove(draftId);
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem(`kp:composer:${draftId}`);
         window.location.reload();
       }
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Could not discard draft");
+      onError(errorMessageFromUnknown(e, "Could not discard draft"));
       setOperation("idle");
     }
   }, [classId, draftId, onError]);
@@ -277,7 +269,7 @@ function PlanWorkspace({
         goToLesson();
       }
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Save failed");
+      onError(errorMessageFromUnknown(e, "Save failed"));
       setLoading(false);
     }
   }, [

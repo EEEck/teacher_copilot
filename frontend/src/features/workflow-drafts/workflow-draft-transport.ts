@@ -13,6 +13,7 @@ export function fetchedDraftToSnapshot(
     mode === "ingest"
       ? (draft as IngestDraft).diary_markdown
       : (draft as PlanDraft).plan_markdown;
+  const ingest = mode === "ingest" ? (draft as IngestDraft) : null;
   return {
     mode,
     classId,
@@ -24,5 +25,7 @@ export function fetchedDraftToSnapshot(
     artifactHash: draft.artifact_hash,
     turnInProgress: draft.turn_in_progress ?? false,
     latestTurnComplete: draft.latest_turn_complete ?? true,
+    completeness: ingest?.completeness ?? null,
+    memoryState: ingest?.memory_state ?? null,
   };
 }

@@ -3,7 +3,7 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ThreadMessageLike } from "@assistant-ui/react";
 
 import type { ArtifactMode } from "@/components/assistant-ui/artifact-runtime-config";
-import type { ChatMessage } from "@/lib/api";
+import type { ChatMessage, CompletenessChecklist } from "@/lib/api";
 
 export type WorkflowDraftSnapshot = {
   mode: ArtifactMode;
@@ -16,6 +16,10 @@ export type WorkflowDraftSnapshot = {
   artifactHash: string;
   turnInProgress: boolean;
   latestTurnComplete: boolean;
+  /** Ingest checklist from draft fetch / background completion. */
+  completeness?: CompletenessChecklist | null;
+  /** Ingest memory runtime payload from draft fetch. */
+  memoryState?: Record<string, unknown> | null;
 };
 
 type WorkflowDraftState = {

@@ -31,6 +31,8 @@ describe("fetchedDraftToSnapshot", () => {
       artifactHash: "hash-2",
       turnInProgress: false,
       latestTurnComplete: true,
+      completeness: null,
+      memoryState: null,
     });
   });
 });

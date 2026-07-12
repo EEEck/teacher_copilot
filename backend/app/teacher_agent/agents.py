@@ -706,7 +706,7 @@ class AgentRunner:
         )
         if finalized is None:
             return (
-                "I had trouble processing that â€” could you try again?",
+                "I had trouble processing that — could you try again?",
                 current_draft,
                 False,
             )

@@ -200,16 +200,6 @@ class IngestService:
             needs_confirmation=not confirmed,
         )
 
-    def _apply_start_hint(
-        self, session: ArtifactSession, hint: IngestSessionStartRequest
-    ) -> None:
-        if not isinstance(session.runtime, MemoryRuntime):
-            return
-        resolved = self._resolve_start_hint(session.class_id, hint)
-        if resolved is None:
-            return
-        self._apply_start_hint_resolution(session, resolved)
-
     def _apply_start_hint_resolution(
         self, session: ArtifactSession, resolved: IngestStartHintResolution
     ) -> None:

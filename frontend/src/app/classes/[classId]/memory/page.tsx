@@ -44,6 +44,9 @@ import {
   loadPendingMemoryReview,
   savePendingMemoryReview,
 } from "@/lib/pending-memory-review";
+import { dedupeMemoryCandidates } from "@/lib/memory-candidates";
+import { errorMessageFromUnknown } from "@/lib/write-verification-error";
+import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 import { useAuiState } from "@assistant-ui/react";
 
 type CommitResult = {
@@ -91,18 +94,6 @@ function textFromRecord(value: unknown): string {
 
 function boolFromRecord(value: unknown): boolean {
   return typeof value === "boolean" ? value : false;
-}
-
-function dedupeMemoryCandidates(candidates: MemoryCandidate[]): MemoryCandidate[] {
-  const seen = new Set<string>();
-  const out: MemoryCandidate[] = [];
-  for (const c of candidates) {
-    const key = `${c.target}::${c.section ?? ""}::${c.candidate_update.trim().toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(c);
-  }
-  return out;
 }
 
 function CompactMemoryProposalCard({
@@ -431,6 +422,7 @@ function MemoryWorkspace({
     onError(null);
     try {
       await client.discardWorkflowDraft(classId, draftId);
+      useWorkflowDraftStore.getState().remove(draftId);
       if (typeof window !== "undefined") {
         clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
         window.sessionStorage.removeItem(`kp:composer:${draftId}`);
@@ -442,7 +434,7 @@ function MemoryWorkspace({
         }
       }
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Could not discard draft");
+      onError(errorMessageFromUnknown(e, "Could not discard draft"));
       setDiscarding(false);
     }
   }, [classId, discardRedirectHref, draftId, onError, reviewStorageKey, router]);
@@ -497,7 +489,7 @@ function MemoryWorkspace({
       initFromProposals(unique);
       setInReview(true);
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Could not prepare save");
+      onError(errorMessageFromUnknown(e, "Could not prepare save"));
     } finally {
       setLoading(false);
     }
@@ -556,7 +548,7 @@ function MemoryWorkspace({
       }
       router.refresh();
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Commit failed");
+      onError(errorMessageFromUnknown(e, "Commit failed"));
     } finally {
       setLoading(false);
     }

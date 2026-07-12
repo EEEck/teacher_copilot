@@ -190,7 +190,7 @@ export function ArtifactSessionPage({
       )}
       {error && (
         <Alert className="mb-6 border-destructive/30 bg-[var(--error-bg)] text-destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="whitespace-pre-line">{error}</AlertDescription>
         </Alert>
       )}
       {data.latestTurnComplete === false && data.turnInProgress !== true && (
