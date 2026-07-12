@@ -15,6 +15,7 @@ from app.services.memory_sweep_reviews import (
     MemorySweepReviewStore,
     build_memory_sweep_source_snapshot,
     memory_sweep_source_fingerprint,
+    memory_sweep_stale_reasons,
 )
 from app.teacher_agent.wiki_store import WikiStore
 from tests.conftest import CLASS_ID, StubAgentRunner
@@ -344,4 +345,58 @@ def test_memory_sweep_review_api_explains_new_candidates_that_make_a_draft_stale
     assert resumed.json()["is_stale"] is True
     assert resumed.json()["stale_reasons"] == [
         "1 new memory candidate arrived after this draft was generated."
+    ]
+
+
+def test_memory_sweep_stale_reasons_tolerates_asymmetric_wiki_targets() -> None:
+    """Union-of-keys diffs must not KeyError when a target exists on only one side.
+
+    HITL 2026-07-12: teaching_patterns.md present only in the live snapshot raised
+    KeyError and the frontend showed "Cannot reach API".
+    """
+    previous = {
+        "ledger_rows": [],
+        "wiki_targets": [],
+        "synthetic_student_summaries": [],
+    }
+    current = {
+        "ledger_rows": [],
+        "wiki_targets": [
+            {"target": "teaching_patterns.md", "excerpt_hash": "hash_live"}
+        ],
+        "synthetic_student_summaries": [],
+    }
+    reasons = memory_sweep_stale_reasons(previous, current)
+    assert reasons == [
+        "1 memory page changed after this draft was generated."
+    ]
+
+    # Removed target (only in previous) must also be safe.
+    reasons_removed = memory_sweep_stale_reasons(current, previous)
+    assert reasons_removed == [
+        "1 memory page changed after this draft was generated."
+    ]
+
+
+def test_memory_sweep_stale_reasons_tolerates_asymmetric_student_summaries() -> None:
+    previous = {
+        "ledger_rows": [],
+        "wiki_targets": [],
+        "synthetic_student_summaries": [
+            {
+                "candidate_id": "cand_only_previous",
+                "target": "students/anna.md",
+                "content_hash": "c1",
+                "excerpt_hash": "e1",
+            }
+        ],
+    }
+    current = {
+        "ledger_rows": [],
+        "wiki_targets": [],
+        "synthetic_student_summaries": [],
+    }
+    reasons = memory_sweep_stale_reasons(previous, current)
+    assert reasons == [
+        "1 student summary changed after this draft was generated."
     ]
