@@ -209,6 +209,44 @@ class MemorySweepApplyResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+MemorySweepReviewStatus = Literal[
+    "generating",
+    "ready",
+    "stale",
+    "applying",
+    "completed",
+    "discarded",
+    "failed",
+    "none",
+]
+
+
+class MemorySweepReviewOpenRequest(BaseModel):
+    refresh: bool = False
+    keep_stale: bool = False
+
+
+class MemorySweepReviewPatchRequest(BaseModel):
+    decisions: list[MemorySweepDecision] = Field(default_factory=list)
+
+
+class MemorySweepReviewResponse(BaseModel):
+    review_id: str = ""
+    class_id: str
+    status: MemorySweepReviewStatus
+    source_fingerprint: str = ""
+    generated_at: str | None = None
+    updated_at: str | None = None
+    completed_at: str | None = None
+    is_stale: bool = False
+    stale_reasons: list[str] = Field(default_factory=list)
+    has_teacher_edits: bool = False
+    queues: dict[str, list[MemorySweepCandidate]] = Field(default_factory=dict)
+    decisions: list[MemorySweepDecision] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    error: str = ""
+
+
 class TimelineEntry(BaseModel):
     date: str
     title: str
@@ -225,6 +263,7 @@ class TimelineEntry(BaseModel):
     status: str = "taught"
     committed_at: Optional[str] = None
     wiki_paths: list[str] = Field(default_factory=list)
+    memory_draft_id: Optional[str] = None
 
 
 class ClassTimeline(BaseModel):
@@ -314,6 +353,11 @@ class CompletenessChecklist(BaseModel):
 
 class IngestSession(BaseModel):
     session_id: str
+    draft_id: str = ""
+    artifact_revision: int = 0
+    artifact_hash: str = ""
+    turn_in_progress: bool = False
+    latest_turn_complete: bool = True
     class_id: str
     status: IngestSessionStatus
     messages: list[ChatMessage] = Field(default_factory=list)
@@ -332,6 +376,12 @@ class WikiUpdateProposal(BaseModel):
 
 
 class IngestDraft(BaseModel):
+    draft_id: str = ""
+    artifact_revision: int = 0
+    artifact_hash: str = ""
+    turn_in_progress: bool = False
+    latest_turn_complete: bool = True
+    messages: list[ChatMessage] = Field(default_factory=list)
     diary_markdown: str
     wiki_proposals: list[WikiUpdateProposal]
     completeness: CompletenessChecklist
@@ -349,6 +399,11 @@ class CommitIngestRequest(BaseModel):
     session_id: str
     diary_markdown: str
     approved_updates: list[ApprovedWikiUpdate]
+    draft_id: Optional[str] = None
+    expected_artifact_revision: Optional[int] = None
+    expected_artifact_hash: Optional[str] = None
+    source_artifact_revision: Optional[int] = None
+    source_artifact_hash: Optional[str] = None
 
 
 class CommitIngestResponse(BaseModel):
@@ -379,6 +434,9 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     diary_markdown: str
+    draft_id: str = ""
+    artifact_revision: int = 0
+    artifact_hash: str = ""
     completeness: CompletenessChecklist
     ready_to_propose: bool = False
     last_change_summary: str = ""
@@ -399,6 +457,11 @@ class PlanSessionStatus(str, Enum):
 
 class PlanSession(BaseModel):
     session_id: str
+    draft_id: str = ""
+    artifact_revision: int = 0
+    artifact_hash: str = ""
+    turn_in_progress: bool = False
+    latest_turn_complete: bool = True
     class_id: str
     status: PlanSessionStatus
     messages: list[ChatMessage] = Field(default_factory=list)
@@ -406,6 +469,12 @@ class PlanSession(BaseModel):
 
 
 class PlanDraft(BaseModel):
+    draft_id: str = ""
+    artifact_revision: int = 0
+    artifact_hash: str = ""
+    turn_in_progress: bool = False
+    latest_turn_complete: bool = True
+    messages: list[ChatMessage] = Field(default_factory=list)
     plan_markdown: str
 
 
@@ -418,6 +487,9 @@ class PlanChatRequest(BaseModel):
 class PlanChatResponse(BaseModel):
     reply: str
     plan_markdown: str
+    draft_id: str = ""
+    artifact_revision: int = 0
+    artifact_hash: str = ""
     ready_to_save: bool = False
     # Runtime context-manager state (lesson-planning chat).
     phase: Optional[str] = None
@@ -436,6 +508,9 @@ class SavePlanRequest(BaseModel):
     session_id: str
     lesson_date: str
     plan_markdown: str
+    draft_id: Optional[str] = None
+    expected_artifact_revision: Optional[int] = None
+    expected_artifact_hash: Optional[str] = None
 
 
 class SavePlanResponse(BaseModel):

@@ -44,21 +44,21 @@ from app.teacher_agent.tools import (
 )
 
 
-def chat_model_settings(reasoning_effort: str) -> ModelSettings | None:
+def chat_model_settings(
+    reasoning_effort: str, *, model: str | None = None
+) -> ModelSettings | None:
     """Reasoning settings for any agent (chat, sweep, or utility one-shot).
 
     Set effort to ``none`` to match the API default and skip hidden reasoning
     tokens. Non-reasoning models ignore this when unsupported. Call classes pass
     their profile-resolved effort (chat/important/utility — see config.py).
-    ``minimal`` is accepted as a legacy/local alias and normalized to ``low``,
-    because current GPT-5.5 reasoning models reject ``minimal`` at the API
-    boundary.
     """
-    if reasoning_effort == "none":
+    normalized_effort = reasoning_effort
+    if reasoning_effort == "minimal" and model and model.startswith("gpt-5.4"):
+        normalized_effort = "none"
+    if normalized_effort == "none":
         return None
-    if reasoning_effort == "minimal":
-        reasoning_effort = "low"
-    return ModelSettings(reasoning=Reasoning(effort=reasoning_effort, summary="auto"))
+    return ModelSettings(reasoning=Reasoning(effort=normalized_effort, summary="auto"))
 
 
 def build_ingest_agent(
@@ -79,7 +79,7 @@ def build_ingest_agent(
         attachments=[],
     )
     instructions = assembly["instructions"]
-    settings = chat_model_settings(reasoning_effort)
+    settings = chat_model_settings(reasoning_effort, model=model)
     return Agent(
         name="KlassenPilot Ingest",
         instructions=instructions,
@@ -111,7 +111,7 @@ def build_plan_chat_agent(
         attachments=[],
     )
     instructions = assembly["instructions"]
-    settings = chat_model_settings(reasoning_effort)
+    settings = chat_model_settings(reasoning_effort, model=model)
     return Agent(
         name="KlassenPilot Plan Chat",
         instructions=instructions,
@@ -140,14 +140,14 @@ def build_write_verification_agent(
             security_policy=TEACHER_AGENT_SECURITY_POLICY,
         ),
         model=model,
-        **_reasoning(reasoning_effort),
+        **_reasoning(reasoning_effort, model),
         tools=create_chat_wiki_tools(ctx),
         output_type=WriteVerificationOutput,
     )
 
 
-def _reasoning(reasoning_effort: str) -> dict:
-    settings = chat_model_settings(reasoning_effort)
+def _reasoning(reasoning_effort: str, model: str) -> dict:
+    settings = chat_model_settings(reasoning_effort, model=model)
     return {"model_settings": settings} if settings else {}
 
 
@@ -163,7 +163,7 @@ def build_plan_opening_agent(
             ),
         ),
         model=model,
-        **_reasoning(reasoning_effort),
+        **_reasoning(reasoning_effort, model),
     )
 
 
@@ -173,7 +173,7 @@ def build_compile_agent(model: str, *, reasoning_effort: str = "minimal") -> Age
         instructions=COMPILE_SYSTEM,
         model=model,
         output_type=CompileOutput,
-        **_reasoning(reasoning_effort),
+        **_reasoning(reasoning_effort, model),
     )
 
 
@@ -186,7 +186,7 @@ def build_plan_lesson_agent(
         model=model,
         tools=create_wiki_tools(ctx),
         output_type=PlanOutput,
-        **_reasoning(reasoning_effort),
+        **_reasoning(reasoning_effort, model),
     )
 
 
@@ -200,7 +200,7 @@ def build_lint_agent(
         + apply_char_limit(context, get_context_limits().lint_context_chars),
         model=model,
         tools=create_wiki_tools(ctx),
-        **_reasoning(reasoning_effort),
+        **_reasoning(reasoning_effort, model),
     )
 
 
@@ -215,7 +215,7 @@ def build_memory_compact_agent(
         ),
         model=model,
         output_type=MemoryCompactOutput,
-        **_reasoning(reasoning_effort),
+        **_reasoning(reasoning_effort, model),
     )
 
 
@@ -230,7 +230,7 @@ def build_profile_proposal_agent(
         ),
         model=model,
         output_type=ProfileProposalOutput,
-        **_reasoning(reasoning_effort),
+        **_reasoning(reasoning_effort, model),
     )
 
 
@@ -245,5 +245,5 @@ def build_memory_sweep_consolidation_agent(
         ),
         model=model,
         output_type=MemoryConsolidationOutput,
-        **_reasoning(reasoning_effort),
+        **_reasoning(reasoning_effort, model),
     )

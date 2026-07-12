@@ -9,6 +9,7 @@ from typing import Any
 from deepeval.metrics import BaseMetric, GEval
 from deepeval.test_case import LLMTestCase, SingleTurnParams
 
+from tests.eval.model_config import build_deepeval_model
 from tests.eval.plan_trace_scorer import score_trace_hygiene
 from tests.evals.goldens.workflow_scenarios import WorkflowScenarioGolden
 from tests.evals.harness import (
@@ -163,7 +164,6 @@ class WorkflowGroundedGEval(BaseMetric):
                 self.reason = "LLM judge skipped (RUN_LLM_CHAT_JUDGE!=1 or no criteria)."
                 self.success = True
                 return self.score
-            model = os.getenv("DEEPEVAL_MODEL") or os.getenv("OPENAI_FAST_MODEL", "gpt-4o-mini")
             metric = GEval(
                 name=f"WorkflowGrounded[{self.golden.golden_id}]",
                 criteria=self.golden.geval_criteria,
@@ -173,7 +173,7 @@ class WorkflowGroundedGEval(BaseMetric):
                     SingleTurnParams.ACTUAL_OUTPUT,
                 ],
                 threshold=self.threshold,
-                model=model,
+                model=build_deepeval_model(),
             )
             metric.measure(test_case)
             self.score = float(metric.score or 0.0)

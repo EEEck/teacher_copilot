@@ -6,8 +6,12 @@ wiki storage.
 ## Files
 
 - `artifact_session_service.py` - generic artifact-session lifecycle:
-  in-memory sessions, messages, current markdown artifact, readiness/status,
-  streaming finalization, and optional mode-specific runtime hooks.
+  messages, current markdown artifact, readiness/status, streaming
+  finalization, optional mode-specific runtime hooks, and open-or-resume against
+  the durable workflow-draft store.
+- `workflow_drafts.py` - SQLite-backed `WorkflowDraft` store under wiki
+  `workflow/`: chat messages, artifact markdown, runtime JSON, revision/hash,
+  and pending-turn resume metadata for Plan / Update Memory.
 - `artifact_spec.py` - per-mode policy for artifact sessions. Ingest and plan
   define their templates, readiness checks, turn runners, optional openings,
   mode-specific runtime/trace hooks, streaming adapters, final-event adapters,
@@ -24,6 +28,9 @@ wiki storage.
 - `memory_sweep.py` - V3 single-call Memory Sweep consolidation: builds the
   gate-passing claim packet, validates ID-referenced operations structurally,
   and assembles teacher-reviewable cards.
+- `memory_sweep_reviews.py` - backend-owned saved Memory Sweep review sessions
+  (generate/resume, fingerprint/stale detection, edits/decisions, apply,
+  discard, refresh).
 - `memory_skills.py` - typed memory write/read service contract for curated
   memory apply paths.
 - `plan_service.py` - lesson-planning adapter around the artifact session core,
@@ -33,8 +40,11 @@ wiki storage.
 
 ## Mental Model
 
-- `ArtifactSessionService` is the lifecycle core.
+- `ArtifactSessionService` is the lifecycle core; `workflow_drafts` is the
+  durable source of truth for active Plan/Update Memory drafts.
 - `ArtifactSpec` is the mode policy.
+- `memory_sweep_reviews` owns saved sweep review state the same way drafts own
+  chat artifacts; the frontend never authorizes apply from a local-only cache.
 - Streaming dispatch and final-event normalization go through `ArtifactSpec`;
   the shared session service should not branch on concrete modes such as
   `plan` or `ingest`.

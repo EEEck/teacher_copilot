@@ -40,9 +40,12 @@ plans only.
 - `../backend/app/teacher_agent/README.md` - agent prompts, tools, models, and runtime state.
 - `../backend/app/teacher_agent/wiki/README.md` - wiki facade internals.
 - `../backend/tests/README.md` - deterministic test structure and fixtures.
-- `../frontend/README.md` - frontend setup and folder map.
+- `../frontend/README.md` - frontend setup, durable drafts/jobs, and folder map.
+- `../frontend/DESIGN.md` - frontend design tokens and review/job UI rules.
 - `../frontend/src/README.md` - Next.js app, components, and frontend API flow.
 - `../frontend/src/app/README.md` - App Router page map.
+- `../frontend/src/features/README.md` - cross-route feature modules
+  (workflow drafts).
 - `../frontend/src/content/docs/en/` - teacher-facing beta docs (locale folder; add `de/` later) rendered at
   `/docs` in the app.
 - `../frontend/src/components/README.md` - frontend component layers.
@@ -62,7 +65,12 @@ plans only.
   `context_management.md`.
 - Current memory-capture, Memory Sweep, or wiki/input reconciliation changes
   should update `mem_v3/`; `mem_v2/` is historical background.
+- Workflow draft persistence, background-turn, or frontend draft-store changes
+  should update `agent_contracts.md` and the frontend READMEs under
+  `../frontend/` (especially `src/features/README.md`).
 - Agents SDK integration changes should update `agent_sdk_practices_review.md`
   when they change orchestration, session strategy, guardrails, approvals,
   tracing, or eval expectations.
 - Implementation plans belong in `../implementation_plans/`, not here.
+  Dated design/build notes under `superpowers/` are historical once shipped;
+  keep durable contracts in the files above.

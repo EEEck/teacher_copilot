@@ -44,8 +44,8 @@ Shipped:
 - Karpathy-style compiled wiki with compact class memory pages.
 - Deterministic wiki pathfinding and class-scoped read tools.
 - Shared `ArtifactSessionWorkspace` UI for diary and plan artifacts.
-- In-memory sessions; draft can survive browser refresh through session
-  recovery, but backend restart loses server chat history.
+- Backend-owned workflow drafts and Memory Sweep review sessions under wiki
+  `workflow/`; teachers can leave and resume without losing the turn or review.
 
 Known PM gaps:
 

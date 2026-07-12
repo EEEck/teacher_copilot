@@ -65,25 +65,30 @@ Shipped teacher workflows:
 - **Beta telemetry**: local operator-side capture of app sessions, visible
   conversations, draft snapshots, app events, approved wiki diffs, and a
   Markdown beta report CLI.
-- **Memory Sweep v1**: review accumulated memory signals, apply supported
-  writes, mark suggestions as already in memory / not needed / remove, and
-  defer uncertain suggestions for seven days while more evidence accumulates.
+- **Memory Sweep**: review accumulated memory signals in a backend-owned saved
+  review session, apply supported writes, dismiss or postpone suggestions, and
+  resume later without regenerating unless sources drifted.
 - **Memory V3 capture and sweep**: chat can stage review-only durable-memory
   candidates through the explicit `remember(...)` tool; a ledger/folding/gate
   layer throttles noise; the teacher-triggered sweep runs one high-reasoning
-  consolidation call and presents a teacher-first review brief.
+  consolidation call and presents a teacher-first Simple/Detailed review brief.
 
 Core implementation shape:
 
 - FastAPI backend with OpenAI Agents SDK.
-- Next.js frontend using a shared artifact-session shell.
+- Next.js frontend using a shared artifact-session shell and a workflow-draft
+  store for Plan / Update Memory chat.
+- Backend-owned workflow drafts and Memory Sweep reviews under the wiki
+  `workflow/` directory; teachers can leave and return without losing the turn
+  or review draft.
+- Durable background jobs (chat turns, sweep generation) surface in a small
+  Running box with one completion toast when finished.
 - Karpathy-style markdown wiki as canonical class memory.
 - Compact class memory and profile pages for fast context.
 - Teacher-approved durable writes; chat tools stay read-only.
 - Model routing is tiered by call class: production uses the top model for chat
   and sweep quality, while economy may use a cheaper chat model but still keeps
   the sweep on the strong model.
-- In-memory prototype sessions; restart loses server chat history.
 - Beta auth is intentionally simple: invite codes plus an opaque cookie. The
   code path resolves every request through a `RequestIdentity`, so later
   production auth can replace only the identity provider instead of rewriting

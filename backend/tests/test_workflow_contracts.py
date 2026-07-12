@@ -29,7 +29,7 @@ def test_registered_workflows_declare_runtime_trace_and_stream_contracts():
 
 
 def test_artifact_session_streaming_uses_workflow_spec_not_mode_branch():
-    source = inspect.getsource(ArtifactSessionService.chat_stream)
+    source = inspect.getsource(ArtifactSessionService._execute_chat_stream_turn)
     assert 'session.mode == "ingest"' not in source
     assert "spec.stream_turn" in source
     assert "spec.final_event_to_turn_result" in source

@@ -11,6 +11,7 @@ The profile derives from APP_ENV when unset.
 from __future__ import annotations
 
 from app.config import Settings
+from app.teacher_agent.agent import chat_model_settings
 
 _MODELS = {"openai_strong_model": "STRONG", "openai_cheap_model": "CHEAP"}
 
@@ -77,3 +78,17 @@ def test_legacy_reasoning_effort_still_overrides_chat():
         **_MODELS,
     )
     assert s2.resolved_chat_effort() == "none"
+
+
+def test_gpt_5_4_models_normalize_unsupported_minimal_effort():
+    settings = chat_model_settings("minimal", model="gpt-5.4-mini")
+
+    assert settings is None
+
+
+def test_other_models_keep_minimal_effort():
+    settings = chat_model_settings("minimal", model="gpt-5.5")
+
+    assert settings is not None
+    assert settings.reasoning is not None
+    assert settings.reasoning.effort == "minimal"

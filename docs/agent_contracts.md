@@ -22,6 +22,48 @@ For file-by-file memory scope and update rules, see `memory_hierarchy.md`.
 - Ask at most one targeted question when blocked.
 - Never silently mutate wiki files from a planning turn.
 
+## Workflow Draft Persistence Contract
+
+Artifact-style workflows use a shared backend-owned `WorkflowDraft` store under
+the wiki `workflow/` directory. The store is the source of truth for chat
+messages, the markdown artifact, runtime JSON, status, and artifact
+revision/hash metadata during draft and review.
+
+- Existing start-session endpoints are open-or-resume for active drafts. The
+  draft identity is workflow-generic: `workspace_id`, `class_id`, `mode`,
+  `intent`, optional `target_kind`, and optional `lesson_date`.
+- Frontend caches are convenience only. Session storage may hold unsent composer
+  text and a visual pending-review cache, but it must not authorize writes.
+  Plan and Update Memory chat render through a Zustand draft snapshot cache
+  (`frontend/src/features/workflow-drafts/`) and assistant-ui
+  `useExternalStoreRuntime`; the backend `WorkflowDraft` remains authoritative.
+  Background-turn completion toasts and the Running box are owned by one
+  app-level notifier that claims a locally initiated pending-turn marker
+  exactly once (`pending-chat-turns`, including `memory_sweep` generation).
+- Review and save actions must include the expected artifact revision/hash. If
+  the artifact changed after review was prepared, the backend rejects the write
+  with `draft_changed_since_review_created`.
+- Update Memory commit uses the backend-stored diary markdown when a draft id
+  and revision/hash are present. Client-supplied markdown is legacy fallback,
+  not the authoritative write source.
+- Lesson Plan save follows the same revision/hash guard and saves the
+  backend-stored plan markdown for draft-aware clients.
+- Streamed chat turns are backend-owned once accepted. The browser stream is a
+  subscriber, so navigating away must not cancel an in-flight model turn; the
+  final assistant message and artifact update are persisted to the draft when
+  the turn completes.
+- A streamed turn persists its attachment payload before execution. If a backend
+  restart interrupts it, reopening the same draft resumes that pending turn from
+  the backend-owned messages/runtime rather than leaving a permanent loading
+  state. Legacy incomplete rows without a persisted pending-turn payload resolve
+  to the interrupted-turn state; review/save remains blocked until retry or
+  discard.
+- A discarded or committed/saved draft is terminal and must not be resumed by a
+  later page bootstrap.
+- Future workflows should reuse this store through `ArtifactSessionService` and
+  `ArtifactSpec` runtime dump/load hooks instead of creating workflow-local
+  session stores.
+
 ## Teacher-Agent Security Contract
 
 The lightweight security source of truth is
@@ -427,8 +469,14 @@ Reads:
 Writes:
 
 - `/memory/sweep/propose` writes nothing.
-- `/memory/sweep/apply` accepts a teacher-reviewed decision set, applies
-  approved memory writes first, then updates represented ledger rows.
+- `/memory/sweep/review` is the normal UI entrypoint. It opens or creates a
+  backend-owned saved review for the current ledger/wiki fingerprint and stores
+  generated cards, teacher edits, and selected decisions in SQLite.
+- `/memory/sweep/review/{review_id}/apply` applies backend-stored decisions
+  only if the current ledger/wiki fingerprint still matches the saved review.
+  Stale reviews return `409 stale_review`.
+- `/memory/sweep/propose` and `/memory/sweep/apply` remain compatibility/debug
+  routes. New UI code should not use them as the authoritative review state.
 - Approved student-summary decisions update only `## Student Summary` in the
   affected `students/S-###.md`, then rebuild `students.md` from those approved
   summaries.
@@ -442,6 +490,16 @@ Proposal behavior:
 - Backend Memory Sweep owns candidate identity, channel, review queue, target,
   and status. The SQLite ledger stores evidence rows; insert-time folding
   normalizes section vocabulary and clusters exact/near duplicate captures.
+- A saved Memory Sweep review is generated once for an unchanged ledger/wiki
+  fingerprint. Returning to the page resumes the saved review instead of
+  rerunning consolidation. If the source fingerprint changed, unedited reviews
+  may refresh automatically; edited reviews surface as stale until the teacher
+  chooses refresh, keep reviewing, or discard. A stale response names the
+  changed candidate, memory-page, or student-summary inputs.
+- Frontend Memory Sweep is independent of assistant-ui. Generation is a durable
+  backend job tracked like other pending turns. Class-home badges show
+  “Stale draft” only when teacher edits are at risk; unedited fingerprint drift
+  keeps a quieter “Draft saved …” label while open/refresh can regenerate.
 - The promotion gate decides which rows reach review: explicit teacher asks are
   eligible immediately, inferred claims need reinforcement across distinct
   occasions, stale unreinforced singletons expire silently, and rejected
@@ -475,9 +533,10 @@ Proposal behavior:
   ignores unknown candidate ids from model output, and preserves evidence
   ownership. A single candidate row may support multiple target-specific review
   cards only when those target scopes are explicit and validated.
-- The UI should submit sweep decisions as a batch. Ledger row status is resolved
-  only after the whole decision set is processed, so overlapping evidence does
-  not disappear during proposal review.
+- The UI should persist sweep decisions to the saved review and apply them as a
+  batch by `review_id`. Ledger row status is resolved only after the whole
+  decision set is processed, so overlapping evidence does not disappear during
+  proposal review.
 - `canonical_wiki` remains review-only; it is never converted into a direct
   write target by the proposer.
 - Student summaries must avoid sensitive or high-stakes profiling language:
@@ -687,7 +746,7 @@ Purpose:
 Plan trace endpoint:
 
 - `GET /classes/{id}/plan/sessions/{session_id}/trace` returns a read-only
-  debug bundle for the in-memory planning session.
+  debug bundle for the active planning session.
 - The bundle includes prompt stack sections, current `lessonplan.md`, compact
   runtime state, recent messages, captured streamed events, evidence briefs, and
   raw evidence refs.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator, Callable
@@ -13,7 +14,9 @@ from app.api.deps import (
     get_beta_auth_service,
     get_ingest_service,
     get_memory_candidate_ledger,
+    get_memory_sweep_review_store,
     get_plan_service,
+    get_workflow_draft_store,
     get_wiki,
 )
 from app.config import get_settings
@@ -46,6 +49,9 @@ from app.schemas.api import (
     MemorySweepApplyResponse,
     MemorySweepCandidate,
     MemorySweepProposalResponse,
+    MemorySweepReviewOpenRequest,
+    MemorySweepReviewPatchRequest,
+    MemorySweepReviewResponse,
     MemoryTraceResponse,
     PlanChatRequest,
     PlanChatResponse,
@@ -77,7 +83,16 @@ from app.services.memory_sweep import (
     propose_memory_sweep_review,
     synthetic_student_summary_candidate_ids,
 )
+from app.services.memory_sweep_reviews import (
+    MemorySweepReviewRecord,
+    MemorySweepReviewStore,
+    build_memory_sweep_source_snapshot,
+    memory_sweep_source_fingerprint,
+    memory_sweep_stale_reasons,
+)
+from app.services.memory_gate import expire_stale_candidates
 from app.services.plan_service import PlanService
+from app.services.workflow_drafts import WorkflowDraftStore
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.memory_targets import canonical_memory_target, compact_key_for_target
 from app.teacher_agent.stream_events import SseError, sse_encode
@@ -123,6 +138,41 @@ def _memory_sweep_api_queues(grouped_cards) -> dict[str, list[MemorySweepCandida
         queue: [MemorySweepCandidate(**card.__dict__) for card in cards]
         for queue, cards in grouped_cards.items()
     }
+
+
+def _memory_sweep_review_response(
+    record: MemorySweepReviewRecord | None,
+    *,
+    class_id: str,
+    is_stale: bool = False,
+    stale_reasons: list[str] | None = None,
+) -> MemorySweepReviewResponse:
+    if record is None:
+        return MemorySweepReviewResponse(class_id=class_id, status="none")
+    proposals = record.proposals or {}
+    decisions = [
+        decision
+        for decision in MemorySweepApplyRequest(decisions=record.decisions).decisions
+    ]
+    return MemorySweepReviewResponse(
+        review_id=record.review_id,
+        class_id=record.class_id,
+        status=record.status,
+        source_fingerprint=record.source_fingerprint,
+        generated_at=record.generated_at,
+        updated_at=record.updated_at,
+        completed_at=record.completed_at,
+        is_stale=is_stale or record.status == "stale",
+        stale_reasons=stale_reasons or [],
+        has_teacher_edits=record.has_teacher_edits,
+        queues={
+            queue: [MemorySweepCandidate(**card) for card in cards]
+            for queue, cards in (proposals.get("queues") or {}).items()
+        },
+        decisions=decisions,
+        warnings=list(proposals.get("warnings") or []),
+        error=record.error,
+    )
 
 
 def _memory_sweep_status_for_action(action: str) -> str | None:
@@ -180,6 +230,116 @@ def _memory_apply_candidate_paths(wiki: WikiStore, class_id: str, items) -> list
         if rel and rel not in paths:
             paths.append(rel)
     return paths
+
+
+def _apply_memory_sweep_decision_batch(
+    *,
+    class_id: str,
+    body: MemorySweepApplyRequest,
+    request: Request,
+    wiki: WikiStore,
+    ledger: MemoryCandidateLedger,
+    beta_auth: BetaAuthService,
+) -> MemorySweepApplyResponse:
+    try:
+        cls = wiki.get_class(class_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    if not body.decisions:
+        raise HTTPException(
+            status_code=400, detail="No Memory Sweep decisions provided"
+        )
+
+    open_rows = ledger.list_candidates(
+        class_id=class_id,
+        subject=cls.subject,
+        statuses=OPEN_STATUSES,
+        include_global=True,
+    )
+    open_ids = {row.id for row in open_rows}
+    synthetic_ids = synthetic_student_summary_candidate_ids(wiki, class_id)
+    requested_ids = {
+        candidate_id
+        for decision in body.decisions
+        for candidate_id in decision.candidate_ids
+    }
+    unknown_ids = sorted(requested_ids - open_ids - synthetic_ids)
+    if unknown_ids:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown or closed Memory Sweep candidate ids: {', '.join(unknown_ids)}",
+        )
+
+    applied: list[str] = []
+    skipped: list[str] = []
+    warnings: list[str] = []
+    successful_apply_indexes: list[int] = []
+    candidate_paths = _memory_apply_candidate_paths(wiki, class_id, body.decisions)
+    before_by_path = {path: _read_wiki_rel(wiki, path) for path in candidate_paths}
+    if any(decision.action == "apply" for decision in body.decisions):
+        applied, skipped, warnings, successful_apply_indexes = (
+            apply_curated_sweep_decisions(wiki, class_id, body.decisions)
+        )
+        _record_beta_wiki_diff(
+            request,
+            beta_auth,
+            wiki,
+            class_id=class_id,
+            app_session_id=None,
+            mode="memory",
+            action="memory_sweep_apply",
+            before_by_path=before_by_path,
+            changed_paths=applied,
+            metadata={"review_batch_id": body.review_batch_id, "skipped": skipped},
+        )
+
+    successful_apply_index_set = set(successful_apply_indexes)
+    applied_decisions = [
+        decision
+        for index, decision in enumerate(body.decisions)
+        if decision.action == "apply" and index in successful_apply_index_set
+    ]
+    effective_body = MemorySweepApplyRequest(
+        decisions=[
+            *applied_decisions,
+            *[decision for decision in body.decisions if decision.action != "apply"],
+        ],
+        review_batch_id=body.review_batch_id,
+    )
+    statuses = _resolve_memory_sweep_statuses(effective_body)
+    now = _utc_now()
+    review_batch_id = body.review_batch_id or f"memory_sweep_{now}"
+    updated_ids: list[str] = []
+    try:
+        for candidate_id, status in statuses.items():
+            if is_synthetic_student_summary_candidate_id(candidate_id):
+                continue
+            rejection_reason = None
+            for decision in body.decisions:
+                if candidate_id in decision.candidate_ids and decision.rejection_reason:
+                    rejection_reason = decision.rejection_reason
+                    break
+            ledger.update_status(
+                candidate_id,
+                status,
+                updated_at=now,
+                rejection_reason=rejection_reason,
+                review_batch_id=review_batch_id,
+                promoted_at=now if status in {"approved", "applied"} else None,
+            )
+            updated_ids.append(candidate_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    return MemorySweepApplyResponse(
+        class_id=class_id,
+        applied_wiki_paths=applied,
+        updated_candidate_ids=updated_ids,
+        skipped=skipped,
+        warnings=warnings,
+    )
 
 
 def _record_beta_wiki_diff(
@@ -317,6 +477,12 @@ def _sse_payload_of_type(line: str, event_type: str) -> dict | None:
 
 def _sse_final_payload(line: str) -> dict | None:
     return _sse_payload_of_type(line, "final")
+
+
+def _raise_workflow_value_error(exc: ValueError, *, default_status: int) -> None:
+    if str(exc) == "draft_changed_since_review_created":
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    raise HTTPException(status_code=default_status, detail=str(exc)) from exc
 
 
 async def _stream_chat_with_beta_telemetry(
@@ -512,10 +678,21 @@ def list_classes(wiki: WikiStore = Depends(get_wiki)) -> ClassesResponse:
 
 
 @router.get("/classes/{class_id}/timeline", response_model=ClassTimeline)
-def get_timeline(class_id: str, wiki: WikiStore = Depends(get_wiki)) -> ClassTimeline:
+def get_timeline(
+    class_id: str,
+    wiki: WikiStore = Depends(get_wiki),
+    workflow_drafts: WorkflowDraftStore = Depends(get_workflow_draft_store),
+) -> ClassTimeline:
     try:
         wiki.get_class(class_id)
-        return wiki.get_timeline(class_id)
+        timeline = wiki.get_timeline(class_id)
+        active_by_date: dict[str, str] = {}
+        for draft in workflow_drafts.list_active_for_class(class_id, mode="ingest"):
+            if draft.lesson_date and draft.lesson_date not in active_by_date:
+                active_by_date[draft.lesson_date] = draft.draft_id
+        for entry in timeline.entries:
+            entry.memory_draft_id = active_by_date.get(entry.date)
+        return timeline
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -602,6 +779,22 @@ def get_wiki_file(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post("/classes/{class_id}/workflow-drafts/{draft_id}/discard")
+def discard_workflow_draft(
+    class_id: str,
+    draft_id: str,
+    store: WorkflowDraftStore = Depends(get_workflow_draft_store),
+) -> dict[str, str]:
+    try:
+        row = store.get(draft_id)
+        if row.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Workflow draft not found")
+        row = store.discard(draft_id)
+        return {"draft_id": row.draft_id, "status": row.status}
+    except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
@@ -931,6 +1124,256 @@ async def propose_memory_sweep(
     )
 
 
+def _memory_sweep_source(
+    *,
+    wiki: WikiStore,
+    ledger: MemoryCandidateLedger,
+    class_id: str,
+) -> tuple[dict, str]:
+    # The sweep itself expires stale singleton candidates. Do that before
+    # snapshotting so its own housekeeping cannot stale a newly created review.
+    expire_stale_candidates(ledger, datetime.now(timezone.utc))
+    source = build_memory_sweep_source_snapshot(
+        wiki=wiki,
+        ledger=ledger,
+        class_id=class_id,
+    )
+    return source, memory_sweep_source_fingerprint(source)
+
+
+def _create_memory_sweep_review(
+    *,
+    class_id: str,
+    source: dict,
+    fingerprint: str,
+    wiki: WikiStore,
+    ledger: MemoryCandidateLedger,
+    agents: AgentRunner,
+    store: MemorySweepReviewStore,
+) -> MemorySweepReviewRecord:
+    review = store.create_generating(
+        class_id=class_id,
+        source_fingerprint=fingerprint,
+        source=source,
+    )
+    asyncio.create_task(
+        _generate_memory_sweep_review(
+            review_id=review.review_id,
+            class_id=class_id,
+            wiki=wiki,
+            ledger=ledger,
+            agents=agents,
+            store=store,
+        ),
+        name=f"memory-sweep-review:{review.review_id}",
+    )
+    return review
+
+
+async def _generate_memory_sweep_review(
+    *,
+    review_id: str,
+    class_id: str,
+    wiki: WikiStore,
+    ledger: MemoryCandidateLedger,
+    agents: AgentRunner,
+    store: MemorySweepReviewStore,
+) -> None:
+    try:
+        result = await propose_memory_sweep_review(
+            wiki=wiki,
+            ledger=ledger,
+            agents=agents,
+            class_id=class_id,
+            include_student_summaries=True,
+        )
+        queues = {
+            queue: [
+                MemorySweepCandidate(**card.__dict__).model_dump()
+                for card in cards
+            ]
+            for queue, cards in result.cards_by_queue.items()
+        }
+        store.mark_ready(
+            review_id,
+            proposals={
+                "class_id": result.class_id,
+                "subject": result.subject,
+                "queues": queues,
+                "warnings": result.warnings,
+            },
+        )
+    except Exception as exc:
+        logger.exception("Memory Sweep review generation failed")
+        store.mark_failed(review_id, error=str(exc))
+
+
+@router.get(
+    "/classes/{class_id}/memory/sweep/review",
+    response_model=MemorySweepReviewResponse,
+)
+def get_memory_sweep_review(
+    class_id: str,
+    wiki: WikiStore = Depends(get_wiki),
+    ledger: MemoryCandidateLedger = Depends(get_memory_candidate_ledger),
+    store: MemorySweepReviewStore = Depends(get_memory_sweep_review_store),
+) -> MemorySweepReviewResponse:
+    try:
+        wiki.get_class(class_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    active = store.get_active(class_id)
+    if active is None:
+        return _memory_sweep_review_response(None, class_id=class_id)
+    # A review generation already owns a source snapshot. Rebuilding it on
+    # every frontend status poll is expensive and cannot affect the result in
+    # flight; validate freshness once generation has reached a terminal state.
+    if active.status == "generating":
+        return _memory_sweep_review_response(active, class_id=class_id)
+    source, fingerprint = _memory_sweep_source(wiki=wiki, ledger=ledger, class_id=class_id)
+    is_stale = active.source_fingerprint != fingerprint
+    if is_stale and active.status != "stale":
+        active = store.mark_stale(active.review_id)
+    return _memory_sweep_review_response(
+        active,
+        class_id=class_id,
+        is_stale=is_stale,
+        stale_reasons=memory_sweep_stale_reasons(active.source, source) if is_stale else [],
+    )
+
+
+@router.post(
+    "/classes/{class_id}/memory/sweep/review",
+    response_model=MemorySweepReviewResponse,
+)
+async def open_memory_sweep_review(
+    class_id: str,
+    body: MemorySweepReviewOpenRequest | None = None,
+    wiki: WikiStore = Depends(get_wiki),
+    ledger: MemoryCandidateLedger = Depends(get_memory_candidate_ledger),
+    agents: AgentRunner = Depends(get_agents),
+    store: MemorySweepReviewStore = Depends(get_memory_sweep_review_store),
+) -> MemorySweepReviewResponse:
+    try:
+        wiki.get_class(class_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    request_body = body or MemorySweepReviewOpenRequest()
+    source, fingerprint = _memory_sweep_source(wiki=wiki, ledger=ledger, class_id=class_id)
+    active = store.get_active(class_id)
+    if active is not None and request_body.refresh:
+        store.discard(active.review_id)
+        active = None
+    if active is not None and active.source_fingerprint == fingerprint:
+        return _memory_sweep_review_response(active, class_id=class_id)
+    if active is not None and active.source_fingerprint != fingerprint:
+        if active.has_teacher_edits and not request_body.keep_stale:
+            stale = store.mark_stale(active.review_id)
+            return _memory_sweep_review_response(
+                stale,
+                class_id=class_id,
+                is_stale=True,
+                stale_reasons=memory_sweep_stale_reasons(active.source, source),
+            )
+        store.discard(active.review_id)
+    review = _create_memory_sweep_review(
+        class_id=class_id,
+        source=source,
+        fingerprint=fingerprint,
+        wiki=wiki,
+        ledger=ledger,
+        agents=agents,
+        store=store,
+    )
+    return _memory_sweep_review_response(review, class_id=class_id)
+
+
+@router.patch(
+    "/classes/{class_id}/memory/sweep/review/{review_id}",
+    response_model=MemorySweepReviewResponse,
+)
+def patch_memory_sweep_review(
+    class_id: str,
+    review_id: str,
+    body: MemorySweepReviewPatchRequest,
+    wiki: WikiStore = Depends(get_wiki),
+    store: MemorySweepReviewStore = Depends(get_memory_sweep_review_store),
+) -> MemorySweepReviewResponse:
+    try:
+        wiki.get_class(class_id)
+        review = store.get(review_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    if review.class_id != class_id:
+        raise HTTPException(status_code=404, detail="Memory Sweep review not found")
+    updated = store.save_decisions(
+        review_id,
+        decisions=[decision.model_dump() for decision in body.decisions],
+    )
+    return _memory_sweep_review_response(updated, class_id=class_id)
+
+
+@router.post(
+    "/classes/{class_id}/memory/sweep/review/{review_id}/discard",
+    response_model=MemorySweepReviewResponse,
+)
+def discard_memory_sweep_review(
+    class_id: str,
+    review_id: str,
+    wiki: WikiStore = Depends(get_wiki),
+    store: MemorySweepReviewStore = Depends(get_memory_sweep_review_store),
+) -> MemorySweepReviewResponse:
+    try:
+        wiki.get_class(class_id)
+        review = store.get(review_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    if review.class_id != class_id:
+        raise HTTPException(status_code=404, detail="Memory Sweep review not found")
+    discarded = store.discard(review_id)
+    return _memory_sweep_review_response(discarded, class_id=class_id)
+
+
+@router.post(
+    "/classes/{class_id}/memory/sweep/review/{review_id}/apply",
+    response_model=MemorySweepApplyResponse,
+)
+def apply_memory_sweep_review(
+    class_id: str,
+    review_id: str,
+    request: Request,
+    wiki: WikiStore = Depends(get_wiki),
+    ledger: MemoryCandidateLedger = Depends(get_memory_candidate_ledger),
+    store: MemorySweepReviewStore = Depends(get_memory_sweep_review_store),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> MemorySweepApplyResponse:
+    try:
+        wiki.get_class(class_id)
+        review = store.get(review_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    if review.class_id != class_id:
+        raise HTTPException(status_code=404, detail="Memory Sweep review not found")
+    _, fingerprint = _memory_sweep_source(wiki=wiki, ledger=ledger, class_id=class_id)
+    if review.source_fingerprint != fingerprint:
+        store.mark_stale(review_id)
+        raise HTTPException(status_code=409, detail="stale_review")
+    store.mark_applying(review_id)
+    result = _apply_memory_sweep_decision_batch(
+        class_id=class_id,
+        body=MemorySweepApplyRequest(
+            decisions=review.decisions,
+            review_batch_id=review.review_id,
+        ),
+        request=request,
+        wiki=wiki,
+        ledger=ledger,
+        beta_auth=beta_auth,
+    )
+    store.mark_completed(review_id)
+    return result
+
+
 @router.post(
     "/classes/{class_id}/memory/sweep/apply",
     response_model=MemorySweepApplyResponse,
@@ -944,104 +1387,13 @@ def apply_memory_sweep(
     beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> MemorySweepApplyResponse:
     """Apply a teacher-reviewed sweep decision set, then update ledger status."""
-    try:
-        cls = wiki.get_class(class_id)
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    if not body.decisions:
-        raise HTTPException(
-            status_code=400, detail="No Memory Sweep decisions provided"
-        )
-
-    open_rows = ledger.list_candidates(
+    return _apply_memory_sweep_decision_batch(
         class_id=class_id,
-        subject=cls.subject,
-        statuses=OPEN_STATUSES,
-        include_global=True,
-    )
-    open_ids = {row.id for row in open_rows}
-    synthetic_ids = synthetic_student_summary_candidate_ids(wiki, class_id)
-    requested_ids = {
-        candidate_id
-        for decision in body.decisions
-        for candidate_id in decision.candidate_ids
-    }
-    unknown_ids = sorted(requested_ids - open_ids - synthetic_ids)
-    if unknown_ids:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unknown or closed Memory Sweep candidate ids: {', '.join(unknown_ids)}",
-        )
-
-    applied: list[str] = []
-    skipped: list[str] = []
-    warnings: list[str] = []
-    successful_apply_indexes: list[int] = []
-    candidate_paths = _memory_apply_candidate_paths(wiki, class_id, body.decisions)
-    before_by_path = {path: _read_wiki_rel(wiki, path) for path in candidate_paths}
-    if any(decision.action == "apply" for decision in body.decisions):
-        applied, skipped, warnings, successful_apply_indexes = (
-            apply_curated_sweep_decisions(wiki, class_id, body.decisions)
-        )
-        _record_beta_wiki_diff(
-            request,
-            beta_auth,
-            wiki,
-            class_id=class_id,
-            app_session_id=None,
-            mode="memory",
-            action="memory_sweep_apply",
-            before_by_path=before_by_path,
-            changed_paths=applied,
-            metadata={"review_batch_id": body.review_batch_id, "skipped": skipped},
-        )
-
-    successful_apply_index_set = set(successful_apply_indexes)
-    applied_decisions = [
-        decision
-        for index, decision in enumerate(body.decisions)
-        if decision.action == "apply" and index in successful_apply_index_set
-    ]
-    effective_body = MemorySweepApplyRequest(
-        decisions=[
-            *applied_decisions,
-            *[decision for decision in body.decisions if decision.action != "apply"],
-        ],
-        review_batch_id=body.review_batch_id,
-    )
-    statuses = _resolve_memory_sweep_statuses(effective_body)
-    now = _utc_now()
-    review_batch_id = body.review_batch_id or f"memory_sweep_{now}"
-    updated_ids: list[str] = []
-    try:
-        for candidate_id, status in statuses.items():
-            if is_synthetic_student_summary_candidate_id(candidate_id):
-                continue
-            rejection_reason = None
-            for decision in body.decisions:
-                if candidate_id in decision.candidate_ids and decision.rejection_reason:
-                    rejection_reason = decision.rejection_reason
-                    break
-            ledger.update_status(
-                candidate_id,
-                status,
-                updated_at=now,
-                rejection_reason=rejection_reason,
-                review_batch_id=review_batch_id,
-                promoted_at=now if status in {"approved", "applied"} else None,
-            )
-            updated_ids.append(candidate_id)
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-
-    return MemorySweepApplyResponse(
-        class_id=class_id,
-        applied_wiki_paths=applied,
-        updated_candidate_ids=updated_ids,
-        skipped=skipped,
-        warnings=warnings,
+        body=body,
+        request=request,
+        wiki=wiki,
+        ledger=ledger,
+        beta_auth=beta_auth,
     )
 
 
@@ -1436,7 +1788,7 @@ async def ingest_commit(
             )
         return response
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        _raise_workflow_value_error(e, default_status=400)
     except WriteVerificationBlocked as exc:
         return JSONResponse(
             status_code=409,
@@ -1746,7 +2098,7 @@ async def plan_save(
             ).model_dump(),
         )
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
+        _raise_workflow_value_error(e, default_status=422)
 
 
 @router.post("/classes/{class_id}/plan-lesson", response_model=LessonPlan)

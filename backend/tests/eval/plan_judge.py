@@ -10,6 +10,7 @@ import json
 import os
 from typing import Any
 
+from tests.eval.model_config import resolve_eval_model
 from tests.eval.plan_trace_scorer import ScoreResult
 
 RUBRIC = """You are reviewing a Gymnasium chemistry lesson plan draft.
@@ -41,10 +42,10 @@ def score_lesson_plan_with_llm_judge(artifact_md: str, *, model: str | None = No
             return ScoreResult(passed=True, warnings=["LLM judge skipped (no OPENAI_API_KEY)"])
 
         client = OpenAI(api_key=api_key)
-        chosen_model = model or os.getenv("OPENAI_FAST_MODEL", "gpt-4o-mini")
+        model_config = resolve_eval_model(model)
         response = client.chat.completions.create(
-            model=chosen_model,
-            temperature=0,
+            model=model_config.model,
+            reasoning_effort=model_config.reasoning_effort,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": RUBRIC},

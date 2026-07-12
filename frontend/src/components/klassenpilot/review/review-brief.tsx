@@ -2,6 +2,7 @@
 
 import {
   ChevronDownIcon,
+  LoaderCircleIcon,
   MinusIcon,
   PencilLineIcon,
   PlusIcon,
@@ -211,7 +212,14 @@ export function ReviewBrief({
             onClick={onSave}
             disabled={saving || saveDisabled}
           >
-            {saving ? "Saving…" : `Save ${approvedCount === entries.length ? "all" : "selected"} (${approvedCount})`}
+            {saving ? (
+              <>
+                <LoaderCircleIcon className="animate-spin" />
+                Saving…
+              </>
+            ) : (
+              `Save ${approvedCount === entries.length ? "all" : "selected"} (${approvedCount})`
+            )}
           </Button>
         </div>
       </div>

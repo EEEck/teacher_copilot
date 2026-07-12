@@ -52,11 +52,31 @@ turns enough room before the backend emits a timeout SSE event. For faster local
 smoke checks, lower `OPENAI_REASONING_EFFORT` or `AGENT_TIMEOUT_SECONDS` in
 `backend/.env`.
 
-## Chat sessions and memory targets (prototype)
+## Chat sessions, workflow drafts, and memory targets
 
-Ingest and plan sessions are stored **in memory** (`ArtifactSessionService`). Restarting uvicorn clears server-side session state. The frontend recreates a session and restores the draft markdown when the API returns “unknown session”; chat history in the tab is not restored.
+Ingest and plan artifact sessions use the shared `ArtifactSessionService` plus a
+SQLite-backed `WorkflowDraftStore` at
+`{wiki_root}/workflow/workflow_drafts.sqlite`. The durable draft stores the chat
+messages, current markdown artifact, runtime JSON, status, and artifact
+revision/hash. Restarting uvicorn no longer loses active Update Memory or Plan
+drafts; the start-session endpoints reopen the active draft for that workflow
+identity.
 
-**SQLite is not required for the prototype.** Session persistence is deferred until multi-worker deploys or durable server-side history are needed. Current product direction lives in [`product_backlog.md`](../implementation_plans/product_backlog.md).
+The frontend still keeps only convenience state locally: unsent composer text
+keyed by `draft_id`, non-authoritative review UI cache, and session markers for
+durable background jobs (`pending-chat-turns`, including Memory Sweep
+generation). Plan/Update Memory chat mirrors drafts through
+`frontend/src/features/workflow-drafts/`. Teacher-approved commit/save routes
+validate the expected artifact revision/hash and use the backend-stored artifact
+for draft-aware clients.
+
+Streamed chat turns run as backend-owned tasks. The HTTP SSE response subscribes
+to the task, but closing the page or navigating away does not cancel the model
+turn in the running backend process. When the turn completes, the final
+assistant message, runtime state, and artifact markdown are written to the
+workflow draft. If the backend process itself stops mid-turn, the draft remains
+marked as incomplete so save/review paths stay blocked until the teacher retries
+or discards the draft.
 
 Update Memory starts in free-agent target discovery unless the frontend passes a
 typed start hint to `POST /api/classes/{id}/ingest/sessions`. Timeline/detail
@@ -69,8 +89,9 @@ Both planning and Update Memory use the same app-owned conversation strategy:
 `ArtifactSessionService` stores messages, the current markdown artifact, and a
 workflow runtime object. Planning uses `PlanRuntime`; Update Memory uses
 `MemoryRuntime`. Future artifact chats should register an `ArtifactSpec` with
-runtime, prompt trace, stream, final-event, and trace-contract hooks instead of
-adding mode-specific branches to the session core.
+runtime dump/load, prompt trace, stream, final-event, and trace-contract hooks
+instead of adding mode-specific branches or workflow-local stores to the session
+core.
 
 ## Beta identity, telemetry, and workspace roots
 
@@ -104,7 +125,9 @@ and durable wiki memory. Captured candidates live in the SQLite candidate
 ledger; insert-time folding, the promotion gate, and silent decay reduce noise
 before review. The sweep proposer runs one high-reasoning consolidation call,
 maps the result into a teacher-first review brief, and never writes wiki files
-directly.
+directly. Teacher UI state is a backend-owned saved review in
+`workflow/memory_sweep_reviews.sqlite` (open/resume, fingerprint/stale,
+edits/decisions, apply/discard/refresh).
 
 Decision semantics:
 

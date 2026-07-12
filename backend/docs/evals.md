@@ -137,8 +137,12 @@ $env:LIVE_AGENT_EVAL_UTILITY_REASONING_EFFORT="minimal"
 Optional judge model override:
 
 ```powershell
-$env:DEEPEVAL_MODEL="gpt-4o-mini"
+$env:DEEPEVAL_MODEL="gpt-5.4-mini"
+$env:DEEPEVAL_REASONING_EFFORT="medium"
 ```
+
+Optional LLM judges default to `gpt-5.4-mini` with medium reasoning.
+`OPENAI_FAST_MODEL` remains a legacy fallback when `DEEPEVAL_MODEL` is unset.
 
 Disable LLM judge but keep live agent:
 
