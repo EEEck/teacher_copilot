@@ -11,10 +11,21 @@ import {
   listPendingChatTurns,
   markPendingChatTurn,
   markPendingMemorySweep,
+  markPendingTurnSeenInProgress,
   pendingMemorySweepKey,
   pendingTurnWorkflowHref,
   pendingTurnKey,
+  shouldNotifyPendingDraftComplete,
 } from "./pending-chat-turns";
+
+function memoryStorage() {
+  const storage = new Map<string, string>();
+  return {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+  };
+}
 
 describe("pending chat turns", () => {
   it("treats completed backend draft status as notification-ready", () => {
@@ -33,13 +44,35 @@ describe("pending chat turns", () => {
     expect(isPendingDraftComplete({ latest_turn_complete: false })).toBe(false);
   });
 
-  it("registers discoverable pending turns and clears them by key", () => {
-    const storage = new Map<string, string>();
-    const adapter = {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => storage.set(key, value),
-      removeItem: (key: string) => storage.delete(key),
+  it("does not notify on idle-complete until the turn was seen in progress", () => {
+    const idleComplete = {
+      latest_turn_complete: true,
+      turn_in_progress: false,
     };
+    expect(
+      shouldNotifyPendingDraftComplete(idleComplete, { seenInProgress: false }, 0),
+    ).toBe(false);
+    expect(
+      shouldNotifyPendingDraftComplete(idleComplete, { seenInProgress: true }, 0),
+    ).toBe(true);
+    expect(
+      shouldNotifyPendingDraftComplete(
+        idleComplete,
+        { seenInProgress: false, baselineMessageCount: 0 },
+        2,
+      ),
+    ).toBe(true);
+    expect(
+      shouldNotifyPendingDraftComplete(
+        idleComplete,
+        { seenInProgress: false, baselineMessageCount: 2 },
+        2,
+      ),
+    ).toBe(false);
+  });
+
+  it("registers discoverable pending turns and clears them by key", () => {
+    const adapter = memoryStorage();
 
     const key = markPendingChatTurn(adapter, {
       mode: "plan",
@@ -49,7 +82,7 @@ describe("pending chat turns", () => {
     });
 
     expect(key).toBe(pendingTurnKey("draft-1", "session-1"));
-    expect(storage.get(key)).toBe("1");
+    expect(adapter.getItem(key)).toBe("1");
     expect(listPendingChatTurns(adapter)).toEqual([
       {
         key,
@@ -57,22 +90,34 @@ describe("pending chat turns", () => {
         classId: "chemie_9b_2026_27",
         sessionId: "session-1",
         draftId: "draft-1",
+        seenInProgress: false,
+        baselineMessageCount: 0,
       },
     ]);
 
     clearPendingChatTurn(adapter, key);
 
-    expect(storage.has(key)).toBe(false);
+    expect(adapter.getItem(key)).toBe(null);
     expect(listPendingChatTurns(adapter)).toEqual([]);
   });
 
+  it("records seenInProgress on the pending index entry", () => {
+    const adapter = memoryStorage();
+    const key = markPendingChatTurn(adapter, {
+      mode: "plan",
+      classId: "chemie_9b_2026_27",
+      sessionId: "session-1",
+      draftId: "draft-1",
+      baselineMessageCount: 1,
+    });
+    expect(listPendingChatTurns(adapter)[0].seenInProgress).toBe(false);
+    markPendingTurnSeenInProgress(adapter, key);
+    expect(listPendingChatTurns(adapter)[0].seenInProgress).toBe(true);
+    expect(listPendingChatTurns(adapter)[0].baselineMessageCount).toBe(1);
+  });
+
   it("lets exactly one UI surface consume a completed turn notification", () => {
-    const storage = new Map<string, string>();
-    const adapter = {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => storage.set(key, value),
-      removeItem: (key: string) => storage.delete(key),
-    };
+    const adapter = memoryStorage();
     const key = markPendingChatTurn(adapter, {
       mode: "ingest",
       classId: "chemie_9b_2026_27",
@@ -85,12 +130,7 @@ describe("pending chat turns", () => {
   });
 
   it("round-trips optional lesson metadata on pending turns", () => {
-    const storage = new Map<string, string>();
-    const adapter = {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => storage.set(key, value),
-      removeItem: (key: string) => storage.delete(key),
-    };
+    const adapter = memoryStorage();
 
     markPendingChatTurn(adapter, {
       mode: "ingest",
@@ -114,6 +154,8 @@ describe("pending chat turns", () => {
         lessonTitle: "Ions review",
         resumeHref:
           "/classes/chemie_9b_2026_27/memory?lessonDate=2026-07-10&intent=update_missing_results&targetKind=planned_lesson",
+        seenInProgress: false,
+        baselineMessageCount: 0,
       },
     ]);
   });
@@ -136,12 +178,7 @@ describe("pending chat turns", () => {
   });
 
   it("hides the running-tasks box for the current key set until a new turn appears", () => {
-    const storage = new Map<string, string>();
-    const adapter = {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => storage.set(key, value),
-      removeItem: (key: string) => storage.delete(key),
-    };
+    const adapter = memoryStorage();
 
     markPendingChatTurn(adapter, {
       mode: "plan",
@@ -169,12 +206,7 @@ describe("pending chat turns", () => {
   });
 
   it("tracks one Memory Sweep job per class with the sweep workflow href", () => {
-    const storage = new Map<string, string>();
-    const adapter = {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => storage.set(key, value),
-      removeItem: (key: string) => storage.delete(key),
-    };
+    const adapter = memoryStorage();
 
     const key = markPendingMemorySweep(adapter, {
       classId: "chemie_9b_2026_27",
@@ -190,6 +222,8 @@ describe("pending chat turns", () => {
         sessionId: "review-1",
         draftId: "review-1",
         resumeHref: "/classes/chemie_9b_2026_27/memory-sweep",
+        seenInProgress: false,
+        baselineMessageCount: 0,
       },
     ]);
     expect(pendingTurnWorkflowHref(turns[0])).toBe(

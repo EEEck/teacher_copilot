@@ -147,4 +147,41 @@ describe("workflow draft store", () => {
       },
     ]);
   });
+
+  it("does not wipe a live thread when an empty draft snapshot arrives", () => {
+    const store = createWorkflowDraftStore();
+    store.getState().upsert(
+      snapshot({
+        messages: [{ role: "user", content: "Record lesson results." }],
+      }),
+    );
+    store.getState().setThreadMessages("draft-1", [
+      { id: "live-0", role: "user", content: "Record lesson results." },
+      {
+        id: "live-1",
+        role: "assistant",
+        content: [{ type: "reasoning", text: "Working..." }],
+      },
+    ]);
+
+    store.getState().upsert(
+      snapshot({
+        messages: [],
+        turnInProgress: false,
+        latestTurnComplete: true,
+        artifactRevision: 2,
+        artifactHash: "hash-2",
+      }),
+    );
+
+    expect(store.getState().threadMessagesByDraftId["draft-1"]).toEqual([
+      { id: "live-0", role: "user", content: "Record lesson results." },
+      {
+        id: "live-1",
+        role: "assistant",
+        content: [{ type: "reasoning", text: "Working..." }],
+      },
+    ]);
+    expect(store.getState().draftsById["draft-1"].artifactRevision).toBe(2);
+  });
 });

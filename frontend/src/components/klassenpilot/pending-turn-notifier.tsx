@@ -15,10 +15,11 @@ import {
   clearPendingChatTurn,
   consumeCompletedPendingChatTurn,
   dismissRunningTasksBox,
-  isPendingDraftComplete,
   isPendingMemorySweepComplete,
   isRunningTasksBoxDismissed,
   listPendingChatTurns,
+  markPendingTurnSeenInProgress,
+  shouldNotifyPendingDraftComplete,
   type PendingChatTurn,
 } from "@/lib/pending-chat-turns";
 
@@ -120,7 +121,19 @@ async function checkOnePendingTurn(turn: PendingChatTurn): Promise<void> {
       turn.mode === "plan"
         ? await client.planGetDraft(turn.classId, turn.sessionId)
         : await client.ingestGetDraft(turn.classId, turn.sessionId);
-    if (!isPendingDraftComplete(draft)) return;
+    if (draft.turn_in_progress) {
+      markPendingTurnSeenInProgress(window.sessionStorage, turn.key);
+      return;
+    }
+    if (
+      !shouldNotifyPendingDraftComplete(
+        draft,
+        turn,
+        draft.messages?.length ?? 0,
+      )
+    ) {
+      return;
+    }
     useWorkflowDraftStore
       .getState()
       .upsert(fetchedDraftToSnapshot(turn.mode, turn.classId, turn.sessionId, draft));

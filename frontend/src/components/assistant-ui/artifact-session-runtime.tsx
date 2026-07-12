@@ -369,6 +369,12 @@ export function ArtifactSessionRuntimeProvider({
         },
       ]);
       setIsUpdating(true);
+      const threadKey = activeDraftIdRef.current || sessionIdRef.current;
+      const baselineMessageCount =
+        useWorkflowDraftStore.getState().draftsById[threadKey]?.messages.length ??
+        useWorkflowDraftStore.getState().draftsById[activeDraftIdRef.current]?.messages
+          .length ??
+        0;
       const fromMemory = lessonContextFromMemoryState(memoryStateRef.current);
       const lessonDate =
         fromMemory.lessonDate ||
@@ -388,6 +394,7 @@ export function ArtifactSessionRuntimeProvider({
               lessonDate,
               lessonTitle,
               resumeHref: `${window.location.pathname}${window.location.search}`,
+              baselineMessageCount,
             })
           : "";
       // Successful turns leave the pending marker for PendingTurnNotifier.

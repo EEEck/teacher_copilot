@@ -38,19 +38,29 @@ const createWorkflowDraftState = (
   draftsById: {},
   threadMessagesByDraftId: {},
   upsert: (snapshot) => {
-    set((state) => ({
-      draftsById: { ...state.draftsById, [snapshot.draftId]: snapshot },
-      threadMessagesByDraftId: {
-        ...state.threadMessagesByDraftId,
-        [snapshot.draftId]: snapshot.messages.map(
-          (message, index): ThreadMessageLike => ({
-            id: `persisted-${index}`,
-            role: message.role as ThreadMessageLike["role"],
-            content: message.content,
-          }),
-        ),
-      },
-    }));
+    set((state) => {
+      const previous = state.threadMessagesByDraftId[snapshot.draftId] ?? [];
+      // Never let a stale/empty draft fetch wipe a live streamed thread.
+      // Background completion should arrive with the persisted messages.
+      const keepPreviousThread =
+        snapshot.messages.length === 0 && previous.length > 0;
+      const nextThread = keepPreviousThread
+        ? previous
+        : snapshot.messages.map(
+            (message, index): ThreadMessageLike => ({
+              id: `persisted-${index}`,
+              role: message.role as ThreadMessageLike["role"],
+              content: message.content,
+            }),
+          );
+      return {
+        draftsById: { ...state.draftsById, [snapshot.draftId]: snapshot },
+        threadMessagesByDraftId: {
+          ...state.threadMessagesByDraftId,
+          [snapshot.draftId]: nextThread,
+        },
+      };
+    });
   },
   setThreadMessages: (draftId, messages) => {
     set((state) => ({

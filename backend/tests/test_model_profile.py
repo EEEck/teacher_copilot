@@ -83,12 +83,14 @@ def test_legacy_reasoning_effort_still_overrides_chat():
 def test_gpt_5_4_models_normalize_unsupported_minimal_effort():
     settings = chat_model_settings("minimal", model="gpt-5.4-mini")
 
-    assert settings is None
+    assert settings is not None
+    assert settings.reasoning is not None
+    assert settings.reasoning.effort == "low"
 
 
-def test_other_models_keep_minimal_effort():
+def test_other_models_normalize_gpt_5_5_minimal_effort():
     settings = chat_model_settings("minimal", model="gpt-5.5")
 
     assert settings is not None
     assert settings.reasoning is not None
-    assert settings.reasoning.effort == "minimal"
+    assert settings.reasoning.effort == "low"
