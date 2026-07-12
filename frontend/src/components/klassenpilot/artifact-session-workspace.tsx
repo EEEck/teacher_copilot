@@ -25,14 +25,12 @@ export function ArtifactSessionWorkspace({
 }) {
   const inReview = Boolean(reviewDiff || reviewFileList);
   return (
-    // Fixed `vh` height (NOT dvh): the thread scrolls *inside* the panel instead
-    // of growing the page. dvh fluctuates with scrollbars/toolbars and, combined
-    // with react-resizable-panels' ResizeObserver, caused a measure→resize→
-    // measure feedback loop (the "blinking"). A stable vh height breaks that.
-    // Shared by memory + plan, so this fixes both.
+    // Fill leftover viewport height via the AppShell flex chain (NOT a fixed
+    // max-h band). Keep stable `min-h-0` so react-resizable-panels does not
+    // blink. Shared by memory + plan.
     <ResizablePanelGroup
       orientation="horizontal"
-      className="h-[70vh] min-h-[32rem] max-h-[44rem] overflow-hidden rounded-lg border"
+      className="min-h-[28rem] flex-1 overflow-hidden rounded-lg border"
     >
       <ResizablePanel defaultSize={58} minSize={40} className="h-full min-h-0 overflow-hidden">
         <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-4">

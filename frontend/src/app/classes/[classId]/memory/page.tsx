@@ -650,8 +650,10 @@ function MemoryWorkspace({
     );
 
   return (
-    <div className="space-y-8">
-      <MemoryTargetStatus />
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="shrink-0">
+        <MemoryTargetStatus />
+      </div>
       <ArtifactSessionWorkspace
         thread={<IngestThread />}
         draftPanel={draftPanel}
