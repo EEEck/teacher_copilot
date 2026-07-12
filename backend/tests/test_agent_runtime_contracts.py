@@ -18,9 +18,15 @@ def test_plan_and_ingest_outputs_are_agents_sdk_strict_schema_compatible():
     AgentOutputSchema(WriteVerificationOutput)
 
 
-def test_minimal_reasoning_effort_is_normalized_before_model_settings():
-    settings = chat_model_settings("minimal")
+def test_gpt_5_4_models_normalize_unsupported_minimal_effort():
+    settings = chat_model_settings("minimal", model="gpt-5.4-mini")
+
+    assert settings is None
+
+
+def test_other_models_keep_minimal_effort():
+    settings = chat_model_settings("minimal", model="gpt-5.5")
 
     assert settings is not None
     assert settings.reasoning is not None
-    assert settings.reasoning.effort == "low"
+    assert settings.reasoning.effort == "minimal"

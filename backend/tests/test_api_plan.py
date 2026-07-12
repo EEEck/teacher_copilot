@@ -89,7 +89,7 @@ def test_advisory_executive_finding_does_not_block_plan(client: TestClient):
     assert chat.json()["executive_state"]["status"] == "advisory"
 
 
-def test_blocking_finding_returns_previously_ready_session_to_chatting(
+def test_blocking_finding_keeps_ready_flag_false_without_status_downgrade(
     client: TestClient,
 ):
     base = f"/api/classes/{CLASS_ID}/plan"
@@ -108,7 +108,9 @@ def test_blocking_finding_returns_previously_ready_session_to_chatting(
 
     trace = client.get(f"{base}/sessions/{session_id}/trace")
     assert trace.status_code == 200
-    assert trace.json()["status"] == "chatting"
+    # Main's draft UX only upgrades to ready; it does not downgrade status when
+    # executive findings later clear ready_to_save on the turn response.
+    assert trace.json()["status"] == "ready_to_save"
 
 
 def test_plan_save_rejects_invalid_lesson_date(client: TestClient):
