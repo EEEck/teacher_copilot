@@ -53,7 +53,9 @@ It is an educational note, not a behavior contract.
   only through the teacher-approved commit flow.
 - Prefer compiled wiki memory over raw sources.
 - Frontend polish is not the priority unless the user explicitly asks for it.
-  The frontend primarily uses `assistant-ui`.
+  The frontend primarily uses `assistant-ui`, with Plan/Update Memory drafts in
+  `frontend/src/features/workflow-drafts/` and durable pending jobs coordinated
+  by `pending-chat-turns` + `PendingTurnNotifier`.
 - Keep the MVP simple. Do not add broad agent infrastructure unless it directly
   supports lesson planning or memory update.
 
@@ -76,6 +78,8 @@ It is an educational note, not a behavior contract.
 - Memory hierarchy and update rules: `docs/memory_hierarchy.md`
 - Backend tests: `backend/tests/`
 - Frontend app: `frontend/`
+- Frontend workflow drafts: `frontend/src/features/workflow-drafts/`
+- Frontend design notes: `frontend/DESIGN.md`
 
 ## Agent Contracts
 

@@ -63,9 +63,12 @@ drafts; the start-session endpoints reopen the active draft for that workflow
 identity.
 
 The frontend still keeps only convenience state locally: unsent composer text
-keyed by `draft_id` and non-authoritative review UI cache. Teacher-approved
-commit/save routes validate the expected artifact revision/hash and use the
-backend-stored artifact for draft-aware clients.
+keyed by `draft_id`, non-authoritative review UI cache, and session markers for
+durable background jobs (`pending-chat-turns`, including Memory Sweep
+generation). Plan/Update Memory chat mirrors drafts through
+`frontend/src/features/workflow-drafts/`. Teacher-approved commit/save routes
+validate the expected artifact revision/hash and use the backend-stored artifact
+for draft-aware clients.
 
 Streamed chat turns run as backend-owned tasks. The HTTP SSE response subscribes
 to the task, but closing the page or navigating away does not cancel the model
@@ -122,7 +125,9 @@ and durable wiki memory. Captured candidates live in the SQLite candidate
 ledger; insert-time folding, the promotion gate, and silent decay reduce noise
 before review. The sweep proposer runs one high-reasoning consolidation call,
 maps the result into a teacher-first review brief, and never writes wiki files
-directly.
+directly. Teacher UI state is a backend-owned saved review in
+`workflow/memory_sweep_reviews.sqlite` (open/resume, fingerprint/stale,
+edits/decisions, apply/discard/refresh).
 
 Decision semantics:
 

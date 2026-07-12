@@ -34,10 +34,12 @@ revision/hash metadata during draft and review.
   `intent`, optional `target_kind`, and optional `lesson_date`.
 - Frontend caches are convenience only. Session storage may hold unsent composer
   text and a visual pending-review cache, but it must not authorize writes.
-  Plan and Update Memory chat render through a Zustand draft snapshot cache and
-  assistant-ui `useExternalStoreRuntime`; the backend `WorkflowDraft` remains
-  authoritative. Background-turn completion toasts are owned by one app-level
-  notifier that claims a locally initiated pending-turn marker exactly once.
+  Plan and Update Memory chat render through a Zustand draft snapshot cache
+  (`frontend/src/features/workflow-drafts/`) and assistant-ui
+  `useExternalStoreRuntime`; the backend `WorkflowDraft` remains authoritative.
+  Background-turn completion toasts and the Running box are owned by one
+  app-level notifier that claims a locally initiated pending-turn marker
+  exactly once (`pending-chat-turns`, including `memory_sweep` generation).
 - Review and save actions must include the expected artifact revision/hash. If
   the artifact changed after review was prepared, the backend rejects the write
   with `draft_changed_since_review_created`.
@@ -438,6 +440,10 @@ Proposal behavior:
   may refresh automatically; edited reviews surface as stale until the teacher
   chooses refresh, keep reviewing, or discard. A stale response names the
   changed candidate, memory-page, or student-summary inputs.
+- Frontend Memory Sweep is independent of assistant-ui. Generation is a durable
+  backend job tracked like other pending turns. Class-home badges show
+  “Stale draft” only when teacher edits are at risk; unedited fingerprint drift
+  keeps a quieter “Draft saved …” label while open/refresh can regenerate.
 - The promotion gate decides which rows reach review: explicit teacher asks are
   eligible immediately, inferred claims need reinforcement across distinct
   occasions, stale unreinforced singletons expire silently, and rejected
