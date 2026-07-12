@@ -16,6 +16,7 @@ import {
   pendingTurnWorkflowHref,
   pendingTurnKey,
   shouldNotifyPendingDraftComplete,
+  isPendingTurnOnCurrentPage,
 } from "./pending-chat-turns";
 
 function memoryStorage() {
@@ -69,6 +70,24 @@ describe("pending chat turns", () => {
         2,
       ),
     ).toBe(false);
+  });
+
+  it("detects pending turns started on the current page", () => {
+    expect(
+      isPendingTurnOnCurrentPage(
+        { resumeHref: "/classes/chemie_9b_2026_27/plan" },
+        "/classes/chemie_9b_2026_27/plan",
+      ),
+    ).toBe(true);
+    expect(
+      isPendingTurnOnCurrentPage(
+        { resumeHref: "/classes/chemie_9b_2026_27/plan" },
+        "/classes/chemie_9b_2026_27/memory",
+      ),
+    ).toBe(false);
+    expect(isPendingTurnOnCurrentPage({}, "/classes/chemie_9b_2026_27/plan")).toBe(
+      false,
+    );
   });
 
   it("registers discoverable pending turns and clears them by key", () => {

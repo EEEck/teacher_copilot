@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createWorkflowDraftStore,
+  shouldKeepLiveThread,
   type WorkflowDraftSnapshot,
 } from "./workflow-draft-store";
 
@@ -22,6 +23,48 @@ function snapshot(
     ...overrides,
   };
 }
+
+describe("shouldKeepLiveThread", () => {
+  it("keeps a rich live thread over a plain same-length snapshot", () => {
+    expect(
+      shouldKeepLiveThread(
+        [
+          { id: "u", role: "user", content: "Hi" },
+          {
+            id: "a",
+            role: "assistant",
+            content: [{ type: "reasoning", text: "Thinking" }],
+          },
+        ],
+        [
+          { role: "user", content: "Hi" },
+          { role: "assistant", content: "Done." },
+        ],
+      ),
+    ).toBe(true);
+  });
+
+  it("replaces when the previous thread is empty or plain", () => {
+    expect(
+      shouldKeepLiveThread([], [{ role: "user", content: "Hi" }]),
+    ).toBe(false);
+    expect(
+      shouldKeepLiveThread(
+        [{ id: "u", role: "user", content: "Hi" }],
+        [
+          { role: "user", content: "Hi" },
+          { role: "assistant", content: "Done." },
+        ],
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps any non-empty previous thread when the snapshot has no messages", () => {
+    expect(
+      shouldKeepLiveThread([{ id: "u", role: "user", content: "Hi" }], []),
+    ).toBe(true);
+  });
+});
 
 describe("workflow draft store", () => {
   it("replaces a running snapshot with the persisted completed chat turn", () => {
@@ -106,7 +149,7 @@ describe("workflow draft store", () => {
     ]);
   });
 
-  it("replaces visible thread messages when a later backend snapshot arrives", () => {
+  it("keeps rich live parts when a plain completion snapshot arrives", () => {
     const store = createWorkflowDraftStore();
     store.getState().upsert(
       snapshot({
@@ -120,7 +163,10 @@ describe("workflow draft store", () => {
       {
         id: "streaming-1",
         role: "assistant",
-        content: [{ type: "reasoning", text: "Still working..." }],
+        content: [
+          { type: "reasoning", text: "Still working..." },
+          { type: "text", text: "The lesson diary is ready." },
+        ],
       },
     ]);
 
@@ -137,13 +183,16 @@ describe("workflow draft store", () => {
       }),
     );
 
-    // External-store runtime reads this map; no remount key is required.
+    expect(store.getState().draftsById["draft-1"].turnInProgress).toBe(false);
     expect(store.getState().threadMessagesByDraftId["draft-1"]).toEqual([
       { id: "persisted-0", role: "user", content: "Record lesson results." },
       {
-        id: "persisted-1",
+        id: "streaming-1",
         role: "assistant",
-        content: "The lesson diary is ready.",
+        content: [
+          { type: "reasoning", text: "Still working..." },
+          { type: "text", text: "The lesson diary is ready." },
+        ],
       },
     ]);
   });
@@ -183,5 +232,37 @@ describe("workflow draft store", () => {
       },
     ]);
     expect(store.getState().draftsById["draft-1"].artifactRevision).toBe(2);
+  });
+
+  it("hydrates a plain remounted thread from a longer completion snapshot", () => {
+    const store = createWorkflowDraftStore();
+    store.getState().upsert(
+      snapshot({
+        messages: [{ role: "user", content: "Record lesson results." }],
+        turnInProgress: true,
+        latestTurnComplete: false,
+      }),
+    );
+
+    store.getState().upsert(
+      snapshot({
+        messages: [
+          { role: "user", content: "Record lesson results." },
+          { role: "assistant", content: "The lesson diary is ready." },
+        ],
+        turnInProgress: false,
+        latestTurnComplete: true,
+        artifactRevision: 2,
+      }),
+    );
+
+    expect(store.getState().threadMessagesByDraftId["draft-1"]).toEqual([
+      { id: "persisted-0", role: "user", content: "Record lesson results." },
+      {
+        id: "persisted-1",
+        role: "assistant",
+        content: "The lesson diary is ready.",
+      },
+    ]);
   });
 });

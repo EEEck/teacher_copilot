@@ -100,6 +100,18 @@ export function pendingTurnWorkflowHref(turn: PendingChatTurn): string {
   return base;
 }
 
+/**
+ * True when this pending turn was started on the current page (same path+search).
+ * Used with the live-stream registry: background tabs still toast + hydrate.
+ */
+export function isPendingTurnOnCurrentPage(
+  turn: Pick<PendingChatTurn, "resumeHref">,
+  currentPathWithSearch: string,
+): boolean {
+  if (!turn.resumeHref) return false;
+  return turn.resumeHref === currentPathWithSearch;
+}
+
 export function listPendingChatTurns(storage: PendingTurnStorage): PendingChatTurn[] {
   const raw = storage.getItem(INDEX_KEY);
   if (!raw) return [];

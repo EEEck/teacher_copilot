@@ -32,6 +32,41 @@ type WorkflowDraftState = {
 
 type WorkflowDraftStore = StoreApi<WorkflowDraftState>;
 
+function threadHasRichParts(messages: ThreadMessageLike[]): boolean {
+  return messages.some((message) => Array.isArray(message.content));
+}
+
+function messagesFromSnapshot(
+  messages: ChatMessage[],
+): ThreadMessageLike[] {
+  return messages.map(
+    (message, index): ThreadMessageLike => ({
+      id: `persisted-${index}`,
+      role: message.role as ThreadMessageLike["role"],
+      content: message.content,
+    }),
+  );
+}
+
+/**
+ * Decide whether to keep the in-memory thread instead of replacing it with a
+ * plain persisted snapshot. Always update draftsById (turn flags / artifact).
+ */
+export function shouldKeepLiveThread(
+  previous: ThreadMessageLike[],
+  snapshotMessages: ChatMessage[],
+): boolean {
+  if (previous.length === 0) return false;
+  // Stale/empty fetch must not wipe a live stream.
+  if (snapshotMessages.length === 0) return true;
+  // Keep streamed reasoning/tool parts when the snapshot is only plain strings
+  // of similar length (typical same-tab completion upsert).
+  return (
+    threadHasRichParts(previous) &&
+    snapshotMessages.length <= previous.length
+  );
+}
+
 const createWorkflowDraftState = (
   set: WorkflowDraftStore["setState"],
 ): WorkflowDraftState => ({
@@ -40,19 +75,9 @@ const createWorkflowDraftState = (
   upsert: (snapshot) => {
     set((state) => {
       const previous = state.threadMessagesByDraftId[snapshot.draftId] ?? [];
-      // Never let a stale/empty draft fetch wipe a live streamed thread.
-      // Background completion should arrive with the persisted messages.
-      const keepPreviousThread =
-        snapshot.messages.length === 0 && previous.length > 0;
-      const nextThread = keepPreviousThread
+      const nextThread = shouldKeepLiveThread(previous, snapshot.messages)
         ? previous
-        : snapshot.messages.map(
-            (message, index): ThreadMessageLike => ({
-              id: `persisted-${index}`,
-              role: message.role as ThreadMessageLike["role"],
-              content: message.content,
-            }),
-          );
+        : messagesFromSnapshot(snapshot.messages);
       return {
         draftsById: { ...state.draftsById, [snapshot.draftId]: snapshot },
         threadMessagesByDraftId: {

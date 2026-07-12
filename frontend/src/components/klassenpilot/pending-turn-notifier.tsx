@@ -16,6 +16,7 @@ import {
   consumeCompletedPendingChatTurn,
   dismissRunningTasksBox,
   isPendingMemorySweepComplete,
+  isPendingTurnOnCurrentPage,
   isRunningTasksBoxDismissed,
   listPendingChatTurns,
   markPendingTurnSeenInProgress,
@@ -134,17 +135,28 @@ async function checkOnePendingTurn(turn: PendingChatTurn): Promise<void> {
     ) {
       return;
     }
+    // Always upsert draft meta (clears turnInProgress / spinner). Thread replace
+    // is gated inside the store so rich live SSE parts are not wiped.
     useWorkflowDraftStore
       .getState()
       .upsert(fetchedDraftToSnapshot(turn.mode, turn.classId, turn.sessionId, draft));
     if (consumeCompletedPendingChatTurn(window.sessionStorage, turn.key)) {
-      toast.success(
-        chatCompletionToastLabel({
-          mode: turn.mode,
-          lessonDate: turn.lessonDate,
-          lessonTitle: turn.lessonTitle,
-        }),
-      );
+      const onCurrentPage =
+        typeof window !== "undefined" &&
+        isPendingTurnOnCurrentPage(
+          turn,
+          `${window.location.pathname}${window.location.search}`,
+        );
+      // Live tab already sees the result; toast is for background / other pages.
+      if (!onCurrentPage) {
+        toast.success(
+          chatCompletionToastLabel({
+            mode: turn.mode,
+            lessonDate: turn.lessonDate,
+            lessonTitle: turn.lessonTitle,
+          }),
+        );
+      }
     }
   } catch (error) {
     if (isUnknownSessionError(error)) {
