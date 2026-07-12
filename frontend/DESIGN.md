@@ -16,8 +16,9 @@ Lightweight design rules for app screens and [assistant-ui](https://github.com/a
 |-------|------|------|
 | Tokens | `src/app/globals.css` | shadcn semantic CSS variables |
 | Primitives | `src/components/ui/` | Button, Card, Alert, SegmentedToggle, … |
+| Features | `src/features/` | Cross-route draft/job ownership (workflow drafts) |
 | Chat | `src/components/assistant-ui/` | Thread, markdown (from assistant-ui registry) |
-| Domain | `src/components/klassenpilot/` | Timeline, checklist, wiki cards |
+| Domain | `src/components/klassenpilot/` | Timeline, checklist, wiki cards, pending jobs |
 | Pages | `src/app/` | Routes compose domain + ui + chat |
 
 Update assistant-ui components: `npx assistant-ui add thread -o -p src/components/assistant-ui`
@@ -54,8 +55,16 @@ cards inside the brief.
 Current helpers:
 
 - `components/klassenpilot/review/review-brief.tsx` for wiki-file review.
-- `components/klassenpilot/memory-sweep-brief.tsx` for sweep decisions.
+- `components/klassenpilot/memory-sweep-brief.tsx` for sweep decisions
+  (default Simple triage; `SegmentedToggle` Simple / Detailed for full cards).
 - `lib/review-brief.ts` and `lib/sweep-brief.ts` for grouping and labels.
+
+## Background jobs
+
+Durable backend work that outlives the current page (chat turns, Memory Sweep
+generation) uses a small fixed Running box (`running-tasks-box.tsx`): numbered
+zebra rows, thin separators, one dismiss control. Prefer that over toasts-only
+feedback while a job is still running.
 
 ## Buttons
 
@@ -69,7 +78,7 @@ Current helpers:
 
 ## Segmented controls
 
-Use [`SegmentedToggle`](src/components/ui/segmented-toggle.tsx) for mutually exclusive modes (e.g. Edit / Preview). Do not copy toggle classes into feature components.
+Use [`SegmentedToggle`](src/components/ui/segmented-toggle.tsx) for mutually exclusive modes (e.g. Edit / Preview, Memory Sweep Simple / Detailed). Do not copy toggle classes into feature components.
 
 | Part | Tokens / classes |
 |------|------------------|

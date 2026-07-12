@@ -20,6 +20,7 @@ import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { workflowTurnActivity } from "@/features/workflow-drafts/workflow-turn-activity";
 import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
@@ -32,6 +33,7 @@ import {
   SuggestionPrimitive,
   ThreadPrimitive,
   useAuiState,
+  useComposerRuntime,
 } from "@assistant-ui/react";
 import {
   ArrowDownIcon,
@@ -47,7 +49,7 @@ import {
   RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
-import type { FC, ReactNode } from "react";
+import { useEffect, useRef, type FC, type ReactNode } from "react";
 
 export type ThreadWelcomeConfig = {
   title: string;
@@ -63,7 +65,15 @@ export const Thread: FC<{
   welcome?: ThreadWelcomeConfig;
   welcomeExtra?: ReactNode;
   showSuggestions?: boolean;
-}> = ({ welcome = DEFAULT_WELCOME, welcomeExtra, showSuggestions = true }) => {
+  composerStorageKey?: string;
+  backgroundTurnInProgress?: boolean;
+}> = ({
+  welcome = DEFAULT_WELCOME,
+  welcomeExtra,
+  showSuggestions = true,
+  composerStorageKey,
+  backgroundTurnInProgress = false,
+}) => {
   return (
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root @container flex h-full min-h-0 flex-col overflow-hidden bg-background"
@@ -73,6 +83,7 @@ export const Thread: FC<{
         ["--composer-padding" as string]: "10px",
       }}
     >
+      <ComposerDraftPersistence storageKey={composerStorageKey} />
       <ThreadPrimitive.Viewport
         turnAnchor="top"
         data-slot="aui_thread-viewport"
@@ -90,10 +101,12 @@ export const Thread: FC<{
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
             </ThreadPrimitive.Messages>
-            <ThreadRunningIndicator />
+            <ThreadRunningIndicator
+              backgroundTurnInProgress={backgroundTurnInProgress}
+            />
           </div>
 
-          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 mt-auto flex shrink-0 flex-col gap-4 overflow-visible rounded-t-(--composer-radius) bg-background pb-4 md:pb-6">
+          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer mt-auto flex shrink-0 flex-col gap-4 overflow-visible rounded-t-(--composer-radius) bg-background pb-4 md:pb-6">
             <ThreadScrollToBottom />
             <Composer />
           </ThreadPrimitive.ViewportFooter>
@@ -101,6 +114,34 @@ export const Thread: FC<{
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
   );
+};
+
+const ComposerDraftPersistence: FC<{ storageKey?: string }> = ({ storageKey }) => {
+  const composer = useComposerRuntime({ optional: true });
+  const text = useAuiState((s) => s.composer.text);
+  const restoredKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!storageKey || typeof window === "undefined") return;
+    if (!composer) return;
+    if (restoredKeyRef.current === storageKey) return;
+    restoredKeyRef.current = storageKey;
+    const saved = window.sessionStorage.getItem(storageKey);
+    if (saved && !composer.getState().text) {
+      composer.setText(saved);
+    }
+  }, [composer, storageKey]);
+
+  useEffect(() => {
+    if (!storageKey || typeof window === "undefined") return;
+    if (text.trim()) {
+      window.sessionStorage.setItem(storageKey, text);
+    } else {
+      window.sessionStorage.removeItem(storageKey);
+    }
+  }, [storageKey, text]);
+
+  return null;
 };
 
 const ThreadMessage: FC = () => {
@@ -112,16 +153,40 @@ const ThreadMessage: FC = () => {
   return <AssistantMessage />;
 };
 
-// Visible feedback while a turn is in flight. Our adapter is non-streaming
-// (single yield at the end), so without this a slow turn shows the user message
-// alone with no sign anything is happening.
-const ThreadRunningIndicator: FC = () => {
+// A remounted thread cannot recover transient reasoning/tool stream parts, so
+// show a compact backend-owned status until the persisted final turn arrives.
+export function WorkingStatus() {
   return (
-    <AuiIf condition={(s) => s.thread.isRunning}>
-      <div className="flex items-center gap-2 px-2 text-sm text-muted-foreground">
-        <Loader2Icon className="size-4 animate-spin" />
-        <span>Working on it…</span>
-      </div>
+    <div
+      role="status"
+      className="flex items-center gap-2 px-2 text-sm text-muted-foreground"
+    >
+      <Loader2Icon className="size-4 animate-spin" />
+      <span>Still working on your response…</span>
+    </div>
+  );
+}
+
+export function shouldShowResumedTurnStatus(
+  backgroundTurnInProgress: boolean,
+  localRuntimeRunning: boolean,
+): boolean {
+  return workflowTurnActivity({
+    localStreamActive: localRuntimeRunning,
+    backendTurnInProgress: backgroundTurnInProgress,
+  }).showResumedTurnStatus;
+}
+
+export const ThreadRunningIndicator: FC<{
+  backgroundTurnInProgress?: boolean;
+}> = ({ backgroundTurnInProgress = false }) => {
+  return (
+    <AuiIf
+      condition={(s) =>
+        shouldShowResumedTurnStatus(backgroundTurnInProgress, s.thread.isRunning)
+      }
+    >
+      <WorkingStatus />
     </AuiIf>
   );
 };
@@ -146,7 +211,7 @@ const ThreadWelcome: FC<{
   showSuggestions?: boolean;
 }> = ({ welcome, extra, showSuggestions = true }) => {
   return (
-    <div className="aui-thread-welcome-root my-auto flex grow flex-col">
+    <div className="aui-thread-welcome-root my-auto flex grow flex-col pb-28">
       <div className="aui-thread-welcome-center flex w-full grow flex-col items-center justify-center">
         <div className="aui-thread-welcome-message flex size-full flex-col justify-center px-4">
           <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both font-semibold text-2xl duration-200">

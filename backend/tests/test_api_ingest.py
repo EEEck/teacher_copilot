@@ -392,17 +392,15 @@ def test_validation_error_returns_typed_envelope(client: TestClient):
 
 
 @pytest.mark.anyio
-async def test_ingest_commit_rejects_unfinished_streamed_turn(
+async def test_ingest_commit_rejects_unfinished_turn(
     wiki: WikiStore,
     agents: StubAgentRunner,
 ):
     ingest = IngestService(wiki=wiki, agents=agents)
     session = await ingest.start_session(CLASS_ID)
-    stream = ingest.chat_stream(session.session_id, "sorry, I forgot one more thing")
-
-    first_line = await anext(stream)
-    assert first_line.startswith("data:")
-    await stream.aclose()
+    core_session = ingest.core.get_session(session.session_id)
+    ingest.core._begin_turn(core_session)
+    ingest.core._persist_session(core_session)
 
     _, proposals = wiki.compile_from_diary(CLASS_ID, COMPLETE_DIARY)
     approved = [
@@ -425,7 +423,7 @@ async def test_ingest_commit_rejects_unfinished_streamed_turn(
 
 
 @pytest.mark.anyio
-async def test_ingest_allows_retry_after_unfinished_streamed_turn(
+async def test_ingest_consumer_close_allows_background_turn_to_finish(
     wiki: WikiStore,
     agents: StubAgentRunner,
 ):
@@ -437,14 +435,9 @@ async def test_ingest_allows_retry_after_unfinished_streamed_turn(
     assert first_line.startswith("data:")
     await stream.aclose()
 
-    retry_events = [
-        line
-        async for line in ingest.chat_stream(
-            session.session_id, "sorry, I forgot one more thing"
-        )
-    ]
-
-    assert any('"type":"final"' in line for line in retry_events)
+    completed = ingest.get_session(session.session_id)
+    assert completed.latest_turn_complete is True
+    assert completed.turn_in_progress is False
     _, proposals = wiki.compile_from_diary(CLASS_ID, COMPLETE_DIARY)
     approved = [
         ApprovedWikiUpdate(

@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { TimelineEntry } from "@/lib/api";
+import { timelineMemoryAction } from "@/lib/timeline-memory-action";
 import { cn } from "@/lib/utils";
 
 function monthLabel(monthKey: string): string {
@@ -132,6 +133,7 @@ function LessonTimelineCard({
   entry: TimelineEntry;
   highlighted?: boolean;
 }) {
+  const memoryAction = timelineMemoryAction(entry);
   return (
     <li className="ml-6 list-none">
       <span
@@ -184,17 +186,15 @@ function LessonTimelineCard({
               </ul>
             )}
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button asChild size="sm" variant={entry.status === "planned" ? "default" : "outline"}>
+              <Button asChild size="sm" variant={memoryAction.variant}>
                 <Link
                   href={`/classes/${classId}/memory?lessonDate=${encodeURIComponent(
                     entry.date,
-                  )}&intent=${
-                    entry.status === "planned" ? "update_missing_results" : "correct_existing_results"
-                  }&targetKind=${
-                    entry.status === "planned" ? "planned_lesson" : "taught_lesson"
+                  )}&intent=${memoryAction.intent}&targetKind=${
+                    memoryAction.targetKind
                   }&lessonTitle=${encodeURIComponent(entry.title)}`}
                 >
-                  {entry.status === "planned" ? "Add results" : "Correct with agent"}
+                  {memoryAction.label}
                 </Link>
               </Button>
               <Button asChild size="sm" variant="ghost">

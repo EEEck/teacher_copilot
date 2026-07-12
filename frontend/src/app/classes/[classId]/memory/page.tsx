@@ -28,6 +28,12 @@ import {
   type MemoryProposalResponse,
   type WikiUpdateProposal,
 } from "@/lib/api";
+import { markClassHomeTimelineRefresh } from "@/lib/class-home-refresh";
+import { memoryDiscardRedirectHref } from "@/lib/memory-discard-routing";
+import {
+  getReadyToSaveButtonLabel,
+  type MemoryFooterOperation,
+} from "@/lib/memory-footer-state";
 import {
   isMemoryReCommitBlocked,
   isMemoryReviewSaveDisabled,
@@ -54,31 +60,28 @@ const COMPACT_PAGE_LABELS: Record<string, string> = {
   session_summaries: "Session summaries",
 };
 
-function ReadyToSaveButton({ onReady, loading }: { onReady: () => void; loading: boolean }) {
-  const { isUpdating, readyToSave } = useArtifactSession();
+function ReadyToSaveButton({
+  onReady,
+  operation,
+  disabled = false,
+}: {
+  onReady: () => void;
+  operation: MemoryFooterOperation;
+  disabled?: boolean;
+}) {
+  const { isUpdating } = useArtifactSession();
   const hasDraftMessage = useAuiState((s) => !s.composer.isEmpty);
+  const compiling = operation === "compiling";
 
   return (
-    <div className="flex flex-col gap-1">
-      <Button
-        type="button"
-        className="w-fit"
-        onClick={onReady}
-        disabled={loading || isUpdating || hasDraftMessage}
-      >
-        {loading ? "Compiling wiki updates…" : "Ready to save memory"}
-      </Button>
-      {hasDraftMessage && !loading && !isUpdating && (
-        <p className="text-xs text-muted-foreground">
-          Send or clear the draft message before preparing wiki updates.
-        </p>
-      )}
-      {readyToSave && !loading && (
-        <p className="text-xs text-primary">
-          All sections filled — compile and review wiki file changes before saving.
-        </p>
-      )}
-    </div>
+    <Button
+      type="button"
+      className="w-fit"
+      onClick={onReady}
+      disabled={disabled || compiling || isUpdating || hasDraftMessage}
+    >
+      {getReadyToSaveButtonLabel(operation)}
+    </Button>
   );
 }
 
@@ -88,17 +91,6 @@ function textFromRecord(value: unknown): string {
 
 function boolFromRecord(value: unknown): boolean {
   return typeof value === "boolean" ? value : false;
-}
-
-function normalizeMemoryCandidates(value: unknown): MemoryCandidate[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (item): item is MemoryCandidate =>
-      !!item &&
-      typeof item === "object" &&
-      typeof (item as MemoryCandidate).target === "string" &&
-      typeof (item as MemoryCandidate).candidate_update === "string",
-  );
 }
 
 function dedupeMemoryCandidates(candidates: MemoryCandidate[]): MemoryCandidate[] {
@@ -236,21 +228,28 @@ function MemoryTargetStatus() {
 function MemoryWorkspace({
   classId,
   reviewStorageKey,
+  discardRedirectHref,
   onError,
 }: {
   classId: string;
   reviewStorageKey: string;
+  discardRedirectHref?: string | null;
   onError: (message: string | null) => void;
 }) {
   const router = useRouter();
   const {
+    draftId,
+    artifactRevision,
+    artifactHash,
     artifactMarkdown: diaryMarkdown,
     isUpdating,
+    readyToSave,
     runWithSessionRecovery,
     setArtifactMarkdown,
   } = useArtifactSession();
   const [proposals, setProposals] = useState<WikiUpdateProposal[]>([]);
   const [loading, setLoading] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
   const [inReview, setInReview] = useState(false);
   const [editingWiki, setEditingWiki] = useState(false);
   const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
@@ -258,6 +257,11 @@ function MemoryWorkspace({
   const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidate[]>([]);
   const [applyingMemory, setApplyingMemory] = useState(false);
   const [reviewBaseMarkdown, setReviewBaseMarkdown] = useState<string | null>(null);
+  const [reviewSnapshot, setReviewSnapshot] = useState<{
+    draftId: string;
+    artifactRevision: number;
+    artifactHash: string;
+  } | null>(null);
   const [classMemoryProposal, setClassMemoryProposal] =
     useState<MemoryProposalResponse | null>(null);
   const [applyingClassMemory, setApplyingClassMemory] = useState(false);
@@ -291,11 +295,24 @@ function MemoryWorkspace({
       reviewStorageKey,
     );
     if (!pending) return;
+    if (
+      pending.draftId !== draftId ||
+      pending.sourceArtifactRevision !== artifactRevision ||
+      pending.sourceArtifactHash !== artifactHash
+    ) {
+      clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
+      return;
+    }
 
     setArtifactMarkdown(pending.diaryMarkdown, "agent");
     setMemoryCandidates(pending.memoryCandidates);
     setProposals(pending.proposals);
     setReviewBaseMarkdown(pending.diaryMarkdown);
+    setReviewSnapshot({
+      draftId: pending.draftId,
+      artifactRevision: pending.sourceArtifactRevision,
+      artifactHash: pending.sourceArtifactHash,
+    });
     initFromProposals(pending.proposals);
     for (const [path, content] of Object.entries(pending.contentByPath)) {
       updateContent(path, content);
@@ -307,7 +324,10 @@ function MemoryWorkspace({
     setEditingWiki(pending.editingWiki);
     setInReview(true);
   }, [
+    artifactHash,
+    artifactRevision,
     classId,
+    draftId,
     initFromProposals,
     reviewStorageKey,
     setApproved,
@@ -318,11 +338,14 @@ function MemoryWorkspace({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!inReview || proposals.length === 0) return;
+    if (!inReview || proposals.length === 0 || !reviewSnapshot) return;
 
     savePendingMemoryReview(window.sessionStorage, {
       classId,
       routeKey: reviewStorageKey,
+      draftId: reviewSnapshot.draftId,
+      sourceArtifactRevision: reviewSnapshot.artifactRevision,
+      sourceArtifactHash: reviewSnapshot.artifactHash,
       diaryMarkdown,
       proposals,
       memoryCandidates,
@@ -341,6 +364,7 @@ function MemoryWorkspace({
     memoryCandidates,
     proposals,
     reviewStorageKey,
+    reviewSnapshot,
     selectedPath,
   ]);
 
@@ -361,6 +385,7 @@ function MemoryWorkspace({
     setProposals([]);
     setMemoryCandidates([]);
     setReviewBaseMarkdown(null);
+    setReviewSnapshot(null);
     setClassMemoryProposal(null);
     clearReview();
     if (typeof window !== "undefined") {
@@ -376,6 +401,7 @@ function MemoryWorkspace({
     setProposals([]);
     setMemoryCandidates([]);
     setReviewBaseMarkdown(null);
+    setReviewSnapshot(null);
     setClassMemoryProposal(null);
     clearReview();
     if (typeof window !== "undefined") {
@@ -398,6 +424,28 @@ function MemoryWorkspace({
     },
     [setSelectedPath],
   );
+
+  const handleDiscardDraft = useCallback(async () => {
+    if (!draftId) return;
+    setDiscarding(true);
+    onError(null);
+    try {
+      await client.discardWorkflowDraft(classId, draftId);
+      if (typeof window !== "undefined") {
+        clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
+        window.sessionStorage.removeItem(`kp:composer:${draftId}`);
+        markClassHomeTimelineRefresh(window.sessionStorage, classId);
+        if (discardRedirectHref) {
+          router.replace(discardRedirectHref);
+        } else {
+          window.location.reload();
+        }
+      }
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Could not discard draft");
+      setDiscarding(false);
+    }
+  }, [classId, discardRedirectHref, draftId, onError, reviewStorageKey, router]);
 
   // After a successful commit, bring the "Memory saved" confirmation into view
   // so the save is unmissable (beta: teachers re-clicked Save when the card
@@ -438,15 +486,14 @@ function MemoryWorkspace({
         client.ingestPropose(classId, sessionId),
       );
       const unique = uniqueWikiProposals(d.wiki_proposals);
-      setMemoryCandidates(
-        dedupeMemoryCandidates(
-          d.memory_candidates?.length
-            ? d.memory_candidates
-            : normalizeMemoryCandidates(d.memory_state?.memory_candidates),
-        ),
-      );
+      setMemoryCandidates(dedupeMemoryCandidates(d.memory_candidates ?? []));
       setProposals(unique);
       setReviewBaseMarkdown(d.diary_markdown);
+      setReviewSnapshot({
+        draftId: d.draft_id,
+        artifactRevision: d.artifact_revision,
+        artifactHash: d.artifact_hash,
+      });
       initFromProposals(unique);
       setInReview(true);
     } catch (e) {
@@ -479,7 +526,13 @@ function MemoryWorkspace({
     onError(null);
     try {
       const result = await runWithSessionRecovery((sessionId) =>
-        client.ingestCommit(classId, sessionId, diaryMarkdown, getCommitPayload()),
+        client.ingestCommit(classId, sessionId, diaryMarkdown, getCommitPayload(), {
+          draftId: reviewSnapshot?.draftId ?? draftId,
+          expectedArtifactRevision: reviewSnapshot?.artifactRevision ?? artifactRevision,
+          expectedArtifactHash: reviewSnapshot?.artifactHash ?? artifactHash,
+          sourceArtifactRevision: reviewSnapshot?.artifactRevision ?? artifactRevision,
+          sourceArtifactHash: reviewSnapshot?.artifactHash ?? artifactHash,
+        }),
       );
       setCommitResult({
         lesson_date: result.lesson_date,
@@ -496,6 +549,7 @@ function MemoryWorkspace({
       setInReview(false);
       setProposals([]);
       setReviewBaseMarkdown(null);
+      setReviewSnapshot(null);
       clearReview();
       if (typeof window !== "undefined") {
         clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
@@ -506,7 +560,23 @@ function MemoryWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [classId, diaryMarkdown, getCommitPayload, clearReview, isUpdating, loading, commitResult, onError, reviewStorageKey, router, runWithSessionRecovery]);
+  }, [
+    artifactHash,
+    artifactRevision,
+    classId,
+    diaryMarkdown,
+    draftId,
+    getCommitPayload,
+    clearReview,
+    isUpdating,
+    loading,
+    commitResult,
+    onError,
+    reviewStorageKey,
+    router,
+    runWithSessionRecovery,
+    reviewSnapshot,
+  ]);
 
   const applyClassMemory = useCallback(
     async (pages: Record<string, string>) => {
@@ -566,6 +636,7 @@ function MemoryWorkspace({
     setProposals([]);
     setMemoryCandidates([]);
     setReviewBaseMarkdown(null);
+    setReviewSnapshot(null);
     setClassMemoryProposal(null);
     clearReview();
     if (typeof window !== "undefined") {
@@ -593,7 +664,35 @@ function MemoryWorkspace({
         thread={<IngestThread />}
         draftPanel={draftPanel}
         footer={
-          !inReview ? <ReadyToSaveButton onReady={handleReadyToSave} loading={loading} /> : null
+          !inReview ? (
+            <div className="flex min-w-0 flex-col gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <ReadyToSaveButton
+                  onReady={handleReadyToSave}
+                  operation={loading ? "compiling" : discarding ? "discarding" : "idle"}
+                  disabled={discarding}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDiscardDraft}
+                  disabled={loading || discarding || isUpdating || !draftId}
+                >
+                  {discarding ? "Discarding..." : "Discard draft"}
+                </Button>
+              </div>
+              {hasDraftMessage && !loading && !isUpdating && (
+                <p className="text-xs text-muted-foreground">
+                  Send or clear the draft message before preparing wiki updates.
+                </p>
+              )}
+              {readyToSave && !loading && !hasDraftMessage && (
+                <p className="text-xs text-primary">
+                  All sections filled - compile and review wiki file changes before saving.
+                </p>
+              )}
+            </div>
+          ) : null
         }
         reviewDiff={
           inReview && editingWiki && selectedChange ? (
@@ -726,6 +825,14 @@ function MemoryPageContent() {
       source: "timeline_hint",
     };
   }, [searchParams]);
+  const discardRedirectHref = useMemo(
+    () =>
+      memoryDiscardRedirectHref({
+        classId,
+        hasTimelineHint: Boolean(startHint?.lesson_date),
+      }),
+    [classId, startHint],
+  );
 
   const bootstrap = useCallback(
     async (opts?: { preserveMarkdown?: string }) => {
@@ -740,6 +847,12 @@ function MemoryPageContent() {
       }
       return {
         sessionId: session.session_id,
+        draftId: draft.draft_id,
+        artifactRevision: draft.artifact_revision,
+        artifactHash: draft.artifact_hash,
+        turnInProgress: draft.turn_in_progress,
+        latestTurnComplete: draft.latest_turn_complete,
+        initialMessages: draft.messages?.length ? draft.messages : session.messages,
         initialMarkdown: draft.diary_markdown,
         initialCompleteness: draft.completeness,
         initialMemoryState: draft.memory_state ?? session.memory_state ?? null,
@@ -759,10 +872,13 @@ function MemoryPageContent() {
           : "Chat through the lesson, edit the diary on the right, then save when ready."
       }
       bootstrap={bootstrap}
+      lessonDate={startHint?.lesson_date}
+      lessonTitle={startHint?.lesson_title}
       renderBody={({ onError }: ArtifactSessionBodyProps) => (
         <MemoryWorkspace
           classId={classId}
           reviewStorageKey={reviewStorageKey}
+          discardRedirectHref={discardRedirectHref}
           onError={onError}
         />
       )}

@@ -27,6 +27,11 @@ from app.services.artifact_session_service import (
     ArtifactSessionService,
 )
 from app.services.memory_candidate_ledger import MemoryCandidateLedger
+from app.services.workflow_drafts import (
+    WorkflowDraftConflict,
+    WorkflowDraftIdentity,
+    WorkflowDraftStore,
+)
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.planning_state import (
     planning_api_payload,
@@ -51,16 +56,29 @@ class PlanService:
         wiki: WikiStore,
         agents: AgentRunner,
         memory_candidate_ledger: MemoryCandidateLedger | None = None,
+        workflow_drafts: WorkflowDraftStore | None = None,
+        workspace_id: str = "local",
     ) -> None:
         self.wiki = wiki
         self.agents = agents
+        self.workflow_drafts = workflow_drafts
+        self.workspace_id = workspace_id
         self.core = ArtifactSessionService(
-            wiki, agents, memory_candidate_ledger=memory_candidate_ledger
+            wiki,
+            agents,
+            memory_candidate_ledger=memory_candidate_ledger,
+            workflow_drafts=workflow_drafts,
+            workspace_id=workspace_id,
         )
 
     def _to_model(self, s: ArtifactSession) -> PlanSession:
         return PlanSession(
             session_id=s.session_id,
+            draft_id=s.draft_id,
+            artifact_revision=s.artifact_revision,
+            artifact_hash=s.artifact_hash,
+            turn_in_progress=s.turn_in_progress,
+            latest_turn_complete=s.latest_turn_complete,
             class_id=s.class_id,
             status=PlanSessionStatus(s.status),
             messages=s.messages,
@@ -68,7 +86,18 @@ class PlanService:
         )
 
     async def start_session(self, class_id: str) -> PlanSession:
-        session = await self.core.start_session(MODE, class_id)
+        session = await self.core.start_session(
+            MODE,
+            class_id,
+            draft_identity=WorkflowDraftIdentity(
+                workspace_id=self.workspace_id,
+                class_id=class_id,
+                mode=MODE,
+                intent="create_plan",
+            )
+            if self.workflow_drafts is not None
+            else None,
+        )
         return self._to_model(session)
 
     def get_session(self, session_id: str) -> ArtifactSession:
@@ -87,10 +116,14 @@ class PlanService:
         attachments: list[ChatAttachment] | None = None,
     ) -> PlanChatResponse:
         result = await self.core.chat(session_id, message, plan_markdown, attachments)
+        session = self.core.get_session(session_id)
         planning = result.planning or {}
         return PlanChatResponse(
             reply=result.reply,
             plan_markdown=result.markdown,
+            draft_id=session.draft_id,
+            artifact_revision=session.artifact_revision,
+            artifact_hash=session.artifact_hash,
             ready_to_save=result.ready,
             phase=planning.get("phase"),
             last_change_summary=planning.get("last_change_summary", ""),
@@ -172,9 +205,33 @@ class PlanService:
             lesson_date = date.fromisoformat(req.lesson_date).isoformat()
         except ValueError as exc:
             raise ValueError("lesson_date must be YYYY-MM-DD") from exc
-        title = self.wiki.extract_title(req.plan_markdown) or "Lesson plan"
-        path = self.wiki.save_lesson_plan(class_id, lesson_date, req.plan_markdown)
+        plan_markdown = req.plan_markdown
+        if req.draft_id:
+            if req.draft_id != session.draft_id:
+                raise KeyError("Draft/session mismatch")
+            if req.expected_artifact_revision is None or req.expected_artifact_hash is None:
+                raise ValueError("draft revision/hash required")
+            if self.workflow_drafts is None:
+                if (
+                    session.artifact_revision != req.expected_artifact_revision
+                    or session.artifact_hash != req.expected_artifact_hash
+                ):
+                    raise ValueError("draft_changed_since_review_created")
+            else:
+                try:
+                    row = self.workflow_drafts.validate_current_snapshot(
+                        req.draft_id,
+                        expected_revision=req.expected_artifact_revision,
+                        expected_hash=req.expected_artifact_hash,
+                    )
+                except WorkflowDraftConflict as exc:
+                    raise ValueError(str(exc)) from exc
+                plan_markdown = row.artifact_markdown
+        title = self.wiki.extract_title(plan_markdown) or "Lesson plan"
+        path = self.wiki.save_lesson_plan(class_id, lesson_date, plan_markdown)
         self.core.set_status(req.session_id, PlanSessionStatus.saved.value)
+        if self.workflow_drafts is not None and session.draft_id:
+            self.workflow_drafts.mark_saved(session.draft_id)
         candidates: list[dict] = []
         if session.runtime:
             subject = self.wiki.get_class(class_id).subject
@@ -222,3 +279,10 @@ class PlanService:
 
     def save_plan(self, class_id: str, lesson_date: str, plan: LessonPlan) -> str:
         return self.wiki.save_lesson_plan(class_id, lesson_date, plan.to_markdown())
+
+    def discard_draft(self, draft_id: str) -> None:
+        if self.workflow_drafts is None:
+            raise KeyError(f"Unknown workflow draft: {draft_id}")
+        row = self.workflow_drafts.discard(draft_id)
+        if row.backend_session_id in self.core.sessions:
+            del self.core.sessions[row.backend_session_id]

@@ -9,6 +9,7 @@ from typing import Any
 from deepeval.metrics import BaseMetric, GEval
 from deepeval.test_case import LLMTestCase, SingleTurnParams
 
+from tests.eval.model_config import build_deepeval_model
 from tests.eval.plan_trace_scorer import ScoreResult, score_trace_hygiene, score_turn_runtime
 from tests.evals.goldens.chat_plan import ChatGolden
 from tests.evals.harness import (
@@ -194,7 +195,6 @@ class GroundedChatGEval(BaseMetric):
             return None
         if os.getenv("RUN_LLM_CHAT_JUDGE", "1") != "1":
             return None
-        model = os.getenv("DEEPEVAL_MODEL") or os.getenv("OPENAI_FAST_MODEL", "gpt-4o-mini")
         return GEval(
             name=f"GroundedChat[{self.golden.golden_id}]",
             criteria=self.golden.geval_criteria,
@@ -204,7 +204,7 @@ class GroundedChatGEval(BaseMetric):
                 SingleTurnParams.ACTUAL_OUTPUT,
             ],
             threshold=self.threshold,
-            model=model,
+            model=build_deepeval_model(),
         )
 
     def measure(self, test_case: LLMTestCase) -> float:

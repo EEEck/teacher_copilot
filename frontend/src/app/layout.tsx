@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/layout/app-shell";
+import { PendingTurnNotifier } from "@/components/klassenpilot/pending-turn-notifier";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 import { Geist } from "next/font/google";
@@ -18,6 +20,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <TooltipProvider>
           <AppShell>{children}</AppShell>
+          <PendingTurnNotifier />
+          <Toaster />
         </TooltipProvider>
       </body>
     </html>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ActionLink } from "@/components/klassenpilot/action-link";
 import {
@@ -12,7 +12,14 @@ import { StatCard } from "@/components/klassenpilot/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { client, type ClassMemorySnapshot, type ClassTimeline } from "@/lib/api";
+import {
+  client,
+  type ClassMemorySnapshot,
+  type ClassTimeline,
+  type MemorySweepReviewResponse,
+} from "@/lib/api";
+import { consumeClassHomeTimelineRefresh } from "@/lib/class-home-refresh";
+import { memorySweepReviewBadge } from "@/lib/memory-sweep-review-status";
 
 type ClassHomeClientProps = {
   classId: string;
@@ -39,15 +46,38 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
   const [snapshot, setSnapshot] = useState<ClassMemorySnapshot>(
     emptySnapshot(classId),
   );
+  const [memorySweepReview, setMemorySweepReview] =
+    useState<MemorySweepReviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchClassHome = useCallback(
+    async (opts?: { snapshot?: boolean }) => {
+      const includeSnapshot = opts?.snapshot !== false;
+      const requests = includeSnapshot
+        ? Promise.all([
+            client.getTimeline(classId),
+            client.getSnapshot(classId),
+            client.getMemorySweepReview(classId),
+          ])
+        : Promise.all([
+            client.getTimeline(classId),
+            client.getMemorySweepReview(classId),
+          ]).then(([timelineData, reviewData]) => [timelineData, null, reviewData] as const);
+
+      const [timelineData, snapshotData, reviewData] = await requests;
+      return { timelineData, snapshotData, reviewData };
+    },
+    [classId],
+  );
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([client.getTimeline(classId), client.getSnapshot(classId)])
-      .then(([timelineData, snapshotData]) => {
+    fetchClassHome()
+      .then(({ timelineData, snapshotData, reviewData }) => {
         if (!cancelled) {
           setTimeline(timelineData);
-          setSnapshot(snapshotData);
+          if (snapshotData) setSnapshot(snapshotData);
+          setMemorySweepReview(reviewData);
           setError(null);
         }
       })
@@ -59,10 +89,57 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
     return () => {
       cancelled = true;
     };
-  }, [classId]);
+  }, [fetchClassHome]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const refreshIfMarked = () => {
+      if (!consumeClassHomeTimelineRefresh(window.sessionStorage, classId)) return;
+      void fetchClassHome({ snapshot: false })
+        .then(({ timelineData, reviewData }) => {
+          setTimeline(timelineData);
+          setMemorySweepReview(reviewData);
+          setError(null);
+        })
+        .catch((e: unknown) => {
+          setError(e instanceof Error ? e.message : "Failed to refresh timeline");
+        });
+    };
+
+    const refreshReviewStatus = () => {
+      void client
+        .getMemorySweepReview(classId)
+        .then(setMemorySweepReview)
+        .catch(() => {
+          // Keep the rest of class home usable if the badge status fails.
+        });
+    };
+
+    const handlePageResume = () => {
+      refreshIfMarked();
+      refreshReviewStatus();
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") handlePageResume();
+    };
+
+    window.addEventListener("pageshow", handlePageResume);
+    window.addEventListener("focus", handlePageResume);
+    document.addEventListener("visibilitychange", handleVisibility);
+    refreshIfMarked();
+    refreshReviewStatus();
+    return () => {
+      window.removeEventListener("pageshow", handlePageResume);
+      window.removeEventListener("focus", handlePageResume);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [classId, fetchClassHome]);
 
   const timelineEntries = timeline.entries ?? [];
   const timelineMonths = timeline.months ?? [];
+  const memorySweepBadge = memorySweepReviewBadge(memorySweepReview);
 
   return (
     <div>
@@ -99,7 +176,16 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
           Update memory
         </ActionLink>
         <ActionLink href={`/classes/${classId}/plan`}>Create lesson plan</ActionLink>
-        <ActionLink href={`/classes/${classId}/memory-sweep`}>Memory Sweep</ActionLink>
+        <ActionLink href={`/classes/${classId}/memory-sweep`}>
+          <span className="flex flex-col items-start leading-tight">
+            <span>Memory Sweep</span>
+            {memorySweepBadge && (
+              <span className="text-xs font-normal opacity-80">
+                {memorySweepBadge}
+              </span>
+            )}
+          </span>
+        </ActionLink>
       </div>
 
       <Card>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { Thread } from "@/components/assistant-ui/thread";
 
 /**
@@ -10,8 +11,11 @@ import { Thread } from "@/components/assistant-ui/thread";
  * disappeared"). A plain static welcome avoids both and matches memory exactly.
  */
 export function PlanThread() {
+  const { draftId, turnInProgress } = useArtifactSession();
   return (
     <Thread
+      composerStorageKey={draftId ? `kp:composer:${draftId}` : undefined}
+      backgroundTurnInProgress={turnInProgress}
       showSuggestions={false}
       welcome={{
         title: "Plan your next lesson",

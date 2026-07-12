@@ -39,4 +39,28 @@ describe("client beta auth transport", () => {
       expect.objectContaining({ credentials: "include" }),
     );
   });
+
+  it("preserves active memory draft metadata while normalizing timeline entries", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          class_id: "chemie_9b_2026_27",
+          entries: [
+            {
+              date: "2026-07-08",
+              title: "Isomers",
+              status: "planned",
+              memory_draft_id: "draft-123",
+            },
+          ],
+          months: ["2026-07"],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const timeline = await client.getTimeline("chemie_9b_2026_27");
+
+    expect(timeline.entries[0].memory_draft_id).toBe("draft-123");
+  });
 });

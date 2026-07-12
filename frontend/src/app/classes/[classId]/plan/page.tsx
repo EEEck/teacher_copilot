@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import { LoaderCircleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { PlanThread } from "@/components/assistant-ui/plan-thread";
@@ -50,16 +51,17 @@ function PlanSaveFooter({
   setLessonDate: (v: string) => void;
   setBeforePlan: (v: string) => void;
 }) {
-  const { artifactMarkdown, isUpdating, readyToSave, runWithSessionRecovery } =
+  const { artifactMarkdown, draftId, isUpdating, readyToSave, runWithSessionRecovery } =
     useArtifactSession();
-  const [loading, setLoading] = useState(false);
+  const [operation, setOperation] = useState<"idle" | "preparing" | "discarding">("idle");
+  const busy = operation !== "idle";
 
   const handleReady = useCallback(async () => {
     if (!lessonDate.trim()) {
       onError("Enter a lesson date (YYYY-MM-DD).");
       return;
     }
-    setLoading(true);
+    setOperation("preparing");
     onError(null);
     try {
       await runWithSessionRecovery((sessionId) =>
@@ -76,9 +78,25 @@ function PlanSaveFooter({
     } catch (e) {
       onError(e instanceof Error ? e.message : "Could not prepare save");
     } finally {
-      setLoading(false);
+      setOperation("idle");
     }
   }, [classId, artifactMarkdown, lessonDate, onError, runWithSessionRecovery, setBeforePlan, setInReview]);
+
+  const handleDiscard = useCallback(async () => {
+    if (!draftId) return;
+    setOperation("discarding");
+    onError(null);
+    try {
+      await client.discardWorkflowDraft(classId, draftId);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(`kp:composer:${draftId}`);
+        window.location.reload();
+      }
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Could not discard draft");
+      setOperation("idle");
+    }
+  }, [classId, draftId, onError]);
 
   if (inReview) {
     return (
@@ -91,10 +109,10 @@ function PlanSaveFooter({
             value={lessonDate}
             onChange={(e) => setLessonDate(e.target.value)}
             className="w-[180px]"
-            disabled={loading}
+            disabled={busy}
           />
         </div>
-        <Button variant="ghost" onClick={() => setInReview(false)} disabled={loading}>
+        <Button variant="ghost" onClick={() => setInReview(false)} disabled={busy}>
           Back
         </Button>
       </div>
@@ -114,8 +132,30 @@ function PlanSaveFooter({
             className="w-[180px]"
           />
         </div>
-        <Button className="w-fit" onClick={handleReady} disabled={loading || isUpdating}>
-          {loading ? "Preparing save…" : "Ready to save plan"}
+        <Button className="w-fit" onClick={handleReady} disabled={busy || isUpdating}>
+          {operation === "preparing" ? (
+            <>
+              <LoaderCircleIcon className="animate-spin" />
+              Preparing save…
+            </>
+          ) : (
+            "Ready to save plan"
+          )}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleDiscard}
+          disabled={busy || isUpdating || !draftId}
+        >
+          {operation === "discarding" ? (
+            <>
+              <LoaderCircleIcon className="animate-spin" />
+              Discarding…
+            </>
+          ) : (
+            "Discard draft"
+          )}
         </Button>
       </div>
       {readyToSave && (
@@ -129,15 +169,24 @@ function PlanSaveFooter({
 
 function PlanWorkspace({
   classId,
+  lessonDate,
+  setLessonDate,
   onError,
 }: {
   classId: string;
+  lessonDate: string;
+  setLessonDate: (value: string) => void;
   onError: (message: string | null) => void;
 }) {
   const router = useRouter();
-  const { artifactMarkdown, runWithSessionRecovery } = useArtifactSession();
+  const {
+    artifactMarkdown,
+    draftId,
+    artifactRevision,
+    artifactHash,
+    runWithSessionRecovery,
+  } = useArtifactSession();
   const [inReview, setInReview] = useState(false);
-  const [lessonDate, setLessonDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [beforePlan, setBeforePlan] = useState("");
   const [approved, setApproved] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -212,7 +261,11 @@ function PlanWorkspace({
     onError(null);
     try {
       const res = await runWithSessionRecovery((sessionId) =>
-        client.planSave(classId, sessionId, lessonDate.trim(), artifactMarkdown),
+        client.planSave(classId, sessionId, lessonDate.trim(), artifactMarkdown, {
+          draftId,
+          expectedArtifactRevision: artifactRevision,
+          expectedArtifactHash: artifactHash,
+        }),
       );
       const candidates = dedupeMemoryCandidates(res?.memory_candidates ?? []);
       const split = splitPostSaveMemoryCandidates(candidates);
@@ -225,10 +278,20 @@ function PlanWorkspace({
       }
     } catch (e) {
       onError(e instanceof Error ? e.message : "Save failed");
-    } finally {
       setLoading(false);
     }
-  }, [approved, lessonDate, classId, artifactMarkdown, onError, goToLesson, runWithSessionRecovery]);
+  }, [
+    approved,
+    lessonDate,
+    classId,
+    artifactMarkdown,
+    draftId,
+    artifactRevision,
+    artifactHash,
+    onError,
+    goToLesson,
+    runWithSessionRecovery,
+  ]);
 
   useEffect(() => {
     if (!inReview || !lessonDate.trim()) return;
@@ -325,6 +388,7 @@ function PlanWorkspace({
 export default function PlanPage() {
   const params = useParams();
   const classId = params.classId as string;
+  const [lessonDate, setLessonDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const bootstrap = useCallback(
     async (opts?: { preserveMarkdown?: string }) => {
@@ -336,6 +400,12 @@ export default function PlanPage() {
       }
       return {
         sessionId: session.session_id,
+        draftId: draft.draft_id,
+        artifactRevision: draft.artifact_revision,
+        artifactHash: draft.artifact_hash,
+        turnInProgress: draft.turn_in_progress,
+        latestTurnComplete: draft.latest_turn_complete,
+        initialMessages: draft.messages?.length ? draft.messages : session.messages,
         initialMarkdown: draft.plan_markdown,
         openingMessage: session.opening_message,
       };
@@ -350,8 +420,14 @@ export default function PlanPage() {
       title="Create lesson plan"
       description="Chat to plan the next lesson, refine the draft on the right, then save to a lesson date."
       bootstrap={bootstrap}
+      lessonDate={lessonDate}
       renderBody={({ onError }: ArtifactSessionBodyProps) => (
-        <PlanWorkspace classId={classId} onError={onError} />
+        <PlanWorkspace
+          classId={classId}
+          lessonDate={lessonDate}
+          setLessonDate={setLessonDate}
+          onError={onError}
+        />
       )}
     />
   );

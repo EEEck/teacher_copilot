@@ -8,7 +8,10 @@ import {
 } from "@/components/assistant-ui/artifact-runtime-config";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import type { CompletenessChecklist } from "@/lib/api";
+import type { ChatMessage, CompletenessChecklist } from "@/lib/api";
+import { toWorkflowDraftSnapshot } from "@/features/workflow-drafts/workflow-draft-bootstrap";
+import { workflowDraftRuntimeKey } from "@/features/workflow-drafts/workflow-draft-runtime-key";
+import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 
 export type ArtifactBootstrapOptions = {
   /** Re-apply draft after the server lost the in-memory session (e.g. backend restart). */
@@ -17,6 +20,12 @@ export type ArtifactBootstrapOptions = {
 
 export type ArtifactBootstrap = {
   sessionId: string;
+  draftId?: string;
+  artifactRevision?: number;
+  artifactHash?: string;
+  turnInProgress?: boolean;
+  latestTurnComplete?: boolean;
+  initialMessages?: ChatMessage[];
   initialMarkdown: string;
   initialCompleteness?: CompletenessChecklist | null;
   initialMemoryState?: Record<string, unknown> | null;
@@ -41,6 +50,8 @@ export function ArtifactSessionPage({
   title,
   description,
   bootstrap,
+  lessonDate,
+  lessonTitle,
   renderBody,
 }: {
   mode: ArtifactMode;
@@ -48,6 +59,8 @@ export function ArtifactSessionPage({
   title: string;
   description?: string;
   bootstrap: (opts?: ArtifactBootstrapOptions) => Promise<ArtifactBootstrap>;
+  lessonDate?: string;
+  lessonTitle?: string;
   renderBody: (props: ArtifactSessionBodyProps) => ReactNode;
 }) {
   const [data, setData] = useState<ArtifactBootstrap | null>(null);
@@ -64,17 +77,19 @@ export function ArtifactSessionPage({
     async (opts?: ArtifactBootstrapOptions) => {
       const result = await bootstrap(opts);
       sessionIdRef.current = result.sessionId;
+      const snapshot = toWorkflowDraftSnapshot(mode, classId, result);
+      if (snapshot) useWorkflowDraftStore.getState().upsert(snapshot);
       setData(result);
       return result;
     },
-    [bootstrap],
+    [bootstrap, classId, mode],
   );
 
   const onSessionLost = useCallback(
     async (preserveMarkdown: string) => {
       await loadBootstrap({ preserveMarkdown });
       setSessionNotice(
-        "Server session was reset (e.g. after a restart). Your draft was restored — chat history from this tab was cleared.",
+        "Server session was reset. Your draft and saved chat state were restored.",
       );
     },
     [loadBootstrap],
@@ -121,6 +136,14 @@ export function ArtifactSessionPage({
             mode,
             classId,
             sessionId: data.sessionId,
+            draftId: data.draftId,
+            artifactRevision: data.artifactRevision,
+            artifactHash: data.artifactHash,
+            turnInProgress: data.turnInProgress,
+            latestTurnComplete: data.latestTurnComplete,
+            lessonDate,
+            lessonTitle,
+            initialMessages: data.initialMessages,
             getSessionId: () => sessionIdRef.current,
             onSessionLost,
             initialMarkdown: data.initialMarkdown,
@@ -128,7 +151,7 @@ export function ArtifactSessionPage({
             initialMemoryState: data.initialMemoryState ?? null,
           })
         : null,
-    [mode, classId, data, onSessionLost],
+    [mode, classId, data, lessonDate, lessonTitle, onSessionLost],
   );
 
   const header = (
@@ -170,7 +193,18 @@ export function ArtifactSessionPage({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <ArtifactSessionRuntimeProvider config={config}>
+      {data.latestTurnComplete === false && data.turnInProgress !== true && (
+        <Alert className="mb-6 border-destructive/30 bg-[var(--error-bg)] text-destructive">
+          <AlertDescription>
+            The previous chat turn was interrupted before it reached the draft. Send
+            that note again, or discard the draft to start cleanly.
+          </AlertDescription>
+        </Alert>
+      )}
+      <ArtifactSessionRuntimeProvider
+        key={workflowDraftRuntimeKey(data.draftId, data.sessionId)}
+        config={config}
+      >
         {renderBody({
           sessionId: data.sessionId,
           openingMessage: data.openingMessage ?? "",

@@ -229,7 +229,11 @@ Both backend and frontend use **hot reload** in dev - you usually do not restart
 ./scripts/restart-dev.sh --frontend-only
 ```
 
-**Sessions (prototype):** ingest/plan chat sessions live in backend memory - restarting the backend clears server session state. The UI recreates a session and restores your draft; chat history in the tab is cleared. File/SQLite session persistence is deferred - see [backend/README.md](backend/README.md).
+**Sessions / drafts:** Plan and Update Memory use backend-owned workflow drafts
+under the wiki `workflow/` directory. Reopening the same class workflow resumes
+the draft (messages, artifact, revision). Navigating away does not cancel an
+accepted model turn. See [backend/README.md](backend/README.md) and
+[`docs/agent_contracts.md`](docs/agent_contracts.md).
 
 ## Workflows (v1)
 
@@ -237,9 +241,10 @@ Both backend and frontend use **hot reload** in dev - you usually do not restart
 2. **Class home** -> lesson timeline + status
 3. **Update memory** -> chat + diary draft (right panel) -> review wiki proposals and memory suggestions -> save
 4. **Create lesson plan** -> chat + plan draft (same layout) -> save to a lesson date
-5. **Memory Sweep** -> periodically review accumulated durable-memory signals before applying them
+5. **Memory Sweep** -> open/resume a saved review of accumulated durable-memory
+   signals, decide in Simple or Detailed view, then apply teacher-approved writes
 
-Both chat flows share the same UI shell (`ArtifactSessionWorkspace`: thread left, markdown draft right).
+Both chat flows share the same UI shell (`ArtifactSessionWorkspace`: thread left, markdown draft right) and the same backend workflow-draft path.
 Update Memory can start free-form from the class header, or from a lesson
 timeline/detail action with a typed date/intent hint. Known planned/taught
 lessons skip most target discovery; unknown hinted dates still require
@@ -413,19 +418,26 @@ When a Codex agent finishes a task, it should report:
 - any wiki files changed
 - known limitations or follow-up needed
 
-## Prototype limitations (sessions)
+## Workflow drafts and background jobs
 
-Ingest/plan **session IDs and chat history** live in server RAM (`ArtifactSessionService`). Restarting uvicorn (or `docker compose restart backend`) drops sessions. The UI recovers by starting a new session and keeping your **draft markdown** in the browser; in-thread chat history is not restored. **SQLite (or any DB) is not required for the prototype** - add persistence only when you need multi-worker deploys or durable server-side history.
+Plan / Update Memory chat and Memory Sweep reviews are backend-owned under the
+wiki `workflow/` store. The frontend mirrors drafts in
+`frontend/src/features/workflow-drafts/` and tracks durable jobs
+(chat turns, sweep generation) with a small Running box plus one completion
+toast. Restarting the backend does not wipe an already-persisted draft or saved
+sweep review; an interrupted in-flight turn resumes when the draft is reopened
+(see [`docs/agent_contracts.md`](docs/agent_contracts.md)).
 
 ## UI architecture
 
 | Layer | Location | Purpose |
 |---|---|---|
 | Design tokens | `src/app/globals.css` | shadcn CSS variables |
-| Primitives | `src/components/ui/` | Button, Card, Textarea, Checkbox, ... |
+| Primitives | `src/components/ui/` | Button, Card, SegmentedToggle, … |
+| Features | `src/features/workflow-drafts/` | Draft store + ExternalStore chat runtime |
 | Layout | `src/components/layout/` | AppShell, PageHeader |
-| Domain | `src/components/klassenpilot/` | Timeline, checklist, wiki cards |
-| Chat | `src/components/assistant-ui/` | Shared artifact session runtime -> FastAPI |
+| Domain | `src/components/klassenpilot/` | Timeline, review briefs, Running box |
+| Chat | `src/components/assistant-ui/` | Thread UI + artifact session integration |
 
 ## Roadmap
 

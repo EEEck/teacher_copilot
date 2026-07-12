@@ -4,10 +4,13 @@ import type {
 } from "@/lib/api";
 
 export type PendingMemoryReview = {
-  version: 1;
+  version: 2;
   savedAt: number;
   classId: string;
   routeKey: string;
+  draftId: string;
+  sourceArtifactRevision: number;
+  sourceArtifactHash: string;
   diaryMarkdown: string;
   proposals: WikiUpdateProposal[];
   memoryCandidates: MemoryCandidate[];
@@ -30,7 +33,7 @@ export function savePendingMemoryReview(
 ) {
   const value: PendingMemoryReview = {
     ...review,
-    version: 1,
+    version: 2,
     savedAt: now,
   };
   storage.setItem(
@@ -49,8 +52,11 @@ export function loadPendingMemoryReview(
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<PendingMemoryReview>;
-    if (parsed.version !== 1) return null;
+    if (parsed.version !== 2) return null;
     if (parsed.classId !== classId || parsed.routeKey !== routeKey) return null;
+    if (typeof parsed.draftId !== "string") return null;
+    if (typeof parsed.sourceArtifactRevision !== "number") return null;
+    if (typeof parsed.sourceArtifactHash !== "string") return null;
     if (typeof parsed.savedAt !== "number" || now - parsed.savedAt > MAX_REVIEW_AGE_MS) {
       return null;
     }

@@ -154,10 +154,10 @@ line between class memory and external sources.
 - Create lesson plan with read-only wiki access.
 - Compact memory compaction and profile proposal/apply endpoints.
 - Memory V3 candidate capture, ledger folding/gating, and teacher-reviewed
-  Memory Sweep brief.
+  Memory Sweep brief with backend-owned saved review sessions.
 - Deterministic source-bearing wiki retrieval.
 - Query packs for planning, ingest, and review.
-- In-memory prototype sessions.
+- Backend-owned workflow drafts for Plan / Update Memory (leave and resume).
 
 ## Near-Term Scope
 

@@ -10,5 +10,12 @@ function IngestWelcomeChecklist() {
 }
 
 export function IngestThread() {
-  return <Thread welcomeExtra={<IngestWelcomeChecklist />} />;
+  const { draftId, turnInProgress } = useArtifactSession();
+  return (
+    <Thread
+      welcomeExtra={<IngestWelcomeChecklist />}
+      composerStorageKey={draftId ? `kp:composer:${draftId}` : undefined}
+      backgroundTurnInProgress={turnInProgress}
+    />
+  );
 }

@@ -19,11 +19,16 @@ Maintenance notes:
 
 - Treat these files as adapted/vendor-style UI components, not as product
   behavior contracts.
+- Plan and Update Memory chat messages are owned by
+  `src/features/workflow-drafts/` and rendered through
+  `useExternalStoreRuntime`. Do not reintroduce `useLocalRuntime` remount keys
+  as the sync strategy.
 - For future inline chat artifacts, attachments, message actions, or richer
   tool/result displays, inspect upstream assistant-ui examples first and adapt
   the smallest useful pattern locally.
 - Keep KlassenPilot-specific session, artifact, safety, and SSE behavior in the
-  local runtime integration files and backend stream policy.
+  local runtime integration files, the workflow-draft feature module, and
+  backend stream policy.
 - Raw reasoning/tool panels are for development diagnostics. In production the
   backend stream policy strips raw reasoning text, tool args, and tool outputs
   before these components receive events.
