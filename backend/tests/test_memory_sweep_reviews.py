@@ -349,10 +349,23 @@ def test_memory_sweep_review_api_explains_new_candidates_that_make_a_draft_stale
 
 
 def test_memory_sweep_stale_reasons_tolerates_asymmetric_wiki_targets() -> None:
-    """Union-of-keys diffs must not KeyError when a target exists on only one side.
+    """Regression: asymmetric wiki_targets must not KeyError (HITL 2026-07-12).
 
-    HITL 2026-07-12: teaching_patterns.md present only in the live snapshot raised
-    KeyError and the frontend showed "Cannot reach API".
+    Real-world path:
+    1. Teacher opens Memory Sweep; backend saves a review + source snapshot that
+       lists wiki targets present *at generate time*.
+    2. Later, class memory gains (or loses) a curated page excerpt — e.g.
+       ``teaching_patterns.md`` appears only in the *live* snapshot.
+    3. ``GET /memory/sweep/review`` rebuilds the live snapshot and calls
+       ``memory_sweep_stale_reasons(previous, current)``.
+    4. The old code did ``previous_targets[target]`` over
+       ``set(previous) | set(current)``. A key only in ``current`` raised
+       ``KeyError: 'teaching_patterns.md'`` → FastAPI 500 → frontend
+       ``Cannot reach API``.
+
+    Launch fix: ``.get(target)`` on both sides (same for student summaries).
+    v1.1: fingerprint-first stale gate so reason text is best-effort and cannot
+    crash the review GET (see product_backlog incident MSW-001).
     """
     previous = {
         "ledger_rows": [],
@@ -366,12 +379,13 @@ def test_memory_sweep_stale_reasons_tolerates_asymmetric_wiki_targets() -> None:
         ],
         "synthetic_student_summaries": [],
     }
+    # Target only in live snapshot (the HITL case).
     reasons = memory_sweep_stale_reasons(previous, current)
     assert reasons == [
         "1 memory page changed after this draft was generated."
     ]
 
-    # Removed target (only in previous) must also be safe.
+    # Target only in saved snapshot (removed from wiki excerpts).
     reasons_removed = memory_sweep_stale_reasons(current, previous)
     assert reasons_removed == [
         "1 memory page changed after this draft was generated."
@@ -379,6 +393,11 @@ def test_memory_sweep_stale_reasons_tolerates_asymmetric_wiki_targets() -> None:
 
 
 def test_memory_sweep_stale_reasons_tolerates_asymmetric_student_summaries() -> None:
+    """Same union-of-keys bug class as wiki_targets, for synthetic summaries.
+
+    Student-summary rows are keyed by ``candidate_id``. A summary that exists
+    only on one side of the snapshot must count as a change, never raise.
+    """
     previous = {
         "ledger_rows": [],
         "wiki_targets": [],
