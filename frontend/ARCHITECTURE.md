@@ -89,6 +89,29 @@ Runtime owner: [`artifact-session-runtime.tsx`](src/components/assistant-ui/arti
 
 Discuss dock is **chrome only**; chat behavior is the shared runtime + Thread.
 
+## Class home dashboard
+
+[`class-home-client.tsx`](src/app/classes/[classId]/class-home-client.tsx) is a light
+dashboard, not a second product surface. Layout is three titled sections
+(`ClassHomeSection`):
+
+1. **Classroom dashboard** — brief hero + At a glance / Upcoming / My notes.
+   Brief merges **Watch** (misconceptions first, then brief watch items; max 3).
+   No recommended-action button in the brief (workflows live under Actions).
+   Upcoming uses mock dates (`class-home-mock-dates.ts`); notes are
+   localStorage (`kp:class-notes:{classId}` via `class-home-notes.ts`) —
+   browser-local only.
+2. **Actions** — dismissible `StickyNote` + compact equal-width row
+   (`inline-grid` + `auto-cols-[1fr]`, sized to the widest label; `size="lg"`).
+   Core three use `variant="soft"`; Memory Sweep + Inspect wiki use `outline`.
+   Sweep shows a quiet “Draft saved…” subtitle when useful, an attention chip
+   for generating/stale/failed, and a due chip after 5 days / never swept
+   (`memory-sweep-review-status.ts`).
+3. **Lesson timeline** — larger section title; timeline card below.
+
+Discuss dock stays page chrome (FAB). Do not add a feature kanban or wiki-backed
+todos here without an explicit product decision.
+
 ## Pending jobs
 
 - Markers: `src/lib/pending-chat-turns.ts` (includes `discuss`).

@@ -21,4 +21,6 @@ Before adding or changing UI, read [frontend/DESIGN.md](frontend/DESIGN.md) and 
 |------|-----|
 | Edit / Preview (or similar modes) | `SegmentedToggle` from `@/components/ui/segmented-toggle` |
 | Highlight panel / callout | `Card variant="highlight"` |
+| Equal-weight workflow destinations | `Button` / `ActionLink` `variant="soft"` |
+| Dismissible amber help / sticky note | `StickyNote` from `@/components/ui/sticky-note` |
 | Primary action | `Button variant="default"` once per row |

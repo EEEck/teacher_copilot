@@ -15,7 +15,7 @@ Lightweight design rules for app screens and [assistant-ui](https://github.com/a
 | Layer | Path | Role |
 |-------|------|------|
 | Tokens | `src/app/globals.css` | shadcn semantic CSS variables |
-| Primitives | `src/components/ui/` | Button, Card, Alert, SegmentedToggle, … |
+| Primitives | `src/components/ui/` | Button, Card, Alert, StickyNote, SegmentedToggle, … |
 | Features | `src/features/` | Cross-route draft/job ownership (workflow drafts) |
 | Chat | `src/components/assistant-ui/` | Thread, markdown (from assistant-ui registry) |
 | Domain | `src/components/klassenpilot/` | Timeline, checklist, wiki cards, pending jobs, discuss dock |
@@ -56,6 +56,7 @@ Update assistant-ui components: `npx assistant-ui add thread -o -p src/component
 |---------|---------|-----|
 | **Default** | `Card` (default) → `bg-card` white | Class list, stat cards, timeline, diary checklist |
 | **Highlight** | `Card variant="highlight"` → `bg-muted` | Top misconceptions, info alerts |
+| **Sticky note** | `StickyNote` → amber help + dismiss × | Workflow orientation (class Actions, Memory Sweep “How to review”) |
 | **Chat canvas** | `bg-background` | Thread root, composer (assistant-ui) |
 | **User bubble** | `bg-muted` | User messages in Thread (do not override) |
 
@@ -85,11 +86,15 @@ feedback while a job is still running.
 
 | Variant | Look | Use |
 |---------|------|-----|
-| `default` | Green fill | Primary CTA, chat send button |
-| `outline` | White + border | Secondary actions (“Create lesson plan”) |
+| `default` | Green fill | Primary CTA, chat send button (scarce — one per action group) |
+| `soft` | Accent fill + dark green text | Equal-weight destinations (e.g. class-home core workflows) |
+| `outline` | White + border | Secondary actions |
+| `ghost` | Text only / light hover | Tertiary (Inspect wiki) |
 | `destructive` | Red tint | Delete / errors |
 
-**Rule:** One green `default` button per action row. Use `ActionLink` with `primary` prop for the main action.
+**Rule:** One green `default` button per action row when there is a single primary
+habit CTA. For a small set of equal core workflows, prefer `soft` instead of a
+wall of `default`. Use `ActionLink` with `variant` for linked actions.
 
 ## Segmented controls
 

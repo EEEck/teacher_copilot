@@ -1,22 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ActionLink } from "@/components/klassenpilot/action-link";
+import { ClassHomeNotes } from "@/components/klassenpilot/class-home-notes";
+import { ClassHomeSection } from "@/components/klassenpilot/class-home-section";
 import {
   DiscussDock,
   type DiscussDockState,
 } from "@/components/klassenpilot/discuss-dock";
-import {
-  LessonTimeline,
-  MisconceptionsPanel,
-} from "@/components/klassenpilot/lesson-timeline";
+import { LessonTimeline } from "@/components/klassenpilot/lesson-timeline";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StickyNote } from "@/components/ui/sticky-note";
 import {
   client,
   type ClassBrief,
@@ -25,8 +25,14 @@ import {
   type MemorySweepReviewResponse,
 } from "@/lib/api";
 import { consumeClassHomeTimelineRefresh } from "@/lib/class-home-refresh";
+import { classHomeMockUpcoming } from "@/lib/class-home-mock-dates";
+import { classHomeWatchItems } from "@/lib/class-home-watch";
 import { shortWikiPath } from "@/lib/markdown-diff";
-import { memorySweepReviewBadge } from "@/lib/memory-sweep-review-status";
+import {
+  memorySweepDueBadge,
+  memorySweepReviewAttentionBadge,
+  memorySweepUsefulSubtitle,
+} from "@/lib/memory-sweep-review-status";
 import {
   normalizeClassWikiPath,
   wikiViewerHref,
@@ -67,6 +73,7 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
   const [brief, setBrief] = useState<ClassBrief | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
   const [discussDock, setDiscussDock] = useState<DiscussDockState>("closed");
+  const [showActionsHelp, setShowActionsHelp] = useState(true);
   const [memorySweepReview, setMemorySweepReview] =
     useState<MemorySweepReviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -187,14 +194,28 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
 
   const timelineEntries = timeline.entries ?? [];
   const timelineMonths = timeline.months ?? [];
-  const memorySweepBadge = memorySweepReviewBadge(memorySweepReview);
-  const recommendedHref =
-    brief?.recommended_action.href ||
-    (brief?.recommended_action.label.toLowerCase().includes("memory sweep")
-      ? `/classes/${classId}/memory-sweep`
-      : brief?.recommended_action.label.toLowerCase().includes("update")
-        ? `/classes/${classId}/memory`
-        : `/classes/${classId}/plan`);
+  const memorySweepSubtitle = memorySweepUsefulSubtitle(memorySweepReview);
+  const memorySweepQuietSubtitle = memorySweepSubtitle.startsWith("Draft saved")
+    ? memorySweepSubtitle
+    : "";
+  const memorySweepAttention = memorySweepReviewAttentionBadge(
+    memorySweepReview,
+  );
+  const memorySweepDue = memorySweepDueBadge(memorySweepReview);
+  // Chip = attention (4) or weekly due; quiet draft stays as subtitle (2).
+  const memorySweepChip = memorySweepAttention || memorySweepDue;
+
+  const watchItems = useMemo(
+    () =>
+      classHomeWatchItems(snapshot.top_misconceptions, brief?.watch_items),
+    [snapshot.top_misconceptions, brief?.watch_items],
+  );
+  const briefReasons = (brief?.reasons ?? []).slice(0, 3);
+  const upcoming = classHomeMockUpcoming(classId);
+  const lastTaught =
+    snapshot.last_committed_date ||
+    snapshot.last_lesson_date ||
+    "—";
 
   return (
     <div>
@@ -209,91 +230,239 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
         </Alert>
       )}
 
-      <Card className="mb-8" variant="highlight">
-        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-          <div>
-            <CardTitle>Today&apos;s class brief</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {brief?.cached
-                ? "Cached briefing from the last refresh."
-                : "Snapshot-backed briefing until you refresh."}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void refreshBrief()}
-            disabled={briefLoading}
-          >
-            {briefLoading ? "Refreshing…" : "Refresh brief"}
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm leading-relaxed text-foreground">
-            {brief?.summary ?? "Loading class brief…"}
-          </p>
-          {brief?.reasons?.length ? (
-            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-              {brief.reasons.map((reason) => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
-          ) : null}
-          {brief?.watch_items?.length ? (
+      <ClassHomeSection
+        id="classroom-dashboard"
+        title="Classroom dashboard"
+        description="Situation snapshot for this class — brief, metrics, upcoming, and your local notes."
+      >
+        <Card className="mb-4" variant="highlight">
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Watch
+              <CardTitle>Today&apos;s class brief</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {brief?.cached
+                  ? "Cached briefing from the last refresh."
+                  : "Snapshot-backed briefing until you refresh."}
               </p>
-              <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                {brief.watch_items.map((item) => (
-                  <li key={item}>{item}</li>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void refreshBrief()}
+              disabled={briefLoading}
+            >
+              {briefLoading ? "Refreshing…" : "Refresh brief"}
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm leading-relaxed text-foreground">
+              {brief?.summary ?? "Loading class brief…"}
+            </p>
+            {briefReasons.length ? (
+              <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                {briefReasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
                 ))}
               </ul>
-            </div>
-          ) : null}
-          {brief?.recommended_action?.label ? (
-            <ActionLink href={recommendedHref} primary>
-              {brief.recommended_action.label}
-            </ActionLink>
-          ) : null}
-          {brief?.source_paths?.length ? (
-            <p className="text-xs text-muted-foreground">
-              Based on{" "}
-              {brief.source_paths.map((path, index) => (
-                <span key={path}>
-                  {index > 0 ? ", " : ""}
-                  <Link
-                    href={wikiHref(classId, path)}
-                    className="text-primary hover:underline"
+            ) : null}
+            {watchItems.length ? (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Watch
+                </p>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                  {watchItems.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {brief?.source_paths?.length ? (
+              <p className="text-xs text-muted-foreground">
+                Based on{" "}
+                {brief.source_paths.map((path, index) => (
+                  <span key={path}>
+                    {index > 0 ? ", " : ""}
+                    <Link
+                      href={wikiHref(classId, path)}
+                      className="text-primary hover:underline"
+                    >
+                      {shortWikiPath(path)}
+                    </Link>
+                  </span>
+                ))}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader className="pb-0">
+              <CardTitle className="text-base">At a glance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Unit</dt>
+                  <dd className="font-medium text-foreground">
+                    {snapshot.current_unit || "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Open loops</dt>
+                  <dd className="font-medium text-foreground">
+                    {snapshot.open_loop_count}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Last taught</dt>
+                  <dd className="font-medium text-foreground">{lastTaught}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Lessons logged</dt>
+                  <dd className="font-medium text-foreground">
+                    {timelineEntries.length}
+                  </dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-0">
+              <CardTitle className="text-base">Upcoming</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Mock dates — not from wiki.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm">
+                {upcoming.map((item) => (
+                  <li
+                    key={`${item.label}-${item.date}`}
+                    className="flex items-baseline justify-between gap-3"
                   >
-                    {shortWikiPath(path)}
-                  </Link>
-                </span>
-              ))}
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
+                    <span className="text-foreground">{item.label}</span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      {item.date}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
 
-      <MisconceptionsPanel items={snapshot.top_misconceptions} />
+          <div className="md:col-span-2">
+            <ClassHomeNotes classId={classId} />
+          </div>
+        </div>
+      </ClassHomeSection>
 
-      <div className="mb-6 mt-8 flex flex-wrap gap-3">
-        <ActionLink href={`/classes/${classId}/memory`} primary>
-          Update memory
-        </ActionLink>
-        <ActionLink href={`/classes/${classId}/plan`}>Create lesson plan</ActionLink>
-        <ActionLink href={`/classes/${classId}/memory-sweep`}>
-          <span className="flex flex-col items-start leading-tight">
+      <ClassHomeSection
+        id="actions"
+        title="Actions"
+        description="Workflows for this class — pick one job at a time."
+      >
+        {showActionsHelp && (
+          <StickyNote
+            className="mb-4"
+            title="What you can do"
+            dismissAriaLabel="Dismiss actions help"
+            onDismiss={() => setShowActionsHelp(false)}
+          >
+            <ul className="list-disc space-y-1 pl-5">
+              <li>
+                <span className="font-medium">Update memory</span> — turn a
+                lesson conversation into structured results, then approve wiki
+                writes.
+              </li>
+              <li>
+                <span className="font-medium">Create lesson plan</span> — draft
+                the next lesson or assessment from class memory.
+              </li>
+              <li>
+                <span className="font-medium">Discuss</span> — ask about open
+                loops, watch items, or what to do next (opens the chat dock).
+              </li>
+              <li>
+                <span className="font-medium">Memory Sweep</span> — review
+                pending candidates before they land in the wiki. Aim for about
+                once a week; we nudge after 5 days.
+              </li>
+              <li>
+                <span className="font-medium">Inspect wiki</span> — browse the
+                compiled class files behind this dashboard.
+              </li>
+            </ul>
+          </StickyNote>
+        )}
+
+        {/* Equal width = widest label; normal lg height (not full-bleed stretch). */}
+        <div
+          className="inline-grid max-w-full grid-flow-col auto-cols-[1fr] items-stretch gap-3"
+          role="group"
+          aria-label="Class workflows"
+        >
+          <ActionLink
+            href={`/classes/${classId}/memory`}
+            variant="soft"
+            size="lg"
+            className="w-full justify-center px-3"
+          >
+            Update memory
+          </ActionLink>
+          <ActionLink
+            href={`/classes/${classId}/plan`}
+            variant="soft"
+            size="lg"
+            className="w-full justify-center px-3"
+          >
+            Create lesson plan
+          </ActionLink>
+          <Button
+            type="button"
+            variant="soft"
+            size="lg"
+            className="w-full justify-center px-3"
+            onClick={() => setDiscussDock("expanded")}
+          >
+            Discuss
+          </Button>
+          <ActionLink
+            href={`/classes/${classId}/memory-sweep`}
+            variant="outline"
+            size="lg"
+            className="relative w-full flex-col justify-center gap-0 px-3 leading-tight"
+          >
             <span>Memory Sweep</span>
-            {memorySweepBadge && (
-              <span className="text-xs font-normal opacity-80">
-                {memorySweepBadge}
+            {memorySweepQuietSubtitle ? (
+              <span className="text-[10px] font-normal text-muted-foreground">
+                {memorySweepQuietSubtitle}
               </span>
-            )}
-          </span>
-        </ActionLink>
-        <ActionLink href={`/classes/${classId}/wiki/view`}>Inspect wiki</ActionLink>
-      </div>
+            ) : null}
+            {memorySweepChip ? (
+              <span
+                className={
+                  memorySweepAttention
+                    ? "absolute -top-1.5 -right-1.5 max-w-[7.5rem] truncate rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium leading-none text-foreground shadow-sm"
+                    : "absolute -top-1.5 -right-1.5 max-w-[7.5rem] truncate rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-950 shadow-sm"
+                }
+              >
+                {memorySweepChip}
+              </span>
+            ) : null}
+          </ActionLink>
+          <ActionLink
+            href={`/classes/${classId}/wiki/view`}
+            variant="outline"
+            size="lg"
+            className="w-full justify-center px-3"
+          >
+            Inspect wiki
+          </ActionLink>
+        </div>
+      </ClassHomeSection>
 
       <DiscussDock
         classId={classId}
@@ -301,27 +470,30 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
         onStateChange={setDiscussDock}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Lesson timeline</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error ? (
-            <p className="text-sm text-muted-foreground">
-              Timeline unavailable until the API loads successfully.
-            </p>
-          ) : (
-            <LessonTimeline
-              classId={classId}
-              entries={timelineEntries}
-              months={timelineMonths}
-              highlightDate={highlightDate ?? snapshot.last_committed_date}
-            />
-          )}
-        </CardContent>
-      </Card>
+      <ClassHomeSection
+        id="lesson-timeline"
+        title="Lesson timeline"
+        description="Planned and taught lessons for this class."
+      >
+        <Card>
+          <CardContent className="pt-6">
+            {error ? (
+              <p className="text-sm text-muted-foreground">
+                Timeline unavailable until the API loads successfully.
+              </p>
+            ) : (
+              <LessonTimeline
+                classId={classId}
+                entries={timelineEntries}
+                months={timelineMonths}
+                highlightDate={highlightDate ?? snapshot.last_committed_date}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </ClassHomeSection>
 
-      <p className="mt-6 text-sm text-muted-foreground">
+      <p className="mt-2 text-sm text-muted-foreground">
         <Link href="/" className="text-primary hover:underline">
           All classes
         </Link>

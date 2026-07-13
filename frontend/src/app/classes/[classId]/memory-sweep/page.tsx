@@ -12,6 +12,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StickyNote } from "@/components/ui/sticky-note";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -574,35 +575,23 @@ export default function MemorySweepPage() {
       </div>
 
       {showReviewHelp && (
-        <Alert className="mb-4 border-amber-200 bg-amber-50 text-amber-950">
-          <AlertDescription>
-            <div className="flex gap-3">
-              <div className="flex-1 space-y-1">
-                <div className="text-sm font-semibold">How to review</div>
-                <p className="text-sm">
-                  Each line is one suggestion: <span className="font-medium">+</span>{" "}
-                  adds it to memory, <span className="font-medium">×</span> dismisses
-                  it, and the clock postpones it until more evidence arrives.
-                  Anything explicitly requested in chat is pinned at the top.
-                  Open <span className="font-medium">details</span> on a row to edit
-                  wording or see evidence; switch to{" "}
-                  <span className="font-medium">Detailed</span> for the full card
-                  layout.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Dismiss review help"
-                className="shrink-0 text-base leading-none text-amber-900 hover:bg-amber-100/80 hover:text-amber-950"
-                onClick={() => setShowReviewHelp(false)}
-              >
-                ×
-              </Button>
-            </div>
-          </AlertDescription>
-        </Alert>
+        <StickyNote
+          className="mb-4"
+          title="How to review"
+          dismissAriaLabel="Dismiss review help"
+          onDismiss={() => setShowReviewHelp(false)}
+        >
+          <p>
+            Each line is one suggestion: <span className="font-medium">+</span>{" "}
+            adds it to memory, <span className="font-medium">×</span> dismisses
+            it, and the clock postpones it until more evidence arrives.
+            Anything explicitly requested in chat is pinned at the top.
+            Open <span className="font-medium">details</span> on a row to edit
+            wording or see evidence; switch to{" "}
+            <span className="font-medium">Detailed</span> for the full card
+            layout.
+          </p>
+        </StickyNote>
       )}
 
       {error && (

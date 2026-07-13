@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { MemorySweepReviewResponse } from "@/lib/api";
 import {
+  memorySweepDueBadge,
+  memorySweepIsDue,
   memorySweepLoadingSavedText,
   memorySweepProgressText,
+  memorySweepReviewAttentionBadge,
   memorySweepReviewBadge,
 } from "./memory-sweep-review-status";
 
@@ -84,5 +87,126 @@ describe("memorySweepReviewBadge", () => {
       "Generating updated memory candidates… This can take 1–2 minutes.",
     );
     expect(memorySweepProgressText(review({ status: "ready" }))).toBe("");
+  });
+});
+
+describe("memorySweepReviewAttentionBadge", () => {
+  it("hides quiet Draft saved on solid primary CTAs", () => {
+    expect(memorySweepReviewAttentionBadge(review({ status: "ready" }))).toBe(
+      "",
+    );
+    expect(
+      memorySweepReviewAttentionBadge(
+        review({ status: "ready", is_stale: true, has_teacher_edits: false }),
+      ),
+    ).toBe("");
+  });
+
+  it("keeps generating / stale / failed visible", () => {
+    expect(
+      memorySweepReviewAttentionBadge(review({ status: "generating" })),
+    ).toBe("Generating...");
+    expect(
+      memorySweepReviewAttentionBadge(
+        review({
+          status: "stale",
+          is_stale: true,
+          has_teacher_edits: true,
+        }),
+      ),
+    ).toBe("Stale draft");
+    expect(memorySweepReviewAttentionBadge(review({ status: "failed" }))).toBe(
+      "Failed",
+    );
+  });
+});
+
+describe("memorySweep due cadence", () => {
+  const now = new Date("2026-07-12T12:00:00Z");
+
+  it("is due when never applied (draft open does not count)", () => {
+    expect(memorySweepIsDue(null, { now })).toBe(true);
+    expect(memorySweepDueBadge(null, { now })).toBe("Due · weekly");
+    expect(memorySweepIsDue(review({ status: "none" }), { now })).toBe(true);
+    expect(
+      memorySweepIsDue(
+        review({
+          status: "ready",
+          updated_at: "2026-07-12T08:00:00Z",
+          generated_at: "2026-07-12T08:00:00Z",
+          completed_at: null,
+        }),
+        { now },
+      ),
+    ).toBe(true);
+    expect(
+      memorySweepDueBadge(
+        review({
+          status: "ready",
+          updated_at: "2026-07-12T08:00:00Z",
+          completed_at: null,
+        }),
+        { now },
+      ),
+    ).toBe("Due · weekly");
+  });
+
+  it("is due after 5+ days since last apply", () => {
+    expect(
+      memorySweepIsDue(
+        review({
+          status: "completed",
+          completed_at: "2026-07-01T08:00:00Z",
+          updated_at: "2026-07-12T08:00:00Z",
+        }),
+        { now },
+      ),
+    ).toBe(true);
+    expect(
+      memorySweepDueBadge(
+        review({
+          status: "completed",
+          completed_at: "2026-07-01T08:00:00Z",
+        }),
+        { now },
+      ),
+    ).toBe("Due · 5+ days");
+  });
+
+  it("is caught up within 5 days of last apply even with a fresh draft", () => {
+    expect(
+      memorySweepIsDue(
+        review({
+          status: "ready",
+          completed_at: "2026-07-10T08:00:00Z",
+          updated_at: "2026-07-12T08:00:00Z",
+          generated_at: "2026-07-12T08:00:00Z",
+        }),
+        { now },
+      ),
+    ).toBe(false);
+    expect(
+      memorySweepDueBadge(
+        review({
+          status: "ready",
+          completed_at: "2026-07-10T08:00:00Z",
+          updated_at: "2026-07-12T08:00:00Z",
+        }),
+        { now },
+      ),
+    ).toBe("");
+  });
+
+  it("suppresses due while generating", () => {
+    expect(
+      memorySweepIsDue(
+        review({
+          status: "generating",
+          completed_at: null,
+          updated_at: "2026-06-01T08:00:00Z",
+        }),
+        { now },
+      ),
+    ).toBe(false);
   });
 });

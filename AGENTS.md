@@ -52,6 +52,14 @@ It is an educational note, not a behavior contract.
 - Memory update chat may update `diary_markdown`, but curated wiki writes happen
   only through the teacher-approved commit flow.
 - Prefer compiled wiki memory over raw sources.
+- Frontend UI must reuse the fixed design system — do not invent one-off
+  controls or copy Tailwind class strings across pages. Read
+  `frontend/DESIGN.md` and compose from `frontend/src/components/ui/`,
+  `frontend/src/components/klassenpilot/`, and `frontend/src/components/assistant-ui/`.
+  If a pattern appears twice (or is domain-wide), add or extend a shared
+  component first, then import it. Semantic tokens only (no ad-hoc hex in
+  feature code). Exception: only when the user explicitly asks for a
+  page-specific one-off.
 - Frontend polish is not the priority unless the user explicitly asks for it.
   The frontend primarily uses `assistant-ui`, with Plan/Update Memory drafts in
   `frontend/src/features/workflow-drafts/` and durable pending jobs coordinated
