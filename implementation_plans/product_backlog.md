@@ -81,6 +81,9 @@ Primary items:
 | **Session persistence decision** | Add SQLite/app-owned persistence only if real testing shows restart/session loss hurts usage. |
 | **Hosted beta on AWS** | Move the current local beta shape to AWS without changing product scope: Amplify for frontend, ECS/Fargate + ALB for FastAPI, EFS for per-workspace wiki roots, Postgres/Aurora for telemetry and beta metadata, S3 for exports/backups. |
 | **Operator beta runbook** | Daily report generation, wiki-diff review, tester feedback notes, backup/export, and retention cleanup. Keep this CLI/docs-first unless a dashboard becomes clearly necessary. |
+| **Multi-worker / session hydrate docs** | Document single-worker-per-wiki assumption for local/HITL stacks; note that durable drafts + executive JSON survive restart, while in-memory session caches in `deps.py` are not multi-worker safe without sticky routing or always-hydrate-from-draft-store. |
+| **Workflow-drafts page slim-down** | Finish the plan/memory page extraction onto the shared artifact-session shell: runtime adapter registry, shared discard/bootstrap helpers, thinner commit/review workspaces. Unblocks adding exam/status workflows without copying 400–800 LOC pages. |
+| **Memory Sweep stale-diff hardening** | See incident **MSW-001** below. Launch patched with `.get()`; v1.1 fingerprint-first stale gate. |
 
 Non-goals:
 
@@ -95,6 +98,28 @@ Validation:
   source checking.
 - A generated assessment cites the taught sequence and common misconceptions.
 - The UI makes it clear what was used and what will be written.
+
+### Incident / bug queue (living)
+
+Short records for launch patches that still need a durable follow-up. Prefer one
+entry per incident. Close or demote when the long-term fix ships. New agents:
+start here before inventing a redesign.
+
+**Template:** ID · status · symptom · root cause · reproduce · quick fix ·
+long-term · tests.
+
+#### MSW-001 — Memory Sweep stale KeyError → “Cannot reach API”
+
+| | |
+|---|---|
+| **Status** | Launch patched (`73e8fb8`); long-term open for **v1.1** |
+| **Symptom** | Opening / resuming Memory Sweep review showed frontend “Cannot reach API”. Backend `GET /api/classes/{id}/memory/sweep/review` returned 500. |
+| **Root cause** | `memory_sweep_stale_reasons` field-diffed wiki targets (and student summaries) over `set(previous) \| set(current)` but indexed with `previous_targets[target]` / `previous_summaries[id]`. A key present only in the *live* snapshot raised `KeyError` (HITL: `teaching_patterns.md`). |
+| **How it happened** | Saved review snapshot from generate-time wiki excerpts; later live snapshot included a target the saved one did not (or vice versa). Stale check on GET crashed before returning `is_stale` / reasons. |
+| **Reproduce / simulate** | Unit: `test_memory_sweep_stale_reasons_tolerates_asymmetric_wiki_targets` in `backend/tests/test_memory_sweep_reviews.py` (empty `previous.wiki_targets`, current has `teaching_patterns.md`). Same pattern for summaries. HITL: open sweep, let wiki drift add/remove a target excerpt, GET review again. |
+| **Quick fix (shipped)** | Use `.get(...)` on both sides of the comparison so missing keys count as a change, never raise. |
+| **Long-term (v1.1)** | Fingerprint-first stale gate: hash the whole source snapshot for `is_stale`; treat human-readable field reasons as best-effort and **never** let reason generation crash the review GET. Same discipline for student-summary keys. |
+| **Tests** | `test_memory_sweep_stale_reasons_tolerates_asymmetric_wiki_targets`, `…_asymmetric_student_summaries` |
 
 ---
 

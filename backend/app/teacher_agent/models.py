@@ -7,6 +7,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from app.schemas.api import LessonFlowPhase
+from app.teacher_agent.executive_verification import ExecutivePatch
 from app.teacher_agent.memory_capture import MemoryCandidate
 from app.teacher_agent.memory_update_state import (
     MemoryEvidenceBrief,
@@ -58,6 +59,7 @@ class IngestTurnOutput(BaseModel):
         default="",
         description="Set only when the teacher asks for an update-memory task outside the MVP scope.",
     )
+    executive_patch: ExecutivePatch = Field(default_factory=ExecutivePatch)
 
 
 class PlanTurnOutput(BaseModel):
@@ -89,6 +91,20 @@ class PlanTurnOutput(BaseModel):
             "Durable-memory update candidates. These are review-only, never direct "
             "writes, and explicit durable teacher/class/copilot signals should be "
             "emitted here in the same turn."
+        ),
+    )
+    executive_patch: ExecutivePatch = Field(default_factory=ExecutivePatch)
+
+
+class WriteVerificationOutput(BaseModel):
+    """Read-only check of the exact artifact submitted for a durable action."""
+
+    executive_patch: ExecutivePatch = Field(default_factory=ExecutivePatch)
+    message: str = Field(
+        default="Verification complete.",
+        description=(
+            "One concise teacher-visible outcome. If blocking, name the mismatch "
+            "and ask the smallest decision needed; never claim a write occurred."
         ),
     )
 

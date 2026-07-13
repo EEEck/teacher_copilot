@@ -106,7 +106,7 @@ export const Thread: FC<{
             />
           </div>
 
-          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer mt-auto flex shrink-0 flex-col gap-4 overflow-visible rounded-t-(--composer-radius) bg-background pb-4 md:pb-6">
+          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 z-10 mt-auto flex shrink-0 flex-col gap-4 overflow-visible rounded-t-(--composer-radius) bg-background pb-4 md:pb-6">
             <ThreadScrollToBottom />
             <Composer />
           </ThreadPrimitive.ViewportFooter>

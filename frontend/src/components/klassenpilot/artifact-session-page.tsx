@@ -7,6 +7,7 @@ import {
   type ArtifactMode,
 } from "@/components/assistant-ui/artifact-runtime-config";
 import { PageHeader } from "@/components/layout/page-header";
+import { useArtifactSessionShell } from "@/components/layout/shell-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { ChatMessage, CompletenessChecklist } from "@/lib/api";
 import { toWorkflowDraftSnapshot } from "@/features/workflow-drafts/workflow-draft-bootstrap";
@@ -72,6 +73,9 @@ export function ArtifactSessionPage({
     fn: unknown;
     promise: Promise<unknown>;
   } | null>(null);
+
+  // Plan / Update memory: immersive dual-pane (wider + flush viewport).
+  useArtifactSessionShell(true);
 
   const loadBootstrap = useCallback(
     async (opts?: ArtifactBootstrapOptions) => {
@@ -160,6 +164,8 @@ export function ArtifactSessionPage({
       backLabel="Class home"
       title={title}
       description={description}
+      variant="compact"
+      className="shrink-0"
     />
   );
 
@@ -167,7 +173,7 @@ export function ArtifactSessionPage({
   // not leave the page stuck on "Starting session…" (the old `!draft` bug).
   if (!loaded || !data || !config) {
     return (
-      <div>
+      <div className="flex min-h-0 flex-1 flex-col">
         {header}
         {error ? (
           <Alert className="mb-6 border-destructive/30 bg-[var(--error-bg)] text-destructive">
@@ -181,36 +187,38 @@ export function ArtifactSessionPage({
   }
 
   return (
-    <div>
+    <div className="flex min-h-0 flex-1 flex-col">
       {header}
       {sessionNotice && (
-        <Alert className="mb-6 border-border bg-muted text-foreground">
+        <Alert className="mb-4 shrink-0 border-border bg-muted text-foreground">
           <AlertDescription>{sessionNotice}</AlertDescription>
         </Alert>
       )}
       {error && (
-        <Alert className="mb-6 border-destructive/30 bg-[var(--error-bg)] text-destructive">
-          <AlertDescription>{error}</AlertDescription>
+        <Alert className="mb-4 shrink-0 border-destructive/30 bg-[var(--error-bg)] text-destructive">
+          <AlertDescription className="whitespace-pre-line">{error}</AlertDescription>
         </Alert>
       )}
       {data.latestTurnComplete === false && data.turnInProgress !== true && (
-        <Alert className="mb-6 border-destructive/30 bg-[var(--error-bg)] text-destructive">
+        <Alert className="mb-4 shrink-0 border-destructive/30 bg-[var(--error-bg)] text-destructive">
           <AlertDescription>
             The previous chat turn was interrupted before it reached the draft. Send
             that note again, or discard the draft to start cleanly.
           </AlertDescription>
         </Alert>
       )}
-      <ArtifactSessionRuntimeProvider
-        key={workflowDraftRuntimeKey(data.draftId, data.sessionId)}
-        config={config}
-      >
-        {renderBody({
-          sessionId: data.sessionId,
-          openingMessage: data.openingMessage ?? "",
-          onError: setError,
-        })}
-      </ArtifactSessionRuntimeProvider>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <ArtifactSessionRuntimeProvider
+          key={workflowDraftRuntimeKey(data.draftId, data.sessionId)}
+          config={config}
+        >
+          {renderBody({
+            sessionId: data.sessionId,
+            openingMessage: data.openingMessage ?? "",
+            onError: setError,
+          })}
+        </ArtifactSessionRuntimeProvider>
+      </div>
     </div>
   );
 }

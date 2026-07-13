@@ -15,6 +15,7 @@ from app.services.memory_sweep_reviews import (
     MemorySweepReviewStore,
     build_memory_sweep_source_snapshot,
     memory_sweep_source_fingerprint,
+    memory_sweep_stale_reasons,
 )
 from app.teacher_agent.wiki_store import WikiStore
 from tests.conftest import CLASS_ID, StubAgentRunner
@@ -344,4 +345,77 @@ def test_memory_sweep_review_api_explains_new_candidates_that_make_a_draft_stale
     assert resumed.json()["is_stale"] is True
     assert resumed.json()["stale_reasons"] == [
         "1 new memory candidate arrived after this draft was generated."
+    ]
+
+
+def test_memory_sweep_stale_reasons_tolerates_asymmetric_wiki_targets() -> None:
+    """Regression: asymmetric wiki_targets must not KeyError (HITL 2026-07-12).
+
+    Real-world path:
+    1. Teacher opens Memory Sweep; backend saves a review + source snapshot that
+       lists wiki targets present *at generate time*.
+    2. Later, class memory gains (or loses) a curated page excerpt — e.g.
+       ``teaching_patterns.md`` appears only in the *live* snapshot.
+    3. ``GET /memory/sweep/review`` rebuilds the live snapshot and calls
+       ``memory_sweep_stale_reasons(previous, current)``.
+    4. The old code did ``previous_targets[target]`` over
+       ``set(previous) | set(current)``. A key only in ``current`` raised
+       ``KeyError: 'teaching_patterns.md'`` → FastAPI 500 → frontend
+       ``Cannot reach API``.
+
+    Launch fix: ``.get(target)`` on both sides (same for student summaries).
+    v1.1: fingerprint-first stale gate so reason text is best-effort and cannot
+    crash the review GET (see product_backlog incident MSW-001).
+    """
+    previous = {
+        "ledger_rows": [],
+        "wiki_targets": [],
+        "synthetic_student_summaries": [],
+    }
+    current = {
+        "ledger_rows": [],
+        "wiki_targets": [
+            {"target": "teaching_patterns.md", "excerpt_hash": "hash_live"}
+        ],
+        "synthetic_student_summaries": [],
+    }
+    # Target only in live snapshot (the HITL case).
+    reasons = memory_sweep_stale_reasons(previous, current)
+    assert reasons == [
+        "1 memory page changed after this draft was generated."
+    ]
+
+    # Target only in saved snapshot (removed from wiki excerpts).
+    reasons_removed = memory_sweep_stale_reasons(current, previous)
+    assert reasons_removed == [
+        "1 memory page changed after this draft was generated."
+    ]
+
+
+def test_memory_sweep_stale_reasons_tolerates_asymmetric_student_summaries() -> None:
+    """Same union-of-keys bug class as wiki_targets, for synthetic summaries.
+
+    Student-summary rows are keyed by ``candidate_id``. A summary that exists
+    only on one side of the snapshot must count as a change, never raise.
+    """
+    previous = {
+        "ledger_rows": [],
+        "wiki_targets": [],
+        "synthetic_student_summaries": [
+            {
+                "candidate_id": "cand_only_previous",
+                "target": "students/anna.md",
+                "content_hash": "c1",
+                "excerpt_hash": "e1",
+            }
+        ],
+    }
+    current = {
+        "ledger_rows": [],
+        "wiki_targets": [],
+        "synthetic_student_summaries": [],
+    }
+    reasons = memory_sweep_stale_reasons(previous, current)
+    assert reasons == [
+        "1 student summary changed after this draft was generated."
     ]

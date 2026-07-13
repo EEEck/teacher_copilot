@@ -16,6 +16,14 @@ export type PendingChatTurn = {
   lessonDate?: string;
   lessonTitle?: string;
   resumeHref?: string;
+  /**
+   * True once the notifier (or live stream) has observed this turn running.
+   * Required before treating idle+complete as *this* turn finishing — otherwise
+   * a marker set before the stream starts races the still-idle previous state.
+   */
+  seenInProgress?: boolean;
+  /** Persisted draft message count at mark time; growth implies a real turn landed. */
+  baselineMessageCount?: number;
 };
 
 export type PendingDraftStatus = {
@@ -29,6 +37,27 @@ export type PendingMemorySweepStatus = {
 
 export function isPendingDraftComplete(status: PendingDraftStatus): boolean {
   return status.latest_turn_complete === true && status.turn_in_progress !== true;
+}
+
+/**
+ * A pending plan/ingest marker may be written before the backend begins the turn.
+ * Only notify after we have seen in-progress, or after persisted messages grew
+ * past the baseline captured at mark time (fast turns that skip the in-progress poll).
+ */
+export function shouldNotifyPendingDraftComplete(
+  status: PendingDraftStatus,
+  turn: Pick<PendingChatTurn, "seenInProgress" | "baselineMessageCount">,
+  draftMessageCount = 0,
+): boolean {
+  if (!isPendingDraftComplete(status)) return false;
+  if (turn.seenInProgress) return true;
+  if (
+    turn.baselineMessageCount !== undefined &&
+    draftMessageCount > turn.baselineMessageCount
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /** Memory Sweep generation is done when the review is no longer generating. */
@@ -71,6 +100,18 @@ export function pendingTurnWorkflowHref(turn: PendingChatTurn): string {
   return base;
 }
 
+/**
+ * True when this pending turn was started on the current page (same path+search).
+ * Used with the live-stream registry: background tabs still toast + hydrate.
+ */
+export function isPendingTurnOnCurrentPage(
+  turn: Pick<PendingChatTurn, "resumeHref">,
+  currentPathWithSearch: string,
+): boolean {
+  if (!turn.resumeHref) return false;
+  return turn.resumeHref === currentPathWithSearch;
+}
+
 export function listPendingChatTurns(storage: PendingTurnStorage): PendingChatTurn[] {
   const raw = storage.getItem(INDEX_KEY);
   if (!raw) return [];
@@ -85,17 +126,38 @@ export function listPendingChatTurns(storage: PendingTurnStorage): PendingChatTu
 
 export function markPendingChatTurn(
   storage: PendingTurnStorage,
-  turn: Omit<PendingChatTurn, "key">,
+  turn: Omit<PendingChatTurn, "key" | "seenInProgress">,
 ): string {
   const key =
     turn.mode === "memory_sweep"
       ? pendingMemorySweepKey(turn.classId)
       : pendingTurnKey(turn.draftId, turn.sessionId);
-  const next: PendingChatTurn = { ...turn, key };
+  const next: PendingChatTurn = {
+    ...turn,
+    key,
+    seenInProgress: false,
+    baselineMessageCount: turn.baselineMessageCount ?? 0,
+  };
   const existing = listPendingChatTurns(storage).filter((item) => item.key !== key);
   storage.setItem(key, "1");
   storage.setItem(INDEX_KEY, JSON.stringify([...existing, next]));
   return key;
+}
+
+/** Record that this pending turn was observed running on the backend. */
+export function markPendingTurnSeenInProgress(
+  storage: PendingTurnStorage,
+  key: string,
+): void {
+  const turns = listPendingChatTurns(storage);
+  let changed = false;
+  const next = turns.map((turn) => {
+    if (turn.key !== key || turn.seenInProgress) return turn;
+    changed = true;
+    return { ...turn, seenInProgress: true };
+  });
+  if (!changed) return;
+  storage.setItem(INDEX_KEY, JSON.stringify(next));
 }
 
 export function markPendingMemorySweep(
@@ -192,6 +254,9 @@ function isPendingChatTurn(value: unknown): value is PendingChatTurn {
     typeof item.classId === "string" &&
     typeof item.sessionId === "string" &&
     (item.draftId === undefined || typeof item.draftId === "string") &&
+    (item.seenInProgress === undefined || typeof item.seenInProgress === "boolean") &&
+    (item.baselineMessageCount === undefined ||
+      typeof item.baselineMessageCount === "number") &&
     isOptionalString(item.lessonDate) &&
     isOptionalString(item.lessonTitle) &&
     isOptionalString(item.resumeHref)

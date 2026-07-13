@@ -18,6 +18,10 @@ from app.teacher_agent.memory_update_state import (
     render_memory_session_state,
     render_memory_target_state,
 )
+from app.teacher_agent.executive_verification import (
+    ExecutiveRuntime,
+    render_executive_runtime,
+)
 from app.teacher_agent.planning_state import (
     PlanRuntime,
     render_briefs,
@@ -26,6 +30,7 @@ from app.teacher_agent.planning_state import (
 )
 from app.teacher_agent.prompts import (
     DURABLE_MEMORY_CANDIDATE_POLICY,
+    EXECUTIVE_ASSISTANT_POLICY,
     INGEST_SYSTEM,
     INGEST_WIKI_TOOLS_POLICY,
     MEMORY_SKILL,
@@ -34,6 +39,7 @@ from app.teacher_agent.prompts import (
     PLAN_OPENING_SYSTEM,
     PLAN_SKILL,
     PLAN_WIKI_TOOLS_POLICY,
+    SOURCE_AUTHORITY_POLICY,
     TEACHER_AGENT_SECURITY_POLICY,
     apply_prompt,
 )
@@ -194,10 +200,12 @@ def build_ingest_chat_prompt_assembly(
     messages: list[ChatMessage],
     current_diary: str,
     runtime: MemoryRuntime | None,
+    executive: ExecutiveRuntime | None = None,
     attachments: list[ChatAttachment] | None = None,
     history_turns: int | None = None,
 ) -> dict:
     rt = runtime or MemoryRuntime()
+    executive_rt = executive or ExecutiveRuntime()
     lim = get_context_limits()
     sections_text = "\n".join(f"- {s}" for s in DIARY_SECTION_HEADINGS)
     teacher_trace = wiki.build_teacher_context_trace()
@@ -210,11 +218,15 @@ def build_ingest_chat_prompt_assembly(
     lesson_result_state = render_lesson_result_state(rt.lesson_result_state)
     evidence = render_memory_briefs(rt.evidence_briefs)
     memory_candidates = render_memory_candidates(rt.memory_candidates)
+    executive_state = render_executive_runtime(executive_rt)
     user_input = build_ingest_user_input_assembly(
         messages, current_diary, attachments, history_turns=history_turns
     )
     instructions = apply_prompt(
         INGEST_SYSTEM,
+        executive_assistant_policy=EXECUTIVE_ASSISTANT_POLICY,
+        source_authority_policy=SOURCE_AUTHORITY_POLICY,
+        executive_state=executive_state,
         memory_skill=MEMORY_SKILL,
         sections=sections_text,
         teacher_context=teacher_trace["text"],
@@ -278,6 +290,12 @@ def build_ingest_chat_prompt_assembly(
                 function="wiki.build_ingest_task_context_trace",
                 source="recent lesson/roster/saved plan",
                 text=ingest_task_context,
+            ),
+            _section(
+                name="Executive state",
+                function="render_executive_runtime",
+                source="ArtifactSession.executive",
+                text=executive_state,
             ),
             _section(
                 name="Memory target state",
@@ -425,10 +443,12 @@ def build_plan_chat_prompt_assembly(
     messages: list[ChatMessage],
     current_plan: str,
     runtime: PlanRuntime | None,
+    executive: ExecutiveRuntime | None = None,
     attachments: list[ChatAttachment] | None = None,
     history_turns: int | None = None,
 ) -> dict:
     rt = runtime or PlanRuntime()
+    executive_rt = executive or ExecutiveRuntime()
     lim = get_context_limits()
     teacher_trace = wiki.build_teacher_context_trace()
     class_trace = wiki.build_active_class_core_context_trace(class_id)
@@ -439,11 +459,14 @@ def build_plan_chat_prompt_assembly(
         or "- (empty draft)"
     )
     evidence = render_briefs(rt.evidence_briefs)
+    executive_state = render_executive_runtime(executive_rt)
     user_input = build_plan_user_input_assembly(
         messages, attachments, history_turns=history_turns
     )
     rendered_instructions = apply_prompt(
         PLAN_CHAT_SYSTEM,
+        executive_assistant_policy=EXECUTIVE_ASSISTANT_POLICY,
+        executive_state=executive_state,
         skill=PLAN_SKILL,
         memory_policy=PLAN_MEMORY_POLICY,
         durable_memory_candidate_policy=DURABLE_MEMORY_CANDIDATE_POLICY,
@@ -495,6 +518,12 @@ def build_plan_chat_prompt_assembly(
             function="wiki.build_active_class_core_context_trace",
             source=f"wiki/classes/{class_id}/memory/*.md + selected subject guide",
             text=class_trace["text"],
+        ),
+        _section(
+            name="Executive state",
+            function="render_executive_runtime",
+            source="ArtifactSession.executive",
+            text=executive_state,
         ),
         _section(
             name="Session state",

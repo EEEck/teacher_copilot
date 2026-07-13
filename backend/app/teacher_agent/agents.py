@@ -30,6 +30,7 @@ from app.teacher_agent.agent import (
     build_plan_lesson_agent,
     build_plan_opening_agent,
     build_profile_proposal_agent,
+    build_write_verification_agent,
 )
 from app.teacher_agent.models import (
     CompileOutput,
@@ -38,6 +39,7 @@ from app.teacher_agent.models import (
     PlanOutput,
     PlanTurnOutput,
     ProfileProposalOutput,
+    WriteVerificationOutput,
 )
 from app.context_limits import apply_char_limit, get_context_limits
 from app.teacher_agent.prompt_assembly import (
@@ -49,6 +51,13 @@ from app.teacher_agent.memory_update_state import (
     MemoryRuntime,
     memory_api_payload,
     merge_memory_turn,
+)
+from app.teacher_agent.executive_verification import (
+    ExecutiveRuntime,
+    WriteVerificationResult,
+    artifact_fingerprint,
+    apply_executive_patch,
+    executive_api_payload,
 )
 from app.teacher_agent.planning_state import (
     PlanRuntime,
@@ -217,6 +226,7 @@ class AgentRunner:
         planning: PlanRuntime | None = None,
         memory: MemoryRuntime | None = None,
         teacher_message: str = "",
+        executive: ExecutiveRuntime | None = None,
     ) -> WikiToolContext:
         return WikiToolContext(
             wiki=self.wiki,
@@ -224,6 +234,7 @@ class AgentRunner:
             planning=planning,
             memory=memory,
             teacher_message=teacher_message,
+            executive=executive or ExecutiveRuntime(),
         )
 
     def _format_attachments(self, attachments: list[ChatAttachment]) -> str:
@@ -294,7 +305,12 @@ class AgentRunner:
         )
 
     def _plan_final_event(
-        self, reply: str, plan_md: str, ready: bool, runtime: PlanRuntime
+        self,
+        reply: str,
+        plan_md: str,
+        ready: bool,
+        runtime: PlanRuntime,
+        executive: ExecutiveRuntime,
     ) -> SseFinal:
         payload = planning_api_payload(runtime)
         return SseFinal(
@@ -307,6 +323,7 @@ class AgentRunner:
             session_state=payload["session_state"],
             lesson_planning_state=payload["lesson_planning_state"],
             memory_candidates=payload["memory_candidates"],
+            executive_state=executive_api_payload(executive),
         )
 
     def _merge_memory_turn(
@@ -337,6 +354,7 @@ class AgentRunner:
         ready: bool,
         checklist: CompletenessChecklist,
         runtime: MemoryRuntime,
+        executive: ExecutiveRuntime,
     ) -> SseFinal:
         payload = memory_api_payload(runtime)
         return SseFinal(
@@ -347,6 +365,7 @@ class AgentRunner:
             last_change_summary=payload["last_change_summary"],
             memory_candidates=payload["memory_candidates"],
             memory_state=payload,
+            executive_state=executive_api_payload(executive),
         )
 
     def _prepare_ingest_turn(
@@ -356,12 +375,16 @@ class AgentRunner:
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
         memory: MemoryRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
     ) -> _PreparedAgentTurn:
         runtime = memory or MemoryRuntime()
         latest_teacher_message = messages[-1].content if messages else ""
         agent = build_ingest_agent(
             self._wiki_ctx(
-                class_id, memory=runtime, teacher_message=latest_teacher_message
+                class_id,
+                memory=runtime,
+                teacher_message=latest_teacher_message,
+                executive=executive,
             ),
             self.chat_model,
             memory=runtime,
@@ -381,6 +404,7 @@ class AgentRunner:
         *,
         class_id: str,
         teacher_message: str = "",
+        executive: ExecutiveRuntime | None = None,
     ) -> tuple[str, str, CompletenessChecklist, bool] | None:
         if not isinstance(parsed, IngestTurnOutput):
             return None
@@ -397,7 +421,13 @@ class AgentRunner:
             teacher_message=teacher_message,
             diary_complete=diary_complete,
         )
-        ready = diary_complete and runtime.session_state.phase == "review_draft"
+        executive_runtime = executive or ExecutiveRuntime()
+        apply_executive_patch(executive_runtime, parsed.executive_patch)
+        ready = (
+            diary_complete
+            and runtime.session_state.phase == "review_draft"
+            and not executive_runtime.open_blocking_findings()
+        )
         return reply, diary_md, checklist, ready
 
     def _prepare_plan_turn(
@@ -407,13 +437,17 @@ class AgentRunner:
         partial_plan: str = "",
         attachments: list[ChatAttachment] | None = None,
         planning: PlanRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
     ) -> _PreparedAgentTurn:
         runtime = planning or PlanRuntime()
         current_draft = partial_plan.strip() or self.wiki.empty_plan_template()
         latest_teacher_message = messages[-1].content if messages else ""
         agent = build_plan_chat_agent(
             self._wiki_ctx(
-                class_id, planning=runtime, teacher_message=latest_teacher_message
+                class_id,
+                planning=runtime,
+                teacher_message=latest_teacher_message,
+                executive=executive,
             ),
             current_draft,
             self.chat_model,
@@ -430,6 +464,7 @@ class AgentRunner:
         runtime: PlanRuntime,
         *,
         teacher_message: str = "",
+        executive: ExecutiveRuntime | None = None,
     ) -> tuple[str, str, bool] | None:
         if not isinstance(parsed, PlanTurnOutput):
             return None
@@ -445,6 +480,9 @@ class AgentRunner:
             teacher_message=teacher_message,
             plan_ready=ready,
         )
+        executive_runtime = executive or ExecutiveRuntime()
+        apply_executive_patch(executive_runtime, parsed.executive_patch)
+        ready = ready and not executive_runtime.open_blocking_findings()
         return reply, plan_md, ready
 
     async def _run_structured(self, agent, user_input: str):
@@ -514,9 +552,10 @@ class AgentRunner:
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
         memory: MemoryRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
     ) -> AsyncIterator[SseEvent]:
         turn = self._prepare_ingest_turn(
-            class_id, messages, partial_diary, attachments, memory
+            class_id, messages, partial_diary, attachments, memory, executive
         )
         result_holder: dict[str, Any] = {}
         async for event in self._yield_stream_events(
@@ -536,6 +575,7 @@ class AgentRunner:
             turn.runtime,
             class_id=class_id,
             teacher_message=messages[-1].content if messages else "",
+            executive=executive,
         )
         if finalized is None:
             yield SseError(
@@ -544,7 +584,14 @@ class AgentRunner:
             )
             return
         reply, diary_md, checklist, ready = finalized
-        yield self._memory_final_event(reply, diary_md, ready, checklist, turn.runtime)
+        yield self._memory_final_event(
+            reply,
+            diary_md,
+            ready,
+            checklist,
+            turn.runtime,
+            executive or ExecutiveRuntime(),
+        )
 
     async def plan_chat_stream(
         self,
@@ -553,9 +600,10 @@ class AgentRunner:
         partial_plan: str = "",
         attachments: list[ChatAttachment] | None = None,
         planning: PlanRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
     ) -> AsyncIterator[SseEvent]:
         turn = self._prepare_plan_turn(
-            class_id, messages, partial_plan, attachments, planning
+            class_id, messages, partial_plan, attachments, planning, executive
         )
         result_holder: dict[str, Any] = {}
         async for event in self._yield_stream_events(
@@ -574,6 +622,7 @@ class AgentRunner:
             turn.current_draft,
             turn.runtime,
             teacher_message=messages[-1].content if messages else "",
+            executive=executive,
         )
         if finalized is None:
             yield SseError(
@@ -582,7 +631,13 @@ class AgentRunner:
             )
             return
         reply, plan_md, ready = finalized
-        yield self._plan_final_event(reply, plan_md, ready, turn.runtime)
+        yield self._plan_final_event(
+            reply,
+            plan_md,
+            ready,
+            turn.runtime,
+            executive or ExecutiveRuntime(),
+        )
 
     def _plan_opening_fallback(self, class_id: str) -> str:
         snap = self.wiki.get_snapshot(class_id)
@@ -625,9 +680,10 @@ class AgentRunner:
         partial_plan: str = "",
         attachments: list[ChatAttachment] | None = None,
         planning: PlanRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
     ) -> tuple[str, str, bool]:
         turn = self._prepare_plan_turn(
-            class_id, messages, partial_plan, attachments, planning
+            class_id, messages, partial_plan, attachments, planning, executive
         )
         current_draft = turn.current_draft
         runtime = turn.runtime
@@ -646,10 +702,11 @@ class AgentRunner:
             current_draft,
             runtime,
             teacher_message=messages[-1].content if messages else "",
+            executive=executive,
         )
         if finalized is None:
             return (
-                "I had trouble processing that â€” could you try again?",
+                "I had trouble processing that — could you try again?",
                 current_draft,
                 False,
             )
@@ -662,9 +719,10 @@ class AgentRunner:
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
         memory: MemoryRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
     ) -> tuple[str, str, CompletenessChecklist, bool]:
         turn = self._prepare_ingest_turn(
-            class_id, messages, partial_diary, attachments, memory
+            class_id, messages, partial_diary, attachments, memory, executive
         )
         current_draft = turn.current_draft
         runtime = turn.runtime
@@ -690,6 +748,7 @@ class AgentRunner:
             runtime,
             class_id=class_id,
             teacher_message=messages[-1].content if messages else "",
+            executive=executive,
         )
         if finalized is None:
             return (
@@ -740,6 +799,36 @@ class AgentRunner:
         if not isinstance(parsed, PlanOutput):
             raise RuntimeError("Failed to generate lesson plan")
         return LessonPlan(**parsed.model_dump())
+
+    async def verify_artifact_for_write(
+        self,
+        class_id: str,
+        artifact_kind: str,
+        markdown: str,
+        executive: ExecutiveRuntime,
+    ) -> WriteVerificationResult:
+        """Run the isolated read-only verifier for one exact durable draft."""
+        context = self.wiki.build_active_class_core_context_trace(class_id)["text"]
+        agent = build_write_verification_agent(
+            self._wiki_ctx(class_id, executive=executive),
+            artifact_kind,
+            context,
+            self.chat_model,
+            reasoning_effort=self.chat_effort,
+        )
+        prompt = (
+            f"Artifact kind: {artifact_kind}\n\n"
+            "Exact submitted artifact (inspect this text, do not rewrite it):\n"
+            f"{markdown}\n"
+        )
+        parsed = await self._run_structured(agent, prompt)
+        if not isinstance(parsed, WriteVerificationOutput):
+            raise RuntimeError("Failed to verify artifact for write")
+        return WriteVerificationResult(
+            artifact_fingerprint=artifact_fingerprint(markdown),
+            patch=parsed.executive_patch,
+            message=parsed.message.strip() or "Verification complete.",
+        )
 
     async def lint_wiki(self, class_id: str) -> str:
         context = self.wiki.read_wiki_index(class_id)

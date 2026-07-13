@@ -39,6 +39,10 @@ from app.teacher_agent.planning_state import (
     render_lesson_planning_state,
     render_session_state,
 )
+from app.teacher_agent.executive_verification import (
+    WriteVerificationBlocked,
+    enforce_applied_write_verification,
+)
 from app.teacher_agent.prompt_trace import build_plan_chat_prompt_trace
 from app.teacher_agent.wiki_store import WikiStore
 from app.teacher_agent.memory_capture import (
@@ -130,6 +134,7 @@ class PlanService:
             session_state=planning.get("session_state"),
             lesson_planning_state=planning.get("lesson_planning_state"),
             memory_candidates=planning.get("memory_candidates", []),
+            executive_state=result.executive,
         )
 
     async def chat_stream(
@@ -189,6 +194,7 @@ class PlanService:
                 messages=session.messages,
                 current_plan=session.partial_markdown,
                 runtime=runtime,
+                executive=session.executive,
             ),
             runtime=runtime_payload,
             messages=session.messages,
@@ -197,7 +203,7 @@ class PlanService:
             raw_evidence=dict(runtime.raw_store) if runtime else {},
         )
 
-    def save(self, class_id: str, req: SavePlanRequest) -> SavePlanResponse:
+    async def save(self, class_id: str, req: SavePlanRequest) -> SavePlanResponse:
         session = self.core.get_session(req.session_id)
         if session.class_id != class_id:
             raise KeyError("Session class mismatch")
@@ -227,6 +233,20 @@ class PlanService:
                 except WorkflowDraftConflict as exc:
                     raise ValueError(str(exc)) from exc
                 plan_markdown = row.artifact_markdown
+        verification = await self.agents.verify_artifact_for_write(
+            class_id, "lesson plan", plan_markdown, session.executive
+        )
+        try:
+            enforce_applied_write_verification(
+                session.executive,
+                artifact=plan_markdown,
+                verification=verification,
+                action="plan_save",
+                structurally_ready=self.wiki.is_plan_ready(plan_markdown),
+            )
+        except WriteVerificationBlocked:
+            self.core._persist_session(session)
+            raise
         title = self.wiki.extract_title(plan_markdown) or "Lesson plan"
         path = self.wiki.save_lesson_plan(class_id, lesson_date, plan_markdown)
         self.core.set_status(req.session_id, PlanSessionStatus.saved.value)

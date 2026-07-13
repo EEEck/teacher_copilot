@@ -1,13 +1,16 @@
 """Tests for wiki index and log."""
 
 import re
+import shutil
 from pathlib import Path
 
 from app.teacher_agent.wiki_store import WikiStore
 
 
-def test_rebuild_index_includes_sections():
-    root = Path(__file__).resolve().parent.parent / "teacher_wiki"
+def test_rebuild_index_includes_sections(tmp_path: Path):
+    seed = Path(__file__).resolve().parent.parent / "teacher_wiki"
+    root = tmp_path / "teacher_wiki"
+    shutil.copytree(seed, root)
     wiki = WikiStore(root=root)
     wiki.rebuild_index()
     index = wiki.read_text(wiki.index_path)

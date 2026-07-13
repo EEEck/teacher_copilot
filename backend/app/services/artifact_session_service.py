@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from app.config import get_settings
 from app.schemas.api import ChatAttachment, ChatMessage, CompletenessChecklist
@@ -46,6 +46,12 @@ from app.services.stream_safety import (
 )
 from app.services.workflow_drafts import WorkflowDraftIdentity, WorkflowDraftStore
 from app.teacher_agent.agents import AgentRunner
+from app.teacher_agent.executive_verification import ExecutiveRuntime
+from app.teacher_agent.executive_verification import (
+    executive_api_payload,
+    executive_runtime_dump,
+    executive_runtime_load,
+)
 from app.teacher_agent.wiki_store import WikiStore
 
 _TRACE_EVENT_CAP = 200
@@ -67,6 +73,7 @@ class ArtifactSession:
     # Optional mode-specific runtime state. Plan mode uses this for structured
     # planning state, evidence briefs, raw refs, and memory candidates.
     runtime: object | None = None
+    executive: ExecutiveRuntime = field(default_factory=ExecutiveRuntime)
     debug_events: list[dict] = field(default_factory=list)
     draft_id: str = ""
     artifact_revision: int = 0
@@ -178,6 +185,7 @@ class ArtifactSessionService:
             completeness=spec.completeness_of(self.wiki, row.artifact_markdown),
             opening_message=opening,
             runtime=runtime,
+            executive=executive_runtime_load(row.executive_json),
             turn_in_progress=row.turn_in_progress,
             latest_turn_complete=row.latest_turn_complete,
             pending_turn=row.pending_turn_json,
@@ -200,6 +208,7 @@ class ArtifactSessionService:
             status=session.status,
             artifact_markdown=session.partial_markdown,
             runtime_json=self._dump_runtime(session.mode, session.runtime),
+            executive_json=executive_runtime_dump(session.executive),
             messages_json=[message.model_dump() for message in session.messages],
             backend_session_id=session.session_id,
             pending_turn_json=session.pending_turn,
@@ -303,6 +312,7 @@ class ArtifactSessionService:
             session.messages,
             session.partial_markdown,
             session.runtime,
+            session.executive,
             attachments or [],
             stage,
         )
@@ -473,6 +483,13 @@ class ArtifactSessionService:
                 session.partial_markdown,
                 attachments or [],
                 session.runtime,
+                session.executive,
+            )
+            result = replace(
+                result,
+                ready=result.ready
+                and not session.executive.open_blocking_findings(),
+                executive=executive_api_payload(session.executive),
             )
             result = self._guard_turn_result(session, result, previous_markdown)
             session.messages.append(ChatMessage(role="assistant", content=result.reply))
@@ -667,6 +684,7 @@ class ArtifactSessionService:
             session.partial_markdown,
             attachments or [],
             session.runtime,
+            session.executive,
         )
         previous_markdown = session.partial_markdown
         sanitize_stream = get_settings().app_env == "production"
@@ -674,6 +692,13 @@ class ArtifactSessionService:
         try:
             async for event in stream:
                 if isinstance(event, SseFinal):
+                    event.ready = (
+                        event.ready
+                        and not session.executive.open_blocking_findings()
+                    )
+                    event.executive_state = executive_api_payload(
+                        session.executive
+                    )
                     event = self._guard_final_event(session, event, previous_markdown)
                 elif sanitize_stream:
                     safe_event = sanitize_teacher_visible_stream_event(

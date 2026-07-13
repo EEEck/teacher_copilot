@@ -239,19 +239,6 @@ export function ArtifactSessionRuntimeProvider({
     });
   }, []);
 
-  useEffect(() => {
-    if (!storedDraft) return;
-    setActiveSessionId(storedDraft.sessionId);
-    setActiveDraftId(storedDraft.draftId);
-    setActiveArtifactRevision(storedDraft.artifactRevision);
-    setActiveArtifactHash(storedDraft.artifactHash);
-    setActiveTurnInProgress(storedDraft.turnInProgress);
-    setActiveLatestTurnComplete(storedDraft.latestTurnComplete);
-    if (storedDraft.artifactMarkdown !== lastSyncedRef.current) {
-      pushMarkdown(storedDraft.artifactMarkdown, "agent");
-    }
-  }, [storedDraft, pushMarkdown]);
-
   // Backend draft refreshes (background turn completion) must update the editor
   // without remounting the assistant-ui runtime.
   useEffect(() => {
@@ -299,6 +286,24 @@ export function ArtifactSessionRuntimeProvider({
     },
     [onCompletenessChange],
   );
+
+  useEffect(() => {
+    if (!storedDraft) return;
+    setActiveSessionId(storedDraft.sessionId);
+    setActiveDraftId(storedDraft.draftId);
+    setActiveArtifactRevision(storedDraft.artifactRevision);
+    setActiveArtifactHash(storedDraft.artifactHash);
+    setActiveTurnInProgress(storedDraft.turnInProgress);
+    setActiveLatestTurnComplete(storedDraft.latestTurnComplete);
+    if (storedDraft.artifactMarkdown !== lastSyncedRef.current) {
+      pushMarkdown(storedDraft.artifactMarkdown, "agent");
+    }
+    if (storedDraft.completeness != null || storedDraft.memoryState !== undefined) {
+      applyMeta(storedDraft.completeness, undefined, {
+        memoryState: storedDraft.memoryState,
+      });
+    }
+  }, [storedDraft, pushMarkdown, applyMeta]);
 
   const applyDraftMetadata = useCallback(
     (metadata?: {
@@ -364,6 +369,12 @@ export function ArtifactSessionRuntimeProvider({
         },
       ]);
       setIsUpdating(true);
+      const threadKey = activeDraftIdRef.current || sessionIdRef.current;
+      const baselineMessageCount =
+        useWorkflowDraftStore.getState().draftsById[threadKey]?.messages.length ??
+        useWorkflowDraftStore.getState().draftsById[activeDraftIdRef.current]?.messages
+          .length ??
+        0;
       const fromMemory = lessonContextFromMemoryState(memoryStateRef.current);
       const lessonDate =
         fromMemory.lessonDate ||
@@ -383,6 +394,7 @@ export function ArtifactSessionRuntimeProvider({
               lessonDate,
               lessonTitle,
               resumeHref: `${window.location.pathname}${window.location.search}`,
+              baselineMessageCount,
             })
           : "";
       // Successful turns leave the pending marker for PendingTurnNotifier.

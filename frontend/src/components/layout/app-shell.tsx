@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useShellLayout } from "@/components/layout/shell-layout";
 
 export function AppShell({
   children,
@@ -8,10 +11,31 @@ export function AppShell({
   children: React.ReactNode;
   className?: string;
 }) {
+  const { wide, flush } = useShellLayout();
+  const contentWidth = flush
+    ? "max-w-[min(100%,1800px)]"
+    : wide
+      ? "max-w-screen-2xl"
+      : "max-w-7xl";
+
   return (
-    <div className={cn("min-h-screen bg-background", className)}>
-      <header className="border-b border-border bg-background">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+    <div
+      className={cn(
+        "flex flex-col bg-background",
+        flush
+          ? "h-dvh min-h-0 overflow-hidden"
+          : "min-h-screen",
+        className,
+      )}
+    >
+      <header className="shrink-0 border-b border-border bg-background">
+        <div
+          className={cn(
+            "mx-auto flex items-center justify-between",
+            flush ? "h-12 px-3" : "h-14 px-6",
+            contentWidth,
+          )}
+        >
           <Link href="/" className="font-semibold tracking-tight text-primary">
             KlassenPilot
           </Link>
@@ -23,7 +47,15 @@ export function AppShell({
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
+      <main
+        className={cn(
+          "mx-auto flex w-full min-h-0 flex-1 flex-col",
+          flush ? "px-3 py-2" : "px-6 py-6",
+          contentWidth,
+        )}
+      >
+        {children}
+      </main>
     </div>
   );
 }

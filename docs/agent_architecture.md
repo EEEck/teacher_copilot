@@ -163,9 +163,37 @@ The product uses tiered class memory.
    planned or taught lesson is found. Unknown hinted dates may seed a dated
    draft, but remain unconfirmed and stay in target discovery.
 
-5. **Profiles (three clearly-scoped files)**
+5. **Shared executive verification runtime**
+
+   Every registered artifact workflow also receives one `ExecutiveRuntime`
+   owned by `ArtifactSession`, separate from its workflow-specific runtime.
+   It records authority-aware assumptions and advisory/blocking findings across
+   turns. A small deterministic resolver checks class, student, and lesson
+   references against committed wiki indexes; existing search/read tools remain
+   responsible for broader teaching concepts and history.
+
+   ```text
+   ArtifactSession
+   ├── ExecutiveRuntime
+   ├── PlanRuntime | MemoryRuntime | future workflow runtime
+   ├── authority-labeled wiki context
+   └── shared verification + workflow-specific tools
+   ```
+
+   Open blocking findings prevent readiness but do not discard the foreground
+   artifact. Advisory findings allow work to continue. Every session is
+   capability-scoped to one active class: the resolver is active-class-only,
+   and neither the model nor the UI may offer a class switch as recovery.
+   Unresolved consequential facts are held out of the artifact and durable
+   candidates until an active-class correction is confirmed. A teacher question
+   about prior coverage retrieves and answers from the active-class record; it
+   is not itself a candidate update. Durable-write fingerprint verification is
+   a later boundary and remains separate from this proactive chat loop.
+
+6. **Profiles (three clearly-scoped files)**
    - `user.md` (`wiki/teacher_profile.md`, GLOBAL): teacher communication style,
-     stable preferences, default lesson structure.
+     stable preferences, default lesson structure, and only teacher-confirmed
+     professional context that materially improves future assistance.
    - `teaching_patterns.md` (class + subject): how this class learns and which
      approaches work/fail (the class learning profile).
    - `copilot.md` (`copilot_profile.md`, class): copilot working agreement only.
@@ -181,9 +209,14 @@ The product uses tiered class memory.
    lesson-memory commit, so subtle chat signals such as repeated communication
    preferences can be reviewed for `teacher_profile.md`, `copilot_profile.md`,
    `teaching_patterns.md`, or `planning_brief.md`. `canonical_wiki` remains
-   review-only in this path.
+   review-only in this path. A recommended future extension is explicit,
+   teacher-requested professional context in `teacher_profile.md` (for example
+   under `Professional context`) with verbatim provenance and the same
+   teacher-review requirement as preferences. Casual disclosures remain session
+   context, not durable memory. Profile context is advisory; it never expands
+   the active class, available tools, or durable-write authority.
 
-6. **Candidate ledger and Memory Sweep (Memory V3)**
+7. **Candidate ledger and Memory Sweep (Memory V3)**
    Planning and Update Memory chats capture review-only durable facts. The
    **primary path is an explicit
    `remember(target, content, speech_act, quote, routing_reason)` tool** the
@@ -240,6 +273,14 @@ The product uses tiered class memory.
    brief UI pins explicitly requested changes first. The MBB/executive
    communication scenario remains a live trace and regression test, not a
    hardcoded system-prompt alias or backend synonym rule.
+
+Evaluation follows the same separation of concerns. Deterministic tests pin
+class scope, exact-draft write gates, and held-back artifact facts. Opt-in live
+goldens are derived from anonymized real teacher behavior and exercise full
+multi-turn context; an LLM judge evaluates the teacher-facing contract against
+the relevant active-class baseline. A complete draft and an accepted draft are
+distinct states, and UI scaffolding must not be judged as teacher-created
+artifact content.
 
 The wiki remains the source of truth. Compact memory is derived and rebuildable.
 Profiles should be small, stable, correctly scoped, and source-backed where

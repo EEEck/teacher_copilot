@@ -202,6 +202,22 @@ export type SavePlanResponse = {
   lesson_planning_state?: Record<string, unknown> | null;
   memory_candidates?: MemoryCandidate[];
 };
+export type WriteVerificationBlockedResponse = {
+  code: "write_verification_blocked";
+  action: "plan_save" | "ingest_propose" | "ingest_commit";
+  artifact_fingerprint: string;
+  executive_state: Record<string, unknown>;
+  message: string;
+};
+
+export class WriteVerificationBlockedError extends Error {
+  readonly status = 409;
+
+  constructor(readonly payload: WriteVerificationBlockedResponse) {
+    super(payload.message);
+    this.name = "WriteVerificationBlockedError";
+  }
+}
 export type PlanTraceResponse = {
   class_id: string;
   session_id: string;
@@ -407,12 +423,29 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     let message = text || res.statusText;
     try {
       const body = JSON.parse(text) as {
+        code?: string;
+        action?: WriteVerificationBlockedResponse["action"];
+        artifact_fingerprint?: string;
+        executive_state?: Record<string, unknown>;
+        message?: string;
         error?: { message?: string };
         detail?: string;
       };
+      if (res.status === 409 && body.code === "write_verification_blocked") {
+        throw new WriteVerificationBlockedError({
+          code: "write_verification_blocked",
+          action: body.action ?? "plan_save",
+          artifact_fingerprint: body.artifact_fingerprint ?? "",
+          executive_state: body.executive_state ?? {},
+          message: body.message ?? "I didn't save this yet; one detail needs your call.",
+        });
+      }
       // Typed envelope { error: { message } }, with fallback to legacy { detail }.
       message = body.error?.message ?? body.detail ?? message;
-    } catch {
+    } catch (err) {
+      if (err instanceof WriteVerificationBlockedError) {
+        throw err;
+      }
       /* use raw text */
     }
     throw new Error(`API ${res.status}: ${message}`);

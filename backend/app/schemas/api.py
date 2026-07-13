@@ -442,6 +442,7 @@ class ChatResponse(BaseModel):
     last_change_summary: str = ""
     memory_state: Optional[dict] = None
     memory_candidates: list[dict] = Field(default_factory=list)
+    executive_state: Optional[dict] = None
 
 
 class UpdateDraftRequest(BaseModel):
@@ -496,6 +497,7 @@ class PlanChatResponse(BaseModel):
     session_state: Optional[dict] = None
     lesson_planning_state: Optional[dict] = None
     memory_candidates: list[dict] = Field(default_factory=list)
+    executive_state: Optional[dict] = None
 
 
 class UpdatePlanDraftRequest(BaseModel):
@@ -520,6 +522,14 @@ class SavePlanResponse(BaseModel):
     # Proposed durable-memory updates from the session (proposed only; never
     # written here — durable writes are a separate teacher-approved action).
     memory_candidates: list[dict] = Field(default_factory=list)
+
+
+class WriteVerificationBlockedResponse(BaseModel):
+    code: Literal["write_verification_blocked"] = "write_verification_blocked"
+    action: Literal["plan_save", "ingest_propose", "ingest_commit"]
+    artifact_fingerprint: str
+    executive_state: dict = Field(default_factory=dict)
+    message: str
 
 
 class AgentTraceResponse(BaseModel):

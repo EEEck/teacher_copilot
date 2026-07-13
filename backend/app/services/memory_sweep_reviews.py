@@ -345,7 +345,7 @@ def memory_sweep_stale_reasons(
     }
     current_targets = {item["target"]: item for item in current.get("wiki_targets", [])}
     target_changes = sum(
-        previous_targets[target] != current_targets.get(target)
+        previous_targets.get(target) != current_targets.get(target)
         for target in set(previous_targets) | set(current_targets)
     )
     if target_changes:
@@ -360,7 +360,7 @@ def memory_sweep_stale_reasons(
         for item in current.get("synthetic_student_summaries", [])
     }
     summary_changes = sum(
-        previous_summaries[candidate_id] != current_summaries.get(candidate_id)
+        previous_summaries.get(candidate_id) != current_summaries.get(candidate_id)
         for candidate_id in set(previous_summaries) | set(current_summaries)
     )
     if summary_changes:

@@ -81,6 +81,7 @@ def _install_fckw_ingest_stub(
         partial_diary: str = "",
         attachments: list[ChatAttachment] | None = None,
         memory=None,
+        executive=None,
     ) -> AsyncIterator:
         yield SseReasoningDelta(text="Reviewing class memory...")
         latest = messages[-1].content.lower() if messages else ""

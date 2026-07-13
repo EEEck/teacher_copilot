@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import shutil
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -15,11 +16,11 @@ SEED_WIKI = Path(__file__).resolve().parent.parent / "teacher_wiki"
 CLASS_ID = "chemie_9b_2026_27"
 
 
-def _service(tmp_path: Path) -> BetaAuthService:
+def _service(tmp_path: Path, *, seed_wiki_root: Path = SEED_WIKI) -> BetaAuthService:
     service = BetaAuthService(
         db_path=tmp_path / "beta.sqlite3",
         data_root=tmp_path / "beta_data",
-        seed_wiki_root=SEED_WIKI,
+        seed_wiki_root=seed_wiki_root,
         cookie_name="kp_beta_session",
         session_days=30,
         cookie_secure=False,
@@ -74,7 +75,12 @@ def test_invite_login_creates_persistent_opaque_session(tmp_path: Path):
 def test_provisioned_workspace_does_not_inherit_seed_workflow_runtime_data(
     tmp_path: Path,
 ):
-    service = _service(tmp_path)
+    seeded_copy = tmp_path / "seed_wiki"
+    shutil.copytree(SEED_WIKI, seeded_copy)
+    workflow = seeded_copy / "workflow"
+    workflow.mkdir()
+    (workflow / "memory_candidates.sqlite").write_bytes(b"sqlite-fixture")
+    service = _service(tmp_path, seed_wiki_root=seeded_copy)
 
     identity = service.provision_tester(
         tester_id="t_anna",
@@ -82,7 +88,7 @@ def test_provisioned_workspace_does_not_inherit_seed_workflow_runtime_data(
         invite_code="anna-invite",
     )
 
-    assert (SEED_WIKI / "workflow" / "memory_candidates.sqlite").exists()
+    assert (seeded_copy / "workflow" / "memory_candidates.sqlite").exists()
     assert not (identity.wiki_root / "workflow").exists()
 
 

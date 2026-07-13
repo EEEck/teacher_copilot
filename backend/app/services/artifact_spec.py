@@ -30,6 +30,10 @@ from app.teacher_agent.memory_update_state import (
     MemoryTargetState,
     memory_api_payload,
 )
+from app.teacher_agent.executive_verification import (
+    ExecutiveRuntime,
+    executive_api_payload,
+)
 from app.teacher_agent.planning_state import (
     EvidenceBrief,
     LessonPlanningState,
@@ -62,6 +66,7 @@ PromptTraceHook = Callable[
         list[ChatMessage],
         str,
         Any,
+        ExecutiveRuntime,
         list[ChatAttachment],
         str,
     ],
@@ -83,6 +88,7 @@ class TurnResult:
     # Ingest/update-memory mode only: target/date identification and
     # lesson-results collection state.
     memory: Optional[dict] = None
+    executive: Optional[dict] = None
 
 
 # Commit strategies (the spec picks one; future artifact types reuse them).
@@ -108,6 +114,7 @@ class ArtifactSpec:
             str,
             list[ChatAttachment],
             Any,
+            ExecutiveRuntime,
         ],
         Awaitable[TurnResult],
     ]
@@ -126,6 +133,7 @@ class ArtifactSpec:
                 str,
                 list[ChatAttachment],
                 Any,
+                ExecutiveRuntime,
             ],
             AsyncIterator[SseEvent],
         ]
@@ -165,10 +173,16 @@ async def _ingest_run_turn(
     partial: str,
     attachments: list[ChatAttachment],
     planning: Optional[Any] = None,
+    executive: ExecutiveRuntime | None = None,
 ) -> TurnResult:
     memory = planning if isinstance(planning, MemoryRuntime) else None
     reply, md, checklist, ready = await agents.ingest_chat(
-        class_id, messages, partial, attachments=attachments, memory=memory
+        class_id,
+        messages,
+        partial,
+        attachments=attachments,
+        memory=memory,
+        executive=executive,
     )
     payload = memory_api_payload(memory) if memory is not None else None
     return TurnResult(
@@ -177,6 +191,7 @@ async def _ingest_run_turn(
         ready=ready,
         completeness=checklist,
         memory=payload,
+        executive=executive_api_payload(executive) if executive else None,
     )
 
 
@@ -187,6 +202,7 @@ def _ingest_stream_turn(
     partial: str,
     attachments: list[ChatAttachment],
     runtime: Any,
+    executive: ExecutiveRuntime,
 ) -> AsyncIterator[SseEvent]:
     return agents.ingest_chat_stream(
         class_id,
@@ -194,6 +210,7 @@ def _ingest_stream_turn(
         partial,
         attachments=attachments,
         memory=runtime if isinstance(runtime, MemoryRuntime) else None,
+        executive=executive,
     )
 
 
@@ -204,6 +221,7 @@ def _ingest_final_event_to_turn_result(event: SseFinal) -> TurnResult:
         ready=event.ready,
         completeness=event.completeness,
         memory=event.memory_state,
+        executive=event.executive_state,
     )
 
 
@@ -213,6 +231,7 @@ def _ingest_prompt_trace(
     messages: list[ChatMessage],
     current_markdown: str,
     runtime: Any,
+    executive: ExecutiveRuntime,
     attachments: list[ChatAttachment],
     stage: str,
 ) -> dict:
@@ -222,6 +241,7 @@ def _ingest_prompt_trace(
         messages=messages,
         current_diary=current_markdown,
         runtime=runtime if isinstance(runtime, MemoryRuntime) else None,
+        executive=executive,
         attachments=attachments,
     )
 
@@ -294,13 +314,24 @@ async def _plan_run_turn(
     partial: str,
     attachments: list[ChatAttachment],
     planning: Optional[PlanRuntime] = None,
+    executive: ExecutiveRuntime | None = None,
 ) -> TurnResult:
     reply, md, ready = await agents.plan_chat(
-        class_id, messages, partial, attachments=attachments, planning=planning
+        class_id,
+        messages,
+        partial,
+        attachments=attachments,
+        planning=planning,
+        executive=executive,
     )
     payload = planning_api_payload(planning) if planning is not None else None
     return TurnResult(
-        reply=reply, markdown=md, ready=ready, completeness=None, planning=payload
+        reply=reply,
+        markdown=md,
+        ready=ready,
+        completeness=None,
+        planning=payload,
+        executive=executive_api_payload(executive) if executive else None,
     )
 
 
@@ -311,6 +342,7 @@ def _plan_stream_turn(
     partial: str,
     attachments: list[ChatAttachment],
     runtime: Any,
+    executive: ExecutiveRuntime,
 ) -> AsyncIterator[SseEvent]:
     return agents.plan_chat_stream(
         class_id,
@@ -318,6 +350,7 @@ def _plan_stream_turn(
         partial,
         attachments=attachments,
         planning=runtime if isinstance(runtime, PlanRuntime) else None,
+        executive=executive,
     )
 
 
@@ -334,6 +367,7 @@ def _plan_final_event_to_turn_result(event: SseFinal) -> TurnResult:
             "lesson_planning_state": event.lesson_planning_state,
             "memory_candidates": event.memory_candidates or [],
         },
+        executive=event.executive_state,
     )
 
 
@@ -347,6 +381,7 @@ def _plan_prompt_trace(
     messages: list[ChatMessage],
     current_markdown: str,
     runtime: Any,
+    executive: ExecutiveRuntime,
     attachments: list[ChatAttachment],
     stage: str,
 ) -> dict:
@@ -358,6 +393,7 @@ def _plan_prompt_trace(
         messages=messages,
         current_plan=current_markdown,
         runtime=runtime if isinstance(runtime, PlanRuntime) else None,
+        executive=executive,
         attachments=attachments,
     )
 
@@ -440,6 +476,7 @@ INGEST_SPEC = ArtifactSpec(
                 "Teacher layer",
                 "Active class core",
                 "Update Memory task context",
+                "Executive state",
                 "Memory target state",
                 "Memory session state",
                 "Lesson result state",
@@ -449,6 +486,7 @@ INGEST_SPEC = ArtifactSpec(
         ),
         stream_turn=_ingest_stream_turn,
         final_event_to_turn_result=_ingest_final_event_to_turn_result,
+        executive_verification=True,
     ),
 )
 
@@ -479,6 +517,7 @@ PLAN_SPEC = ArtifactSpec(
             expected_sections=(
                 "Teacher layer",
                 "Active class core",
+                "Executive state",
                 "Session state",
                 "Lesson planning state",
                 "Evidence briefs",
@@ -486,6 +525,7 @@ PLAN_SPEC = ArtifactSpec(
         ),
         stream_turn=_plan_stream_turn,
         final_event_to_turn_result=_plan_final_event_to_turn_result,
+        executive_verification=True,
     ),
 )
 

@@ -44,6 +44,9 @@ import {
   loadPendingMemoryReview,
   savePendingMemoryReview,
 } from "@/lib/pending-memory-review";
+import { dedupeMemoryCandidates } from "@/lib/memory-candidates";
+import { errorMessageFromUnknown } from "@/lib/write-verification-error";
+import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 import { useAuiState } from "@assistant-ui/react";
 
 type CommitResult = {
@@ -91,18 +94,6 @@ function textFromRecord(value: unknown): string {
 
 function boolFromRecord(value: unknown): boolean {
   return typeof value === "boolean" ? value : false;
-}
-
-function dedupeMemoryCandidates(candidates: MemoryCandidate[]): MemoryCandidate[] {
-  const seen = new Set<string>();
-  const out: MemoryCandidate[] = [];
-  for (const c of candidates) {
-    const key = `${c.target}::${c.section ?? ""}::${c.candidate_update.trim().toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(c);
-  }
-  return out;
 }
 
 function CompactMemoryProposalCard({
@@ -207,21 +198,19 @@ function MemoryTargetStatus() {
   const confirmed = boolFromRecord(targetRecord.target_confirmed);
 
   return (
-    <Card className="border-border bg-muted/40">
-      <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-1 p-3 text-xs">
-        <span className="font-medium text-foreground">
-          {date ? `Target: ${date}${title ? ` · ${title}` : ""}` : "Target: not selected"}
-        </span>
-        {intent && <span className="text-muted-foreground">Intent: {intent}</span>}
-        {phase && <span className="text-muted-foreground">Phase: {phase}</span>}
-        <span className={confirmed ? "text-primary" : "text-muted-foreground"}>
-          {confirmed ? "Confirmed" : "Needs confirmation"}
-        </span>
-        {lastChangeSummary && (
-          <span className="basis-full text-muted-foreground">{lastChangeSummary}</span>
-        )}
-      </CardContent>
-    </Card>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-[11px] leading-tight">
+      <span className="font-medium text-foreground">
+        {date ? `Target: ${date}${title ? ` · ${title}` : ""}` : "Target: not selected"}
+      </span>
+      {intent && <span className="text-muted-foreground">Intent: {intent}</span>}
+      {phase && <span className="text-muted-foreground">Phase: {phase}</span>}
+      <span className={confirmed ? "text-primary" : "text-muted-foreground"}>
+        {confirmed ? "Confirmed" : "Needs confirmation"}
+      </span>
+      {lastChangeSummary && (
+        <span className="basis-full text-muted-foreground">{lastChangeSummary}</span>
+      )}
+    </div>
   );
 }
 
@@ -431,6 +420,7 @@ function MemoryWorkspace({
     onError(null);
     try {
       await client.discardWorkflowDraft(classId, draftId);
+      useWorkflowDraftStore.getState().remove(draftId);
       if (typeof window !== "undefined") {
         clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
         window.sessionStorage.removeItem(`kp:composer:${draftId}`);
@@ -442,7 +432,7 @@ function MemoryWorkspace({
         }
       }
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Could not discard draft");
+      onError(errorMessageFromUnknown(e, "Could not discard draft"));
       setDiscarding(false);
     }
   }, [classId, discardRedirectHref, draftId, onError, reviewStorageKey, router]);
@@ -497,7 +487,7 @@ function MemoryWorkspace({
       initFromProposals(unique);
       setInReview(true);
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Could not prepare save");
+      onError(errorMessageFromUnknown(e, "Could not prepare save"));
     } finally {
       setLoading(false);
     }
@@ -556,7 +546,7 @@ function MemoryWorkspace({
       }
       router.refresh();
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Commit failed");
+      onError(errorMessageFromUnknown(e, "Commit failed"));
     } finally {
       setLoading(false);
     }
@@ -658,8 +648,10 @@ function MemoryWorkspace({
     );
 
   return (
-    <div className="space-y-8">
-      <MemoryTargetStatus />
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="shrink-0">
+        <MemoryTargetStatus />
+      </div>
       <ArtifactSessionWorkspace
         thread={<IngestThread />}
         draftPanel={draftPanel}

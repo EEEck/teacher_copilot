@@ -32,6 +32,29 @@ async def test_general_ingest_session_resumes_same_durable_draft(wiki, agents):
 
 
 @pytest.mark.anyio
+async def test_executive_findings_survive_workflow_draft_resume(wiki, agents):
+    store = WorkflowDraftStore(wiki.root / "workflow" / "workflow_drafts.sqlite")
+    store.initialize()
+    plan = PlanService(wiki=wiki, agents=agents, workflow_drafts=store)
+
+    session = await plan.start_session(CLASS_ID)
+    await plan.chat(session.session_id, "Add a note for student S-999.")
+    live = plan.core.get_session(session.session_id)
+    assert [item.finding_id for item in live.executive.open_blocking_findings()] == [
+        "student-s999"
+    ]
+
+    resumed_service = PlanService(wiki=wiki, agents=agents, workflow_drafts=store)
+    resumed = await resumed_service.start_session(CLASS_ID)
+    restored = resumed_service.core.get_session(resumed.session_id)
+
+    assert resumed.draft_id == session.draft_id
+    assert [
+        item.finding_id for item in restored.executive.open_blocking_findings()
+    ] == ["student-s999"]
+
+
+@pytest.mark.anyio
 async def test_timeline_ingest_drafts_are_scoped_by_lesson_date(wiki, agents):
     store = WorkflowDraftStore(wiki.root / "workflow" / "workflow_drafts.sqlite")
     store.initialize()
@@ -105,7 +128,7 @@ async def test_ingest_commit_rejects_stale_review_snapshot(wiki, agents):
     ]
 
     with pytest.raises(ValueError, match="draft_changed_since_review_created"):
-        ingest.commit(
+        await ingest.commit(
             CommitIngestRequest(
                 session_id=session.session_id,
                 diary_markdown="STALE CLIENT MARKDOWN",
@@ -152,7 +175,7 @@ async def test_unfinished_streamed_turn_guard_survives_service_restart(wiki, age
         for p in proposals
     ]
     with pytest.raises(ValueError, match="latest chat turn"):
-        resumed.commit(
+        await resumed.commit(
             CommitIngestRequest(
                 session_id=resumed_session.session_id,
                 diary_markdown=COMPLETE_DIARY,
@@ -243,7 +266,7 @@ async def test_ingest_commit_uses_backend_draft_when_revision_present(wiki, agen
         for p in proposed.wiki_proposals
     ]
 
-    response = ingest.commit(
+    response = await ingest.commit(
         CommitIngestRequest(
             session_id=session.session_id,
             diary_markdown="# Lesson Results -- 1999-01-01 -- stale",
@@ -276,14 +299,14 @@ async def test_plan_save_rejects_stale_draft_and_uses_backend_markdown(wiki, age
         expected_artifact_revision=draft.artifact_revision,
         expected_artifact_hash=draft.artifact_hash,
     )
-    response = plan.save(CLASS_ID, stale)
+    response = await plan.save(CLASS_ID, stale)
     saved = wiki.read_text(wiki.resolve_path(response.plan_path))
     assert "Stub Plan" in saved
     assert "stale" not in saved
 
     updated = plan.update_draft(session.session_id, READY_PLAN + "\n\nLate edit.\n")
     with pytest.raises(ValueError, match="draft_changed_since_review_created"):
-        plan.save(
+        await plan.save(
             CLASS_ID,
             stale.model_copy(
                 update={

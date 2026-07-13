@@ -208,12 +208,14 @@ def _trace_section(
     function: str,
     source: str,
     text: str,
+    authority: str,
     included: bool = True,
 ) -> dict:
     return {
         "name": name,
         "function": function,
         "source": source,
+        "authority": authority,
         "included": included,
         "chars": len(text or ""),
         "text": text or "",
@@ -241,6 +243,7 @@ def build_teacher_context_trace(store) -> dict:
                 function="build_teacher_context_trace",
                 source=store.rel_wiki(path),
                 text=rendered,
+                authority="curated_advisory",
                 included=bool(text),
             )
         ],
@@ -305,21 +308,24 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
         source: str,
         lines: list[str],
         *,
+        authority: str = "committed_wiki",
         included: bool = True,
         function: str = "build_active_class_core_context_trace",
     ) -> None:
-        text = "\n".join(lines)
+        labeled_lines = [f"[authority={authority}; source={source}]", *lines]
+        text = "\n".join(labeled_lines)
         sections.append(
             _trace_section(
                 name=name,
                 function=function,
                 source=source,
                 text=text,
+                authority=authority,
                 included=included,
             )
         )
         if included:
-            parts.extend(lines)
+            parts.extend(labeled_lines)
 
     add_section(
         "Class identity snapshot",
@@ -362,6 +368,7 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
                 f"## Subject guide: {cls.subject}",
                 _mem.clamp_memory_page("subject_guide", subject_text).rstrip(),
             ],
+            authority="curated_guidance",
         )
     else:
         sections.append(
@@ -370,6 +377,7 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
                 function="build_active_class_core_context_trace",
                 source=store.rel_wiki(subject_path),
                 text="",
+                authority="curated_guidance",
                 included=False,
             )
         )
@@ -387,6 +395,7 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
                 f"Class memory: {path.name}",
                 source,
                 ["", f"## {label}", _mem.clamp_memory_page(key, text).rstrip()],
+                authority="curated_advisory",
             )
         else:
             sections.append(
@@ -395,6 +404,7 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
                     function="build_active_class_core_context_trace",
                     source=source,
                     text="",
+                    authority="curated_advisory",
                     included=False,
                 )
             )
@@ -408,6 +418,7 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
                 "## Compact class memory",
                 "- No compact class memory pages found yet.",
             ],
+            authority="curated_advisory",
         )
 
     rendered = "\n".join(parts)
@@ -458,18 +469,20 @@ def build_ingest_task_context_trace(store, class_id: str) -> dict:
     def add_section(
         name: str, source: str, lines: list[str], included: bool = True
     ) -> None:
-        text = "\n".join(lines)
+        labeled_lines = [f"[authority=committed_wiki; source={source}]", *lines]
+        text = "\n".join(labeled_lines)
         sections.append(
             _trace_section(
                 name=name,
                 function="build_ingest_task_context_trace",
                 source=source,
                 text=text,
+                authority="committed_wiki",
                 included=included,
             )
         )
         if included:
-            parts.extend(lines)
+            parts.extend(labeled_lines)
 
     if snapshot.last_committed_date:
         try:
@@ -559,12 +572,14 @@ def build_ingest_context_slim_trace(store, class_id: str) -> dict:
                 function="build_active_class_core_context_trace",
                 source=f"wiki/classes/{class_id}/memory/*.md + selected subject guide",
                 text=core["text"],
+                authority="mixed_wiki",
             ),
             _trace_section(
                 name="Update Memory task context",
                 function="build_ingest_task_context_trace",
                 source="recent lesson/roster/saved plan",
                 text=task["text"],
+                authority="committed_wiki",
             ),
         ],
         "nested": {"active_class_core": core, "task_context": task},

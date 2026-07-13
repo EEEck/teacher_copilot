@@ -88,12 +88,16 @@ Purpose:
 - communication style
 - default lesson structure
 - cross-class workflow preferences
+- teacher-confirmed professional context only when it materially improves
+  future assistance
 
 Examples:
 
 - "Prefers concise 45-minute lesson plans."
 - "Feedback and planning language: English for this prototype."
 - "Uses pair exercises after board introduction."
+- "Also teaches part time at university." (only after an explicit request to
+  remember it; it does not change active-class scope.)
 
 Loaded where:
 
@@ -115,6 +119,12 @@ Updated by:
 - `POST /api/classes/{class_id}/memory/apply` writes approved `teacher_profile.md`
   items
   through bounded backend helpers.
+- **Recommended extension:** an explicit `remember(...)` request may stage a
+  review-only `teacher_profile.md` candidate in the application-owned ledger.
+  Use the section `Professional context` only for concise, teacher-confirmed
+  context with a foreseeable product use; it still requires teacher approval
+  before profile application. Until that capture policy is implemented,
+  professional disclosures remain session context.
 
 Do not put here:
 
@@ -122,6 +132,9 @@ Do not put here:
 - one-off lesson constraints
 - individual student facts
 - raw conversation logs
+- casual personal or employment disclosures that the teacher did not ask the
+  copilot to remember
+- facts that would imply another active class, course, or tool capability
 
 ### 2. Subject Guide
 

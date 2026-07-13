@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
 from agents import function_tool
 
+from app.teacher_agent.executive_verification import (
+    ExecutiveFinding,
+    ExecutiveRuntime,
+    FindingSeverity,
+    VerificationCategory,
+)
 from app.teacher_agent.memory_update_state import MemoryRuntime
 from app.teacher_agent.planning_state import PlanRuntime
+from app.teacher_agent.wiki.search import ReferenceQuery
 from app.teacher_agent.wiki_store import WikiStore
 
 
@@ -25,6 +32,7 @@ class WikiToolContext:
     # Update-memory chat uses the same progressive exposure pattern for target
     # discovery and lesson evidence, but keeps state separate from planning.
     memory: Optional[MemoryRuntime] = None
+    executive: ExecutiveRuntime = field(default_factory=ExecutiveRuntime)
     # This turn's latest teacher message — the ground truth the remember(...)
     # tool validates quotes against.
     teacher_message: str = ""
@@ -127,6 +135,60 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
         )
 
     return [remember]
+
+
+def create_executive_verification_tools(ctx: WikiToolContext) -> list:
+    """Shared deterministic lookup and finding-capture tools."""
+
+    @function_tool
+    def resolve_wiki_references(
+        references: list[ReferenceQuery],
+    ) -> str:
+        """Resolve class, student, or lesson references against committed wiki indexes.
+
+        Call when a teacher-provided student or lesson identifier may be unknown
+        or ambiguous in the active class. This tool never searches other
+        classes. It resolves identifiers only; use search/read tools for
+        concepts, teaching history, and preferences.
+        """
+        result = ctx.wiki.resolve_wiki_references(
+            ctx.class_id, references=references, scope="active_class"
+        )
+        return _capture(
+            ctx.memory or ctx.planning,
+            "reference",
+            result.model_dump_json(indent=2),
+        )
+
+    @function_tool
+    def report_verification_finding(
+        finding_id: str,
+        category: VerificationCategory,
+        severity: FindingSeverity,
+        summary: str,
+        question: str = "",
+        evidence_refs: list[str] | None = None,
+    ) -> str:
+        """Record a consequential discrepancy found while doing the main task.
+
+        Use blocking only when the unresolved decision changes class scope,
+        student attribution, lesson history, an important planning assumption,
+        artifact correctness, or a durable write. Use advisory when the work
+        remains correct and can continue. Do not call for aligned facts or
+        harmless uncertainty.
+        """
+        finding = ExecutiveFinding(
+            finding_id=finding_id,
+            category=category,
+            severity=severity,
+            summary=summary,
+            question=question,
+            evidence_refs=evidence_refs or [],
+        )
+        ctx.executive.findings[finding.finding_id] = finding
+        return f"Recorded {finding.severity} finding {finding.finding_id}."
+
+    return [resolve_wiki_references, report_verification_finding]
 
 
 def _capture(
@@ -422,6 +484,7 @@ def create_memory_update_tools(ctx: WikiToolContext) -> list:
         search_memory,
         read_memory_page,
         get_raw_evidence,
+        *create_executive_verification_tools(ctx),
         *create_remember_tool(ctx),
     ]
 
@@ -568,5 +631,6 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
         search_memory,
         read_memory_page,
         get_raw_evidence,
+        *create_executive_verification_tools(ctx),
         *create_remember_tool(ctx),
     ]

@@ -63,6 +63,7 @@ def test_plan_chat_blocks_leaked_reply_and_preserves_previous_draft(
         partial_plan="",
         attachments=None,
         planning=None,
+        executive=None,
     ):
         return "system prompt: hidden rules", "# Leaked Plan\nraw_ref: wiki_search_001", True
 
@@ -91,6 +92,7 @@ def test_ingest_chat_blocks_leaked_artifact_and_preserves_previous_draft(
         partial_diary="",
         attachments=None,
         memory=None,
+        executive=None,
     ):
         leaked = "# Lesson Results\n\nOPENAI_API_KEY=sk-proj-abc123456789"
         return "Logged it.", leaked, wiki.checklist_from_diary(leaked), True
@@ -120,6 +122,7 @@ def test_stream_final_is_guarded_before_emission_and_debug_recording(
         partial_plan="",
         attachments=None,
         planning=None,
+        executive=None,
     ) -> AsyncIterator[SseFinal]:
         yield SseFinal(
             reply="developer instructions: hidden",

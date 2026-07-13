@@ -49,6 +49,7 @@ class SseFinal(BaseModel):
     # Ingest/update-memory mode only: target/date identification and
     # lesson-results collection state.
     memory_state: dict | None = None
+    executive_state: dict | None = None
 
 
 class SseError(BaseModel):

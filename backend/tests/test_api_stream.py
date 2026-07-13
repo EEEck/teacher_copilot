@@ -54,6 +54,23 @@ def test_plan_chat_stream(client: TestClient):
     assert any(e.get("type") == "final" for e in events)
 
 
+def test_plan_chat_stream_surfaces_blocking_executive_state(client: TestClient):
+    start = client.post(f"/api/classes/{CLASS_ID}/plan/sessions")
+    session_id = start.json()["session_id"]
+
+    res = client.post(
+        f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/chat/stream",
+        json={"message": "Add a planning note for student S-999."},
+    )
+
+    assert res.status_code == 200
+    final = [
+        event for event in _parse_sse(res.text) if event.get("type") == "final"
+    ][-1]
+    assert final["ready"] is False
+    assert final["executive_state"]["status"] == "needs_decision"
+
+
 def test_plan_chat_stream_fckw_redox_uses_memory_pathfinder(client: TestClient):
     start = client.post(f"/api/classes/{CLASS_ID}/plan/sessions")
     session_id = start.json()["session_id"]

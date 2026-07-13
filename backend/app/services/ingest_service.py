@@ -48,6 +48,10 @@ from app.teacher_agent.memory_update_state import (
     render_memory_target_state,
     render_memory_runtime,
 )
+from app.teacher_agent.executive_verification import (
+    WriteVerificationBlocked,
+    enforce_applied_write_verification,
+)
 from app.teacher_agent.prompt_trace import build_ingest_chat_prompt_trace
 from app.teacher_agent.wiki import parsing as wiki_parsing
 from app.teacher_agent.wiki_store import WikiStore
@@ -196,16 +200,6 @@ class IngestService:
             needs_confirmation=not confirmed,
         )
 
-    def _apply_start_hint(
-        self, session: ArtifactSession, hint: IngestSessionStartRequest
-    ) -> None:
-        if not isinstance(session.runtime, MemoryRuntime):
-            return
-        resolved = self._resolve_start_hint(session.class_id, hint)
-        if resolved is None:
-            return
-        self._apply_start_hint_resolution(session, resolved)
-
     def _apply_start_hint_resolution(
         self, session: ArtifactSession, resolved: IngestStartHintResolution
     ) -> None:
@@ -328,6 +322,7 @@ class IngestService:
             last_change_summary=(result.memory or {}).get("last_change_summary", ""),
             memory_state=result.memory,
             memory_candidates=(result.memory or {}).get("memory_candidates", []),
+            executive_state=result.executive,
         )
 
     async def chat_stream(
@@ -362,6 +357,20 @@ class IngestService:
             diary_md = await self.agents.compile_diary(
                 session.class_id, session.messages
             )
+        verification = await self.agents.verify_artifact_for_write(
+            session.class_id, "lesson results", diary_md, session.executive
+        )
+        try:
+            enforce_applied_write_verification(
+                session.executive,
+                artifact=diary_md,
+                verification=verification,
+                action="ingest_propose",
+                structurally_ready=self.wiki.is_diary_complete(diary_md),
+            )
+        except WriteVerificationBlocked:
+            self.core._persist_session(session)
+            raise
         draft = self.core.update_draft(session_id, diary_md)
         session = self.core.get_session(session_id)
         if self.workflow_drafts is not None and session.draft_id:
@@ -428,6 +437,7 @@ class IngestService:
                 messages=session.messages,
                 current_diary=session.partial_markdown,
                 runtime=runtime,
+                executive=session.executive,
             ),
             runtime=runtime_payload,
             messages=session.messages,
@@ -436,7 +446,7 @@ class IngestService:
             raw_evidence=dict(runtime.raw_store) if runtime else {},
         )
 
-    def commit(self, req: CommitIngestRequest) -> CommitIngestResponse:
+    async def commit(self, req: CommitIngestRequest) -> CommitIngestResponse:
         session = self.core.get_session(req.session_id)
         self.core.require_latest_turn_complete(req.session_id, "save memory")
         diary_markdown = req.diary_markdown
@@ -471,6 +481,20 @@ class IngestService:
                 except WorkflowDraftConflict as exc:
                     raise ValueError(str(exc)) from exc
                 diary_markdown = row.artifact_markdown
+        verification = await self.agents.verify_artifact_for_write(
+            session.class_id, "lesson results", diary_markdown, session.executive
+        )
+        try:
+            enforce_applied_write_verification(
+                session.executive,
+                artifact=diary_markdown,
+                verification=verification,
+                action="ingest_commit",
+                structurally_ready=self.wiki.is_diary_complete(diary_markdown),
+            )
+        except WriteVerificationBlocked:
+            self.core._persist_session(session)
+            raise
         lesson_date = (
             self.wiki.extract_date_from_diary(diary_markdown)
             or date.today().isoformat()

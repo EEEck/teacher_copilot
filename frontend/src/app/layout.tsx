@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/layout/app-shell";
+import { ShellLayoutProvider } from "@/components/layout/shell-layout";
 import { PendingTurnNotifier } from "@/components/klassenpilot/pending-turn-notifier";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -19,9 +20,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={cn("font-sans", geist.variable)}>
       <body>
         <TooltipProvider>
-          <AppShell>{children}</AppShell>
-          <PendingTurnNotifier />
-          <Toaster />
+          <ShellLayoutProvider>
+            <AppShell>{children}</AppShell>
+            <PendingTurnNotifier />
+            <Toaster />
+          </ShellLayoutProvider>
         </TooltipProvider>
       </body>
     </html>

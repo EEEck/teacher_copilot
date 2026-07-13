@@ -14,9 +14,11 @@ from app.teacher_agent.models import (
     PlanOutput,
     PlanTurnOutput,
     ProfileProposalOutput,
+    WriteVerificationOutput,
 )
 from app.teacher_agent.memory_update_state import MemoryRuntime
 from app.teacher_agent.planning_state import PlanRuntime
+from app.teacher_agent.executive_verification import render_executive_runtime
 from app.teacher_agent.prompt_assembly import (
     build_ingest_chat_prompt_assembly,
     build_plan_chat_prompt_assembly,
@@ -29,6 +31,7 @@ from app.teacher_agent.prompts import (
     PROFILE_PROPOSAL_SYSTEM,
     PLAN_OPENING_SYSTEM,
     PLAN_SYSTEM,
+    WRITE_VERIFICATION_SYSTEM,
     apply_prompt,
     TEACHER_AGENT_SECURITY_POLICY,
 )
@@ -49,10 +52,18 @@ def chat_model_settings(
     Set effort to ``none`` to match the API default and skip hidden reasoning
     tokens. Non-reasoning models ignore this when unsupported. Call classes pass
     their profile-resolved effort (chat/important/utility — see config.py).
+
+    ``minimal`` is rejected by current gpt-5.4 / gpt-5.5 Responses models
+    (supported: none/low/medium/high/xhigh). Map it to ``low`` so utility
+    one-shots on the chat-tier model do not 400.
     """
     normalized_effort = reasoning_effort
-    if reasoning_effort == "minimal" and model and model.startswith("gpt-5.4"):
-        normalized_effort = "none"
+    if (
+        reasoning_effort == "minimal"
+        and model
+        and (model.startswith("gpt-5.4") or model.startswith("gpt-5.5"))
+    ):
+        normalized_effort = "low"
     if normalized_effort == "none":
         return None
     return ModelSettings(reasoning=Reasoning(effort=normalized_effort, summary="auto"))
@@ -72,6 +83,7 @@ def build_ingest_agent(
         messages=[],
         current_diary="",
         runtime=rt,
+        executive=ctx.executive,
         attachments=[],
     )
     instructions = assembly["instructions"]
@@ -103,6 +115,7 @@ def build_plan_chat_agent(
         messages=[],
         current_plan=current_plan,
         runtime=rt,
+        executive=ctx.executive,
         attachments=[],
     )
     instructions = assembly["instructions"]
@@ -114,6 +127,30 @@ def build_plan_chat_agent(
         **({"model_settings": settings} if settings else {}),
         tools=create_chat_wiki_tools(ctx),
         output_type=PlanTurnOutput,
+    )
+
+
+def build_write_verification_agent(
+    ctx: WikiToolContext,
+    artifact_kind: str,
+    active_class_core: str,
+    model: str,
+    *,
+    reasoning_effort: str = "medium",
+) -> Agent:
+    return Agent(
+        name="KlassenPilot Write Verifier",
+        instructions=apply_prompt(
+            WRITE_VERIFICATION_SYSTEM,
+            artifact_kind=artifact_kind,
+            active_class_core=active_class_core,
+            executive_state=render_executive_runtime(ctx.executive),
+            security_policy=TEACHER_AGENT_SECURITY_POLICY,
+        ),
+        model=model,
+        **_reasoning(reasoning_effort, model),
+        tools=create_chat_wiki_tools(ctx),
+        output_type=WriteVerificationOutput,
     )
 
 
