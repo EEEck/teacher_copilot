@@ -94,10 +94,27 @@ export function DiscussDock({ classId, state, onStateChange }: DiscussDockProps)
       await inflightRef.current;
       return;
     }
+    // Prefer an in-memory discuss draft for this class so leave/return keeps
+    // the same draftId (and rich thread overlay) while open-or-resume loads.
+    const cached = Object.values(
+      useWorkflowDraftStore.getState().draftsById,
+    ).find((d) => d.mode === "discuss" && d.classId === classId);
+    if (cached) {
+      setBoot({
+        sessionId: cached.sessionId,
+        draftId: cached.draftId,
+        artifactRevision: cached.artifactRevision,
+        artifactHash: cached.artifactHash,
+        turnInProgress: cached.turnInProgress,
+        latestTurnComplete: cached.latestTurnComplete,
+        initialMessages: cached.messages,
+      });
+    }
     setLoading(true);
     setError(null);
     const run = (async () => {
       try {
+        // Backend open_draft resumes the active discuss session for this class.
         const session = await client.startDiscussionSession(classId);
         const draft = await client.discussionGetDraft(classId, session.session_id);
         const snapshot = toWorkflowDraftSnapshot("discuss", classId, {
@@ -128,7 +145,7 @@ export function DiscussDock({ classId, state, onStateChange }: DiscussDockProps)
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to start discussion");
-        setBoot(null);
+        if (!cached) setBoot(null);
       } finally {
         setLoading(false);
       }

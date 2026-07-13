@@ -18,8 +18,23 @@ Lightweight design rules for app screens and [assistant-ui](https://github.com/a
 | Primitives | `src/components/ui/` | Button, Card, Alert, SegmentedToggle, … |
 | Features | `src/features/` | Cross-route draft/job ownership (workflow drafts) |
 | Chat | `src/components/assistant-ui/` | Thread, markdown (from assistant-ui registry) |
-| Domain | `src/components/klassenpilot/` | Timeline, checklist, wiki cards, pending jobs |
+| Domain | `src/components/klassenpilot/` | Timeline, checklist, wiki cards, pending jobs, discuss dock |
 | Pages | `src/app/` | Routes compose domain + ui + chat |
+
+Reuse and turn-lifecycle rules for plan / memory / discuss:
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+### Chat shells
+
+| Shell | When |
+|---|---|
+| Dual-pane (`ArtifactSessionPage` + workspace) | Plan / Update Memory — chat + artifact editor |
+| Discuss dock (`discuss-dock.tsx`) | Class-home helper — fixed viewport chrome only; same runtime + Thread |
+
+Do not fork a second message list or SSE path for a new mode.
+
+Chat turn scenarios (3 workflows × stay-on-page / leave-mid-turn) and how to run
+them: [`ARCHITECTURE.md`](ARCHITECTURE.md#testing-chat-turns).
 
 Update assistant-ui components: `npx assistant-ui add thread -o -p src/components/assistant-ui`
 

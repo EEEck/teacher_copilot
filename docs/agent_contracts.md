@@ -838,6 +838,10 @@ Class home may open an inline read-only “Discuss class state” chat.
 - On class home, Discuss opens as a Gmail-style docked helper (expand /
   minimize / close) that reuses the same runtime + Thread stack inside a
   fixed-height shell; it is not a separate chat implementation.
+- Turn lifecycle (streaming / backend_running / complete) is shared with plan
+  and ingest via the workflow-draft turn-state helpers. Pending turns include
+  `discuss` and resume to class home. Rich reasoning/tool parts are
+  client-session overlays in MVP (not backend-persisted).
 - Output includes `reply`, discussion state, evidence briefs, memory candidates,
   `source_paths`, and `suggested_actions`.
 - Refuse high-stakes student decisions (grading, placement, diagnosis,

@@ -64,9 +64,87 @@ describe("shouldKeepLiveThread", () => {
       shouldKeepLiveThread([{ id: "u", role: "user", content: "Hi" }], []),
     ).toBe(true);
   });
+
+  it("keeps rich parts while backend turn is in progress even if snapshot grows", () => {
+    expect(
+      shouldKeepLiveThread(
+        [
+          { id: "u", role: "user", content: "Hi" },
+          {
+            id: "a",
+            role: "assistant",
+            content: [{ type: "reasoning", text: "Thinking" }],
+          },
+        ],
+        [
+          { role: "user", content: "Hi" },
+          { role: "assistant", content: "Done." },
+          { role: "user", content: "extra" },
+        ],
+        { turnInProgress: true },
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("workflow draft store", () => {
+  it("merges the final reply into a rich thread that never got SSE text", () => {
+    const store = createWorkflowDraftStore();
+    const draftId = "draft-merge";
+    store.getState().upsert(
+      snapshot({
+        draftId,
+        sessionId: "session-merge",
+        messages: [
+          { role: "user", content: "Hi" },
+          { role: "assistant", content: "" },
+        ],
+        turnInProgress: true,
+        latestTurnComplete: false,
+      }),
+    );
+    store.getState().setThreadMessages(draftId, [
+      { id: "u", role: "user", content: "Hi" },
+      {
+        id: "a",
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Thinking" },
+          {
+            type: "tool-call",
+            toolName: "search",
+            toolCallId: "t1",
+            args: {},
+            argsText: "{}",
+          },
+        ],
+      },
+    ]);
+
+    store.getState().upsert(
+      snapshot({
+        draftId,
+        sessionId: "session-merge",
+        messages: [
+          { role: "user", content: "Hi" },
+          { role: "assistant", content: "Here is the draft." },
+        ],
+        turnInProgress: false,
+        latestTurnComplete: true,
+      }),
+    );
+
+    const thread = store.getState().threadMessagesByDraftId[draftId];
+    const assistant = thread[1];
+    expect(Array.isArray(assistant.content)).toBe(true);
+    const parts = assistant.content as Array<{ type: string; text?: string }>;
+    expect(parts.some((p) => p.type === "reasoning")).toBe(true);
+    expect(parts.some((p) => p.type === "text" && p.text === "Here is the draft.")).toBe(
+      true,
+    );
+    expect(store.getState().draftsById[draftId].turnInProgress).toBe(false);
+  });
+
   it("replaces a running snapshot with the persisted completed chat turn", () => {
     const store = createWorkflowDraftStore();
     const running = snapshot();

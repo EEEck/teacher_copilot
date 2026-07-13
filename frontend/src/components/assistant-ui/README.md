@@ -19,10 +19,13 @@ Maintenance notes:
 
 - Treat these files as adapted/vendor-style UI components, not as product
   behavior contracts.
-- Plan and Update Memory chat messages are owned by
-  `src/features/workflow-drafts/` and rendered through
+- Plan, Update Memory, and Discuss class state all own messages via
+  `src/features/workflow-drafts/` and render through
   `useExternalStoreRuntime`. Do not reintroduce `useLocalRuntime` remount keys
   as the sync strategy.
+- Discuss on class home is chrome-only (`discuss-dock.tsx`); it must reuse the
+  same runtime + `Thread` stack. See `frontend/ARCHITECTURE.md` for turn
+  lifecycle and how to add a mode.
 - For future inline chat artifacts, attachments, message actions, or richer
   tool/result displays, inspect upstream assistant-ui examples first and adapt
   the smallest useful pattern locally.

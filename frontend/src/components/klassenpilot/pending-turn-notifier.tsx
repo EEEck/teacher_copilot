@@ -15,6 +15,7 @@ import {
   clearPendingChatTurn,
   consumeCompletedPendingChatTurn,
   dismissRunningTasksBox,
+  isPendingDraftComplete,
   isPendingMemorySweepComplete,
   isPendingTurnOnCurrentPage,
   isRunningTasksBoxDismissed,
@@ -128,20 +129,32 @@ async function checkOnePendingTurn(turn: PendingChatTurn): Promise<void> {
       markPendingTurnSeenInProgress(window.sessionStorage, turn.key);
       return;
     }
-    if (
-      !shouldNotifyPendingDraftComplete(
-        draft,
-        turn,
-        draft.messages?.length ?? 0,
-      )
-    ) {
+    if (!isPendingDraftComplete(draft)) {
       return;
     }
-    // Always upsert draft meta (clears turnInProgress / spinner). Thread replace
-    // is gated inside the store so rich live SSE parts are not wiped.
-    useWorkflowDraftStore
-      .getState()
-      .upsert(fetchedDraftToSnapshot(turn.mode, turn.classId, turn.sessionId, draft));
+
+    const snapshot = fetchedDraftToSnapshot(
+      turn.mode,
+      turn.classId,
+      turn.sessionId,
+      draft,
+    );
+    const local = useWorkflowDraftStore.getState().draftsById[snapshot.draftId];
+    // Client can be stuck on Still working after leave/abort even when the
+    // backend draft is already complete. Always hydrate flags/messages.
+    useWorkflowDraftStore.getState().upsert(snapshot);
+
+    const canToast = shouldNotifyPendingDraftComplete(
+      draft,
+      turn,
+      draft.messages?.length ?? 0,
+    );
+    // Clear the pending marker once the draft is complete and either we can
+    // toast, or the local UI was still showing an in-progress spinner.
+    const stuckLocalSpinner = local?.turnInProgress === true;
+    if (!canToast && !stuckLocalSpinner) {
+      return;
+    }
     if (consumeCompletedPendingChatTurn(window.sessionStorage, turn.key)) {
       const onCurrentPage =
         typeof window !== "undefined" &&
@@ -150,7 +163,7 @@ async function checkOnePendingTurn(turn: PendingChatTurn): Promise<void> {
           `${window.location.pathname}${window.location.search}`,
         );
       // Live tab already sees the result; toast is for background / other pages.
-      if (!onCurrentPage) {
+      if (canToast && !onCurrentPage) {
         toast.success(
           chatCompletionToastLabel({
             mode: turn.mode,

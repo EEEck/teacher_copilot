@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ActionLink } from "@/components/klassenpilot/action-link";
 import {
@@ -52,6 +53,9 @@ function wikiHref(classId: string, path: string): string {
 }
 
 export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [timeline, setTimeline] = useState<ClassTimeline>({
     class_id: classId,
     entries: [],
@@ -66,6 +70,16 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
   const [memorySweepReview, setMemorySweepReview] =
     useState<MemorySweepReviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Running-box / deep links: /classes/{id}?discuss=open → expand dock.
+  useEffect(() => {
+    if (searchParams.get("discuss") !== "open") return;
+    setDiscussDock("expanded");
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("discuss");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [searchParams, router, pathname]);
 
   const fetchClassHome = useCallback(
     async (opts?: { snapshot?: boolean }) => {
