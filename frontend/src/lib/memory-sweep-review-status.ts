@@ -3,6 +3,23 @@ import type { MemorySweepReviewResponse } from "@/lib/api";
 /** Default cadence for class-home Memory Sweep nudge. */
 export const MEMORY_SWEEP_DUE_AFTER_DAYS = 5;
 
+function openCandidateCount(review: MemorySweepReviewResponse | null): number {
+  if (!review?.queues) return 0;
+  return Object.values(review.queues).reduce(
+    (sum, queue) => sum + (queue?.length ?? 0),
+    0,
+  );
+}
+
+/** Empty ready/stale review — same UI as Memory Sweep "All caught up." */
+export function memorySweepIsAllCaughtUp(
+  review: MemorySweepReviewResponse | null,
+): boolean {
+  if (!review) return false;
+  if (review.status !== "ready" && review.status !== "stale") return false;
+  return openCandidateCount(review) === 0;
+}
+
 export function memorySweepReviewBadge(
   review: MemorySweepReviewResponse | null,
 ): string {
@@ -21,6 +38,8 @@ export function memorySweepReviewBadge(
   }
   if (review.status === "failed") return "Failed";
   if (review.status !== "ready" && review.status !== "stale") return "";
+  // Empty sweep is "all caught up", not an open draft to finish.
+  if (memorySweepIsAllCaughtUp(review)) return "";
   const date = shortDate(review.updated_at ?? review.generated_at);
   return date ? `Draft saved ${date}` : "Draft saved";
 }
@@ -47,21 +66,39 @@ export function memorySweepUsefulSubtitle(
   return memorySweepReviewBadge(review);
 }
 
+function parseTimestamp(value?: string | null): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function lastAppliedTimestamp(
   review: MemorySweepReviewResponse | null,
 ): Date | null {
-  if (!review?.completed_at) return null;
-  const date = new Date(review.completed_at);
-  return Number.isNaN(date.getTime()) ? null : date;
+  return parseTimestamp(review?.completed_at);
+}
+
+/** Last successful apply, or last empty "all caught up" sweep. */
+function cadenceResetTimestamp(
+  review: MemorySweepReviewResponse | null,
+): Date | null {
+  const applied = lastAppliedTimestamp(review);
+  const caughtUpAt = memorySweepIsAllCaughtUp(review)
+    ? parseTimestamp(review?.updated_at ?? review?.generated_at)
+    : null;
+  if (applied && caughtUpAt) {
+    return applied.getTime() >= caughtUpAt.getTime() ? applied : caughtUpAt;
+  }
+  return applied ?? caughtUpAt;
 }
 
 export function memorySweepDaysSinceActivity(
   review: MemorySweepReviewResponse | null,
   now: Date = new Date(),
 ): number | null {
-  // Weekly cadence is last *apply*, not last draft open/save — otherwise an
-  // abandoned ready draft would silence the due chip for days.
-  const at = lastAppliedTimestamp(review);
+  // Cadence resets on wiki apply *or* an empty "all caught up" sweep — not on
+  // opening/saving a draft that still has pending suggestions.
+  const at = cadenceResetTimestamp(review);
   if (!at) return null;
   const ms = now.getTime() - at.getTime();
   if (ms < 0) return 0;
@@ -69,8 +106,8 @@ export function memorySweepDaysSinceActivity(
 }
 
 /**
- * Weekly cadence nudge: never applied to wiki, or last apply ≥ dueAfterDays ago.
- * Draft generate/save does not reset this. Suppressed while generate/apply runs.
+ * Weekly cadence nudge: never applied/caught-up, or last reset ≥ dueAfterDays.
+ * Abandoned drafts with open candidates do not reset this.
  */
 export function memorySweepIsDue(
   review: MemorySweepReviewResponse | null,
@@ -85,7 +122,7 @@ export function memorySweepIsDue(
   return days >= dueAfterDays;
 }
 
-/** Corner chip when due (option 4); empty when caught up on apply cadence. */
+/** Corner chip when due; empty when apply or all-caught-up reset is fresh. */
 export function memorySweepDueBadge(
   review: MemorySweepReviewResponse | null,
   opts?: { dueAfterDays?: number; now?: Date },

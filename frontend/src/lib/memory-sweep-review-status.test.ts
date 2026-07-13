@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { MemorySweepReviewResponse } from "@/lib/api";
+import type {
+  MemorySweepCandidate,
+  MemorySweepReviewResponse,
+} from "@/lib/api";
 import {
   memorySweepDueBadge,
   memorySweepIsDue,
@@ -8,6 +11,36 @@ import {
   memorySweepReviewAttentionBadge,
   memorySweepReviewBadge,
 } from "./memory-sweep-review-status";
+
+const openCandidate = {
+  card_id: "card_1",
+  source_group_id: "g1",
+  candidate_id: "cand_1",
+  candidate_ids: ["cand_1"],
+  review_queue: "promote",
+  channel: "ledger",
+  target: "teaching_patterns",
+  section: "Patterns",
+  content: "x",
+  evidence_summary: "",
+  evidence_refs: [],
+  confidence: "medium",
+  basis: "",
+  status: "pending",
+  relationship: "",
+  group_label: "",
+  public_rationale: "",
+  operation: "add",
+  replaces_content: "",
+  status_recommendation: "promote",
+  why_now: "",
+  current_memory_excerpt: "",
+  signal_count: 1,
+  can_apply: true,
+  review_only_reason: "",
+} as MemorySweepCandidate;
+
+const openQueues = { promote: [openCandidate] };
 
 function review(
   overrides: Partial<MemorySweepReviewResponse>,
@@ -23,7 +56,7 @@ function review(
     is_stale: false,
     stale_reasons: [],
     has_teacher_edits: false,
-    queues: {},
+    queues: openQueues,
     decisions: [],
     warnings: [],
     error: "",
@@ -32,10 +65,14 @@ function review(
 }
 
 describe("memorySweepReviewBadge", () => {
-  it("shows saved draft date for ready reviews", () => {
+  it("shows saved draft date for ready reviews with open items", () => {
     expect(memorySweepReviewBadge(review({ status: "ready" }))).toMatch(
       /^Draft saved /,
     );
+  });
+
+  it("hides draft badge when all caught up (empty queues)", () => {
+    expect(memorySweepReviewBadge(review({ queues: {} }))).toBe("");
   });
 
   it("shows stale draft only when teacher edits are at risk", () => {
@@ -124,7 +161,7 @@ describe("memorySweepReviewAttentionBadge", () => {
 describe("memorySweep due cadence", () => {
   const now = new Date("2026-07-12T12:00:00Z");
 
-  it("is due when never applied (draft open does not count)", () => {
+  it("is due when never applied and an open draft still has items", () => {
     expect(memorySweepIsDue(null, { now })).toBe(true);
     expect(memorySweepDueBadge(null, { now })).toBe("Due · weekly");
     expect(memorySweepIsDue(review({ status: "none" }), { now })).toBe(true);
@@ -135,6 +172,7 @@ describe("memorySweep due cadence", () => {
           updated_at: "2026-07-12T08:00:00Z",
           generated_at: "2026-07-12T08:00:00Z",
           completed_at: null,
+          queues: openQueues,
         }),
         { now },
       ),
@@ -145,10 +183,36 @@ describe("memorySweep due cadence", () => {
           status: "ready",
           updated_at: "2026-07-12T08:00:00Z",
           completed_at: null,
+          queues: openQueues,
         }),
         { now },
       ),
     ).toBe("Due · weekly");
+  });
+
+  it("resets due when all caught up (empty queues)", () => {
+    expect(
+      memorySweepIsDue(
+        review({
+          status: "ready",
+          updated_at: "2026-07-12T08:00:00Z",
+          generated_at: "2026-07-12T08:00:00Z",
+          completed_at: null,
+          queues: {},
+        }),
+        { now },
+      ),
+    ).toBe(false);
+    expect(
+      memorySweepDueBadge(
+        review({
+          status: "ready",
+          updated_at: "2026-07-12T08:00:00Z",
+          queues: {},
+        }),
+        { now },
+      ),
+    ).toBe("");
   });
 
   it("is due after 5+ days since last apply", () => {
@@ -158,6 +222,7 @@ describe("memorySweep due cadence", () => {
           status: "completed",
           completed_at: "2026-07-01T08:00:00Z",
           updated_at: "2026-07-12T08:00:00Z",
+          queues: {},
         }),
         { now },
       ),
@@ -181,6 +246,7 @@ describe("memorySweep due cadence", () => {
           completed_at: "2026-07-10T08:00:00Z",
           updated_at: "2026-07-12T08:00:00Z",
           generated_at: "2026-07-12T08:00:00Z",
+          queues: openQueues,
         }),
         { now },
       ),
@@ -191,6 +257,7 @@ describe("memorySweep due cadence", () => {
           status: "ready",
           completed_at: "2026-07-10T08:00:00Z",
           updated_at: "2026-07-12T08:00:00Z",
+          queues: openQueues,
         }),
         { now },
       ),
