@@ -19,6 +19,20 @@ def _utc_now() -> str:
     )
 
 
+def _normalize_source_paths(class_id: str, paths: list[str]) -> list[str]:
+    """Rewrite known retired/twin paths to canonical wiki locations."""
+    wrong = f"wiki/classes/{class_id}/memory/course_state.md"
+    right = f"wiki/classes/{class_id}/course_state.md"
+    out: list[str] = []
+    for path in paths:
+        rel = path.strip().replace("\\", "/").lstrip("/")
+        if rel == wrong or rel.endswith("/memory/course_state.md"):
+            rel = right
+        if rel and rel not in out:
+            out.append(rel)
+    return out
+
+
 class ClassBriefService:
     def __init__(self, wiki: WikiStore, agents: AgentRunner) -> None:
         self.wiki = wiki
@@ -38,7 +52,7 @@ class ClassBriefService:
             ),
             reasons=output.reasons,
             watch_items=output.watch_items,
-            source_paths=output.source_paths,
+            source_paths=_normalize_source_paths(class_id, output.source_paths),
             generated_at=_utc_now(),
             cached=cached,
         )
@@ -47,7 +61,14 @@ class ClassBriefService:
         self.wiki.get_class(class_id)
         cached = self._cache.get(class_id)
         if cached is not None:
-            return cached.model_copy(update={"cached": True})
+            return cached.model_copy(
+                update={
+                    "cached": True,
+                    "source_paths": _normalize_source_paths(
+                        class_id, cached.source_paths
+                    ),
+                }
+            )
         return self._response_from_output(
             class_id, self.agents._class_brief_fallback(class_id), cached=False
         )

@@ -744,7 +744,7 @@ class AgentRunner:
         reasons: list[str] = []
         watch: list[str] = []
         sources = [
-            f"wiki/classes/{class_id}/memory/course_state.md",
+            f"wiki/classes/{class_id}/course_state.md",
             f"wiki/classes/{class_id}/memory/planning_brief.md",
         ]
         if snap.open_loop_count:
@@ -814,7 +814,7 @@ class AgentRunner:
         return ClassDiscussionTurnOutput(
             reply="\n".join(lines),
             source_paths=[
-                f"wiki/classes/{class_id}/memory/course_state.md",
+                f"wiki/classes/{class_id}/course_state.md",
                 f"wiki/classes/{class_id}/memory/planning_brief.md",
             ],
             suggested_actions=["Create lesson plan", "Update memory"],

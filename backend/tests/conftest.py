@@ -494,7 +494,7 @@ class StubAgentRunner:
             reasons=["Recent lessons show redox vocabulary needs reinforcement."],
             watch_items=["Ion charge versus oxidation number."],
             source_paths=[
-                f"wiki/classes/{class_id}/memory/course_state.md",
+                f"wiki/classes/{class_id}/course_state.md",
                 f"wiki/classes/{class_id}/memory/planning_brief.md",
             ],
         )
@@ -545,7 +545,7 @@ class StubAgentRunner:
             ),
             memory_candidates=candidates,
             source_paths=[
-                f"wiki/classes/{CLASS_ID}/memory/course_state.md",
+                f"wiki/classes/{CLASS_ID}/course_state.md",
                 f"wiki/classes/{CLASS_ID}/memory/planning_brief.md",
             ],
             suggested_actions=["Create lesson plan", "Update memory"],

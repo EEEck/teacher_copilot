@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { ActionLink } from "@/components/klassenpilot/action-link";
-import { ClassDiscussionPanel } from "@/components/klassenpilot/class-discussion-panel";
+import {
+  DiscussDock,
+  type DiscussDockState,
+} from "@/components/klassenpilot/discuss-dock";
 import {
   LessonTimeline,
   MisconceptionsPanel,
@@ -23,6 +26,10 @@ import {
 import { consumeClassHomeTimelineRefresh } from "@/lib/class-home-refresh";
 import { shortWikiPath } from "@/lib/markdown-diff";
 import { memorySweepReviewBadge } from "@/lib/memory-sweep-review-status";
+import {
+  normalizeClassWikiPath,
+  wikiViewerHref,
+} from "@/lib/wiki-viewer-links";
 
 type ClassHomeClientProps = {
   classId: string;
@@ -41,7 +48,7 @@ function emptySnapshot(classId: string): ClassMemorySnapshot {
 }
 
 function wikiHref(classId: string, path: string): string {
-  return `/classes/${classId}/wiki/view?path=${encodeURIComponent(path)}`;
+  return wikiViewerHref(classId, normalizeClassWikiPath(classId, path));
 }
 
 export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps) {
@@ -55,7 +62,7 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
   );
   const [brief, setBrief] = useState<ClassBrief | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
-  const [discussOpen, setDiscussOpen] = useState(false);
+  const [discussDock, setDiscussDock] = useState<DiscussDockState>("closed");
   const [memorySweepReview, setMemorySweepReview] =
     useState<MemorySweepReviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -272,24 +279,13 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
           </span>
         </ActionLink>
         <ActionLink href={`/classes/${classId}/wiki/view`}>Inspect wiki</ActionLink>
-        <Button
-          variant="outline"
-          onClick={() => setDiscussOpen((open) => !open)}
-        >
-          {discussOpen ? "Hide discussion" : "Discuss class state"}
-        </Button>
       </div>
 
-      {discussOpen ? (
-        <Card className="mb-10">
-          <CardHeader>
-            <CardTitle>Discuss class state</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ClassDiscussionPanel classId={classId} />
-          </CardContent>
-        </Card>
-      ) : null}
+      <DiscussDock
+        classId={classId}
+        state={discussDock}
+        onStateChange={setDiscussDock}
+      />
 
       <Card>
         <CardHeader>

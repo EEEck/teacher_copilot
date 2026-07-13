@@ -29,6 +29,8 @@ import { useWorkflowChatRuntime, type UpdateWorkflowThread } from "@/features/wo
 import { workflowTurnActivity } from "@/features/workflow-drafts/workflow-turn-activity";
 import {
   newThreadMessageId,
+  isPlaceholderAssistantContent,
+  lastAssistantContent,
   replaceLastAssistantContent,
 } from "@/features/workflow-drafts/thread-messages";
 import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
@@ -408,6 +410,7 @@ export function ArtifactSessionRuntimeProvider({
       // Successful turns leave the pending marker for PendingTurnNotifier.
       // Failed client streams clear it so the notifier does not toast a false completion.
       let turnFailed = false;
+      let finalResult: ArtifactChatResult | null = null;
       try {
         const text = extractText(message);
         const attachments = await extractSessionAttachments(
@@ -415,7 +418,7 @@ export function ArtifactSessionRuntimeProvider({
         );
         const currentMd =
           editorRef.current.history[editorRef.current.index] ?? initialMarkdown;
-        let finalResult: ArtifactChatResult | null = null;
+        setActiveTurnInProgress(true);
         for await (const chunk of chatStream({
           message: text,
           currentMarkdown: currentMd,
@@ -447,21 +450,54 @@ export function ArtifactSessionRuntimeProvider({
         }
         if (!finalResult) {
           turnFailed = true;
-          updateThread((messages) =>
-            replaceLastAssistantContent(messages, [{ type: "text", text: CHAT_ERROR_REPLY }]),
-          );
+          updateThread((messages) => {
+            const existing = lastAssistantContent(messages);
+            // Keep streamed reasoning/text if the turn ended without a final
+            // (e.g. client interrupt) instead of wiping to a plain error string.
+            if (existing && !isPlaceholderAssistantContent(existing)) {
+              return messages;
+            }
+            return replaceLastAssistantContent(messages, [
+              { type: "text", text: CHAT_ERROR_REPLY },
+            ]);
+          });
         }
       } catch (err) {
-        const reply = friendlyChatError(err);
         turnFailed = true;
-        updateThread((messages) =>
-          replaceLastAssistantContent(messages, [{ type: "text", text: reply }]),
-        );
+        updateThread((messages) => {
+          const existing = lastAssistantContent(messages);
+          // Interrupt / mid-stream failure: keep reasoning + partial reply.
+          // Only fall back to an error bubble when nothing useful streamed yet.
+          if (existing && !isPlaceholderAssistantContent(existing)) {
+            return messages;
+          }
+          return replaceLastAssistantContent(messages, [
+            { type: "text", text: friendlyChatError(err) },
+          ]);
+        });
       } finally {
         if (turnFailed && pendingKey && typeof window !== "undefined") {
           clearPendingChatTurn(window.sessionStorage, pendingKey);
         }
         setIsUpdating(false);
+        // Clear resumed-turn spinner as soon as this tab's stream ends. Otherwise
+        // a stale draft `turnInProgress` (e.g. mid-stream notifier upsert) keeps
+        // "Still working on your response…" after the reply is already visible.
+        setActiveTurnInProgress(false);
+        if (finalResult) {
+          setActiveLatestTurnComplete(true);
+        }
+        const draftKey = activeDraftIdRef.current;
+        const existing = useWorkflowDraftStore.getState().draftsById[draftKey];
+        if (existing && (existing.turnInProgress || finalResult)) {
+          useWorkflowDraftStore.getState().upsert({
+            ...existing,
+            turnInProgress: false,
+            latestTurnComplete: finalResult
+              ? true
+              : existing.latestTurnComplete,
+          });
+        }
       }
     },
     [

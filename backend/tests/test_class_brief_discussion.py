@@ -15,7 +15,7 @@ from conftest import CLASS_ID
 
 def test_class_brief_refresh_is_read_only(client, wiki):
     course_state_path = wiki.resolve_path(
-        f"wiki/classes/{CLASS_ID}/memory/course_state.md"
+        f"wiki/classes/{CLASS_ID}/course_state.md"
     )
     before = wiki.read_text(course_state_path)
 
@@ -27,12 +27,20 @@ def test_class_brief_refresh_is_read_only(client, wiki):
     assert data["summary"]
     assert data["recommended_action"]["label"]
     assert data["source_paths"]
+    assert f"wiki/classes/{CLASS_ID}/course_state.md" in data["source_paths"]
+    assert not any(
+        path.endswith("/memory/course_state.md") for path in data["source_paths"]
+    )
     assert data["cached"] is False
     assert wiki.read_text(course_state_path) == before
 
     cached = client.get(f"/api/classes/{CLASS_ID}/brief")
     assert cached.status_code == 200
     assert cached.json()["cached"] is True
+    assert (
+        f"wiki/classes/{CLASS_ID}/course_state.md"
+        in cached.json()["source_paths"]
+    )
 
 
 def test_wiki_pages_list_is_read_only(client, wiki):
@@ -98,7 +106,7 @@ def test_class_discussion_captures_review_candidates_without_wiki_write(
     client, wiki, memory_candidate_ledger
 ):
     course_state_path = wiki.resolve_path(
-        f"wiki/classes/{CLASS_ID}/memory/course_state.md"
+        f"wiki/classes/{CLASS_ID}/course_state.md"
     )
     before = wiki.read_text(course_state_path)
 

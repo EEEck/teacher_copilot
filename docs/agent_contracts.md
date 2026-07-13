@@ -835,6 +835,9 @@ Class home may open an inline read-only “Discuss class state” chat.
   through `WorkflowDraftStore` with empty `artifact_markdown`.
 - Frontend embeds assistant-ui `Thread` / `DiscussThread` with
   `useExternalStoreRuntime` message ownership. No dual-pane draft editor.
+- On class home, Discuss opens as a Gmail-style docked helper (expand /
+  minimize / close) that reuses the same runtime + Thread stack inside a
+  fixed-height shell; it is not a separate chat implementation.
 - Output includes `reply`, discussion state, evidence briefs, memory candidates,
   `source_paths`, and `suggested_actions`.
 - Refuse high-stakes student decisions (grading, placement, diagnosis,
@@ -857,6 +860,11 @@ Teachers can inspect class wiki markdown without editing it.
 - `GET /classes/{class_id}/wiki/file` returns markdown for a path.
 - The class-home **Inspect wiki** entry and brief/discussion `source_paths`
   open `/classes/{id}/wiki/view`.
+- `?path=` selects and highlights a file inside the full class catalog; it
+  does not replace the file list with a one-file view.
+- The viewer supports filename filtering and collapsible kind sections, with
+  Raw notes last. Page chrome stays class-level; the open file name/path live
+  in the preview panel.
 - The viewer is read-only; no wiki writes from this surface.
 
 ## Deferred Contracts
