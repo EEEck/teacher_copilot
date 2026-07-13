@@ -113,6 +113,7 @@ type ArtifactSessionContextValue = {
   readyToSave: boolean;
   lastChangeSummary: string | null;
   memoryState: Record<string, unknown> | null;
+  memoryCandidates: MemoryCandidate[];
   isUpdating: boolean;
   syncStatus: "idle" | "saving" | "error";
   undo: () => void;
@@ -211,6 +212,7 @@ export function ArtifactSessionRuntimeProvider({
   const [memoryState, setMemoryState] = useState<Record<string, unknown> | null>(
     initialMemoryState,
   );
+  const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidate[]>([]);
   const memoryStateRef = useRef(memoryState);
   memoryStateRef.current = memoryState;
   const configLessonDateRef = useRef(configLessonDate);
@@ -270,7 +272,10 @@ export function ArtifactSessionRuntimeProvider({
     (
       checklist: CompletenessChecklist | null | undefined,
       ready: boolean | undefined,
-      result?: Pick<ArtifactChatResult, "lastChangeSummary" | "memoryState">,
+      result?: Pick<
+        ArtifactChatResult,
+        "lastChangeSummary" | "memoryState" | "memoryCandidates"
+      >,
     ) => {
       if (checklist) {
         setCompleteness(checklist);
@@ -282,6 +287,9 @@ export function ArtifactSessionRuntimeProvider({
       }
       if (result?.memoryState !== undefined) {
         setMemoryState(result.memoryState ?? null);
+      }
+      if (result?.memoryCandidates !== undefined) {
+        setMemoryCandidates(result.memoryCandidates ?? []);
       }
     },
     [onCompletenessChange],
@@ -519,6 +527,7 @@ export function ArtifactSessionRuntimeProvider({
       readyToSave,
       lastChangeSummary,
       memoryState,
+      memoryCandidates,
       isUpdating,
       syncStatus,
       undo,
@@ -541,6 +550,7 @@ export function ArtifactSessionRuntimeProvider({
       readyToSave,
       lastChangeSummary,
       memoryState,
+      memoryCandidates,
       isUpdating,
       syncStatus,
       undo,

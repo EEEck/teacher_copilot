@@ -1,5 +1,5 @@
 import type { ArtifactMode } from "@/components/assistant-ui/artifact-runtime-config";
-import type { IngestDraft, PlanDraft } from "@/lib/api";
+import type { DiscussDraft, IngestDraft, PlanDraft } from "@/lib/api";
 
 import type { WorkflowDraftSnapshot } from "./workflow-draft-store";
 
@@ -7,12 +7,14 @@ export function fetchedDraftToSnapshot(
   mode: ArtifactMode,
   classId: string,
   sessionId: string,
-  draft: IngestDraft | PlanDraft,
+  draft: IngestDraft | PlanDraft | DiscussDraft,
 ): WorkflowDraftSnapshot {
   const artifactMarkdown =
     mode === "ingest"
       ? (draft as IngestDraft).diary_markdown
-      : (draft as PlanDraft).plan_markdown;
+      : mode === "plan"
+        ? (draft as PlanDraft).plan_markdown
+        : ((draft as DiscussDraft).artifact_markdown ?? "");
   const ingest = mode === "ingest" ? (draft as IngestDraft) : null;
   return {
     mode,

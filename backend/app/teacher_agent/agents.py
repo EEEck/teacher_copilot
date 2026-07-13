@@ -22,6 +22,8 @@ from app.schemas.api import (
     LessonPlan,
 )
 from app.teacher_agent.agent import (
+    build_class_brief_agent,
+    build_class_discussion_agent,
     build_memory_compact_agent,
     build_compile_agent,
     build_ingest_agent,
@@ -33,6 +35,8 @@ from app.teacher_agent.agent import (
     build_write_verification_agent,
 )
 from app.teacher_agent.models import (
+    ClassBriefOutput,
+    ClassDiscussionTurnOutput,
     CompileOutput,
     IngestTurnOutput,
     MemoryCompactOutput,
@@ -43,9 +47,16 @@ from app.teacher_agent.models import (
 )
 from app.context_limits import apply_char_limit, get_context_limits
 from app.teacher_agent.prompt_assembly import (
+    build_class_discussion_user_input_assembly,
     build_ingest_user_input_assembly,
     build_plan_user_input_assembly,
     trim_to_last_user_turns,
+)
+from app.teacher_agent.class_discussion_state import (
+    ClassDiscussionRuntime,
+    ClassDiscussionStatePatch,
+    discussion_api_payload,
+    merge_class_discussion_turn,
 )
 from app.teacher_agent.memory_update_state import (
     MemoryRuntime,
@@ -223,7 +234,7 @@ class AgentRunner:
     def _wiki_ctx(
         self,
         class_id: str,
-        planning: PlanRuntime | None = None,
+        planning: Any = None,
         memory: MemoryRuntime | None = None,
         teacher_message: str = "",
         executive: ExecutiveRuntime | None = None,
@@ -711,6 +722,274 @@ class AgentRunner:
                 False,
             )
         return finalized
+
+    def _is_high_stakes_student_request(self, messages: list[ChatMessage]) -> bool:
+        latest = messages[-1].content.lower() if messages else ""
+        return any(
+            term in latest
+            for term in (
+                "grade",
+                "diagnose",
+                "placement",
+                "lower track",
+                "admission",
+                "discipline",
+                "disciplinary",
+            )
+        )
+
+    def _class_brief_fallback(self, class_id: str) -> ClassBriefOutput:
+        snap = self.wiki.get_snapshot(class_id)
+        unit = snap.current_unit or "the current unit"
+        reasons: list[str] = []
+        watch: list[str] = []
+        sources = [
+            f"wiki/classes/{class_id}/memory/course_state.md",
+            f"wiki/classes/{class_id}/memory/planning_brief.md",
+        ]
+        if snap.open_loop_count:
+            reasons.append(f"{snap.open_loop_count} open loops are still tracked.")
+        if snap.top_misconceptions:
+            watch.append(snap.top_misconceptions[0])
+            reasons.append("Recent misconceptions still need attention.")
+        if snap.last_committed_date:
+            reasons.append(f"Last logged lesson: {snap.last_committed_date}.")
+        if not reasons:
+            reasons.append("Class memory is available for the next planning step.")
+        return ClassBriefOutput(
+            summary=(
+                f"{snap.label} is in {unit}. "
+                "Use Create lesson plan when you want the next teaching move, "
+                "or Update memory after the next lesson."
+            ),
+            recommended_action_label="Create lesson plan",
+            recommended_action_href=f"/classes/{class_id}/plan",
+            recommended_action_rationale="A grounded next-lesson draft is the usual next action from class home.",
+            reasons=reasons[:3],
+            watch_items=watch[:3],
+            source_paths=sources,
+        )
+
+    async def class_brief(self, class_id: str) -> ClassBriefOutput:
+        if self.client is None:
+            return self._class_brief_fallback(class_id)
+        try:
+            agent = build_class_brief_agent(
+                self.wiki, class_id, self.utility_model
+            )
+            out = await self._run_structured(
+                agent, "Prepare the current class-home executive briefing."
+            )
+            if isinstance(out, ClassBriefOutput):
+                return out
+        except Exception:
+            logger.exception("Class brief generation failed; using fallback.")
+        return self._class_brief_fallback(class_id)
+
+    def _class_discussion_fallback(
+        self, class_id: str, messages: list[ChatMessage]
+    ) -> ClassDiscussionTurnOutput:
+        if self._is_high_stakes_student_request(messages):
+            return ClassDiscussionTurnOutput(
+                reply=(
+                    "I cannot make high-stakes student decisions. I can help review "
+                    "evidence and draft neutral observations for teacher review."
+                ),
+                suggested_actions=["Update memory"],
+            )
+        snap = self.wiki.get_snapshot(class_id)
+        lines = [
+            f"From class memory for **{snap.label}**:",
+            f"- Current unit: {snap.current_unit or 'unknown'}",
+        ]
+        if snap.open_loop_count:
+            lines.append(f"- Open loops tracked: {snap.open_loop_count}")
+        if snap.top_misconceptions:
+            lines.append(f"- Misconception to watch: {snap.top_misconceptions[0]}")
+        if snap.last_committed_date:
+            lines.append(f"- Last logged lesson: {snap.last_committed_date}")
+        lines.append(
+            "Ask about open loops, misconceptions, recent lessons, or what to do next."
+        )
+        return ClassDiscussionTurnOutput(
+            reply="\n".join(lines),
+            source_paths=[
+                f"wiki/classes/{class_id}/memory/course_state.md",
+                f"wiki/classes/{class_id}/memory/planning_brief.md",
+            ],
+            suggested_actions=["Create lesson plan", "Update memory"],
+            state_patch=ClassDiscussionStatePatch(
+                current_focus="class overview",
+                key_observations=[f"Current unit: {snap.current_unit or 'unknown'}"],
+                next_best_actions=["Create lesson plan", "Update memory"],
+            ),
+        )
+
+    def _prepare_discuss_turn(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        attachments: list[ChatAttachment] | None = None,
+        runtime: ClassDiscussionRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
+    ) -> _PreparedAgentTurn:
+        rt = runtime or ClassDiscussionRuntime()
+        latest_teacher_message = messages[-1].content if messages else ""
+        agent = build_class_discussion_agent(
+            self._wiki_ctx(
+                class_id,
+                planning=rt,
+                teacher_message=latest_teacher_message,
+                executive=executive,
+            ),
+            self.chat_model,
+            runtime=rt,
+            reasoning_effort=self.chat_effort,
+        )
+        user_input = build_class_discussion_user_input_assembly(
+            messages, history_turns=self.plan_history_turns
+        )["text"]
+        if attachments:
+            user_input = (
+                f"{user_input}\n\nUploaded materials this turn:\n"
+                f"{self._format_attachments(attachments)}"
+            )
+        return _PreparedAgentTurn(rt, "", agent, user_input)
+
+    def _finalize_discuss_turn(
+        self,
+        parsed: Any,
+        runtime: ClassDiscussionRuntime,
+        *,
+        executive: ExecutiveRuntime | None = None,
+    ) -> str | None:
+        if not isinstance(parsed, ClassDiscussionTurnOutput):
+            return None
+        merge_class_discussion_turn(
+            runtime,
+            state_patch=parsed.state_patch,
+            new_evidence_briefs=parsed.new_evidence_briefs,
+            memory_candidates=parsed.memory_candidates,
+            source_paths=parsed.source_paths,
+            suggested_actions=parsed.suggested_actions,
+        )
+        executive_runtime = executive or ExecutiveRuntime()
+        apply_executive_patch(executive_runtime, parsed.executive_patch)
+        return parsed.reply
+
+    def _discuss_final_event(
+        self,
+        reply: str,
+        runtime: ClassDiscussionRuntime,
+        executive: ExecutiveRuntime,
+    ) -> SseFinal:
+        return SseFinal(
+            reply=reply,
+            artifact_markdown="",
+            ready=False,
+            completeness=None,
+            memory_candidates=discussion_api_payload(runtime).get(
+                "memory_candidates", []
+            ),
+            discussion_state=discussion_api_payload(runtime),
+            executive_state=executive_api_payload(executive),
+        )
+
+    async def discuss_chat(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        attachments: list[ChatAttachment] | None = None,
+        runtime: ClassDiscussionRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
+    ) -> str:
+        runtime = runtime or ClassDiscussionRuntime()
+        if self._is_high_stakes_student_request(messages) or self.client is None:
+            out = self._class_discussion_fallback(class_id, messages)
+            merge_class_discussion_turn(
+                runtime,
+                state_patch=out.state_patch,
+                new_evidence_briefs=out.new_evidence_briefs,
+                memory_candidates=out.memory_candidates,
+                source_paths=out.source_paths,
+                suggested_actions=out.suggested_actions,
+            )
+            return out.reply
+        turn = self._prepare_discuss_turn(
+            class_id, messages, attachments, runtime, executive
+        )
+        try:
+            parsed = await self._run_structured(turn.agent, turn.user_input)
+        except AgentTurnLimitError as exc:
+            return str(exc)
+        except Exception:
+            logger.exception("Class discussion turn failed; using fallback.")
+            out = self._class_discussion_fallback(class_id, messages)
+            merge_class_discussion_turn(
+                runtime,
+                state_patch=out.state_patch,
+                new_evidence_briefs=out.new_evidence_briefs,
+                memory_candidates=out.memory_candidates,
+                source_paths=out.source_paths,
+                suggested_actions=out.suggested_actions,
+            )
+            return out.reply
+        finalized = self._finalize_discuss_turn(
+            parsed, turn.runtime, executive=executive
+        )
+        if finalized is None:
+            return "I had trouble processing that — could you try again?"
+        return finalized
+
+    async def discuss_chat_stream(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        attachments: list[ChatAttachment] | None = None,
+        runtime: ClassDiscussionRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
+    ) -> AsyncIterator[SseEvent]:
+        runtime = runtime or ClassDiscussionRuntime()
+        if self._is_high_stakes_student_request(messages) or self.client is None:
+            out = self._class_discussion_fallback(class_id, messages)
+            merge_class_discussion_turn(
+                runtime,
+                state_patch=out.state_patch,
+                new_evidence_briefs=out.new_evidence_briefs,
+                memory_candidates=out.memory_candidates,
+                source_paths=out.source_paths,
+                suggested_actions=out.suggested_actions,
+            )
+            yield self._discuss_final_event(
+                out.reply, runtime, executive or ExecutiveRuntime()
+            )
+            return
+        turn = self._prepare_discuss_turn(
+            class_id, messages, attachments, runtime, executive
+        )
+        result_holder: dict[str, Any] = {}
+        async for event in self._yield_stream_events(
+            turn.agent, turn.user_input, result_holder
+        ):
+            if isinstance(event, SseError):
+                yield event
+                return
+            yield event
+        out = result_holder.get("result")
+        if out is None:
+            return
+        finalized = self._finalize_discuss_turn(
+            out.final_output, turn.runtime, executive=executive
+        )
+        if finalized is None:
+            yield SseError(
+                message="I had trouble processing that — could you try again?",
+                code="parse_error",
+            )
+            return
+        yield self._discuss_final_event(
+            finalized, turn.runtime, executive or ExecutiveRuntime()
+        )
 
     async def ingest_chat(
         self,

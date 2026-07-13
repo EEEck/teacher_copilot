@@ -766,32 +766,107 @@ Plan trace endpoint:
 
 ## Workflow Spec Contract
 
-Future teacher-facing artifact chats must register a workflow spec rather than
-adding new mode branches to the shared session service.
+Future teacher-facing chats must register a workflow spec rather than adding
+new mode branches to the shared session service.
 
 Required shared shape:
 
-- Fixed workflow-session state: `phase`, `teacher_goal`, `decisions`,
-  `open_questions`, `superseded`, `agent_next_step`.
-- Workflow-specific task state: plan state, lesson-result state, grading state,
-  exam state, or other domain state.
+- Fixed workflow-session state when the workflow needs it: `phase`,
+  `teacher_goal`, `decisions`, `open_questions`, `superseded`,
+  `agent_next_step`.
+- Workflow-specific task state: plan state, lesson-result state, discussion
+  state, grading state, exam state, or other domain state.
 - Shared evidence/raw-ref handling: compact evidence in prompt, raw output
   behind `raw_ref`.
-- Explicit history policy: setting name and artifact placement.
+- Explicit history policy: setting name and artifact placement (or none).
 - Typed SDK output model and read-only tools during chat.
 - Trace contract listing the sections expected for the workflow.
+- Shared `MemoryCandidate` / `remember(...)` / ledger persistence when durable
+  signals appear.
 
 The service may dispatch through the registered spec, but it should not branch
-on concrete workflow names such as `plan` or `ingest` for streaming/finalization.
+on concrete workflow names such as `plan`, `ingest`, or `discuss` for
+streaming/finalization.
+
+`discuss` is the first registered non-artifact mode (`commit_strategy=no_commit`,
+empty markdown). It still reuses `ArtifactSessionService`, workflow drafts, turn
+guards, stream/output safety, and executive runtime.
+
+## Class Brief Contract
+
+Class home loads a short executive briefing for the active class.
+
+- `GET /classes/{class_id}/brief` returns a cached or deterministic
+  snapshot-backed brief. It does not call the LLM on every page load.
+- `POST /classes/{class_id}/brief/refresh` regenerates the brief with an LLM
+  (or stub fallback) and updates the in-process cache.
+- Brief generation is wiki read-only. It never writes wiki files or ledger rows.
+- Response fields: `summary`, `recommended_action`, `reasons`, `watch_items`,
+  `source_paths`, `generated_at`, `cached`.
+- `source_paths` should be inspectable via the class wiki viewer.
+
+## Class Discussion Contract
+
+Class home may open an inline read-only “Discuss class state” chat.
+
+### Reads
+
+- Same base context pattern as planning: Teacher layer + Active class core.
+- Bounded conversation window (plan history turns).
+- Compact evidence briefs and optional raw refs via `get_raw_evidence`.
+- Tools: class-scoped read tools from `create_chat_wiki_tools` (list/read
+  lessons, search memory, read memory page, raw evidence), plus `remember(...)`
+  and executive verification tools.
+
+### Writes / side effects
+
+- Never write canonical wiki files from discussion chat.
+- Never claim durable memory changed.
+- May emit review-only `MemoryCandidate` rows via structured output and/or
+  `remember(...)`; persistence goes through the shared ledger with
+  `workflow="discuss"`.
+- Durable wiki writes still require teacher-approved Memory Sweep / Update
+  Memory apply flows.
+- No saveable markdown artifact (`commit_strategy=no_commit`).
+
+### Session / UI
+
+- Sessions are owned by `ArtifactSessionService` + `DISCUSS_SPEC` and may resume
+  through `WorkflowDraftStore` with empty `artifact_markdown`.
+- Frontend embeds assistant-ui `Thread` / `DiscussThread` with
+  `useExternalStoreRuntime` message ownership. No dual-pane draft editor.
+- Output includes `reply`, discussion state, evidence briefs, memory candidates,
+  `source_paths`, and `suggested_actions`.
+- Refuse high-stakes student decisions (grading, placement, diagnosis,
+  discipline, admission).
+- If the teacher asks to edit the wiki directly, refuse the edit and offer
+  candidate capture or Update Memory.
+
+### Trace / safety
+
+- Trace endpoint follows the shared agent-trace gate.
+- Turn overlap is rejected by the shared turn guard.
+- Teacher-visible replies are filtered by output safety.
+
+## Wiki Inspector Contract
+
+Teachers can inspect class wiki markdown without editing it.
+
+- `GET /classes/{class_id}/wiki/pages` lists class pages from
+  `WikiStore.list_class_pages`.
+- `GET /classes/{class_id}/wiki/file` returns markdown for a path.
+- The class-home **Inspect wiki** entry and brief/discussion `source_paths`
+  open `/classes/{id}/wiki/view`.
+- The viewer is read-only; no wiki writes from this surface.
 
 ## Deferred Contracts
 
 These are intentionally not part of the MVP contract:
 
 - Dedicated evidence metadata in the API.
-- Source panel in the frontend.
 - AutoSci-style graph or edge schema.
 - Multi-agent review pass.
 - Full wiki health-check/lint workflow.
 - Vector database or embedding index as the default class-memory retrieval path.
 - Raw-source fallback as standard planner behavior.
+- Wiki search UI or wiki editor/CMS.

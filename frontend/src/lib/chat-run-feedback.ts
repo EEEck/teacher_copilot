@@ -27,6 +27,9 @@ export function chatRunningTaskLabel(ctx: WorkflowTaskLabelContext): string {
   if (ctx.mode === "memory_sweep") {
     return "Generating memory sweep…";
   }
+  if (ctx.mode === "discuss") {
+    return "Discussing class state";
+  }
   const subject = lessonSubject(ctx);
   if (ctx.mode === "plan") {
     return subject ? `Planning lesson for ${subject}` : "Planning lesson";
@@ -41,6 +44,9 @@ export function chatCompletionToastLabel(
     typeof ctx === "string" ? { mode: ctx } : ctx;
   if (normalized.mode === "memory_sweep") {
     return "Finished memory sweep";
+  }
+  if (normalized.mode === "discuss") {
+    return "Finished class discussion";
   }
   const subject = lessonSubject(normalized);
   if (normalized.mode === "plan") {

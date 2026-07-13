@@ -121,7 +121,9 @@ async function checkOnePendingTurn(turn: PendingChatTurn): Promise<void> {
     const draft =
       turn.mode === "plan"
         ? await client.planGetDraft(turn.classId, turn.sessionId)
-        : await client.ingestGetDraft(turn.classId, turn.sessionId);
+        : turn.mode === "discuss"
+          ? await client.discussionGetDraft(turn.classId, turn.sessionId)
+          : await client.ingestGetDraft(turn.classId, turn.sessionId);
     if (draft.turn_in_progress) {
       markPendingTurnSeenInProgress(window.sessionStorage, turn.key);
       return;

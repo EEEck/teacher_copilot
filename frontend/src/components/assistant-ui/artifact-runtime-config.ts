@@ -11,7 +11,7 @@ import {
 import { readSseJsonStream, StreamPartsAccumulator, type StreamPart } from "@/lib/sse-chat";
 import type { SessionAttachment } from "@/lib/session-attachments";
 
-export type ArtifactMode = "ingest" | "plan";
+export type ArtifactMode = "ingest" | "plan" | "discuss";
 
 export type ChatStreamChunk =
   | { kind: "progress"; content: StreamPart[] }
@@ -99,14 +99,22 @@ export function createArtifactRuntimeConfig(args: {
               attachments,
               signal,
             )
-          : client.planChatStream(
-              classId,
-              sid,
-              message,
-              currentMarkdown,
-              attachments,
-              signal,
-            ),
+          : mode === "discuss"
+            ? client.discussionChatStream(
+                classId,
+                sid,
+                message,
+                attachments,
+                signal,
+              )
+            : client.planChatStream(
+                classId,
+                sid,
+                message,
+                currentMarkdown,
+                attachments,
+                signal,
+              ),
     );
 
     const acc = new StreamPartsAccumulator();
@@ -171,6 +179,24 @@ export function createArtifactRuntimeConfig(args: {
           artifactHash: draft.artifact_hash,
         };
       },
+    };
+  }
+
+  if (mode === "discuss") {
+    return {
+      mode,
+      classId,
+      sessionId,
+      draftId,
+      artifactRevision,
+      artifactHash,
+      turnInProgress,
+      latestTurnComplete,
+      lessonDate,
+      lessonTitle,
+      initialMessages,
+      initialMarkdown: "",
+      chatStream,
     };
   }
 

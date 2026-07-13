@@ -4,21 +4,24 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { ActionLink } from "@/components/klassenpilot/action-link";
+import { ClassDiscussionPanel } from "@/components/klassenpilot/class-discussion-panel";
 import {
   LessonTimeline,
   MisconceptionsPanel,
 } from "@/components/klassenpilot/lesson-timeline";
-import { StatCard } from "@/components/klassenpilot/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   client,
+  type ClassBrief,
   type ClassMemorySnapshot,
   type ClassTimeline,
   type MemorySweepReviewResponse,
 } from "@/lib/api";
 import { consumeClassHomeTimelineRefresh } from "@/lib/class-home-refresh";
+import { shortWikiPath } from "@/lib/markdown-diff";
 import { memorySweepReviewBadge } from "@/lib/memory-sweep-review-status";
 
 type ClassHomeClientProps = {
@@ -37,6 +40,10 @@ function emptySnapshot(classId: string): ClassMemorySnapshot {
   };
 }
 
+function wikiHref(classId: string, path: string): string {
+  return `/classes/${classId}/wiki/view?path=${encodeURIComponent(path)}`;
+}
+
 export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps) {
   const [timeline, setTimeline] = useState<ClassTimeline>({
     class_id: classId,
@@ -46,6 +53,9 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
   const [snapshot, setSnapshot] = useState<ClassMemorySnapshot>(
     emptySnapshot(classId),
   );
+  const [brief, setBrief] = useState<ClassBrief | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [discussOpen, setDiscussOpen] = useState(false);
   const [memorySweepReview, setMemorySweepReview] =
     useState<MemorySweepReviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,14 +68,18 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
             client.getTimeline(classId),
             client.getSnapshot(classId),
             client.getMemorySweepReview(classId),
+            client.getClassBrief(classId),
           ])
         : Promise.all([
             client.getTimeline(classId),
             client.getMemorySweepReview(classId),
-          ]).then(([timelineData, reviewData]) => [timelineData, null, reviewData] as const);
+          ]).then(
+            ([timelineData, reviewData]) =>
+              [timelineData, null, reviewData, null] as const,
+          );
 
-      const [timelineData, snapshotData, reviewData] = await requests;
-      return { timelineData, snapshotData, reviewData };
+      const [timelineData, snapshotData, reviewData, briefData] = await requests;
+      return { timelineData, snapshotData, reviewData, briefData };
     },
     [classId],
   );
@@ -73,11 +87,12 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
   useEffect(() => {
     let cancelled = false;
     fetchClassHome()
-      .then(({ timelineData, snapshotData, reviewData }) => {
+      .then(({ timelineData, snapshotData, reviewData, briefData }) => {
         if (!cancelled) {
           setTimeline(timelineData);
           if (snapshotData) setSnapshot(snapshotData);
           setMemorySweepReview(reviewData);
+          if (briefData) setBrief(briefData);
           setError(null);
         }
       })
@@ -137,9 +152,28 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
     };
   }, [classId, fetchClassHome]);
 
+  const refreshBrief = async () => {
+    setBriefLoading(true);
+    try {
+      const next = await client.refreshClassBrief(classId);
+      setBrief(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to refresh brief");
+    } finally {
+      setBriefLoading(false);
+    }
+  };
+
   const timelineEntries = timeline.entries ?? [];
   const timelineMonths = timeline.months ?? [];
   const memorySweepBadge = memorySweepReviewBadge(memorySweepReview);
+  const recommendedHref =
+    brief?.recommended_action.href ||
+    (brief?.recommended_action.label.toLowerCase().includes("memory sweep")
+      ? `/classes/${classId}/memory-sweep`
+      : brief?.recommended_action.label.toLowerCase().includes("update")
+        ? `/classes/${classId}/memory`
+        : `/classes/${classId}/plan`);
 
   return (
     <div>
@@ -154,24 +188,75 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
         </Alert>
       )}
 
-      <div className="mb-8 grid gap-4 sm:grid-cols-3">
-        <StatCard label="Open loops" value={String(snapshot.open_loop_count)} />
-        <StatCard
-          label="Last saved"
-          value={
-            snapshot.last_committed_date
-              ? snapshot.last_committed_title
-                ? `${snapshot.last_committed_date} - ${snapshot.last_committed_title}`
-                : snapshot.last_committed_date
-              : (snapshot.last_lesson_date ?? "-")
-          }
-        />
-        <StatCard label="Lessons logged" value={String(timeline.entries.length)} />
-      </div>
+      <Card className="mb-8" variant="highlight">
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle>Today&apos;s class brief</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {brief?.cached
+                ? "Cached briefing from the last refresh."
+                : "Snapshot-backed briefing until you refresh."}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refreshBrief()}
+            disabled={briefLoading}
+          >
+            {briefLoading ? "Refreshing…" : "Refresh brief"}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm leading-relaxed text-foreground">
+            {brief?.summary ?? "Loading class brief…"}
+          </p>
+          {brief?.reasons?.length ? (
+            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+              {brief.reasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          ) : null}
+          {brief?.watch_items?.length ? (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Watch
+              </p>
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                {brief.watch_items.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {brief?.recommended_action?.label ? (
+            <ActionLink href={recommendedHref} primary>
+              {brief.recommended_action.label}
+            </ActionLink>
+          ) : null}
+          {brief?.source_paths?.length ? (
+            <p className="text-xs text-muted-foreground">
+              Based on{" "}
+              {brief.source_paths.map((path, index) => (
+                <span key={path}>
+                  {index > 0 ? ", " : ""}
+                  <Link
+                    href={wikiHref(classId, path)}
+                    className="text-primary hover:underline"
+                  >
+                    {shortWikiPath(path)}
+                  </Link>
+                </span>
+              ))}
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <MisconceptionsPanel items={snapshot.top_misconceptions} />
 
-      <div className="mb-10 mt-8 flex flex-wrap gap-3">
+      <div className="mb-6 mt-8 flex flex-wrap gap-3">
         <ActionLink href={`/classes/${classId}/memory`} primary>
           Update memory
         </ActionLink>
@@ -186,7 +271,25 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
             )}
           </span>
         </ActionLink>
+        <ActionLink href={`/classes/${classId}/wiki/view`}>Inspect wiki</ActionLink>
+        <Button
+          variant="outline"
+          onClick={() => setDiscussOpen((open) => !open)}
+        >
+          {discussOpen ? "Hide discussion" : "Discuss class state"}
+        </Button>
       </div>
+
+      {discussOpen ? (
+        <Card className="mb-10">
+          <CardHeader>
+            <CardTitle>Discuss class state</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ClassDiscussionPanel classId={classId} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

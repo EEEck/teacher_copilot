@@ -26,7 +26,17 @@ from app.schemas.api import (
     LessonFlowPhase,
     LessonPlan,
 )
-from app.teacher_agent.models import MemoryCompactOutput
+from app.teacher_agent.models import (
+    ClassBriefOutput,
+    ClassDiscussionTurnOutput,
+    MemoryCompactOutput,
+)
+from app.teacher_agent.class_discussion_state import (
+    ClassDiscussionRuntime,
+    ClassDiscussionStatePatch,
+    discussion_api_payload,
+    merge_class_discussion_turn,
+)
 from app.teacher_agent.executive_verification import (
     ExecutiveFinding,
     ExecutivePatch,
@@ -59,6 +69,8 @@ from app.teacher_agent.planning_state import (
     planning_api_payload,
 )
 from app.services.ingest_service import IngestService
+from app.services.class_brief_service import ClassBriefService
+from app.services.discussion_service import DiscussionService
 from app.services.memory_candidate_ledger import MemoryCandidateLedger
 from app.services.memory_sweep_reviews import MemorySweepReviewStore
 from app.services.plan_service import PlanService
@@ -473,6 +485,132 @@ class StubAgentRunner:
         ready = not (executive and executive.open_blocking_findings())
         return "Here is an updated plan draft.", READY_PLAN, ready
 
+    def _class_brief_fallback(self, class_id: str) -> ClassBriefOutput:
+        return ClassBriefOutput(
+            summary="Chemie 9b is working on redox and needs another concrete practice step.",
+            recommended_action_label="Create lesson plan",
+            recommended_action_href=f"/classes/{class_id}/plan",
+            recommended_action_rationale="The current open loops point to oxidation number versus charge practice.",
+            reasons=["Recent lessons show redox vocabulary needs reinforcement."],
+            watch_items=["Ion charge versus oxidation number."],
+            source_paths=[
+                f"wiki/classes/{class_id}/memory/course_state.md",
+                f"wiki/classes/{class_id}/memory/planning_brief.md",
+            ],
+        )
+
+    async def class_brief(self, class_id: str) -> ClassBriefOutput:
+        return self._class_brief_fallback(class_id)
+
+    def _emit_discussion_state(
+        self,
+        runtime: ClassDiscussionRuntime,
+        messages: list[ChatMessage],
+        *,
+        capture_candidate: bool,
+    ) -> ClassDiscussionTurnOutput:
+        latest = messages[-1].content if messages else ""
+        candidates = []
+        if capture_candidate:
+            candidates.append(
+                MemoryCandidate(
+                    target="teaching_patterns.md",
+                    section="What Worked",
+                    candidate_update=(
+                        "This class needs short retrieval checks before symbolic "
+                        "redox notation."
+                    ),
+                    evidence=f"Direct teacher quote: {latest.strip()}",
+                    evidence_refs=[],
+                    source="teacher_explicit",
+                    basis="explicit",
+                    confidence="high",
+                    speech_act="store_request",
+                )
+            )
+        out = ClassDiscussionTurnOutput(
+            reply=(
+                "Focus next on short retrieval checks before symbolic redox notation."
+                if capture_candidate
+                else "From class memory, redox practice and open loops are the priority."
+            ),
+            state_patch=ClassDiscussionStatePatch(
+                current_focus="redox practice",
+                key_observations=[
+                    "Short retrieval checks before symbolic redox notation."
+                    if capture_candidate
+                    else "Current unit needs continued redox practice."
+                ],
+                next_best_actions=["Create lesson plan", "Update memory"],
+            ),
+            memory_candidates=candidates,
+            source_paths=[
+                f"wiki/classes/{CLASS_ID}/memory/course_state.md",
+                f"wiki/classes/{CLASS_ID}/memory/planning_brief.md",
+            ],
+            suggested_actions=["Create lesson plan", "Update memory"],
+        )
+        merge_class_discussion_turn(
+            runtime,
+            state_patch=out.state_patch,
+            new_evidence_briefs=out.new_evidence_briefs,
+            memory_candidates=out.memory_candidates,
+            source_paths=out.source_paths,
+            suggested_actions=out.suggested_actions,
+        )
+        return out
+
+    async def discuss_chat(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        attachments: list[ChatAttachment] | None = None,
+        runtime: ClassDiscussionRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
+    ) -> str:
+        if self._is_high_stakes_student_request(messages):
+            return (
+                "I cannot make high-stakes student decisions. I can help review "
+                "evidence and draft neutral observations for teacher review."
+            )
+        runtime = runtime or ClassDiscussionRuntime()
+        latest = messages[-1].content.lower() if messages else ""
+        capture = "remember" in latest or "going forward" in latest
+        out = self._emit_discussion_state(
+            runtime, messages, capture_candidate=capture
+        )
+        self._emit_executive_state(executive, messages)
+        return out.reply
+
+    async def discuss_chat_stream(
+        self,
+        class_id: str,
+        messages: list[ChatMessage],
+        attachments: list[ChatAttachment] | None = None,
+        runtime: ClassDiscussionRuntime | None = None,
+        executive: ExecutiveRuntime | None = None,
+    ) -> AsyncIterator:
+        runtime = runtime or ClassDiscussionRuntime()
+        latest = messages[-1].content.lower() if messages else ""
+        capture = "remember" in latest or "going forward" in latest
+        out = self._emit_discussion_state(
+            runtime, messages, capture_candidate=capture
+        )
+        self._emit_executive_state(executive, messages)
+        yield SseFinal(
+            reply=out.reply,
+            artifact_markdown="",
+            ready=False,
+            completeness=None,
+            memory_candidates=discussion_api_payload(runtime).get(
+                "memory_candidates", []
+            ),
+            discussion_state=discussion_api_payload(runtime),
+            executive_state=(
+                executive_api_payload(executive) if executive is not None else None
+            ),
+        )
+
     async def ingest_chat(
         self,
         class_id: str,
@@ -855,6 +993,13 @@ def client(
         memory_candidate_ledger=memory_candidate_ledger,
         workflow_drafts=workflow_drafts,
     )
+    discussion = DiscussionService(
+        wiki=wiki,
+        agents=agents,
+        memory_candidate_ledger=memory_candidate_ledger,
+        workflow_drafts=workflow_drafts,
+    )
+    brief = ClassBriefService(wiki=wiki, agents=agents)
 
     app.dependency_overrides[deps.get_wiki] = lambda: wiki
     app.dependency_overrides[deps.get_agents] = lambda: agents
@@ -867,6 +1012,8 @@ def client(
     )
     app.dependency_overrides[deps.get_ingest_service] = lambda: ingest
     app.dependency_overrides[deps.get_plan_service] = lambda: plan
+    app.dependency_overrides[deps.get_discussion_service] = lambda: discussion
+    app.dependency_overrides[deps.get_class_brief_service] = lambda: brief
     try:
         # raise_server_exceptions=False so the global handler's JSON envelope is
         # returned (mirrors production) instead of re-raising in the test client.

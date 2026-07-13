@@ -30,6 +30,9 @@ describe("chat run feedback", () => {
     expect(chatRunningTaskLabel({ mode: "memory_sweep" })).toBe(
       "Generating memory sweep…",
     );
+    expect(chatRunningTaskLabel({ mode: "discuss" })).toBe(
+      "Discussing class state",
+    );
 
     expect(
       chatCompletionToastLabel({
@@ -44,6 +47,9 @@ describe("chat run feedback", () => {
     expect(chatCompletionToastLabel("ingest")).toBe("Finished updating memory");
     expect(chatCompletionToastLabel("plan")).toBe("Finished lesson planning");
     expect(chatCompletionToastLabel("memory_sweep")).toBe("Finished memory sweep");
+    expect(chatCompletionToastLabel("discuss")).toBe(
+      "Finished class discussion",
+    );
     expect(chatFailureToastLabel({ mode: "memory_sweep" })).toBe(
       "Memory sweep failed",
     );
