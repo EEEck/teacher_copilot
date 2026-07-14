@@ -38,7 +38,7 @@ const openCandidate = {
   signal_count: 1,
   can_apply: true,
   review_only_reason: "",
-} as MemorySweepCandidate;
+} as unknown as MemorySweepCandidate;
 
 const openQueues = { promote: [openCandidate] };
 

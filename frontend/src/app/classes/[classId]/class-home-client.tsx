@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+} from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ActionLink } from "@/components/klassenpilot/action-link";
@@ -18,12 +24,23 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StickyNote } from "@/components/ui/sticky-note";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   client,
   type ClassBrief,
   type ClassMemorySnapshot,
   type ClassTimeline,
   type MemorySweepReviewResponse,
 } from "@/lib/api";
+import {
+  CLASS_HOME_HOVER,
+  formatClassHomeHeading,
+  shortenUnitLabel,
+} from "@/lib/class-home-display";
 import { consumeClassHomeTimelineRefresh } from "@/lib/class-home-refresh";
 import { classHomeMockUpcoming } from "@/lib/class-home-mock-dates";
 import { classHomeWatchItems } from "@/lib/class-home-watch";
@@ -37,6 +54,29 @@ import {
   normalizeClassWikiPath,
   wikiViewerHref,
 } from "@/lib/wiki-viewer-links";
+
+function WorkflowHover({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactElement;
+}) {
+  return (
+    <Tooltip>
+      {/* Span wrapper: reliable hover target (Next Link + asChild is fragile). */}
+      <TooltipTrigger asChild>
+        <span className="inline-flex w-full min-w-0">{children}</span>
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        className="max-w-sm text-pretty leading-relaxed"
+      >
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 type ClassHomeClientProps = {
   classId: string;
@@ -215,13 +255,22 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
   const lastTaught =
     snapshot.last_committed_date ||
     snapshot.last_lesson_date ||
-    "—";
+    "Not set";
+  const heading = useMemo(
+    () => formatClassHomeHeading(classId, snapshot.label),
+    [classId, snapshot.label],
+  );
+  const unitShort = shortenUnitLabel(snapshot.current_unit || "");
+  const headerDescription = [heading.year, heading.track]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
+    <TooltipProvider delayDuration={250}>
     <div>
       <PageHeader
-        title={snapshot.label}
-        description={`Current unit: ${snapshot.current_unit}`}
+        title={heading.title}
+        description={headerDescription || undefined}
       />
 
       {error && (
@@ -233,7 +282,7 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
       <ClassHomeSection
         id="classroom-dashboard"
         title="Classroom dashboard"
-        description="Situation snapshot for this class — brief, metrics, upcoming, and your local notes."
+        description="Your class at a glance: brief, metrics, upcoming dates, and local notes."
       >
         <Card className="mb-4" variant="highlight">
           <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
@@ -302,26 +351,31 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
               <CardTitle className="text-base">At a glance</CardTitle>
             </CardHeader>
             <CardContent>
-              <dl className="grid grid-cols-2 gap-3 text-sm">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-5">
                 <div>
-                  <dt className="text-xs text-muted-foreground">Unit</dt>
-                  <dd className="font-medium text-foreground">
-                    {snapshot.current_unit || "—"}
+                  <dt className="text-sm text-muted-foreground">Unit</dt>
+                  <dd
+                    className="mt-1 text-xl font-semibold leading-snug tracking-tight text-foreground"
+                    title={snapshot.current_unit || undefined}
+                  >
+                    {unitShort}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Open loops</dt>
-                  <dd className="font-medium text-foreground">
+                  <dt className="text-sm text-muted-foreground">Open loops</dt>
+                  <dd className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                     {snapshot.open_loop_count}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Last taught</dt>
-                  <dd className="font-medium text-foreground">{lastTaught}</dd>
+                  <dt className="text-sm text-muted-foreground">Last taught</dt>
+                  <dd className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                    {lastTaught}
+                  </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Lessons logged</dt>
-                  <dd className="font-medium text-foreground">
+                  <dt className="text-sm text-muted-foreground">Lessons logged</dt>
+                  <dd className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                     {timelineEntries.length}
                   </dd>
                 </div>
@@ -333,7 +387,7 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
             <CardHeader className="pb-0">
               <CardTitle className="text-base">Upcoming</CardTitle>
               <p className="text-xs text-muted-foreground">
-                Mock dates — not from wiki.
+                Mock dates, not from wiki.
               </p>
             </CardHeader>
             <CardContent>
@@ -362,7 +416,7 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
       <ClassHomeSection
         id="actions"
         title="Actions"
-        description="Workflows for this class — pick one job at a time."
+        description="Pick one job at a time for this class."
       >
         {showActionsHelp && (
           <StickyNote
@@ -373,94 +427,104 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
           >
             <ul className="list-disc space-y-1 pl-5">
               <li>
-                <span className="font-medium">Update memory</span> — turn a
-                lesson conversation into structured results, then approve wiki
-                writes.
-              </li>
-              <li>
-                <span className="font-medium">Create lesson plan</span> — draft
+                <span className="font-medium">Create lesson plan:</span> draft
                 the next lesson or assessment from class memory.
               </li>
               <li>
-                <span className="font-medium">Discuss</span> — ask about open
+                <span className="font-medium">Update memory:</span> teach your
+                class agent what happened today, then approve wiki updates.
+              </li>
+              <li>
+                <span className="font-medium">Discuss:</span> ask about open
                 loops, watch items, or what to do next (opens the chat dock).
               </li>
               <li>
-                <span className="font-medium">Memory Sweep</span> — review
-                pending candidates before they land in the wiki. Aim for about
-                once a week; we nudge after 5 days.
+                <span className="font-medium">Sharpen your assistant:</span>{" "}
+                review quiet insights so it gets more personal for this class.
+                Aim for about once a week; we nudge after 5 days.
               </li>
               <li>
-                <span className="font-medium">Inspect wiki</span> — browse the
-                compiled class files behind this dashboard.
+                <span className="font-medium">Browse class files:</span> open
+                the living notebook for this class (lesson notes, plans, and
+                memory).
               </li>
             </ul>
           </StickyNote>
         )}
 
-        {/* Equal width = widest label; normal lg height (not full-bleed stretch). */}
+        {/* Equal width = widest label; Plan first among core workflows. */}
         <div
           className="inline-grid max-w-full grid-flow-col auto-cols-[1fr] items-stretch gap-3"
           role="group"
           aria-label="Class workflows"
         >
-          <ActionLink
-            href={`/classes/${classId}/memory`}
-            variant="soft"
-            size="lg"
-            className="w-full justify-center px-3"
-          >
-            Update memory
-          </ActionLink>
-          <ActionLink
-            href={`/classes/${classId}/plan`}
-            variant="soft"
-            size="lg"
-            className="w-full justify-center px-3"
-          >
-            Create lesson plan
-          </ActionLink>
-          <Button
-            type="button"
-            variant="soft"
-            size="lg"
-            className="w-full justify-center px-3"
-            onClick={() => setDiscussDock("expanded")}
-          >
-            Discuss
-          </Button>
-          <ActionLink
-            href={`/classes/${classId}/memory-sweep`}
-            variant="outline"
-            size="lg"
-            className="relative w-full flex-col justify-center gap-0 px-3 leading-tight"
-          >
-            <span>Memory Sweep</span>
-            {memorySweepQuietSubtitle ? (
-              <span className="text-[10px] font-normal text-muted-foreground">
-                {memorySweepQuietSubtitle}
-              </span>
-            ) : null}
-            {memorySweepChip ? (
-              <span
-                className={
-                  memorySweepAttention
-                    ? "absolute -top-1.5 -right-1.5 max-w-[7.5rem] truncate rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium leading-none text-foreground shadow-sm"
-                    : "absolute -top-1.5 -right-1.5 max-w-[7.5rem] truncate rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-950 shadow-sm"
-                }
-              >
-                {memorySweepChip}
-              </span>
-            ) : null}
-          </ActionLink>
-          <ActionLink
-            href={`/classes/${classId}/wiki/view`}
-            variant="outline"
-            size="lg"
-            className="w-full justify-center px-3"
-          >
-            Inspect wiki
-          </ActionLink>
+          <WorkflowHover label={CLASS_HOME_HOVER.plan}>
+            <ActionLink
+              href={`/classes/${classId}/plan`}
+              variant="soft"
+              size="lg"
+              className="w-full justify-center px-3"
+            >
+              Create lesson plan
+            </ActionLink>
+          </WorkflowHover>
+          <WorkflowHover label={CLASS_HOME_HOVER.memory}>
+            <ActionLink
+              href={`/classes/${classId}/memory`}
+              variant="soft"
+              size="lg"
+              className="w-full justify-center px-3"
+            >
+              Update memory
+            </ActionLink>
+          </WorkflowHover>
+          <WorkflowHover label={CLASS_HOME_HOVER.discuss}>
+            <Button
+              type="button"
+              variant="soft"
+              size="lg"
+              className="w-full justify-center px-3"
+              onClick={() => setDiscussDock("expanded")}
+            >
+              Discuss
+            </Button>
+          </WorkflowHover>
+          <WorkflowHover label={CLASS_HOME_HOVER.sweep}>
+            <ActionLink
+              href={`/classes/${classId}/memory-sweep`}
+              variant="outline"
+              size="lg"
+              className="relative w-full flex-col justify-center gap-0 px-3 leading-tight"
+            >
+              <span>Sharpen your assistant</span>
+              {memorySweepQuietSubtitle ? (
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  {memorySweepQuietSubtitle}
+                </span>
+              ) : null}
+              {memorySweepChip ? (
+                <span
+                  className={
+                    memorySweepAttention
+                      ? "absolute -top-1.5 -right-1.5 max-w-[7.5rem] truncate rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium leading-none text-foreground shadow-sm"
+                      : "absolute -top-1.5 -right-1.5 max-w-[7.5rem] truncate rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-950 shadow-sm"
+                  }
+                >
+                  {memorySweepChip}
+                </span>
+              ) : null}
+            </ActionLink>
+          </WorkflowHover>
+          <WorkflowHover label={CLASS_HOME_HOVER.wiki}>
+            <ActionLink
+              href={`/classes/${classId}/wiki/view`}
+              variant="outline"
+              size="lg"
+              className="w-full justify-center px-3"
+            >
+              Browse class files
+            </ActionLink>
+          </WorkflowHover>
         </div>
       </ClassHomeSection>
 
@@ -473,6 +537,7 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
       <ClassHomeSection
         id="lesson-timeline"
         title="Lesson timeline"
+        titleHover={CLASS_HOME_HOVER.timeline}
         description="Planned and taught lessons for this class."
       >
         <Card>
@@ -499,5 +564,6 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
         </Link>
       </p>
     </div>
+    </TooltipProvider>
   );
 }
