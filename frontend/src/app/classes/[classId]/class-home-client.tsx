@@ -552,6 +552,7 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
                 entries={timelineEntries}
                 months={timelineMonths}
                 highlightDate={highlightDate ?? snapshot.last_committed_date}
+                planHover={CLASS_HOME_HOVER.plan}
               />
             )}
           </CardContent>

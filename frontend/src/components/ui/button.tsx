@@ -11,11 +11,17 @@ const buttonVariants = cva(
       variant: {
         default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
         soft:
-          "border-border bg-accent text-accent-foreground hover:bg-accent/80 hover:border-primary/20 aria-expanded:bg-accent aria-expanded:text-accent-foreground",
+          "border-border bg-accent text-accent-foreground hover:border-primary/40 hover:bg-primary/15 hover:text-accent-foreground aria-expanded:bg-accent aria-expanded:text-accent-foreground",
         outline:
           "border-border bg-background hover:bg-accent hover:border-primary/30 hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+        /** Matches timeline "Add results" / StickyNote attention tone. */
+        attention:
+          "border-amber-200 bg-amber-50 text-amber-950 hover:border-amber-300 hover:bg-amber-100",
+        /** Matches timeline "Upcoming" black chip. */
+        inverse:
+          "border-transparent bg-foreground text-background hover:bg-foreground/90",
         ghost:
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:

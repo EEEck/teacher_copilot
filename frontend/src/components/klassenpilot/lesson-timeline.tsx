@@ -1,6 +1,7 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 
@@ -14,8 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { TimelineEntry } from "@/lib/api";
 import { timelineMemoryAction } from "@/lib/timeline-memory-action";
+import { timelineStatusBadges } from "@/lib/timeline-status-badges";
 import { cn } from "@/lib/utils";
 
 function monthLabel(monthKey: string): string {
@@ -37,16 +44,57 @@ function groupByMonth(entries: TimelineEntry[]): Map<string, TimelineEntry[]> {
   return map;
 }
 
+function PlanNextLessonCta({
+  classId,
+  hoverLabel,
+}: {
+  classId: string;
+  hoverLabel?: string;
+}) {
+  const button = (
+    <Link
+      href={`/classes/${classId}/plan`}
+      aria-label="Create lesson plan"
+      className={cn(
+        "flex size-10 shrink-0 items-center justify-center rounded-full",
+        "bg-primary text-primary-foreground shadow-sm",
+        "transition-opacity hover:opacity-90",
+      )}
+    >
+      <Plus className="size-6" strokeWidth={2.75} aria-hidden />
+    </Link>
+  );
+
+  return (
+    <div className="flex items-center gap-2.5">
+      {hoverLabel ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{button}</TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-xs text-pretty">
+            {hoverLabel}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        button
+      )}
+      <span className="text-sm text-muted-foreground">plan next lesson</span>
+    </div>
+  );
+}
+
 export function LessonTimeline({
   classId,
   entries = [],
   months,
   highlightDate,
+  planHover,
 }: {
   classId: string;
   entries?: TimelineEntry[];
   months?: string[];
   highlightDate?: string | null;
+  /** Optional tooltip on the plan-next + control. */
+  planHover?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const safeEntries = entries ?? [];
@@ -66,28 +114,39 @@ export function LessonTimeline({
   };
 
   if (safeEntries.length === 0) {
-    return <p className="text-muted-foreground">No lessons logged yet.</p>;
+    return (
+      <div className="space-y-4">
+        <PlanNextLessonCta classId={classId} hoverLabel={planHover} />
+        <p className="text-center text-muted-foreground">No lessons logged yet.</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-3">
-      {monthKeys.length > 1 && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Jump to month</span>
-          <Select value={selectMonth} onValueChange={scrollToMonth}>
-            <SelectTrigger className="h-8 w-[180px]">
-              <SelectValue placeholder="Select month" />
-            </SelectTrigger>
-            <SelectContent>
-              {monthKeys.map((m) => (
-                <SelectItem key={m} value={m}>
-                  {monthLabel(m)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-3 gap-y-2">
+        <div className="justify-self-start">
+          {monthKeys.length > 1 ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Jump to month</span>
+              <Select value={selectMonth} onValueChange={scrollToMonth}>
+                <SelectTrigger className="h-8 w-[180px]">
+                  <SelectValue placeholder="Select month" />
+                </SelectTrigger>
+                <SelectContent>
+                  {monthKeys.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {monthLabel(m)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
         </div>
-      )}
+        <PlanNextLessonCta classId={classId} hoverLabel={planHover} />
+        <div aria-hidden />
+      </div>
 
       <div
         ref={scrollRef}
@@ -162,17 +221,15 @@ function LessonTimelineCard({
                     Just saved
                   </Badge>
                 )}
-                {entry.status === "planned" ? (
-                  <Badge variant="secondary" className="text-xs">
-                    Planned
+                {timelineStatusBadges(entry).map((badge) => (
+                  <Badge
+                    key={badge.label}
+                    variant={badge.variant}
+                    className={cn("text-xs", badge.className)}
+                  >
+                    {badge.label}
                   </Badge>
-                ) : (
-                  entry.has_plan && (
-                    <Badge variant="outline" className="text-xs">
-                      Has plan
-                    </Badge>
-                  )
-                )}
+                ))}
               </div>
             </div>
             {entry.summary && (

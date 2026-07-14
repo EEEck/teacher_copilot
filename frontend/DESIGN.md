@@ -89,12 +89,28 @@ feedback while a job is still running.
 | `default` | Green fill | Primary CTA, chat send button (scarce — one per action group) |
 | `soft` | Accent fill + dark green text | Equal-weight destinations (e.g. class-home core workflows) |
 | `outline` | White + border | Secondary actions |
-| `ghost` | Text only / light hover | Tertiary (Inspect wiki) |
+| `attention` | Amber fill | Timeline “Add results” CTA (matches status badge / StickyNote) |
+| `inverse` | Black fill | Timeline “Upcoming” CTA (matches status badge) |
+| `ghost` | Text only / light hover | Tertiary (Browse class files) |
 | `destructive` | Red tint | Delete / errors |
 
 **Rule:** One green `default` button per action row when there is a single primary
 habit CTA. For a small set of equal core workflows, prefer `soft` instead of a
 wall of `default`. Use `ActionLink` with `variant` for linked actions.
+
+## Timeline status chips
+
+Lesson timeline uses one status chip + a matching row CTA. Shared tone lives in
+`lib/timeline-status-tone.ts` (do not fork badge vs button colors).
+
+| Status | When | Badge | Row CTA |
+|--------|------|-------|---------|
+| Done | `taught` | `Badge variant="default"` (dark green) | `Correct with agent` → `outline` |
+| Upcoming | `planned`, date after today | black chip | `Add results` → `inverse` |
+| Add results | `planned`, date today/past | amber chip (StickyNote family) | `Add results` → `attention` |
+
+Plan-next control: round primary `+` with muted “plan next lesson” hint, centered
+on the timeline toolbar beside Jump to month.
 
 ## Segmented controls
 

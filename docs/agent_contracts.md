@@ -862,7 +862,7 @@ Teachers can inspect class wiki markdown without editing it.
 - `GET /classes/{class_id}/wiki/pages` lists class pages from
   `WikiStore.list_class_pages`.
 - `GET /classes/{class_id}/wiki/file` returns markdown for a path.
-- The class-home **Inspect wiki** entry and brief/discussion `source_paths`
+- The class-home **Browse class files** entry and brief/discussion `source_paths`
   open `/classes/{id}/wiki/view`.
 - `?path=` selects and highlights a file inside the full class catalog; it
   does not replace the file list with a one-file view.

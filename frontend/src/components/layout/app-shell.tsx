@@ -1,8 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { MenuIcon } from "lucide-react";
+
 import { useShellLayout } from "@/components/layout/shell-layout";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 export function AppShell({
   children,
@@ -22,9 +33,7 @@ export function AppShell({
     <div
       className={cn(
         "flex flex-col bg-background",
-        flush
-          ? "h-dvh min-h-0 overflow-hidden"
-          : "min-h-screen",
+        flush ? "h-dvh min-h-0 overflow-hidden" : "min-h-screen",
         className,
       )}
     >
@@ -39,12 +48,28 @@ export function AppShell({
           <Link href="/" className="font-semibold tracking-tight text-primary">
             KlassenPilot
           </Link>
-          <nav className="flex items-center gap-4 text-xs text-muted-foreground">
-            <Link href="/docs" className="hover:text-foreground">
-              Docs
-            </Link>
-            <span>Teacher copilot</span>
-          </nav>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Open menu"
+              >
+                <MenuIcon className="size-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-44">
+              <DropdownMenuLabel>Menu</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/docs">Docs</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/settings">Settings</Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
       <main

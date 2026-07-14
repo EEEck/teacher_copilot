@@ -111,10 +111,18 @@ dashboard, not a second product surface. Layout is three titled sections
    due chip after 5 days / never applied, resetting also on empty all-caught-up
    reviews (`memory-sweep-review-status.ts`).
 3. **Lesson timeline** — larger section title with hover explanation; timeline
-   card below.
+   card below. Toolbar row: Jump to month (left) + centered **+ plan next lesson**
+   (links to `/plan`). One status chip per entry from
+   `timeline-status-tone.ts` / `timeline-status-badges.ts`:
+   - **Done** (dark green) — `taught` / results exist
+   - **Upcoming** (black) — `planned`, date after today
+   - **Add results** (amber) — `planned`, date today or past
+   Row CTAs use matching button variants via `timelineMemoryAction`
+   (`attention` / `inverse` / `outline`).
 
-Discuss dock stays page chrome (FAB). Do not add a feature kanban or wiki-backed
-todos here without an explicit product decision.
+Discuss dock stays page chrome (FAB). App chrome: header hamburger opens Docs +
+Settings (`/settings` is a placeholder). Do not add a feature kanban or
+wiki-backed todos here without an explicit product decision.
 
 ## Pending jobs
 

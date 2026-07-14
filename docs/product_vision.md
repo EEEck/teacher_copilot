@@ -52,9 +52,10 @@ them.
 The app has five product layers.
 
 1. **Class workspace**
-   The class home is the teacher's entry point. It shows timeline, status,
-   compact memory, open loops, and should evolve into a proactive briefing and
-   suggested-task surface.
+   The class home is the teacher's entry point. It is an executive-assistant
+   surface: class briefing, At a glance metrics, Actions into core workflows
+   (including Discuss as a docked helper), and a lesson timeline with clear
+   Upcoming / Add results / Done status.
 
 2. **Teacher workflows**
    Current core workflows are:
@@ -176,7 +177,8 @@ line between class memory and external sources.
 - Class-scoped markdown wiki memory.
 - Update memory with teacher-approved commits.
 - Timeline/detail shortcuts for adding or correcting lesson results without
-  turning Update Memory into a wizard.
+  turning Update Memory into a wizard; class-home timeline status chips
+  (Upcoming / Add results / Done) with matching CTAs.
 - Create lesson plan with read-only wiki access.
 - Compact memory compaction and profile proposal/apply endpoints.
 - Memory V3 candidate capture, ledger folding/gating, and teacher-reviewed
@@ -184,6 +186,7 @@ line between class memory and external sources.
 - Deterministic source-bearing wiki retrieval.
 - Query packs for planning, ingest, and review.
 - Backend-owned workflow drafts for Plan / Update Memory (leave and resume).
+- Class-home Discuss dock (Gmail-style helper) and Browse class files wiki viewer.
 
 ## Near-Term Scope
 
