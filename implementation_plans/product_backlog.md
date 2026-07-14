@@ -84,6 +84,7 @@ Primary items:
 | **Multi-worker / session hydrate docs** | Document single-worker-per-wiki assumption for local/HITL stacks; note that durable drafts + executive JSON survive restart, while in-memory session caches in `deps.py` are not multi-worker safe without sticky routing or always-hydrate-from-draft-store. |
 | **Workflow-drafts page slim-down** | Finish the plan/memory page extraction onto the shared artifact-session shell: runtime adapter registry, shared discard/bootstrap helpers, thinner commit/review workspaces. Unblocks adding exam/status workflows without copying 400–800 LOC pages. |
 | **Memory Sweep stale-diff hardening** | See incident **MSW-001** below. Launch patched with `.get()`; v1.1 fingerprint-first stale gate. |
+| **Server-side chat turn cancellation** | The composer Stop button only disconnects the browser stream; the service-owned turn task finishes and writes the draft anyway (by design). Add an explicit cancel endpoint that stops the running turn task, marks the draft's turn cleanly cancelled (not failed), and clears pending markers, so Stop means stop. Decided 2026-07-14 during runner-lite design review — `docs/beta_readiness_audit_2026-07-13.md` §A.1.14 Q1. |
 
 Non-goals:
 
