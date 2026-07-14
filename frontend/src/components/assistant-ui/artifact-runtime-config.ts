@@ -11,7 +11,7 @@ import {
 import { readSseJsonStream, StreamPartsAccumulator, type StreamPart } from "@/lib/sse-chat";
 import type { SessionAttachment } from "@/lib/session-attachments";
 
-export type ArtifactMode = "ingest" | "plan";
+export type ArtifactMode = "ingest" | "plan" | "discuss";
 
 export type ChatStreamChunk =
   | { kind: "progress"; content: StreamPart[] }
@@ -99,14 +99,22 @@ export function createArtifactRuntimeConfig(args: {
               attachments,
               signal,
             )
-          : client.planChatStream(
-              classId,
-              sid,
-              message,
-              currentMarkdown,
-              attachments,
-              signal,
-            ),
+          : mode === "discuss"
+            ? client.discussionChatStream(
+                classId,
+                sid,
+                message,
+                attachments,
+                signal,
+              )
+            : client.planChatStream(
+                classId,
+                sid,
+                message,
+                currentMarkdown,
+                attachments,
+                signal,
+              ),
     );
 
     const acc = new StreamPartsAccumulator();
@@ -140,6 +148,46 @@ export function createArtifactRuntimeConfig(args: {
     throw new Error("Stream ended without a final event");
   }
 
+  async function fetchDraft() {
+    const sid = getSessionId();
+    if (mode === "ingest") {
+      const draft = await client.ingestGetDraft(classId, sid);
+      return {
+        draftId: draft.draft_id,
+        artifactRevision: draft.artifact_revision,
+        artifactHash: draft.artifact_hash,
+        turnInProgress: draft.turn_in_progress ?? false,
+        latestTurnComplete: draft.latest_turn_complete ?? true,
+        messages: draft.messages ?? [],
+        artifactMarkdown: draft.diary_markdown,
+        completeness: draft.completeness ?? null,
+        memoryState: draft.memory_state ?? null,
+      };
+    }
+    if (mode === "discuss") {
+      const draft = await client.discussionGetDraft(classId, sid);
+      return {
+        draftId: draft.draft_id,
+        artifactRevision: draft.artifact_revision,
+        artifactHash: draft.artifact_hash,
+        turnInProgress: draft.turn_in_progress ?? false,
+        latestTurnComplete: draft.latest_turn_complete ?? true,
+        messages: draft.messages ?? [],
+        artifactMarkdown: draft.artifact_markdown ?? "",
+      };
+    }
+    const draft = await client.planGetDraft(classId, sid);
+    return {
+      draftId: draft.draft_id,
+      artifactRevision: draft.artifact_revision,
+      artifactHash: draft.artifact_hash,
+      turnInProgress: draft.turn_in_progress ?? false,
+      latestTurnComplete: draft.latest_turn_complete ?? true,
+      messages: draft.messages ?? [],
+      artifactMarkdown: draft.plan_markdown,
+    };
+  }
+
   if (mode === "ingest") {
     return {
       mode,
@@ -158,6 +206,7 @@ export function createArtifactRuntimeConfig(args: {
       initialMemoryState,
       onCompletenessChange,
       chatStream,
+      fetchDraft,
       patchDraft: async (markdown: string) => {
         const draft = await withSessionRecovery(getSessionId, onSessionLost, markdown, (sid) =>
           client.ingestUpdateDraft(classId, sid, markdown),
@@ -171,6 +220,25 @@ export function createArtifactRuntimeConfig(args: {
           artifactHash: draft.artifact_hash,
         };
       },
+    };
+  }
+
+  if (mode === "discuss") {
+    return {
+      mode,
+      classId,
+      sessionId,
+      draftId,
+      artifactRevision,
+      artifactHash,
+      turnInProgress,
+      latestTurnComplete,
+      lessonDate,
+      lessonTitle,
+      initialMessages,
+      initialMarkdown: "",
+      chatStream,
+      fetchDraft,
     };
   }
 
@@ -188,6 +256,7 @@ export function createArtifactRuntimeConfig(args: {
     initialMessages,
     initialMarkdown,
     chatStream,
+    fetchDraft,
     patchDraft: async (markdown: string) => {
       const draft = await withSessionRecovery(getSessionId, onSessionLost, markdown, (sid) =>
         client.planUpdateDraft(classId, sid, markdown),

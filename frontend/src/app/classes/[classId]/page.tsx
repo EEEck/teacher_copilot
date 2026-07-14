@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { ClassHomeClient } from "./class-home-client";
 
 export default async function ClassHomePage({
@@ -9,5 +11,9 @@ export default async function ClassHomePage({
 }) {
   const { classId } = await params;
   const { highlight } = await searchParams;
-  return <ClassHomeClient classId={classId} highlightDate={highlight} />;
+  return (
+    <Suspense fallback={<p className="p-6 text-muted-foreground">Loading class…</p>}>
+      <ClassHomeClient classId={classId} highlightDate={highlight} />
+    </Suspense>
+  );
 }

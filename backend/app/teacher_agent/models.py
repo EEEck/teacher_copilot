@@ -13,6 +13,7 @@ from app.teacher_agent.memory_update_state import (
     MemoryEvidenceBrief,
     MemoryStatePatch,
 )
+from app.teacher_agent.class_discussion_state import ClassDiscussionStatePatch
 from app.teacher_agent.planning_state import (
     EvidenceBrief,
     LessonPlanningState,
@@ -94,6 +95,66 @@ class PlanTurnOutput(BaseModel):
         ),
     )
     executive_patch: ExecutivePatch = Field(default_factory=ExecutivePatch)
+
+
+class ClassDiscussionTurnOutput(BaseModel):
+    reply: str = Field(description="Conversational answer to the teacher")
+    state_patch: ClassDiscussionStatePatch = Field(
+        default_factory=ClassDiscussionStatePatch,
+        description=(
+            "Backend-owned discussion state updates. Missing fields mean no change."
+        ),
+    )
+    new_evidence_briefs: list[EvidenceBrief] = Field(
+        default_factory=list,
+        description="Compact briefs for wiki/tool evidence used in the answer",
+    )
+    memory_candidates: list[MemoryCandidate] = Field(
+        default_factory=list,
+        description=(
+            "Durable-memory update candidates. These are review-only and never "
+            "direct wiki writes."
+        ),
+    )
+    source_paths: list[str] = Field(
+        default_factory=list,
+        description="Wiki paths or lesson dates used in the answer",
+    )
+    suggested_actions: list[str] = Field(
+        default_factory=list,
+        description="Short next actions such as Update memory or Create lesson plan",
+    )
+    unsupported_intent_reason: str = Field(
+        default="",
+        description="Set when the teacher asks for an out-of-scope discussion task.",
+    )
+    executive_patch: ExecutivePatch = Field(default_factory=ExecutivePatch)
+
+
+class ClassBriefOutput(BaseModel):
+    summary: str = Field(description="Concise executive-style class briefing")
+    recommended_action_label: str = Field(
+        default="Create lesson plan",
+        description="Short teacher-facing label for the best next action",
+    )
+    recommended_action_href: str = Field(
+        default="", description="Optional in-app href for the recommended action"
+    )
+    recommended_action_rationale: str = Field(
+        default="", description="One concise reason for the recommendation"
+    )
+    reasons: list[str] = Field(
+        default_factory=list,
+        description="Two or three evidence-grounded reasons behind the brief",
+    )
+    watch_items: list[str] = Field(
+        default_factory=list,
+        description="Small list of issues the teacher should keep in mind",
+    )
+    source_paths: list[str] = Field(
+        default_factory=list,
+        description="Wiki paths or lesson dates used for the briefing",
+    )
 
 
 class WriteVerificationOutput(BaseModel):

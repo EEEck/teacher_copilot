@@ -49,6 +49,8 @@ class SseFinal(BaseModel):
     # Ingest/update-memory mode only: target/date identification and
     # lesson-results collection state.
     memory_state: dict | None = None
+    # Discuss mode only: discussion runtime payload for the client.
+    discussion_state: dict | None = None
     executive_state: dict | None = None
 
 

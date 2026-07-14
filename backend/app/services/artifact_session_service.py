@@ -353,6 +353,7 @@ class ArtifactSessionService:
             completeness=spec.completeness_of(self.wiki, previous_markdown),
             planning=result.planning,
             memory=result.memory,
+            discussion=result.discussion,
         )
 
     def _guard_turn_result(

@@ -18,10 +18,13 @@ export function useWorkflowChatRuntime({
   draftId,
   isRunning,
   onNew,
+  onCancel,
 }: {
   draftId: string;
   isRunning: boolean;
   onNew: (message: AppendMessage, updateThread: UpdateWorkflowThread) => Promise<void>;
+  /** Abort the in-flight SSE turn (Composer stop button). */
+  onCancel?: () => Promise<void>;
 }) {
   const messages = useWorkflowDraftStore(
     (state) => state.threadMessagesByDraftId[draftId] ?? [],
@@ -59,8 +62,18 @@ export function useWorkflowChatRuntime({
         setThreadMessages(draftId, [...nextMessages]),
       onNew: (message: AppendMessage) => onNew(message, updateThread),
       onEdit,
+      onCancel,
     }),
-    [draftId, isRunning, messages, onEdit, onNew, setThreadMessages, updateThread],
+    [
+      draftId,
+      isRunning,
+      messages,
+      onCancel,
+      onEdit,
+      onNew,
+      setThreadMessages,
+      updateThread,
+    ],
   );
 
   return useExternalStoreRuntime(adapter);

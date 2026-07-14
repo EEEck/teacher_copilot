@@ -87,6 +87,11 @@ export function pendingTurnWorkflowHref(turn: PendingChatTurn): string {
     }
     return base;
   }
+  if (turn.mode === "discuss") {
+    // Always land on class home with the discuss dock forced open
+    // (covers closed / minimized and cross-page return).
+    return `/classes/${turn.classId}?discuss=open`;
+  }
   const base =
     turn.mode === "plan"
       ? `/classes/${turn.classId}/plan`
@@ -250,6 +255,7 @@ function isPendingChatTurn(value: unknown): value is PendingChatTurn {
     typeof item.key === "string" &&
     (item.mode === "ingest" ||
       item.mode === "plan" ||
+      item.mode === "discuss" ||
       item.mode === "memory_sweep") &&
     typeof item.classId === "string" &&
     typeof item.sessionId === "string" &&

@@ -11,6 +11,32 @@ export function replaceLastAssistantContent(
   );
 }
 
+/** True when the assistant bubble is still the initial placeholder (no real stream yet). */
+export function isPlaceholderAssistantContent(
+  content: ThreadMessageLike["content"],
+): boolean {
+  if (content == null) return true;
+  if (typeof content === "string") return content.trim().length === 0;
+  if (!Array.isArray(content) || content.length === 0) return true;
+  return !content.some((part) => {
+    if (part.type === "text") return Boolean(part.text?.trim());
+    if (part.type === "reasoning") {
+      const text = part.text?.trim() ?? "";
+      return text.length > 0 && text !== "Starting...";
+    }
+    if (part.type === "tool-call") return true;
+    return false;
+  });
+}
+
+export function lastAssistantContent(
+  messages: readonly ThreadMessageLike[],
+): ThreadMessageLike["content"] | undefined {
+  const index = messages.findLastIndex((message) => message.role === "assistant");
+  if (index < 0) return undefined;
+  return messages[index]?.content;
+}
+
 /**
  * assistant-ui ExternalStore onEdit passes parentId of the message before the
  * edited turn. Keep that prefix and drop the edited message plus everything after.

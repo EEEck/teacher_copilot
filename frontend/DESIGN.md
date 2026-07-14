@@ -15,11 +15,26 @@ Lightweight design rules for app screens and [assistant-ui](https://github.com/a
 | Layer | Path | Role |
 |-------|------|------|
 | Tokens | `src/app/globals.css` | shadcn semantic CSS variables |
-| Primitives | `src/components/ui/` | Button, Card, Alert, SegmentedToggle, … |
+| Primitives | `src/components/ui/` | Button, Card, Alert, StickyNote, SegmentedToggle, … |
 | Features | `src/features/` | Cross-route draft/job ownership (workflow drafts) |
 | Chat | `src/components/assistant-ui/` | Thread, markdown (from assistant-ui registry) |
-| Domain | `src/components/klassenpilot/` | Timeline, checklist, wiki cards, pending jobs |
+| Domain | `src/components/klassenpilot/` | Timeline, checklist, wiki cards, pending jobs, discuss dock |
 | Pages | `src/app/` | Routes compose domain + ui + chat |
+
+Reuse and turn-lifecycle rules for plan / memory / discuss:
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+### Chat shells
+
+| Shell | When |
+|---|---|
+| Dual-pane (`ArtifactSessionPage` + workspace) | Plan / Update Memory — chat + artifact editor |
+| Discuss dock (`discuss-dock.tsx`) | Class-home helper — fixed viewport chrome only; same runtime + Thread |
+
+Do not fork a second message list or SSE path for a new mode.
+
+Chat turn scenarios (3 workflows × stay-on-page / leave-mid-turn) and how to run
+them: [`ARCHITECTURE.md`](ARCHITECTURE.md#testing-chat-turns).
 
 Update assistant-ui components: `npx assistant-ui add thread -o -p src/components/assistant-ui`
 
@@ -41,6 +56,7 @@ Update assistant-ui components: `npx assistant-ui add thread -o -p src/component
 |---------|---------|-----|
 | **Default** | `Card` (default) → `bg-card` white | Class list, stat cards, timeline, diary checklist |
 | **Highlight** | `Card variant="highlight"` → `bg-muted` | Top misconceptions, info alerts |
+| **Sticky note** | `StickyNote` → amber help + dismiss × | Workflow orientation (class Actions, Memory Sweep “How to review”) |
 | **Chat canvas** | `bg-background` | Thread root, composer (assistant-ui) |
 | **User bubble** | `bg-muted` | User messages in Thread (do not override) |
 
@@ -70,11 +86,31 @@ feedback while a job is still running.
 
 | Variant | Look | Use |
 |---------|------|-----|
-| `default` | Green fill | Primary CTA, chat send button |
-| `outline` | White + border | Secondary actions (“Create lesson plan”) |
+| `default` | Green fill | Primary CTA, chat send button (scarce — one per action group) |
+| `soft` | Accent fill + dark green text | Equal-weight destinations (e.g. class-home core workflows) |
+| `outline` | White + border | Secondary actions |
+| `attention` | Amber fill | Timeline “Add results” CTA (matches status badge / StickyNote) |
+| `inverse` | Black fill | Timeline “Upcoming” CTA (matches status badge) |
+| `ghost` | Text only / light hover | Tertiary (Browse class files) |
 | `destructive` | Red tint | Delete / errors |
 
-**Rule:** One green `default` button per action row. Use `ActionLink` with `primary` prop for the main action.
+**Rule:** One green `default` button per action row when there is a single primary
+habit CTA. For a small set of equal core workflows, prefer `soft` instead of a
+wall of `default`. Use `ActionLink` with `variant` for linked actions.
+
+## Timeline status chips
+
+Lesson timeline uses one status chip + a matching row CTA. Shared tone lives in
+`lib/timeline-status-tone.ts` (do not fork badge vs button colors).
+
+| Status | When | Badge | Row CTA |
+|--------|------|-------|---------|
+| Done | `taught` | `Badge variant="default"` (dark green) | `Correct with agent` → `outline` |
+| Upcoming | `planned`, date after today | black chip | `Add results` → `inverse` |
+| Add results | `planned`, date today/past | amber chip (StickyNote family) | `Add results` → `attention` |
+
+Plan-next control: round primary `+` with muted “plan next lesson” hint, centered
+on the timeline toolbar beside Jump to month.
 
 ## Segmented controls
 

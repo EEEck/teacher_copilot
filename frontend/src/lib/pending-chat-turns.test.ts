@@ -196,6 +196,23 @@ describe("pending chat turns", () => {
     ).toBe("/classes/chemie_9b_2026_27/memory");
   });
 
+  it("returns discuss turns to class home and keeps them in the pending index", () => {
+    const adapter = memoryStorage();
+    markPendingChatTurn(adapter, {
+      mode: "discuss",
+      classId: "chemie_9b_2026_27",
+      sessionId: "session-d",
+      draftId: "draft-d",
+      resumeHref: "/classes/chemie_9b_2026_27",
+    });
+    const turns = listPendingChatTurns(adapter);
+    expect(turns).toHaveLength(1);
+    expect(turns[0].mode).toBe("discuss");
+    expect(pendingTurnWorkflowHref(turns[0])).toBe(
+      "/classes/chemie_9b_2026_27?discuss=open",
+    );
+  });
+
   it("hides the running-tasks box for the current key set until a new turn appears", () => {
     const adapter = memoryStorage();
 

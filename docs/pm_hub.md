@@ -48,14 +48,17 @@ The current v1 prototype is a focused class-memory and lesson-planning product.
 Shipped teacher workflows:
 
 - **Class selection**: choose a class and open its workspace.
-- **Class home**: see current unit, open loops, top misconceptions, recent
-  lessons, and a lesson timeline.
+- **Class home**: executive-assistant landing with Classroom dashboard (brief,
+  At a glance, Upcoming, My notes), Actions (Plan / Update memory / Discuss,
+  plus Sharpen your assistant and Browse class files), and Lesson timeline.
 - **Update memory**: chat with the copilot, produce lesson-results markdown,
   review proposed wiki file changes, and save only teacher-approved updates.
 - **Create lesson plan**: chat with the copilot, refine a plan markdown artifact,
   review the plan-file diff, and save it to a lesson date.
-- **Timeline/detail shortcuts**: planned lessons can become "Add results";
-  taught lessons can become "Correct with agent."
+- **Timeline/detail shortcuts**: one status chip per lesson — **Upcoming**
+  (future plan), **Add results** (plan due / past), **Done** (results logged).
+  Matching row CTAs open Update Memory (“Add results” / “Correct with agent”).
+  Toolbar **+ plan next lesson** opens Create lesson plan.
 - **Lesson detail**: inspect saved plan/results, revise lesson results, and view
   roll-up excerpts.
 - **Wiki file viewer**: inspect changed markdown files after saves.
