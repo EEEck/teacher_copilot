@@ -84,10 +84,38 @@ date-field change and/or at save. (Note: the ingest/results flow does this
 correctly — it resolved 2026-09-28 from the message.)
 
 **H3 — Chat turn lifecycle is functionally correct but architecturally fragile
-("hacky", per `docs/chat_message_issue.md`).** The merged fix works — I saw it
-recover a stuck spinner after a mid-turn SSE reset — but it sustains that
-correctness with a lot of moving parts that each new bug has added to rather than
-removed:
+("hacky", per `docs/chat_message_issue.md`).**
+
+> ✅ **RESOLVED 2026-07-14 — runner-lite implemented, verified, and committed.**
+> Commits `6aff82f` (audit + design) and `0c5744f` (implementation, 12 files,
+> +1492/−858; `tsc` clean, 157 vitest green). The SSE loop moved out of React
+> into a module-level turn runner
+> ([turn-runner.ts](../frontend/src/features/workflow-drafts/turn-runner.ts));
+> navigation no longer aborts a turn (only the Stop button does). The store gained
+> a `turnByDraftId` phase map (`streaming`/`awaiting_backend`/`settled`) and a
+> **single snapshot reducer** in `upsert` that decides thread handling purely from
+> (phase, snapshot) — replacing the six content-guessing helpers below. The
+> provider lost its six mirrored `useState`s, both sync effects, the unmount-abort,
+> and the `finally` race-guard. Bug A (unstable selector → "Maximum update depth")
+> fixed with a stable `EMPTY_THREAD`. Scenario tests rewritten to drive the **real
+> runner + store** with controllable fake SSE streams (closes the "tests pass but
+> browser breaks" gap). **All four acceptance criteria browser-verified** in dev +
+> economy mode (see `implementation_plans/runner_lite_implementation_log.md` Step 6):
+> (1) live reasoning + tool-call streaming; (2) leave-and-return keeps the thread /
+> hard-refresh degrades to plain-text + spinner; (3) "Still working…" → final reply
+> → spinner clears; (4) Running box + off-page completion toast. Bug A regression
+> (discard → immediate send) confirmed clean.
+>
+> **What's still deferred (not blocking):** the sessionStorage marker system +
+> `PendingTurnNotifier` remain — runner-lite demoted them to driving toasts only
+> and the reducer makes their upserts unable to corrupt the thread. Fully removing
+> that 4th source of truth (a global `GET /api/workflow/active` query) is **M2**;
+> live re-stream after hard refresh (attach/replay) is **M3** (parked).
+
+The original finding (below) is kept as the pre-fix record. The merged hybrid
+worked — I saw it recover a stuck spinner after a mid-turn SSE reset — but it
+sustained that correctness with a lot of moving parts that each new bug had added
+to rather than removed:
 - **Four sources of truth** for one turn: backend draft (SQLite), Zustand
   `threadMessagesByDraftId`, Zustand `draftsById` flags, and sessionStorage
   pending markers.
