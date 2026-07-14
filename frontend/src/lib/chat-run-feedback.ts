@@ -63,7 +63,18 @@ export function chatFailureToastLabel(ctx: WorkflowTaskLabelContext): string {
   if (ctx.mode === "memory_sweep") {
     return "Memory sweep failed";
   }
-  return "Something went wrong";
+  if (ctx.mode === "discuss") {
+    return "Class discussion didn't finish — reopen it to retry";
+  }
+  const subject = lessonSubject(ctx);
+  if (ctx.mode === "plan") {
+    return subject
+      ? `Lesson plan for ${subject} didn't finish — open the draft to retry`
+      : "Lesson plan didn't finish — open the draft to retry";
+  }
+  return subject
+    ? `Memory update for ${subject} didn't finish — open the draft to retry`
+    : "Memory update didn't finish — open the draft to retry";
 }
 
 /** Read lesson target fields from ingest memory_state.target when present. */

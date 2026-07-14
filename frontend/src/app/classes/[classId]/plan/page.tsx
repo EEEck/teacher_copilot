@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { client, type MemoryCandidate } from "@/lib/api";
 import { dedupeMemoryCandidates } from "@/lib/memory-candidates";
 import { errorMessageFromUnknown } from "@/lib/write-verification-error";
+import { cancelTurn } from "@/features/workflow-drafts/turn-runner";
 import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 
 function PlanSaveFooter({
@@ -79,6 +80,7 @@ function PlanSaveFooter({
     onError(null);
     try {
       await client.discardWorkflowDraft(classId, draftId);
+      cancelTurn(draftId);
       useWorkflowDraftStore.getState().remove(draftId);
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem(`kp:composer:${draftId}`);

@@ -46,6 +46,7 @@ import {
 } from "@/lib/pending-memory-review";
 import { dedupeMemoryCandidates } from "@/lib/memory-candidates";
 import { errorMessageFromUnknown } from "@/lib/write-verification-error";
+import { cancelTurn } from "@/features/workflow-drafts/turn-runner";
 import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 import { useAuiState } from "@assistant-ui/react";
 
@@ -420,6 +421,7 @@ function MemoryWorkspace({
     onError(null);
     try {
       await client.discardWorkflowDraft(classId, draftId);
+      cancelTurn(draftId);
       useWorkflowDraftStore.getState().remove(draftId);
       if (typeof window !== "undefined") {
         clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);

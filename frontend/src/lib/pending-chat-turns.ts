@@ -1,6 +1,6 @@
 import type { ArtifactMode } from "@/components/assistant-ui/artifact-runtime-config";
 
-type PendingTurnStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+export type PendingTurnStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 const INDEX_KEY = "kp:turn-pending:index";
 const DISMISS_KEY = "kp:running-tasks:dismissed";

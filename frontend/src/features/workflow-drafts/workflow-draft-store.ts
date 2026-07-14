@@ -3,7 +3,15 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ThreadMessageLike } from "@assistant-ui/react";
 
 import type { ArtifactMode } from "@/components/assistant-ui/artifact-runtime-config";
-import type { ChatMessage, CompletenessChecklist } from "@/lib/api";
+import type {
+  ChatMessage,
+  CompletenessChecklist,
+  MemoryCandidate,
+} from "@/lib/api";
+
+import { CHAT_ERROR_REPLY } from "./chat-errors";
+import { newThreadMessageId, replaceLastAssistantContent } from "./thread-messages";
+import { flagsForPhase } from "./workflow-turn-state";
 
 export type WorkflowDraftSnapshot = {
   mode: ArtifactMode;
@@ -16,41 +24,102 @@ export type WorkflowDraftSnapshot = {
   artifactHash: string;
   turnInProgress: boolean;
   latestTurnComplete: boolean;
-  /** Ingest checklist from draft fetch / background completion. */
+  /** Ingest checklist from draft fetch / turn completion. */
   completeness?: CompletenessChecklist | null;
-  /** Ingest memory runtime payload from draft fetch. */
+  /** Ingest memory runtime payload from draft fetch / turn completion. */
   memoryState?: Record<string, unknown> | null;
+  /** Final-turn meta (previously mirrored in provider state). */
+  readyToSave?: boolean;
+  lastChangeSummary?: string | null;
+  memoryCandidates?: MemoryCandidate[];
+};
+
+/**
+ * Turn ownership for one draft in THIS JS context (design:
+ * docs/beta_readiness_audit_2026-07-13.md §A.1.3).
+ *
+ * - `streaming`: a runner is consuming SSE for this draft.
+ * - `awaiting_backend`: the client stream ended without a final event (Stop
+ *   button or dropped connection); the backend may still finish the turn.
+ * - `settled`: this context knows the turn's outcome; the local thread is
+ *   authoritative until discard/refresh (documented limitation: a second
+ *   tab/device appending to the same draft is not reflected until refresh).
+ */
+export type TurnPhase = "streaming" | "awaiting_backend" | "settled";
+
+export type TurnRecord = {
+  phase: TurnPhase;
+  startedAt: number;
+  /** pending-chat-turns marker key; cleared by the runner on hard failure. */
+  pendingKey?: string;
+};
+
+/** Final-turn payload written by the runner on the final SSE event. */
+export type TurnFinalPatch = {
+  /** Final assistant thread content (stream parts, or plain reply text). */
+  content: ThreadMessageLike["content"];
+  /** Plain-text mirror appended to snapshot.messages. */
+  reply: string;
+  userText: string;
+  artifactMarkdown: string;
+  artifactRevision?: number;
+  artifactHash?: string;
+  completeness?: CompletenessChecklist | null;
+  readyToSave?: boolean;
+  lastChangeSummary?: string | null;
+  memoryState?: Record<string, unknown> | null;
+  memoryCandidates?: MemoryCandidate[];
+};
+
+/** Partial snapshot merge for PATCH-draft responses (no messages/flags). */
+export type DraftMetadataPatch = {
+  draftId?: string;
+  /** Teacher-edited markdown just PATCHed — keeps the mirror in step so the
+   * store→editor sync effect cannot revert the editor to a stale value. */
+  artifactMarkdown?: string;
+  artifactRevision?: number;
+  artifactHash?: string;
+  completeness?: CompletenessChecklist | null;
+  readyToSave?: boolean;
 };
 
 type WorkflowDraftState = {
   draftsById: Record<string, WorkflowDraftSnapshot>;
   threadMessagesByDraftId: Record<string, ThreadMessageLike[]>;
+  turnByDraftId: Record<string, TurnRecord>;
+  /** Snapshot reducer — the only entry point for backend snapshots. */
   upsert: (snapshot: WorkflowDraftSnapshot) => void;
+  /** Merge PATCH-draft metadata into an existing snapshot (no thread/flags). */
+  applyDraftPatch: (draftId: string, patch: DraftMetadataPatch) => void;
   setThreadMessages: (draftId: string, messages: ThreadMessageLike[]) => void;
+  /** Runner-facing turn lifecycle (all no-ops when the draft was removed). */
+  beginTurn: (
+    draftId: string,
+    args: {
+      userContent: ThreadMessageLike["content"];
+      placeholderContent: ThreadMessageLike["content"];
+      pendingKey?: string;
+    },
+  ) => void;
+  applyTurnProgress: (
+    draftId: string,
+    content: ThreadMessageLike["content"],
+  ) => void;
+  completeTurn: (draftId: string, patch: TurnFinalPatch) => void;
+  markAwaitingBackend: (draftId: string) => void;
+  failTurn: (draftId: string, friendlyMessage: string) => void;
   remove: (draftId: string) => void;
 };
 
 type WorkflowDraftStore = StoreApi<WorkflowDraftState>;
 
-function threadHasRichParts(messages: ThreadMessageLike[]): boolean {
-  return messages.some((message) => Array.isArray(message.content));
-}
+/** Stable fallback so selectors never allocate per render (invariant I6). */
+export const EMPTY_THREAD: ThreadMessageLike[] = [];
 
-function lastAssistantLacksText(messages: ThreadMessageLike[]): boolean {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (message.role !== "assistant") continue;
-    if (typeof message.content === "string") return !message.content.trim();
-    if (!Array.isArray(message.content)) return true;
-    return !message.content.some(
-      (part) =>
-        part.type === "text" &&
-        typeof (part as { text?: unknown }).text === "string" &&
-        String((part as { text: string }).text).trim().length > 0,
-    );
-  }
-  return false;
-}
+export const selectThreadMessages =
+  (draftId: string) =>
+  (state: Pick<WorkflowDraftState, "threadMessagesByDraftId">) =>
+    state.threadMessagesByDraftId[draftId] ?? EMPTY_THREAD;
 
 function lastSnapshotAssistantReply(messages: ChatMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -62,8 +131,9 @@ function lastSnapshotAssistantReply(messages: ChatMessage[]): string {
 }
 
 /**
- * Keep streamed reasoning/tools, but attach the persisted final reply text when
- * leave/return aborted the SSE before the final event arrived.
+ * Attach the persisted final reply text to the last assistant message without
+ * dropping streamed reasoning/tool parts. Used only for the
+ * `awaiting_backend` reducer rows (Stop button / dropped connection).
  */
 export function mergeFinalReplyIntoThread(
   previous: ThreadMessageLike[],
@@ -93,9 +163,7 @@ export function mergeFinalReplyIntoThread(
   return previous;
 }
 
-function messagesFromSnapshot(
-  messages: ChatMessage[],
-): ThreadMessageLike[] {
+function messagesFromSnapshot(messages: ChatMessage[]): ThreadMessageLike[] {
   return messages.map(
     (message, index): ThreadMessageLike => ({
       id: `persisted-${index}`,
@@ -105,27 +173,12 @@ function messagesFromSnapshot(
   );
 }
 
-/**
- * Decide whether to keep the in-memory thread instead of replacing it with a
- * plain persisted snapshot. Always update draftsById (turn flags / artifact).
- */
-export function shouldKeepLiveThread(
-  previous: ThreadMessageLike[],
-  snapshotMessages: ChatMessage[],
-  opts?: { turnInProgress?: boolean },
-): boolean {
-  if (previous.length === 0) return false;
-  // Stale/empty fetch must not wipe a live stream.
-  if (snapshotMessages.length === 0) return true;
-  // While the backend turn is still open, never replace rich streamed parts
-  // with a plain draft snapshot (leave/return / notifier polls).
-  if (opts?.turnInProgress && threadHasRichParts(previous)) return true;
-  // Keep streamed reasoning/tool parts when the snapshot is only plain strings
-  // of similar length (typical same-tab completion upsert).
-  return (
-    threadHasRichParts(previous) &&
-    snapshotMessages.length <= previous.length
-  );
+function snapshotSaysComplete(snapshot: WorkflowDraftSnapshot): boolean {
+  return !snapshot.turnInProgress && snapshot.latestTurnComplete;
+}
+
+function snapshotSaysInterrupted(snapshot: WorkflowDraftSnapshot): boolean {
+  return !snapshot.turnInProgress && !snapshot.latestTurnComplete;
 }
 
 const createWorkflowDraftState = (
@@ -133,33 +186,93 @@ const createWorkflowDraftState = (
 ): WorkflowDraftState => ({
   draftsById: {},
   threadMessagesByDraftId: {},
+  turnByDraftId: {},
+
+  /**
+   * Snapshot reducer (design §A.1.4). Always refreshes draftsById; the thread
+   * is decided purely from (turn record, snapshot):
+   *
+   * | record            | snapshot        | thread                     |
+   * |-------------------|-----------------|----------------------------|
+   * | none              | any             | replace (empty-fetch guard)|
+   * | streaming         | any             | untouched                  |
+   * | awaiting_backend  | in progress     | untouched                  |
+   * | awaiting_backend  | complete        | merge final reply; settle  |
+   * | awaiting_backend  | interrupted     | append error text; settle  |
+   * | settled           | any             | untouched                  |
+   */
   upsert: (snapshot) => {
     set((state) => {
-      const previous = state.threadMessagesByDraftId[snapshot.draftId] ?? [];
-      let nextThread = shouldKeepLiveThread(previous, snapshot.messages, {
-        turnInProgress: snapshot.turnInProgress,
-      })
-        ? previous
-        : messagesFromSnapshot(snapshot.messages);
-      // Leave/return often keeps reasoning/tools but never received the final
-      // SSE text. When the draft completes, merge the persisted reply in.
-      if (
-        nextThread === previous &&
-        !snapshot.turnInProgress &&
-        snapshot.latestTurnComplete &&
-        lastAssistantLacksText(previous)
-      ) {
-        nextThread = mergeFinalReplyIntoThread(previous, snapshot.messages);
+      const key = snapshot.draftId;
+      const previous = state.threadMessagesByDraftId[key] ?? [];
+      const turn = state.turnByDraftId[key];
+
+      let nextThread = previous;
+      let nextTurn = turn;
+      if (!turn) {
+        // Stale/empty fetch must not wipe an existing thread.
+        nextThread =
+          snapshot.messages.length === 0 && previous.length > 0
+            ? previous
+            : messagesFromSnapshot(snapshot.messages);
+      } else if (turn.phase === "awaiting_backend") {
+        if (snapshotSaysComplete(snapshot)) {
+          nextThread = mergeFinalReplyIntoThread(previous, snapshot.messages);
+          nextTurn = { ...turn, phase: "settled" };
+        } else if (snapshotSaysInterrupted(snapshot)) {
+          nextThread = mergeFinalReplyIntoThread(previous, [
+            { role: "assistant", content: CHAT_ERROR_REPLY },
+          ]);
+          nextTurn = { ...turn, phase: "settled" };
+        }
+        // still in progress → untouched
       }
+      // streaming / settled → untouched
+
       return {
-        draftsById: { ...state.draftsById, [snapshot.draftId]: snapshot },
+        draftsById: { ...state.draftsById, [key]: snapshot },
         threadMessagesByDraftId: {
           ...state.threadMessagesByDraftId,
-          [snapshot.draftId]: nextThread,
+          [key]: nextThread,
+        },
+        turnByDraftId:
+          nextTurn === turn
+            ? state.turnByDraftId
+            : { ...state.turnByDraftId, [key]: nextTurn as TurnRecord },
+      };
+    });
+  },
+
+  applyDraftPatch: (draftId, patch) => {
+    set((state) => {
+      const existing = state.draftsById[draftId];
+      if (!existing) return state;
+      return {
+        draftsById: {
+          ...state.draftsById,
+          [draftId]: {
+            ...existing,
+            ...(patch.artifactMarkdown !== undefined
+              ? { artifactMarkdown: patch.artifactMarkdown }
+              : null),
+            ...(patch.artifactRevision !== undefined
+              ? { artifactRevision: patch.artifactRevision }
+              : null),
+            ...(patch.artifactHash !== undefined
+              ? { artifactHash: patch.artifactHash }
+              : null),
+            ...(patch.completeness !== undefined
+              ? { completeness: patch.completeness }
+              : null),
+            ...(patch.readyToSave !== undefined
+              ? { readyToSave: patch.readyToSave }
+              : null),
+          },
         },
       };
     });
   },
+
   setThreadMessages: (draftId, messages) => {
     set((state) => ({
       threadMessagesByDraftId: {
@@ -168,12 +281,179 @@ const createWorkflowDraftState = (
       },
     }));
   },
+
+  beginTurn: (draftId, { userContent, placeholderContent, pendingKey }) => {
+    set((state) => {
+      const existing = state.draftsById[draftId];
+      if (!existing) return state; // I5: removed draft → no-op
+      const flags = flagsForPhase("streaming");
+      const previous = state.threadMessagesByDraftId[draftId] ?? [];
+      return {
+        draftsById: {
+          ...state.draftsById,
+          [draftId]: {
+            ...existing,
+            turnInProgress: flags.turnInProgress,
+            latestTurnComplete: flags.latestTurnComplete,
+          },
+        },
+        threadMessagesByDraftId: {
+          ...state.threadMessagesByDraftId,
+          [draftId]: [
+            ...previous,
+            {
+              id: newThreadMessageId("user"),
+              role: "user",
+              content: userContent,
+            },
+            {
+              id: newThreadMessageId("assistant"),
+              role: "assistant",
+              content: placeholderContent,
+            },
+          ],
+        },
+        turnByDraftId: {
+          ...state.turnByDraftId,
+          [draftId]: { phase: "streaming", startedAt: Date.now(), pendingKey },
+        },
+      };
+    });
+  },
+
+  applyTurnProgress: (draftId, content) => {
+    set((state) => {
+      if (!state.draftsById[draftId]) return state;
+      if (state.turnByDraftId[draftId]?.phase !== "streaming") return state;
+      const previous = state.threadMessagesByDraftId[draftId] ?? [];
+      return {
+        threadMessagesByDraftId: {
+          ...state.threadMessagesByDraftId,
+          [draftId]: replaceLastAssistantContent(previous, content),
+        },
+      };
+    });
+  },
+
+  completeTurn: (draftId, patch) => {
+    set((state) => {
+      const existing = state.draftsById[draftId];
+      if (!existing) return state;
+      const flags = flagsForPhase("complete");
+      const previous = state.threadMessagesByDraftId[draftId] ?? [];
+      const turn = state.turnByDraftId[draftId];
+      return {
+        draftsById: {
+          ...state.draftsById,
+          [draftId]: {
+            ...existing,
+            messages: [
+              ...existing.messages,
+              { role: "user", content: patch.userText },
+              { role: "assistant", content: patch.reply },
+            ],
+            artifactMarkdown: patch.artifactMarkdown,
+            artifactRevision: patch.artifactRevision ?? existing.artifactRevision,
+            artifactHash: patch.artifactHash ?? existing.artifactHash,
+            turnInProgress: flags.turnInProgress,
+            latestTurnComplete: flags.latestTurnComplete,
+            ...(patch.completeness !== undefined
+              ? { completeness: patch.completeness }
+              : null),
+            ...(patch.readyToSave !== undefined
+              ? { readyToSave: patch.readyToSave }
+              : null),
+            ...(patch.lastChangeSummary !== undefined
+              ? { lastChangeSummary: patch.lastChangeSummary }
+              : null),
+            ...(patch.memoryState !== undefined
+              ? { memoryState: patch.memoryState }
+              : null),
+            ...(patch.memoryCandidates !== undefined
+              ? { memoryCandidates: patch.memoryCandidates }
+              : null),
+          },
+        },
+        threadMessagesByDraftId: {
+          ...state.threadMessagesByDraftId,
+          [draftId]: replaceLastAssistantContent(previous, patch.content),
+        },
+        turnByDraftId: {
+          ...state.turnByDraftId,
+          [draftId]: {
+            phase: "settled",
+            startedAt: turn?.startedAt ?? Date.now(),
+            pendingKey: turn?.pendingKey,
+          },
+        },
+      };
+    });
+  },
+
+  markAwaitingBackend: (draftId) => {
+    set((state) => {
+      const existing = state.draftsById[draftId];
+      const turn = state.turnByDraftId[draftId];
+      if (!existing || !turn) return state;
+      const flags = flagsForPhase("backend_running");
+      return {
+        draftsById: {
+          ...state.draftsById,
+          [draftId]: {
+            ...existing,
+            turnInProgress: flags.turnInProgress,
+            latestTurnComplete: flags.latestTurnComplete,
+          },
+        },
+        turnByDraftId: {
+          ...state.turnByDraftId,
+          [draftId]: { ...turn, phase: "awaiting_backend" },
+        },
+      };
+    });
+  },
+
+  failTurn: (draftId, friendlyMessage) => {
+    set((state) => {
+      const existing = state.draftsById[draftId];
+      if (!existing) return state;
+      const flags = flagsForPhase("failed");
+      const previous = state.threadMessagesByDraftId[draftId] ?? [];
+      const turn = state.turnByDraftId[draftId];
+      return {
+        draftsById: {
+          ...state.draftsById,
+          [draftId]: {
+            ...existing,
+            turnInProgress: flags.turnInProgress,
+            latestTurnComplete: flags.latestTurnComplete,
+          },
+        },
+        threadMessagesByDraftId: {
+          ...state.threadMessagesByDraftId,
+          [draftId]: replaceLastAssistantContent(previous, [
+            { type: "text", text: friendlyMessage },
+          ]),
+        },
+        turnByDraftId: {
+          ...state.turnByDraftId,
+          [draftId]: {
+            phase: "settled",
+            startedAt: turn?.startedAt ?? Date.now(),
+            pendingKey: turn?.pendingKey,
+          },
+        },
+      };
+    });
+  },
+
   remove: (draftId) => {
     set((state) => {
       const { [draftId]: _removed, ...draftsById } = state.draftsById;
       const { [draftId]: _thread, ...threadMessagesByDraftId } =
         state.threadMessagesByDraftId;
-      return { draftsById, threadMessagesByDraftId };
+      const { [draftId]: _turn, ...turnByDraftId } = state.turnByDraftId;
+      return { draftsById, threadMessagesByDraftId, turnByDraftId };
     });
   },
 });
