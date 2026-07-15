@@ -52,7 +52,24 @@ a developer repro before beta.
 
 ### HIGH
 
-**H1 — Intermittent class-home hang after chat turns (needs developer repro).**
+**H1 — Intermittent class-home hang after chat turns.**
+
+> 🟢 **Not reproducible after runner-lite (2026-07-14) — likely resolved.**
+> Stress-tested on the runner-lite code: navigating to class home mid-turn,
+> letting a turn complete while on class home (notifier/toast churn), and an
+> aggressive rapid triple-bounce (memory↔home) during a live turn all render the
+> dashboard cleanly ("At a glance" present, no `Loading class…` hang) across
+> every attempt. H1 was a *client hydration failure* observed on the
+> pre-runner-lite provider, which carried six mirrored `useState`s + two
+> store-sync effects + an always-on recovery poll — exactly the render churn a
+> hydration break stems from; runner-lite deleted all of it. Not a *guaranteed*
+> fix (the original repro was non-deterministic/transient and cleared on
+> restart), so keep it on a watch list and confirm once more against a
+> production build, but it is no longer observable. This also removes the
+> primary motivation for doing M2 (marker cleanup) *as an H1 fix* — M2 remains
+> valuable as architectural cleanup, but there is no longer a bug driving it.
+
+Original finding (pre-runner-lite):
 After running the plan + memory workflows and navigating back to class home, the
 dashboard got stuck on the `Loading class…` Suspense fallback (body = 28 chars).
 It reproduced across a fresh browser tab and persisted through a page reload.
