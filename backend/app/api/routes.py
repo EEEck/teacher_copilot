@@ -22,6 +22,8 @@ from app.api.deps import (
 from app.config import get_settings
 from app.openai_bootstrap import is_openai_configured
 from app.schemas.api import (
+    BetaFeedbackRequest,
+    BetaFeedbackResponse,
     BetaIdentityResponse,
     BetaLoginRequest,
     ChatRequest,
@@ -670,6 +672,37 @@ def beta_me(
         workspace_id=identity.workspace_id,
         role=identity.role,
     )
+
+
+@router.post("/beta/feedback", response_model=BetaFeedbackResponse)
+def beta_feedback(
+    body: BetaFeedbackRequest,
+    request: Request,
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> BetaFeedbackResponse:
+    """Store teacher feedback in beta.sqlite3. Only available when beta is enabled."""
+    settings = get_settings()
+    if not settings.beta_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+    token = request.cookies.get(beta_auth.cookie_name)
+    if not token:
+        raise HTTPException(status_code=401, detail="Beta login required")
+    try:
+        identity = beta_auth.resolve_session_token(token)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    message = body.message.strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="message is required")
+    payload: dict[str, str] = {"message": message}
+    if body.page and body.page.strip():
+        payload["page"] = body.page.strip()
+    beta_auth.telemetry.record_event(
+        identity,
+        event_type="teacher_feedback",
+        payload=payload,
+    )
+    return BetaFeedbackResponse()
 
 
 @router.get("/classes", response_model=ClassesResponse)

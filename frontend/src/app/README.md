@@ -5,9 +5,12 @@ state, and composing domain components.
 
 ## Main Routes
 
-- `page.tsx` - landing/class selection.
+- `page.tsx` - marketing home (`HomeLanding`) plus quiet gray “Coming soon”
+  class list from `GET /api/classes`.
 - `beta/login/page.tsx` - invite-code beta login; backend sets the
   HTTP-only beta session cookie.
+- `beta/feedback/page.tsx` - beta-only teacher feedback form
+  (`POST /api/beta/feedback` → `beta.sqlite3`).
 - `classes/[classId]/page.tsx` - class home and memory/timeline entry point.
   Surfaces a short Memory Sweep badge from the backend saved-review status.
 - `classes/[classId]/memory/page.tsx` - update-memory artifact session. Reads

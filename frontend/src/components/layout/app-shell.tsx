@@ -43,6 +43,9 @@ export function AppShell({
             <Link href="/docs" className="hover:text-foreground">
               Docs
             </Link>
+            <Link href="/beta/feedback" className="hover:text-foreground">
+              Feedback
+            </Link>
             <span>Teacher copilot</span>
           </nav>
         </div>

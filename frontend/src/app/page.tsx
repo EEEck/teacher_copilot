@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { HomeLanding } from "@/components/klassenpilot/home-landing";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { client, type ClassSummary } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 export default function HomePage() {
   const [classes, setClasses] = useState<ClassSummary[]>([]);
@@ -41,61 +43,84 @@ export default function HomePage() {
   const needsLogin = error?.includes("API 401");
 
   return (
-    <div>
-      <header className="mb-10">
-        <h1 className="text-3xl font-bold tracking-tight">Select a class</h1>
-        <p className="mt-2 text-muted-foreground">
-          Open your lesson timeline, log memory, or generate a lesson plan.
-        </p>
-      </header>
+    <div className="relative left-1/2 w-screen max-w-[100vw] -translate-x-1/2 -mx-6 -my-6 min-h-[calc(100vh-3.5rem)] bg-muted/60 px-6 py-10 sm:px-8 sm:py-14">
+      <div className="mx-auto w-full max-w-[58rem]">
+        <HomeLanding />
 
-      {error && (
-        <Alert className="mb-6 border-border bg-muted text-foreground">
-          <AlertDescription>
-            {needsLogin ? (
-              <>
-                Beta login required.{" "}
-                <Link href="/beta/login" className="text-primary hover:underline">
-                  Enter invite code
-                </Link>
-              </>
-            ) : (
-              <>
-                Backend not reachable: {error}. Start the API with{" "}
-                <code className="rounded bg-accent px-1 text-accent-foreground">
-                  uvicorn app.main:app --reload
-                </code>
-              </>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
+        <section
+          aria-labelledby="coming-soon-classes-heading"
+          className="mt-10 opacity-70 sm:mt-12"
+        >
+          <h2
+            id="coming-soon-classes-heading"
+            className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+          >
+            Coming soon
+          </h2>
+          <p className="mb-4 max-w-lg text-sm leading-relaxed text-muted-foreground">
+            All classes in this workspace. The beta highlights Chemie 9b above; more classes will
+            land here over time.
+          </p>
 
-      <div className="grid gap-4">
-        {loading && (
-          <Card>
-            <CardContent className="p-6 text-sm text-muted-foreground">
-              Loading classes...
-            </CardContent>
-          </Card>
-        )}
-        {!loading &&
-          classes.map((c) => (
-            <Link
-              key={c.id}
-              href={`/classes/${c.id}`}
-              className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-            >
-              <Card className="transition hover:border-primary/30 hover:shadow-md">
-                <CardContent className="p-6">
-                  <h2 className="text-xl font-semibold">{c.label}</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Subject: {c.subject}
-                  </p>
+          {error && (
+            <Alert className="mb-4 border-border/60 bg-muted/40 text-muted-foreground shadow-none">
+              <AlertDescription>
+                {needsLogin ? (
+                  <>
+                    Beta login required.{" "}
+                    <Link href="/beta/login" className="text-foreground underline underline-offset-2">
+                      Enter invite code
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    Backend not reachable: {error}. Start the API with{" "}
+                    <code className="rounded bg-muted px-1 text-foreground/80">
+                      uvicorn app.main:app --reload
+                    </code>
+                  </>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid gap-2">
+            {loading && (
+              <Card className="border-border/50 bg-muted/30 shadow-none">
+                <CardContent className="p-5 text-sm text-muted-foreground">
+                  Loading classes...
                 </CardContent>
               </Card>
-            </Link>
-          ))}
+            )}
+            {!loading &&
+              classes.map((c) => (
+                <Link
+                  key={c.id}
+                  href={`/classes/${c.id}`}
+                  className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                >
+                  <Card
+                    className={cn(
+                      "border-border/50 bg-muted/30 shadow-none transition",
+                      "hover:border-border hover:bg-muted/50",
+                    )}
+                  >
+                    <CardContent className="p-5">
+                      <h3 className="text-base font-medium text-muted-foreground">{c.label}</h3>
+                      <p className="mt-1 text-sm text-muted-foreground/80">Subject: {c.subject}</p>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            {!loading && !error && classes.length === 0 && (
+              <Card className="border-border/50 bg-muted/30 shadow-none">
+                <CardContent className="p-5 text-sm text-muted-foreground">
+                  No classes yet.
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );

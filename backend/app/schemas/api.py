@@ -24,6 +24,15 @@ class BetaIdentityResponse(BaseModel):
     role: str
 
 
+class BetaFeedbackRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=8000)
+    page: str | None = Field(default=None, max_length=200)
+
+
+class BetaFeedbackResponse(BaseModel):
+    status: str = "ok"
+
+
 class ClassSummary(BaseModel):
     id: str
     label: str
