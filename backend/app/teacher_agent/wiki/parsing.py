@@ -53,6 +53,34 @@ def clean_results_title(title: str) -> str:
     return cleaned
 
 
+_PLAN_TARGET_DATE_RE = re.compile(r"(Target date:\s*)([^\n]*)")
+
+
+def normalize_plan_target_date(markdown: str, lesson_date: str) -> str:
+    """Make the plan's ``Target date:`` line reflect the saved lesson date.
+
+    The plan template bakes in a placeholder (or, historically, ``date.today()``)
+    at draft-creation time — before the teacher has picked the lesson date — and
+    nothing rewrites that heading afterward. Left alone, a plan filed under
+    ``lessons/2026-09-28/`` can carry ``Target date: 2026-07-13`` on disk. This
+    reconciles the heading at the save boundary. Idempotent; inserts a metadata
+    line after the title if the token is missing. No-op when ``lesson_date`` is
+    empty.
+    """
+    if not lesson_date:
+        return markdown
+    if _PLAN_TARGET_DATE_RE.search(markdown):
+        return _PLAN_TARGET_DATE_RE.sub(
+            lambda m: f"{m.group(1)}{lesson_date}", markdown, count=1
+        )
+    lines = markdown.splitlines()
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("# "):
+            lines.insert(i + 1, f"\n> Target date: {lesson_date}")
+            return "\n".join(lines)
+    return f"> Target date: {lesson_date}\n\n{markdown}"
+
+
 def extract_date_from_diary(text: str) -> Optional[str]:
     m = re.search(r"Lesson Results\s*—\s*(\d{4}-\d{2}-\d{2})", text)
     if m:

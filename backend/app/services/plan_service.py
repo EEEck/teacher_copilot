@@ -233,6 +233,10 @@ class PlanService:
                 except WorkflowDraftConflict as exc:
                     raise ValueError(str(exc)) from exc
                 plan_markdown = row.artifact_markdown
+        # The plan's "Target date" heading is a placeholder until save; reconcile
+        # it with the chosen lesson date before verifying and persisting so the
+        # stored plan is internally consistent (audit H2).
+        plan_markdown = self.wiki.normalize_plan_target_date(plan_markdown, lesson_date)
         verification = await self.agents.verify_artifact_for_write(
             class_id, "lesson plan", plan_markdown, session.executive
         )
@@ -298,7 +302,10 @@ class PlanService:
         return await self.agents.plan_lesson(class_id, req.duration_minutes, anchor)
 
     def save_plan(self, class_id: str, lesson_date: str, plan: LessonPlan) -> str:
-        return self.wiki.save_lesson_plan(class_id, lesson_date, plan.to_markdown())
+        markdown = self.wiki.normalize_plan_target_date(
+            plan.to_markdown(), lesson_date
+        )
+        return self.wiki.save_lesson_plan(class_id, lesson_date, markdown)
 
     def discard_draft(self, draft_id: str) -> None:
         if self.workflow_drafts is None:

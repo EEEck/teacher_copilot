@@ -73,6 +73,28 @@ Key evidence and caveats:
   the time available and do not want to assert a false root cause.
 
 **H2 — Plan artifact "Target date" is wrong and persists to disk.**
+
+> ✅ **RESOLVED 2026-07-14.** Two-part deterministic fix:
+> (1) `empty_plan_template()` now emits `Target date: (set when saving)` instead
+> of `date.today()` — no date is baked in at draft-creation time
+> ([context_packs.py](../backend/app/teacher_agent/wiki/context_packs.py));
+> (2) a new pure helper `normalize_plan_target_date(markdown, lesson_date)`
+> ([parsing.py](../backend/app/teacher_agent/wiki/parsing.py), exposed on
+> `WikiStore`) rewrites/inserts the heading at the save boundary. Wired into
+> `PlanService.save` **before** `verify_artifact_for_write` (so the verifier
+> sees the final artifact) and into the legacy `save_plan` path
+> ([plan_service.py](../backend/app/services/plan_service.py)). 7 deterministic
+> unit tests in `tests/test_plan_target_date.py` (replace stale date / replace
+> placeholder / idempotent / insert-when-missing / no-op on empty date /
+> template has no baked-in date / template→save composition). Offline suites
+> (prompts, wiki tools/indexing, reference resolution, workflow drafts) stay
+> green. **Test-infra note:** the pre-existing real-agent smoke tests
+> (`test_api_plan::test_plan_full_flow`, `test_output_safety`,
+> `test_api_stream`) fail in this worktree because they exercise the live agent
+> rather than the stub (their openings/plans cite real seed data) — they fail
+> identically with this fix stashed and with prod or dev `.env`, so they are not
+> caused by H2; worth a separate look since they claim to run offline.
+
 `empty_plan_template()` bakes in `date.today()`
 ([context_packs.py:746](../backend/app/teacher_agent/wiki/context_packs.py:746)):
 `d = lesson_date or date.today().isoformat()`. The plan session starts before the

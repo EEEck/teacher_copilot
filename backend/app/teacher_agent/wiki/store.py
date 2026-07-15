@@ -231,6 +231,9 @@ class WikiStore:
     def extract_title(self, text):
         return parsing.extract_title(text)
 
+    def normalize_plan_target_date(self, markdown, lesson_date):
+        return parsing.normalize_plan_target_date(markdown, lesson_date)
+
     def extract_date_from_diary(self, text):
         return parsing.extract_date_from_diary(text)
 

@@ -743,7 +743,11 @@ def build_ingest_context(store, class_id: str) -> str:
 
 
 def empty_plan_template(store, lesson_date: Optional[str] = None) -> str:
-    d = lesson_date or date.today().isoformat()
+    # The lesson date is chosen at save time, not at draft creation. Use a
+    # placeholder rather than baking in today's date, which would otherwise
+    # persist into the saved plan (see parsing.normalize_plan_target_date, which
+    # reconciles this at the save boundary).
+    d = lesson_date or "(set when saving)"
     return (
         f"# Lesson Plan — Next lesson\n\n"
         f"> Duration: 45 min | Target date: {d}\n\n"
