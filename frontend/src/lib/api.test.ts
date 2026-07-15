@@ -64,6 +64,81 @@ describe("client beta auth transport", () => {
     expect(timeline.entries[0].memory_draft_id).toBe("draft-123");
   });
 
+  it("sends credentials on class brief, wiki pages, and discussion bootstrap", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          class_id: "chemie_9b_2026_27",
+          summary: "Focus on redox practice.",
+          recommended_action: {
+            label: "Create lesson plan",
+            href: "/classes/chemie_9b_2026_27/plan",
+          },
+          reasons: [],
+          watch_items: [],
+          source_paths: ["wiki/classes/chemie_9b_2026_27/memory/course_state.md"],
+          generated_at: "2026-07-12T00:00:00Z",
+          cached: true,
+        }),
+        { status: 200 },
+      ),
+    );
+    await client.getClassBrief("chemie_9b_2026_27");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("/api/classes/chemie_9b_2026_27/brief"),
+      expect.objectContaining({ credentials: "include" }),
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          class_id: "chemie_9b_2026_27",
+          pages: [
+            {
+              kind: "memory",
+              id: "course_state",
+              path: "wiki/classes/chemie_9b_2026_27/memory/course_state.md",
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    await client.listWikiPages("chemie_9b_2026_27");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("/api/classes/chemie_9b_2026_27/wiki/pages"),
+      expect.objectContaining({ credentials: "include" }),
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          session_id: "discuss-1",
+          draft_id: "draft-discuss-1",
+          class_id: "chemie_9b_2026_27",
+          messages: [],
+          artifact_revision: 1,
+          artifact_hash: "hash",
+          turn_in_progress: false,
+          latest_turn_complete: true,
+        }),
+        { status: 200 },
+      ),
+    );
+    await client.startDiscussionSession("chemie_9b_2026_27");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining(
+        "/api/classes/chemie_9b_2026_27/discussion/sessions",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+      }),
+    );
+  });
+
   it("rethrows WriteVerificationBlockedError for write-gate 409 responses", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(

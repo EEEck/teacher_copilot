@@ -429,9 +429,81 @@ class WikiFileResponse(BaseModel):
     markdown: str
 
 
+class WikiPageSummary(BaseModel):
+    kind: str
+    id: str = ""
+    path: str
+
+
+class WikiPagesResponse(BaseModel):
+    class_id: str
+    pages: list[WikiPageSummary] = Field(default_factory=list)
+
+
+class ClassBriefAction(BaseModel):
+    label: str
+    href: str = ""
+    rationale: str = ""
+
+
+class ClassBriefResponse(BaseModel):
+    class_id: str
+    summary: str
+    recommended_action: ClassBriefAction
+    reasons: list[str] = Field(default_factory=list)
+    watch_items: list[str] = Field(default_factory=list)
+    source_paths: list[str] = Field(default_factory=list)
+    generated_at: str
+    cached: bool = False
+
+
 class ChatAttachment(BaseModel):
     filename: str
     content: str
+
+
+class DiscussSessionStatus(str, Enum):
+    chatting = "chatting"
+
+
+class DiscussSession(BaseModel):
+    session_id: str
+    draft_id: str = ""
+    artifact_revision: int = 0
+    artifact_hash: str = ""
+    turn_in_progress: bool = False
+    latest_turn_complete: bool = True
+    class_id: str
+    status: DiscussSessionStatus = DiscussSessionStatus.chatting
+    messages: list[ChatMessage] = Field(default_factory=list)
+    opening_message: str = ""
+
+
+class DiscussDraft(BaseModel):
+    draft_id: str = ""
+    artifact_revision: int = 0
+    artifact_hash: str = ""
+    turn_in_progress: bool = False
+    latest_turn_complete: bool = True
+    messages: list[ChatMessage] = Field(default_factory=list)
+
+
+class DiscussChatRequest(BaseModel):
+    message: str
+    attachments: list[ChatAttachment] = Field(default_factory=list)
+
+
+class DiscussChatResponse(BaseModel):
+    reply: str
+    draft_id: str = ""
+    artifact_revision: int = 0
+    artifact_hash: str = ""
+    discussion_state: dict = Field(default_factory=dict)
+    evidence_briefs: list[dict] = Field(default_factory=list)
+    memory_candidates: list[dict] = Field(default_factory=list)
+    source_paths: list[str] = Field(default_factory=list)
+    suggested_actions: list[ClassBriefAction] = Field(default_factory=list)
+    executive_state: Optional[dict] = None
 
 
 class ChatRequest(BaseModel):
@@ -562,6 +634,10 @@ class PlanTraceResponse(AgentTraceResponse):
 
 class MemoryTraceResponse(AgentTraceResponse):
     """Debug/review bundle for one update-memory session."""
+
+
+class DiscussTraceResponse(AgentTraceResponse):
+    """Debug/review bundle for one class-discussion session."""
 
 
 class PlanLessonRequest(BaseModel):

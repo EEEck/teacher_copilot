@@ -378,6 +378,68 @@ export type MemoryCompactResponse = {
   stale_report: string[];
   warnings: string[];
 };
+export type WikiPageSummary = {
+  kind: string;
+  id: string;
+  path: string;
+};
+
+export type WikiPagesResponse = {
+  class_id: string;
+  pages: WikiPageSummary[];
+};
+
+export type ClassBriefAction = {
+  label: string;
+  href: string;
+  rationale?: string;
+};
+
+export type ClassBrief = {
+  class_id: string;
+  summary: string;
+  recommended_action: ClassBriefAction;
+  reasons: string[];
+  watch_items: string[];
+  source_paths: string[];
+  generated_at: string;
+  cached: boolean;
+};
+
+export type DiscussSession = {
+  session_id: string;
+  draft_id: string;
+  artifact_revision: number;
+  artifact_hash: string;
+  turn_in_progress: boolean;
+  latest_turn_complete: boolean;
+  class_id: string;
+  status: string;
+  messages: ChatMessage[];
+  opening_message: string;
+};
+
+export type DiscussDraft = DraftMetadata & {
+  turn_in_progress?: boolean;
+  latest_turn_complete?: boolean;
+  messages?: ChatMessage[];
+  /** Discuss has no saveable markdown artifact; always empty when present. */
+  artifact_markdown?: string;
+};
+
+export type DiscussChatResponse = {
+  reply: string;
+  draft_id: string;
+  artifact_revision: number;
+  artifact_hash: string;
+  discussion_state: Record<string, unknown>;
+  evidence_briefs: Record<string, unknown>[];
+  memory_candidates: MemoryCandidate[];
+  source_paths: string[];
+  suggested_actions: ClassBriefAction[];
+  executive_state?: Record<string, unknown> | null;
+};
+
 export type LessonFlowPhase = { phase: string; minutes: number; description: string };
 export type LessonPlan = {
   title: string;
@@ -546,6 +608,37 @@ export const client = {
   getWikiFile: (classId: string, wikiPath: string) =>
     api<{ wiki_path: string; markdown: string }>(
       `/api/classes/${classId}/wiki/file?path=${encodeURIComponent(wikiPath)}`,
+    ),
+  listWikiPages: (classId: string, kind?: string) =>
+    api<WikiPagesResponse>(
+      `/api/classes/${classId}/wiki/pages${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`,
+    ),
+  getClassBrief: (classId: string) =>
+    api<ClassBrief>(`/api/classes/${classId}/brief`),
+  refreshClassBrief: (classId: string) =>
+    api<ClassBrief>(`/api/classes/${classId}/brief/refresh`, { method: "POST" }),
+  startDiscussionSession: (classId: string) =>
+    api<DiscussSession>(`/api/classes/${classId}/discussion/sessions`, {
+      method: "POST",
+    }),
+  discussionGetDraft: (classId: string, sessionId: string) =>
+    api<DiscussDraft>(
+      `/api/classes/${classId}/discussion/sessions/${sessionId}/draft`,
+    ),
+  discussionChatStream: (
+    classId: string,
+    sessionId: string,
+    message: string,
+    attachments?: ChatAttachment[],
+    signal?: AbortSignal,
+  ) =>
+    apiStreamPost(
+      `/api/classes/${classId}/discussion/sessions/${sessionId}/chat/stream`,
+      {
+        message,
+        attachments: attachments ?? [],
+      },
+      signal,
     ),
   ingestCommit: (
     classId: string,

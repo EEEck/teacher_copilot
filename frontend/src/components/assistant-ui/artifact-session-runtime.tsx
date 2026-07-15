@@ -28,7 +28,13 @@ import { streamPartsToRunContent } from "@/lib/sse-chat";
 import { useWorkflowChatRuntime, type UpdateWorkflowThread } from "@/features/workflow-drafts/workflow-chat-runtime";
 import { workflowTurnActivity } from "@/features/workflow-drafts/workflow-turn-activity";
 import {
+  flagsForPhase,
+  resolveClientStreamEnd,
+} from "@/features/workflow-drafts/workflow-turn-state";
+import {
   newThreadMessageId,
+  isPlaceholderAssistantContent,
+  lastAssistantContent,
   replaceLastAssistantContent,
 } from "@/features/workflow-drafts/thread-messages";
 import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
@@ -68,6 +74,18 @@ export type ArtifactSessionConfig = {
     attachments?: SessionAttachment[];
     signal?: AbortSignal;
   }) => AsyncGenerator<ChatStreamChunk>;
+  /** Poll draft status while showing the resumed Still-working spinner. */
+  fetchDraft?: () => Promise<{
+    draftId: string;
+    artifactRevision: number;
+    artifactHash: string;
+    turnInProgress: boolean;
+    latestTurnComplete: boolean;
+    messages: ChatMessage[];
+    artifactMarkdown: string;
+    completeness?: CompletenessChecklist | null;
+    memoryState?: Record<string, unknown> | null;
+  }>;
   patchDraft?: (markdown: string) => Promise<{
     completeness?: CompletenessChecklist;
     readyToSave?: boolean;
@@ -113,6 +131,7 @@ type ArtifactSessionContextValue = {
   readyToSave: boolean;
   lastChangeSummary: string | null;
   memoryState: Record<string, unknown> | null;
+  memoryCandidates: MemoryCandidate[];
   isUpdating: boolean;
   syncStatus: "idle" | "saving" | "error";
   undo: () => void;
@@ -163,6 +182,7 @@ export function ArtifactSessionRuntimeProvider({
     initialMemoryState = null,
     chatStream,
     patchDraft,
+    fetchDraft,
     getSessionId: configGetSessionId,
     onSessionLost,
     onCompletenessChange,
@@ -211,6 +231,7 @@ export function ArtifactSessionRuntimeProvider({
   const [memoryState, setMemoryState] = useState<Record<string, unknown> | null>(
     initialMemoryState,
   );
+  const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidate[]>([]);
   const memoryStateRef = useRef(memoryState);
   memoryStateRef.current = memoryState;
   const configLessonDateRef = useRef(configLessonDate);
@@ -219,6 +240,14 @@ export function ArtifactSessionRuntimeProvider({
   configLessonTitleRef.current = configLessonTitle;
   const [isUpdating, setIsUpdating] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "error">("idle");
+  const streamAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
+    };
+  }, []);
 
   const artifactMarkdown = editor.history[editor.index] ?? initialMarkdown;
   const editorRef = useRef(editor);
@@ -270,7 +299,10 @@ export function ArtifactSessionRuntimeProvider({
     (
       checklist: CompletenessChecklist | null | undefined,
       ready: boolean | undefined,
-      result?: Pick<ArtifactChatResult, "lastChangeSummary" | "memoryState">,
+      result?: Pick<
+        ArtifactChatResult,
+        "lastChangeSummary" | "memoryState" | "memoryCandidates"
+      >,
     ) => {
       if (checklist) {
         setCompleteness(checklist);
@@ -282,6 +314,9 @@ export function ArtifactSessionRuntimeProvider({
       }
       if (result?.memoryState !== undefined) {
         setMemoryState(result.memoryState ?? null);
+      }
+      if (result?.memoryCandidates !== undefined) {
+        setMemoryCandidates(result.memoryCandidates ?? []);
       }
     },
     [onCompletenessChange],
@@ -304,6 +339,44 @@ export function ArtifactSessionRuntimeProvider({
       });
     }
   }, [storedDraft, pushMarkdown, applyMeta]);
+
+  // If the UI shows Still working but the browser SSE is gone, poll the draft
+  // directly. Covers leave/return when the pending marker was cleared too early.
+  useEffect(() => {
+    if (!fetchDraft) return;
+    if (!activeTurnInProgress || isUpdating) return;
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const draft = await fetchDraft();
+        if (cancelled || draft.turnInProgress) return;
+        useWorkflowDraftStore.getState().upsert({
+          mode,
+          classId,
+          sessionId: sessionIdRef.current,
+          draftId: draft.draftId,
+          messages: draft.messages,
+          artifactMarkdown: draft.artifactMarkdown,
+          artifactRevision: draft.artifactRevision,
+          artifactHash: draft.artifactHash,
+          turnInProgress: draft.turnInProgress,
+          latestTurnComplete: draft.latestTurnComplete,
+          completeness: draft.completeness ?? null,
+          memoryState: draft.memoryState ?? null,
+        });
+      } catch {
+        // Keep spinner; a later poll or notifier can still recover.
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(() => {
+      void refresh();
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeTurnInProgress, isUpdating, fetchDraft, mode, classId]);
 
   const applyDraftMetadata = useCallback(
     (metadata?: {
@@ -398,8 +471,13 @@ export function ArtifactSessionRuntimeProvider({
             })
           : "";
       // Successful turns leave the pending marker for PendingTurnNotifier.
-      // Failed client streams clear it so the notifier does not toast a false completion.
+      // Only clear it on a hard client failure with no usable streamed content.
       let turnFailed = false;
+      let finalResult: ArtifactChatResult | null = null;
+      let hadStreamedContent = false;
+      const abort = new AbortController();
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = abort;
       try {
         const text = extractText(message);
         const attachments = await extractSessionAttachments(
@@ -407,24 +485,27 @@ export function ArtifactSessionRuntimeProvider({
         );
         const currentMd =
           editorRef.current.history[editorRef.current.index] ?? initialMarkdown;
-        let finalResult: ArtifactChatResult | null = null;
+        setActiveTurnInProgress(true);
         for await (const chunk of chatStream({
           message: text,
           currentMarkdown: currentMd,
           attachments: attachments.length ? attachments : undefined,
+          signal: abort.signal,
         })) {
           if (chunk.kind === "progress") {
             if (chunk.content.length > 0) {
+              const runContent = streamPartsToRunContent(chunk.content) ?? [];
+              if (!isPlaceholderAssistantContent(runContent)) {
+                hadStreamedContent = true;
+              }
               updateThread((messages) =>
-                replaceLastAssistantContent(
-                  messages,
-                  streamPartsToRunContent(chunk.content) ?? [],
-                ),
+                replaceLastAssistantContent(messages, runContent),
               );
             }
             continue;
           }
           finalResult = chunk.result;
+          hadStreamedContent = true;
           pushMarkdown(chunk.result.artifactMarkdown, "agent");
           lastSyncedRef.current = chunk.result.artifactMarkdown;
           applyDraftMetadata(chunk.result);
@@ -439,21 +520,83 @@ export function ArtifactSessionRuntimeProvider({
         }
         if (!finalResult) {
           turnFailed = true;
-          updateThread((messages) =>
-            replaceLastAssistantContent(messages, [{ type: "text", text: CHAT_ERROR_REPLY }]),
-          );
+          let keptPartial = false;
+          updateThread((messages) => {
+            const existing = lastAssistantContent(messages);
+            if (existing && !isPlaceholderAssistantContent(existing)) {
+              keptPartial = true;
+              return messages;
+            }
+            return replaceLastAssistantContent(messages, [
+              { type: "text", text: CHAT_ERROR_REPLY },
+            ]);
+          });
+          if (keptPartial) hadStreamedContent = true;
         }
       } catch (err) {
-        const reply = friendlyChatError(err);
         turnFailed = true;
-        updateThread((messages) =>
-          replaceLastAssistantContent(messages, [{ type: "text", text: reply }]),
-        );
+        let keptPartial = false;
+        updateThread((messages) => {
+          const existing = lastAssistantContent(messages);
+          if (existing && !isPlaceholderAssistantContent(existing)) {
+            keptPartial = true;
+            return messages;
+          }
+          return replaceLastAssistantContent(messages, [
+            { type: "text", text: friendlyChatError(err) },
+          ]);
+        });
+        if (keptPartial) hadStreamedContent = true;
       } finally {
-        if (turnFailed && pendingKey && typeof window !== "undefined") {
+        if (streamAbortRef.current === abort) {
+          streamAbortRef.current = null;
+        }
+        const phase = resolveClientStreamEnd({
+          gotFinal: Boolean(finalResult),
+          hadStreamedContent,
+        });
+        const flags = flagsForPhase(phase);
+        // Hard client failure with nothing useful: drop pending so notifier
+        // does not toast a false completion. Keep pending when backend may
+        // still finish (backend_running).
+        if (
+          phase === "failed" &&
+          turnFailed &&
+          pendingKey &&
+          typeof window !== "undefined"
+        ) {
           clearPendingChatTurn(window.sessionStorage, pendingKey);
         }
-        setIsUpdating(false);
+        setIsUpdating(flags.localStreamActive);
+
+        const draftKey = activeDraftIdRef.current;
+        const existing = useWorkflowDraftStore.getState().draftsById[draftKey];
+        // Abort/unmount can finish after PendingTurnNotifier already applied the
+        // completed draft. Never regress turnInProgress back to true or the UI
+        // sticks on "Still working…" with no final reply.
+        if (
+          phase === "backend_running" &&
+          existing &&
+          !existing.turnInProgress &&
+          existing.latestTurnComplete
+        ) {
+          setActiveTurnInProgress(false);
+          setActiveLatestTurnComplete(true);
+        } else {
+          setActiveTurnInProgress(flags.turnInProgress);
+          if (flags.latestTurnComplete) {
+            setActiveLatestTurnComplete(true);
+          }
+          if (existing) {
+            useWorkflowDraftStore.getState().upsert({
+              ...existing,
+              turnInProgress: flags.turnInProgress,
+              latestTurnComplete: flags.latestTurnComplete
+                ? true
+                : existing.latestTurnComplete,
+            });
+          }
+        }
       }
     },
     [
@@ -471,10 +614,14 @@ export function ArtifactSessionRuntimeProvider({
     localStreamActive: isUpdating,
     backendTurnInProgress: activeTurnInProgress,
   });
+  const onCancel = useCallback(async () => {
+    streamAbortRef.current?.abort();
+  }, []);
   const runtime = useWorkflowChatRuntime({
     draftId: activeDraftId || activeSessionId,
     isRunning: turnActivity.runtimeIsRunning,
     onNew,
+    onCancel,
   });
 
   useEffect(() => {
@@ -519,6 +666,7 @@ export function ArtifactSessionRuntimeProvider({
       readyToSave,
       lastChangeSummary,
       memoryState,
+      memoryCandidates,
       isUpdating,
       syncStatus,
       undo,
@@ -541,6 +689,7 @@ export function ArtifactSessionRuntimeProvider({
       readyToSave,
       lastChangeSummary,
       memoryState,
+      memoryCandidates,
       isUpdating,
       syncStatus,
       undo,

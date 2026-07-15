@@ -7,6 +7,8 @@ from agents.model_settings import ModelSettings
 from openai.types.shared import Reasoning
 
 from app.teacher_agent.models import (
+    ClassBriefOutput,
+    ClassDiscussionTurnOutput,
     CompileOutput,
     IngestTurnOutput,
     MemoryConsolidationOutput,
@@ -16,10 +18,13 @@ from app.teacher_agent.models import (
     ProfileProposalOutput,
     WriteVerificationOutput,
 )
+from app.teacher_agent.class_discussion_state import ClassDiscussionRuntime
 from app.teacher_agent.memory_update_state import MemoryRuntime
 from app.teacher_agent.planning_state import PlanRuntime
 from app.teacher_agent.executive_verification import render_executive_runtime
 from app.teacher_agent.prompt_assembly import (
+    build_class_brief_prompt_assembly,
+    build_class_discussion_prompt_assembly,
     build_ingest_chat_prompt_assembly,
     build_plan_chat_prompt_assembly,
 )
@@ -127,6 +132,41 @@ def build_plan_chat_agent(
         **({"model_settings": settings} if settings else {}),
         tools=create_chat_wiki_tools(ctx),
         output_type=PlanTurnOutput,
+    )
+
+
+def build_class_brief_agent(wiki, class_id: str, model: str) -> Agent:
+    assembly = build_class_brief_prompt_assembly(wiki, class_id)
+    return Agent(
+        name="KlassenPilot Class Brief",
+        instructions=assembly["instructions"],
+        model=model,
+        output_type=ClassBriefOutput,
+    )
+
+
+def build_class_discussion_agent(
+    ctx: WikiToolContext,
+    model: str,
+    *,
+    runtime: ClassDiscussionRuntime | None = None,
+    reasoning_effort: str = "medium",
+) -> Agent:
+    assembly = build_class_discussion_prompt_assembly(
+        ctx.wiki,
+        ctx.class_id,
+        messages=[],
+        runtime=runtime,
+        executive=ctx.executive,
+    )
+    settings = chat_model_settings(reasoning_effort, model=model)
+    return Agent(
+        name="KlassenPilot Class Discussion",
+        instructions=assembly["instructions"],
+        model=model,
+        **({"model_settings": settings} if settings else {}),
+        tools=create_chat_wiki_tools(ctx),
+        output_type=ClassDiscussionTurnOutput,
     )
 
 

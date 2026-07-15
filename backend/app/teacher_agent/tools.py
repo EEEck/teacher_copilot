@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 
 from agents import function_tool
 
@@ -16,7 +16,6 @@ from app.teacher_agent.executive_verification import (
     VerificationCategory,
 )
 from app.teacher_agent.memory_update_state import MemoryRuntime
-from app.teacher_agent.planning_state import PlanRuntime
 from app.teacher_agent.wiki.search import ReferenceQuery
 from app.teacher_agent.wiki_store import WikiStore
 
@@ -25,10 +24,11 @@ from app.teacher_agent.wiki_store import WikiStore
 class WikiToolContext:
     wiki: WikiStore
     class_id: str
-    # When set (planning chat), tool outputs are captured into raw_store under a
-    # raw_ref so the model can summarize them into compact evidence briefs and
-    # fetch the raw later via get_raw_evidence (progressive exposure).
-    planning: Optional[PlanRuntime] = None
+    # When set (planning or discuss chat), tool outputs are captured into
+    # raw_store under a raw_ref so the model can summarize them into compact
+    # evidence briefs and fetch the raw later via get_raw_evidence.
+    # Accepts PlanRuntime or ClassDiscussionRuntime (duck-typed add_raw).
+    planning: Optional[Any] = None
     # Update-memory chat uses the same progressive exposure pattern for target
     # discovery and lesson evidence, but keeps state separate from planning.
     memory: Optional[MemoryRuntime] = None

@@ -35,4 +35,30 @@ describe("fetchedDraftToSnapshot", () => {
       memoryState: null,
     });
   });
+
+  it("normalizes a discuss draft with empty artifact markdown", () => {
+    expect(
+      fetchedDraftToSnapshot("discuss", "chemie_9b_2026_27", "session-d", {
+        draft_id: "draft-d",
+        artifact_revision: 1,
+        artifact_hash: "hash-d",
+        turn_in_progress: false,
+        latest_turn_complete: true,
+        messages: [{ role: "user", content: "What should I watch?" }],
+      }),
+    ).toEqual({
+      mode: "discuss",
+      classId: "chemie_9b_2026_27",
+      sessionId: "session-d",
+      draftId: "draft-d",
+      messages: [{ role: "user", content: "What should I watch?" }],
+      artifactMarkdown: "",
+      artifactRevision: 1,
+      artifactHash: "hash-d",
+      turnInProgress: false,
+      latestTurnComplete: true,
+      completeness: null,
+      memoryState: null,
+    });
+  });
 });

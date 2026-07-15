@@ -12,6 +12,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from app.api.deps import (
     get_agents,
     get_beta_auth_service,
+    get_class_brief_service,
+    get_discussion_service,
     get_ingest_service,
     get_memory_candidate_ledger,
     get_memory_sweep_review_store,
@@ -29,10 +31,16 @@ from app.schemas.api import (
     ChatRequest,
     ChatResponse,
     ClassesResponse,
+    ClassBriefResponse,
     ClassMemorySnapshot,
     ClassTimeline,
     CommitIngestRequest,
     CommitIngestResponse,
+    DiscussChatRequest,
+    DiscussChatResponse,
+    DiscussDraft,
+    DiscussSession,
+    DiscussTraceResponse,
     HealthResponse,
     IngestDraft,
     IngestSession,
@@ -72,8 +80,12 @@ from app.schemas.api import (
     WriteVerificationBlockedResponse,
     WikiFileResponse,
     WikiLintResponse,
+    WikiPageSummary,
+    WikiPagesResponse,
 )
 from app.services.beta import BetaAuthService
+from app.services.class_brief_service import ClassBriefService
+from app.services.discussion_service import DiscussionService
 from app.services.ingest_service import IngestService
 from app.services.memory_skills import (
     apply_curated_memory,
@@ -812,6 +824,265 @@ def get_wiki_file(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.get("/classes/{class_id}/wiki/pages", response_model=WikiPagesResponse)
+def list_wiki_pages(
+    class_id: str,
+    kind: str = "",
+    wiki: WikiStore = Depends(get_wiki),
+) -> WikiPagesResponse:
+    try:
+        wiki.get_class(class_id)
+        pages = wiki.list_class_pages(class_id, kind=kind.strip() or None)
+        return WikiPagesResponse(
+            class_id=class_id,
+            pages=[WikiPageSummary(**page) for page in pages],
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.get("/classes/{class_id}/brief", response_model=ClassBriefResponse)
+async def get_class_brief(
+    class_id: str,
+    brief_service: ClassBriefService = Depends(get_class_brief_service),
+) -> ClassBriefResponse:
+    try:
+        return await brief_service.get_brief(class_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post("/classes/{class_id}/brief/refresh", response_model=ClassBriefResponse)
+async def refresh_class_brief(
+    class_id: str,
+    request: Request,
+    brief_service: ClassBriefService = Depends(get_class_brief_service),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> ClassBriefResponse:
+    try:
+        response = await brief_service.refresh_brief(class_id)
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="class_brief_refreshed",
+            class_id=class_id,
+            app_session_id=None,
+            mode="brief",
+            payload={"cached": response.cached},
+        )
+        return response
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@router.post(
+    "/classes/{class_id}/discussion/sessions",
+    response_model=DiscussSession,
+)
+async def start_discussion_session(
+    class_id: str,
+    request: Request,
+    discussion_svc: DiscussionService = Depends(get_discussion_service),
+    wiki: WikiStore = Depends(get_wiki),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> DiscussSession:
+    try:
+        wiki.get_class(class_id)
+        session = await discussion_svc.start_session(class_id)
+        _record_beta_app_session(
+            request,
+            beta_auth,
+            app_session_id=session.session_id,
+            class_id=class_id,
+            mode="discuss",
+            status=session.status.value,
+        )
+        for message in session.messages:
+            _record_beta_message(
+                request,
+                beta_auth,
+                app_session_id=session.session_id,
+                class_id=class_id,
+                mode="discuss",
+                role=message.role,
+                content=message.content,
+            )
+        return session
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@router.get(
+    "/classes/{class_id}/discussion/sessions/{session_id}/draft",
+    response_model=DiscussDraft,
+)
+def discussion_draft(
+    class_id: str,
+    session_id: str,
+    discussion_svc: DiscussionService = Depends(get_discussion_service),
+) -> DiscussDraft:
+    try:
+        session = discussion_svc.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return discussion_svc.get_draft(session_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post(
+    "/classes/{class_id}/discussion/sessions/{session_id}/chat",
+    response_model=DiscussChatResponse,
+)
+async def discussion_chat(
+    class_id: str,
+    session_id: str,
+    body: DiscussChatRequest,
+    request: Request,
+    discussion_svc: DiscussionService = Depends(get_discussion_service),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> DiscussChatResponse:
+    try:
+        session = discussion_svc.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="chat_turn_started",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode="discuss",
+            payload={"attachments": len(body.attachments)},
+        )
+        _record_beta_message(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="discuss",
+            role="user",
+            content=body.message,
+        )
+        response = await discussion_svc.chat(
+            session_id,
+            body.message,
+            attachments=body.attachments,
+        )
+        _record_beta_message(
+            request,
+            beta_auth,
+            app_session_id=session_id,
+            class_id=class_id,
+            mode="discuss",
+            role="assistant",
+            content=response.reply,
+        )
+        _record_beta_event(
+            request,
+            beta_auth,
+            event_type="class_discussion_turn",
+            class_id=class_id,
+            app_session_id=session_id,
+            mode="discuss",
+            payload={
+                "memory_candidates": len(response.memory_candidates),
+                "source_paths": response.source_paths,
+            },
+        )
+        return response
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@router.post("/classes/{class_id}/discussion/sessions/{session_id}/chat/stream")
+async def discussion_chat_stream(
+    class_id: str,
+    session_id: str,
+    body: DiscussChatRequest,
+    request: Request,
+    discussion_svc: DiscussionService = Depends(get_discussion_service),
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> StreamingResponse:
+    try:
+        session = discussion_svc.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    _record_beta_event(
+        request,
+        beta_auth,
+        event_type="chat_turn_started",
+        class_id=class_id,
+        app_session_id=session_id,
+        mode="discuss",
+        payload={"attachments": len(body.attachments), "stream": True},
+    )
+    _record_beta_message(
+        request,
+        beta_auth,
+        app_session_id=session_id,
+        class_id=class_id,
+        mode="discuss",
+        role="user",
+        content=body.message,
+    )
+    return StreamingResponse(
+        _stream_chat_with_beta_telemetry(
+            discussion_svc.chat_stream(
+                session_id,
+                body.message,
+                attachments=body.attachments,
+            ),
+            request=request,
+            beta_auth=beta_auth,
+            session_id=session_id,
+            class_id=class_id,
+            mode="discuss",
+            artifact_kind="discussion",
+            completed_payload=lambda final: {
+                "ready": final.get("ready"),
+                "memory_candidates": len(final.get("memory_candidates") or []),
+                "stream": True,
+            },
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get(
+    "/classes/{class_id}/discussion/sessions/{session_id}/trace",
+    response_model=DiscussTraceResponse,
+)
+def discussion_trace(
+    class_id: str,
+    session_id: str,
+    discussion_svc: DiscussionService = Depends(get_discussion_service),
+) -> DiscussTraceResponse:
+    if not get_settings().is_agent_trace_enabled():
+        return DiscussTraceResponse(
+            class_id=class_id,
+            session_id=session_id,
+            status="chatting",
+            prompt_assembly={},
+            event_trace=[],
+        )
+    try:
+        return discussion_svc.trace(class_id, session_id)
+    except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 

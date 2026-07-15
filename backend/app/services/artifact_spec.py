@@ -17,11 +17,17 @@ from app.schemas.api import (
     ChatAttachment,
     ChatMessage,
     CompletenessChecklist,
+    DiscussDraft,
     IngestDraft,
     PlanDraft,
 )
 
 from app.teacher_agent.memory_capture import MemoryCandidate
+from app.teacher_agent.class_discussion_state import (
+    ClassDiscussionRuntime,
+    ClassDiscussionState,
+    discussion_api_payload,
+)
 from app.teacher_agent.memory_update_state import (
     LessonResultState,
     MemoryEvidenceBrief,
@@ -46,6 +52,7 @@ from app.teacher_agent.prompt_trace import (
     build_plan_chat_prompt_trace,
     build_plan_opening_prompt_trace,
 )
+from app.teacher_agent.prompt_assembly import build_class_discussion_prompt_assembly
 from app.teacher_agent.wiki_store import dedupe_wiki_proposals
 from app.teacher_agent.stream_events import SseEvent, SseFinal
 from app.teacher_agent.workflow_contract import (
@@ -88,12 +95,15 @@ class TurnResult:
     # Ingest/update-memory mode only: target/date identification and
     # lesson-results collection state.
     memory: Optional[dict] = None
+    # Discuss mode only: discussion runtime payload.
+    discussion: Optional[dict] = None
     executive: Optional[dict] = None
 
 
 # Commit strategies (the spec picks one; future artifact types reuse them).
 SINGLE_FILE_SAVE = "single_file_save"
 PROPOSE_REVIEW_COMMIT = "propose_review_commit"
+NO_COMMIT = "no_commit"
 
 
 @dataclass(frozen=True)
@@ -530,5 +540,189 @@ PLAN_SPEC = ArtifactSpec(
 )
 
 
+# --- discuss (read-only class state chat) ----------------------------------
+
+
+def _discuss_empty(wiki: "WikiStore") -> str:
+    return ""
+
+
+def _discuss_readiness(wiki: "WikiStore", md: str) -> bool:
+    return False
+
+
+def _discuss_completeness(wiki: "WikiStore", md: str) -> None:
+    return None
+
+
+def _discuss_build_draft(wiki: "WikiStore", class_id: str, md: str) -> DiscussDraft:
+    return DiscussDraft()
+
+
+async def _discuss_run_turn(
+    agents: "AgentRunner",
+    class_id: str,
+    messages: list[ChatMessage],
+    partial: str,
+    attachments: list[ChatAttachment],
+    planning: Optional[Any] = None,
+    executive: ExecutiveRuntime | None = None,
+) -> TurnResult:
+    runtime = planning if isinstance(planning, ClassDiscussionRuntime) else None
+    reply = await agents.discuss_chat(
+        class_id,
+        messages,
+        attachments=attachments,
+        runtime=runtime,
+        executive=executive,
+    )
+    payload = discussion_api_payload(runtime) if runtime is not None else None
+    return TurnResult(
+        reply=reply,
+        markdown="",
+        ready=False,
+        completeness=None,
+        discussion=payload,
+        executive=executive_api_payload(executive) if executive else None,
+    )
+
+
+def _discuss_stream_turn(
+    agents: "AgentRunner",
+    class_id: str,
+    messages: list[ChatMessage],
+    partial: str,
+    attachments: list[ChatAttachment],
+    runtime: Any,
+    executive: ExecutiveRuntime,
+) -> AsyncIterator[SseEvent]:
+    return agents.discuss_chat_stream(
+        class_id,
+        messages,
+        attachments=attachments,
+        runtime=runtime if isinstance(runtime, ClassDiscussionRuntime) else None,
+        executive=executive,
+    )
+
+
+def _discuss_final_event_to_turn_result(event: SseFinal) -> TurnResult:
+    return TurnResult(
+        reply=event.reply,
+        markdown="",
+        ready=False,
+        completeness=None,
+        discussion=event.discussion_state,
+        executive=event.executive_state,
+    )
+
+
+def _discuss_prompt_trace(
+    wiki: "WikiStore",
+    class_id: str,
+    messages: list[ChatMessage],
+    current_markdown: str,
+    runtime: Any,
+    executive: ExecutiveRuntime,
+    attachments: list[ChatAttachment],
+    stage: str,
+) -> dict:
+    return build_class_discussion_prompt_assembly(
+        wiki,
+        class_id,
+        messages=messages,
+        runtime=runtime if isinstance(runtime, ClassDiscussionRuntime) else None,
+        executive=executive,
+    )
+
+
+def _discuss_runtime_dump(runtime: Any) -> dict:
+    if not isinstance(runtime, ClassDiscussionRuntime):
+        return {}
+    return {
+        "discussion_state": runtime.discussion_state.model_dump(),
+        "evidence_briefs": [brief.model_dump() for brief in runtime.evidence_briefs],
+        "raw_store": dict(runtime.raw_store),
+        "memory_candidates": [
+            candidate.model_dump() for candidate in runtime.memory_candidates
+        ],
+        "counters": dict(runtime.counters),
+        "last_source_paths": list(runtime.last_source_paths),
+        "last_suggested_actions": list(runtime.last_suggested_actions),
+    }
+
+
+def _discuss_runtime_load(data: dict) -> ClassDiscussionRuntime:
+    runtime = ClassDiscussionRuntime()
+    if not isinstance(data, dict):
+        return runtime
+    runtime.discussion_state = ClassDiscussionState(
+        **_dict_field(data, "discussion_state")
+    )
+    runtime.evidence_briefs = [
+        EvidenceBrief(**item) for item in _list_dict_field(data, "evidence_briefs")
+    ]
+    runtime.raw_store = {
+        str(key): str(value) for key, value in _dict_field(data, "raw_store").items()
+    }
+    runtime.memory_candidates = [
+        MemoryCandidate(**item) for item in _list_dict_field(data, "memory_candidates")
+    ]
+    runtime.counters = {
+        str(key): int(value) for key, value in _dict_field(data, "counters").items()
+    }
+    runtime.last_source_paths = [
+        str(item) for item in data.get("last_source_paths") or [] if str(item).strip()
+    ]
+    runtime.last_suggested_actions = [
+        str(item)
+        for item in data.get("last_suggested_actions") or []
+        if str(item).strip()
+    ]
+    return runtime
+
+
+DISCUSS_SPEC = ArtifactSpec(
+    mode="discuss",
+    chatting_status="chatting",
+    ready_status="chatting",
+    commit_strategy=NO_COMMIT,
+    empty_template=_discuss_empty,
+    readiness=_discuss_readiness,
+    completeness_of=_discuss_completeness,
+    build_draft=_discuss_build_draft,
+    run_turn=_discuss_run_turn,
+    opening=None,
+    runtime_factory=ClassDiscussionRuntime,
+    runtime_dump=_discuss_runtime_dump,
+    runtime_load=_discuss_runtime_load,
+    prompt_trace=_discuss_prompt_trace,
+    stream_turn=_discuss_stream_turn,
+    final_event_to_turn_result=_discuss_final_event_to_turn_result,
+    workflow_contract=WorkflowContract(
+        history=WorkflowHistoryPolicy(
+            conversation_turns_setting="plan_history_turns",
+            artifact_location="user_input",
+        ),
+        trace=WorkflowTraceContract(
+            expected_sections=(
+                "Teacher layer",
+                "Active class core",
+                "Executive state",
+                "Class discussion state",
+                "Evidence briefs",
+                "Memory candidates",
+            )
+        ),
+        stream_turn=_discuss_stream_turn,
+        final_event_to_turn_result=_discuss_final_event_to_turn_result,
+        executive_verification=True,
+    ),
+)
+
+
 def default_specs() -> dict[str, ArtifactSpec]:
-    return {INGEST_SPEC.mode: INGEST_SPEC, PLAN_SPEC.mode: PLAN_SPEC}
+    return {
+        INGEST_SPEC.mode: INGEST_SPEC,
+        PLAN_SPEC.mode: PLAN_SPEC,
+        DISCUSS_SPEC.mode: DISCUSS_SPEC,
+    }

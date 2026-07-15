@@ -1,25 +1,82 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+} from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ActionLink } from "@/components/klassenpilot/action-link";
+import { ClassHomeNotes } from "@/components/klassenpilot/class-home-notes";
+import { ClassHomeSection } from "@/components/klassenpilot/class-home-section";
 import {
-  LessonTimeline,
-  MisconceptionsPanel,
-} from "@/components/klassenpilot/lesson-timeline";
-import { StatCard } from "@/components/klassenpilot/stat-card";
+  DiscussDock,
+  type DiscussDockState,
+} from "@/components/klassenpilot/discuss-dock";
+import { LessonTimeline } from "@/components/klassenpilot/lesson-timeline";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StickyNote } from "@/components/ui/sticky-note";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   client,
+  type ClassBrief,
   type ClassMemorySnapshot,
   type ClassTimeline,
   type MemorySweepReviewResponse,
 } from "@/lib/api";
+import {
+  CLASS_HOME_HOVER,
+  formatClassHomeHeading,
+  shortenUnitLabel,
+} from "@/lib/class-home-display";
 import { consumeClassHomeTimelineRefresh } from "@/lib/class-home-refresh";
-import { memorySweepReviewBadge } from "@/lib/memory-sweep-review-status";
+import { classHomeMockUpcoming } from "@/lib/class-home-mock-dates";
+import { classHomeWatchItems } from "@/lib/class-home-watch";
+import { shortWikiPath } from "@/lib/markdown-diff";
+import {
+  memorySweepDueBadge,
+  memorySweepReviewAttentionBadge,
+  memorySweepUsefulSubtitle,
+} from "@/lib/memory-sweep-review-status";
+import {
+  normalizeClassWikiPath,
+  wikiViewerHref,
+} from "@/lib/wiki-viewer-links";
+
+function WorkflowHover({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactElement;
+}) {
+  return (
+    <Tooltip>
+      {/* Span wrapper: reliable hover target (Next Link + asChild is fragile). */}
+      <TooltipTrigger asChild>
+        <span className="inline-flex w-full min-w-0">{children}</span>
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        className="max-w-sm text-pretty leading-relaxed"
+      >
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 type ClassHomeClientProps = {
   classId: string;
@@ -37,7 +94,14 @@ function emptySnapshot(classId: string): ClassMemorySnapshot {
   };
 }
 
+function wikiHref(classId: string, path: string): string {
+  return wikiViewerHref(classId, normalizeClassWikiPath(classId, path));
+}
+
 export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [timeline, setTimeline] = useState<ClassTimeline>({
     class_id: classId,
     entries: [],
@@ -46,9 +110,23 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
   const [snapshot, setSnapshot] = useState<ClassMemorySnapshot>(
     emptySnapshot(classId),
   );
+  const [brief, setBrief] = useState<ClassBrief | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [discussDock, setDiscussDock] = useState<DiscussDockState>("closed");
+  const [showActionsHelp, setShowActionsHelp] = useState(true);
   const [memorySweepReview, setMemorySweepReview] =
     useState<MemorySweepReviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Running-box / deep links: /classes/{id}?discuss=open → expand dock.
+  useEffect(() => {
+    if (searchParams.get("discuss") !== "open") return;
+    setDiscussDock("expanded");
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("discuss");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [searchParams, router, pathname]);
 
   const fetchClassHome = useCallback(
     async (opts?: { snapshot?: boolean }) => {
@@ -58,14 +136,18 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
             client.getTimeline(classId),
             client.getSnapshot(classId),
             client.getMemorySweepReview(classId),
+            client.getClassBrief(classId),
           ])
         : Promise.all([
             client.getTimeline(classId),
             client.getMemorySweepReview(classId),
-          ]).then(([timelineData, reviewData]) => [timelineData, null, reviewData] as const);
+          ]).then(
+            ([timelineData, reviewData]) =>
+              [timelineData, null, reviewData, null] as const,
+          );
 
-      const [timelineData, snapshotData, reviewData] = await requests;
-      return { timelineData, snapshotData, reviewData };
+      const [timelineData, snapshotData, reviewData, briefData] = await requests;
+      return { timelineData, snapshotData, reviewData, briefData };
     },
     [classId],
   );
@@ -73,11 +155,12 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
   useEffect(() => {
     let cancelled = false;
     fetchClassHome()
-      .then(({ timelineData, snapshotData, reviewData }) => {
+      .then(({ timelineData, snapshotData, reviewData, briefData }) => {
         if (!cancelled) {
           setTimeline(timelineData);
           if (snapshotData) setSnapshot(snapshotData);
           setMemorySweepReview(reviewData);
+          if (briefData) setBrief(briefData);
           setError(null);
         }
       })
@@ -137,15 +220,57 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
     };
   }, [classId, fetchClassHome]);
 
+  const refreshBrief = async () => {
+    setBriefLoading(true);
+    try {
+      const next = await client.refreshClassBrief(classId);
+      setBrief(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to refresh brief");
+    } finally {
+      setBriefLoading(false);
+    }
+  };
+
   const timelineEntries = timeline.entries ?? [];
   const timelineMonths = timeline.months ?? [];
-  const memorySweepBadge = memorySweepReviewBadge(memorySweepReview);
+  const memorySweepSubtitle = memorySweepUsefulSubtitle(memorySweepReview);
+  const memorySweepQuietSubtitle = memorySweepSubtitle.startsWith("Draft saved")
+    ? memorySweepSubtitle
+    : "";
+  const memorySweepAttention = memorySweepReviewAttentionBadge(
+    memorySweepReview,
+  );
+  const memorySweepDue = memorySweepDueBadge(memorySweepReview);
+  // Chip = attention (4) or weekly due; quiet draft stays as subtitle (2).
+  const memorySweepChip = memorySweepAttention || memorySweepDue;
+
+  const watchItems = useMemo(
+    () =>
+      classHomeWatchItems(snapshot.top_misconceptions, brief?.watch_items),
+    [snapshot.top_misconceptions, brief?.watch_items],
+  );
+  const briefReasons = (brief?.reasons ?? []).slice(0, 3);
+  const upcoming = classHomeMockUpcoming(classId);
+  const lastTaught =
+    snapshot.last_committed_date ||
+    snapshot.last_lesson_date ||
+    "Not set";
+  const heading = useMemo(
+    () => formatClassHomeHeading(classId, snapshot.label),
+    [classId, snapshot.label],
+  );
+  const unitShort = shortenUnitLabel(snapshot.current_unit || "");
+  const headerDescription = [heading.year, heading.track]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
+    <TooltipProvider delayDuration={250}>
     <div>
       <PageHeader
-        title={snapshot.label}
-        description={`Current unit: ${snapshot.current_unit}`}
+        title={heading.title}
+        description={headerDescription || undefined}
       />
 
       {error && (
@@ -154,65 +279,292 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
         </Alert>
       )}
 
-      <div className="mb-8 grid gap-4 sm:grid-cols-3">
-        <StatCard label="Open loops" value={String(snapshot.open_loop_count)} />
-        <StatCard
-          label="Last saved"
-          value={
-            snapshot.last_committed_date
-              ? snapshot.last_committed_title
-                ? `${snapshot.last_committed_date} - ${snapshot.last_committed_title}`
-                : snapshot.last_committed_date
-              : (snapshot.last_lesson_date ?? "-")
-          }
-        />
-        <StatCard label="Lessons logged" value={String(timeline.entries.length)} />
-      </div>
-
-      <MisconceptionsPanel items={snapshot.top_misconceptions} />
-
-      <div className="mb-10 mt-8 flex flex-wrap gap-3">
-        <ActionLink href={`/classes/${classId}/memory`} primary>
-          Update memory
-        </ActionLink>
-        <ActionLink href={`/classes/${classId}/plan`}>Create lesson plan</ActionLink>
-        <ActionLink href={`/classes/${classId}/memory-sweep`}>
-          <span className="flex flex-col items-start leading-tight">
-            <span>Memory Sweep</span>
-            {memorySweepBadge && (
-              <span className="text-xs font-normal opacity-80">
-                {memorySweepBadge}
-              </span>
-            )}
-          </span>
-        </ActionLink>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Lesson timeline</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error ? (
-            <p className="text-sm text-muted-foreground">
-              Timeline unavailable until the API loads successfully.
+      <ClassHomeSection
+        id="classroom-dashboard"
+        title="Classroom dashboard"
+        description="Your class at a glance: brief, metrics, upcoming dates, and local notes."
+      >
+        <Card className="mb-4" variant="highlight">
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+            <div>
+              <CardTitle>Today&apos;s class brief</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {brief?.cached
+                  ? "Cached briefing from the last refresh."
+                  : "Snapshot-backed briefing until you refresh."}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void refreshBrief()}
+              disabled={briefLoading}
+            >
+              {briefLoading ? "Refreshing…" : "Refresh brief"}
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm leading-relaxed text-foreground">
+              {brief?.summary ?? "Loading class brief…"}
             </p>
-          ) : (
-            <LessonTimeline
-              classId={classId}
-              entries={timelineEntries}
-              months={timelineMonths}
-              highlightDate={highlightDate ?? snapshot.last_committed_date}
-            />
-          )}
-        </CardContent>
-      </Card>
+            {briefReasons.length ? (
+              <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                {briefReasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            ) : null}
+            {watchItems.length ? (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Watch
+                </p>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                  {watchItems.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {brief?.source_paths?.length ? (
+              <p className="text-xs text-muted-foreground">
+                Based on{" "}
+                {brief.source_paths.map((path, index) => (
+                  <span key={path}>
+                    {index > 0 ? ", " : ""}
+                    <Link
+                      href={wikiHref(classId, path)}
+                      className="text-primary hover:underline"
+                    >
+                      {shortWikiPath(path)}
+                    </Link>
+                  </span>
+                ))}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
 
-      <p className="mt-6 text-sm text-muted-foreground">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader className="pb-0">
+              <CardTitle className="text-base">At a glance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-5">
+                <div>
+                  <dt className="text-sm text-muted-foreground">Unit</dt>
+                  <dd
+                    className="mt-1 text-xl font-semibold leading-snug tracking-tight text-foreground"
+                    title={snapshot.current_unit || undefined}
+                  >
+                    {unitShort}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-muted-foreground">Open loops</dt>
+                  <dd className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+                    {snapshot.open_loop_count}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-muted-foreground">Last taught</dt>
+                  <dd className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                    {lastTaught}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-muted-foreground">Lessons logged</dt>
+                  <dd className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+                    {timelineEntries.length}
+                  </dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-0">
+              <CardTitle className="text-base">Upcoming</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Mock dates, not from wiki.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm">
+                {upcoming.map((item) => (
+                  <li
+                    key={`${item.label}-${item.date}`}
+                    className="flex items-baseline justify-between gap-3"
+                  >
+                    <span className="text-foreground">{item.label}</span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      {item.date}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+
+          <div className="md:col-span-2">
+            <ClassHomeNotes classId={classId} />
+          </div>
+        </div>
+      </ClassHomeSection>
+
+      <ClassHomeSection
+        id="actions"
+        title="Actions"
+        description="Pick one job at a time for this class."
+      >
+        {showActionsHelp && (
+          <StickyNote
+            className="mb-4"
+            title="What you can do"
+            dismissAriaLabel="Dismiss actions help"
+            onDismiss={() => setShowActionsHelp(false)}
+          >
+            <ul className="list-disc space-y-1 pl-5">
+              <li>
+                <span className="font-medium">Create lesson plan:</span> draft
+                the next lesson or assessment from class memory.
+              </li>
+              <li>
+                <span className="font-medium">Update memory:</span> teach your
+                class agent what happened today, then approve wiki updates.
+              </li>
+              <li>
+                <span className="font-medium">Discuss:</span> ask about open
+                loops, watch items, or what to do next (opens the chat dock).
+              </li>
+              <li>
+                <span className="font-medium">Sharpen your assistant:</span>{" "}
+                review quiet insights so it gets more personal for this class.
+                Aim for about once a week; we nudge after 5 days.
+              </li>
+              <li>
+                <span className="font-medium">Browse class files:</span> open
+                the living notebook for this class (lesson notes, plans, and
+                memory).
+              </li>
+            </ul>
+          </StickyNote>
+        )}
+
+        {/* Equal width = widest label; Plan first among core workflows. */}
+        <div
+          className="inline-grid max-w-full grid-flow-col auto-cols-[1fr] items-stretch gap-3"
+          role="group"
+          aria-label="Class workflows"
+        >
+          <WorkflowHover label={CLASS_HOME_HOVER.plan}>
+            <ActionLink
+              href={`/classes/${classId}/plan`}
+              variant="soft"
+              size="lg"
+              className="w-full justify-center px-3"
+            >
+              Create lesson plan
+            </ActionLink>
+          </WorkflowHover>
+          <WorkflowHover label={CLASS_HOME_HOVER.memory}>
+            <ActionLink
+              href={`/classes/${classId}/memory`}
+              variant="soft"
+              size="lg"
+              className="w-full justify-center px-3"
+            >
+              Update memory
+            </ActionLink>
+          </WorkflowHover>
+          <WorkflowHover label={CLASS_HOME_HOVER.discuss}>
+            <Button
+              type="button"
+              variant="soft"
+              size="lg"
+              className="w-full justify-center px-3"
+              onClick={() => setDiscussDock("expanded")}
+            >
+              Discuss
+            </Button>
+          </WorkflowHover>
+          <WorkflowHover label={CLASS_HOME_HOVER.sweep}>
+            <ActionLink
+              href={`/classes/${classId}/memory-sweep`}
+              variant="outline"
+              size="lg"
+              className="relative w-full flex-col justify-center gap-0 px-3 leading-tight"
+            >
+              <span>Sharpen your assistant</span>
+              {memorySweepQuietSubtitle ? (
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  {memorySweepQuietSubtitle}
+                </span>
+              ) : null}
+              {memorySweepChip ? (
+                <span
+                  className={
+                    memorySweepAttention
+                      ? "absolute -top-1.5 -right-1.5 max-w-[7.5rem] truncate rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium leading-none text-foreground shadow-sm"
+                      : "absolute -top-1.5 -right-1.5 max-w-[7.5rem] truncate rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-950 shadow-sm"
+                  }
+                >
+                  {memorySweepChip}
+                </span>
+              ) : null}
+            </ActionLink>
+          </WorkflowHover>
+          <WorkflowHover label={CLASS_HOME_HOVER.wiki}>
+            <ActionLink
+              href={`/classes/${classId}/wiki/view`}
+              variant="outline"
+              size="lg"
+              className="w-full justify-center px-3"
+            >
+              Browse class files
+            </ActionLink>
+          </WorkflowHover>
+        </div>
+      </ClassHomeSection>
+
+      <DiscussDock
+        classId={classId}
+        state={discussDock}
+        onStateChange={setDiscussDock}
+      />
+
+      <ClassHomeSection
+        id="lesson-timeline"
+        title="Lesson timeline"
+        titleHover={CLASS_HOME_HOVER.timeline}
+        description="Planned and taught lessons for this class."
+      >
+        <Card>
+          <CardContent className="pt-6">
+            {error ? (
+              <p className="text-sm text-muted-foreground">
+                Timeline unavailable until the API loads successfully.
+              </p>
+            ) : (
+              <LessonTimeline
+                classId={classId}
+                entries={timelineEntries}
+                months={timelineMonths}
+                highlightDate={highlightDate ?? snapshot.last_committed_date}
+                planHover={CLASS_HOME_HOVER.plan}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </ClassHomeSection>
+
+      <p className="mt-2 text-sm text-muted-foreground">
         <Link href="/" className="text-primary hover:underline">
           All classes
         </Link>
       </p>
     </div>
+    </TooltipProvider>
   );
 }

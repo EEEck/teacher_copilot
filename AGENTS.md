@@ -52,10 +52,18 @@ It is an educational note, not a behavior contract.
 - Memory update chat may update `diary_markdown`, but curated wiki writes happen
   only through the teacher-approved commit flow.
 - Prefer compiled wiki memory over raw sources.
-- Frontend polish is not the priority unless the user explicitly asks for it.
-  The frontend primarily uses `assistant-ui`, with Plan/Update Memory drafts in
+- Frontend UI must reuse the fixed design system — do not invent one-off
+  controls or copy Tailwind class strings across pages. Read
+  `frontend/DESIGN.md` and compose from `frontend/src/components/ui/`,
+  `frontend/src/components/klassenpilot/`, and `frontend/src/components/assistant-ui/`.
+  If a pattern appears twice (or is domain-wide), add or extend a shared
+  component first, then import it. Semantic tokens only (no ad-hoc hex in
+  feature code). Exception: only when the user explicitly asks for a
+  page-specific one-off.
+- Frontend primarily uses `assistant-ui`, with Plan/Update Memory drafts in
   `frontend/src/features/workflow-drafts/` and durable pending jobs coordinated
-  by `pending-chat-turns` + `PendingTurnNotifier`.
+  by `pending-chat-turns` + `PendingTurnNotifier`. Class home is documented in
+  `frontend/ARCHITECTURE.md` (three sections + Discuss dock + timeline status).
 - Keep the MVP simple. Do not add broad agent infrastructure unless it directly
   supports lesson planning or memory update.
 
@@ -80,6 +88,10 @@ It is an educational note, not a behavior contract.
 - Frontend app: `frontend/`
 - Frontend workflow drafts: `frontend/src/features/workflow-drafts/`
 - Frontend design notes: `frontend/DESIGN.md`
+- Class-home UI map: `frontend/ARCHITECTURE.md` (dashboard / Actions / timeline
+  status chips); helpers in `frontend/src/lib/class-home-display.ts`,
+  `timeline-status-tone.ts`, `timeline-status-badges.ts`,
+  `timeline-memory-action.ts`
 
 ## Agent Contracts
 
