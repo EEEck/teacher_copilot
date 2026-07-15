@@ -163,15 +163,16 @@ to rather than removed:
 
 ### MEDIUM
 
-**M1 — Mock data shown in the customer-facing dashboard.** Class home renders an
-"Upcoming" panel with "Next large exam 2026-07-20 / Class excursion 2026-07-28"
-from [class-home-mock-dates.ts](../frontend/src/lib/class-home-mock-dates.ts),
-labeled "Mock dates, not from wiki." Fine for internal demo, not for beta
-customers. Either wire to real data or hide the panel behind a flag.
+**M1 — Mock data shown in the customer-facing dashboard.**
+✅ **RESOLVED 2026-07-14** (commit `43a1949`). The "Upcoming" card now shows an
+honest empty state ("No key dates yet") and the `class-home-mock-dates.ts`
+module is deleted; no fake exam/excursion dates ship. A real source (assessment
+calendar) is a later backlog item.
 
-**M2 — Wrong workflow copy in the plan-save review.** The plan-save review shows a
-control labeled *"The lesson results are required to save memory"* — memory-
-workflow copy leaking into the plan flow. Confusing in a save/confirm surface.
+**M2 — Wrong workflow copy in the plan-save review.**
+✅ **RESOLVED 2026-07-14** (commit `4f213d5`). The shared `ReviewBrief`
+required-item tooltip no longer hard-codes "…required to save memory"; it uses
+mode-agnostic copy ("This change is required and can't be skipped").
 
 **M3 — SSE `ConnectionResetError` → stuck-spinner-until-poll.** On Windows dev the
 SSE connection was reset mid-turn (asyncio proactor `WinError 10054`, benign log
