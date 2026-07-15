@@ -188,9 +188,16 @@ the three workflows.
 
 ### LOW
 
-**L1 — Timeline title mojibake.** The 2026-09-28 timeline entry title serializes
-as `Lesson Plan â€" First Organic…` — a UTF-8/latin1 mishandling of the em-dash
-somewhere in title read/write. Cosmetic but visible.
+**L1 — Timeline title mojibake — ❌ NOT A BUG (retracted 2026-07-14).** This was
+a **false finding**: my own diagnostic harness, not the product. The em-dash is
+correct UTF-8 end to end — verified: `lesson_plan.md` stores `E2 80 94`,
+`read_text(encoding="utf-8")` + `extract_title` yield codepoint `U+2014`, the
+HTTP response body carries `E2 80 94` (`Content-Type: application/json`), and the
+browser's `fetch().json()` returns `U+2014` with no mojibake. The apparent
+`â€"` came from inspecting the API with `curl … | python`, where Windows
+`sys.stdin` defaults to cp1252 and mis-decoded the UTF-8 bytes. No code change.
+(Lesson for future audits on Windows: pipe bytes, or force `PYTHONUTF8=1` /
+`encoding="utf-8"`, before calling anything mojibake.)
 
 **L2 — Seed-data phantom "last lesson".** Snapshot/course_state report
 "Last taught: 2026-06-01", but no 2026-06-01 lesson exists (latest is
