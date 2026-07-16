@@ -33,7 +33,7 @@ app/pages  →  klassenpilot shells  →  assistant-ui Thread
 | Domain UI | `src/components/klassenpilot/` | Timeline, dock, review, pending box | Raw Thread primitives |
 | Chat UI | `src/components/assistant-ui/` | Thread, markdown, reasoning (registry) | Mode-specific bootstrap |
 | Workflow feature | `src/features/workflow-drafts/` | Draft store, turn state, chat runtime adapter | Page layout |
-| Lib | `src/lib/` | API, SSE, pending-chat-turns, wiki links | React trees |
+| Lib | `src/lib/` | API, SSE, running-jobs, wiki links | React trees |
 | Primitives | `src/components/ui/` | Button, Card, Input (design system) | Product copy |
 
 ## Zustand vs assistant-ui
@@ -59,7 +59,7 @@ Design: `docs/beta_readiness_audit_2026-07-13.md` §A.1.
   `awaiting_backend` = Stop or a dropped connection while the backend may
   still finish; the store's snapshot reducer (`upsert`) merges the final
   reply when the completed draft arrives.
-- Every backend snapshot (bootstrap, notifier, recovery poll) goes through
+- Every backend snapshot (bootstrap, notifier poll) goes through
   `upsert`; thread handling is decided purely from (phase, snapshot) — see the
   reducer table in `workflow-draft-store.ts`.
 
@@ -89,8 +89,8 @@ refresh resumes with plain reply + turn flags).
    `discuss-thread.tsx`).
 4. Shell: either `ArtifactSessionPage` + workspace (artifact workflows) or a
    chrome-only dock (`discuss-dock.tsx`) with a fixed-height Thread parent.
-5. Ensure `pending-chat-turns` accepts the mode and `pendingTurnWorkflowHref`
-   returns the right resume URL.
+5. Ensure `running-jobs.ts` accepts the mode and `runningJobHref` returns the
+   right resume URL.
 6. **Never** fork Thread or invent a textarea chat.
 
 ## Shells
@@ -138,10 +138,21 @@ Discuss dock stays page chrome (FAB). App chrome: header hamburger opens Docs +
 Settings (`/settings` is a placeholder). Do not add a feature kanban or
 wiki-backed todos here without an explicit product decision.
 
-## Pending jobs
+## Running jobs
 
-- Markers: `src/lib/pending-chat-turns.ts` (includes `discuss`).
-- Notifier: `PendingTurnNotifier` polls drafts and upserts the draft store.
+The backend is the source of truth for what is running — the client keeps no
+markers. `PendingTurnNotifier` polls `GET /api/workflow/active` (draft turns
+across all classes + generating memory sweeps) every 3s while the tab is
+visible.
+
+- Notifier: `pending-turn-notifier.tsx`. When a job leaves the active list it
+  fetches that draft once, `upsert`s it, and toasts — unless the draft is the
+  one on screen (`mountedDraftId`). `markTurnNotified(draftId, revision)` makes
+  the toast fire exactly once even if two polls race.
+- Union: `src/lib/running-jobs.ts` merges poll items with this tab's live
+  runners, so a turn shows the instant it is sent and a short turn that starts
+  and finishes between polls is still visible. Local labels win (they carry the
+  resolved lesson date/title).
 - Running box: `running-tasks-box.tsx` (bottom-left); discuss FAB is bottom-right.
 
 ## Testing chat turns
@@ -173,7 +184,7 @@ Related unit coverage:
 | [`chat-turn-scenarios.test.ts`](src/features/workflow-drafts/chat-turn-scenarios.test.ts) | 24 runner-driven scenario observations (matrix above) |
 | [`workflow-turn-activity.test.ts`](src/features/workflow-drafts/workflow-turn-activity.test.ts) | Stop vs Still-working mapping |
 | [`workflow-draft-store.test.ts`](src/features/workflow-drafts/workflow-draft-store.test.ts) | Snapshot reducer rows, turn actions, meta preservation, selector stability |
-| [`pending-chat-turns.test.ts`](src/lib/pending-chat-turns.test.ts) | Pending markers + discuss resume href |
+| [`running-jobs.test.ts`](src/lib/running-jobs.test.ts) | Running-box union (poll ∪ local turns) + resume hrefs |
 | [`thread-background-status.test.ts`](src/components/assistant-ui/thread-background-status.test.ts) | Still-working banner copy |
 
 Broader frontend check:

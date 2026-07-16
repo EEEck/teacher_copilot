@@ -49,17 +49,17 @@ export type TurnPhase = "streaming" | "awaiting_backend" | "settled";
 export type TurnRecord = {
   phase: TurnPhase;
   startedAt: number;
-  /** pending-chat-turns marker key; cleared by the runner on hard failure. */
-  pendingKey?: string;
+  /** Toast/label context for this turn (Running box + completion toast). */
+  mode: ArtifactMode;
+  classId: string;
+  lessonDate?: string;
+  lessonTitle?: string;
 };
 
 /** Final-turn payload written by the runner on the final SSE event. */
 export type TurnFinalPatch = {
   /** Final assistant thread content (stream parts, or plain reply text). */
   content: ThreadMessageLike["content"];
-  /** Plain-text mirror appended to snapshot.messages. */
-  reply: string;
-  userText: string;
   artifactMarkdown: string;
   artifactRevision?: number;
   artifactHash?: string;
@@ -86,6 +86,13 @@ type WorkflowDraftState = {
   draftsById: Record<string, WorkflowDraftSnapshot>;
   threadMessagesByDraftId: Record<string, ThreadMessageLike[]>;
   turnByDraftId: Record<string, TurnRecord>;
+  /** Draft whose chat is on screen; its completions must not toast. */
+  mountedDraftId: string | null;
+  /** Completion keys already toasted, so runner and notifier can't double-toast. */
+  notifiedTurns: Record<string, true>;
+  setMountedDraftId: (draftId: string | null) => void;
+  /** True only for the first caller to observe this completion. */
+  markTurnNotified: (draftId: string, artifactRevision: number) => boolean;
   /** Snapshot reducer — the only entry point for backend snapshots. */
   upsert: (snapshot: WorkflowDraftSnapshot) => void;
   /** Merge PATCH-draft metadata into an existing snapshot (no thread/flags). */
@@ -97,7 +104,10 @@ type WorkflowDraftState = {
     args: {
       userContent: ThreadMessageLike["content"];
       placeholderContent: ThreadMessageLike["content"];
-      pendingKey?: string;
+      mode: ArtifactMode;
+      classId: string;
+      lessonDate?: string;
+      lessonTitle?: string;
     },
   ) => void;
   applyTurnProgress: (
@@ -172,6 +182,16 @@ function messagesFromSnapshot(messages: ChatMessage[]): ThreadMessageLike[] {
   );
 }
 
+/** Mark this draft's turn settled, keeping the record's label context. */
+function settleTurn(
+  turns: Record<string, TurnRecord>,
+  draftId: string,
+  turn: TurnRecord | undefined,
+): Record<string, TurnRecord> {
+  if (!turn) return turns;
+  return { ...turns, [draftId]: { ...turn, phase: "settled" } };
+}
+
 function snapshotSaysComplete(snapshot: WorkflowDraftSnapshot): boolean {
   return !snapshot.turnInProgress && snapshot.latestTurnComplete;
 }
@@ -186,6 +206,23 @@ const createWorkflowDraftState = (
   draftsById: {},
   threadMessagesByDraftId: {},
   turnByDraftId: {},
+  mountedDraftId: null,
+  notifiedTurns: {},
+
+  setMountedDraftId: (draftId) => {
+    set({ mountedDraftId: draftId });
+  },
+
+  markTurnNotified: (draftId, artifactRevision) => {
+    const key = `${draftId}@${artifactRevision}`;
+    let first = false;
+    set((state) => {
+      if (state.notifiedTurns[key]) return state;
+      first = true;
+      return { notifiedTurns: { ...state.notifiedTurns, [key]: true } };
+    });
+    return first;
+  },
 
   /**
    * Snapshot reducer (design §A.1.4). Always refreshes draftsById; the thread
@@ -299,7 +336,10 @@ const createWorkflowDraftState = (
     }));
   },
 
-  beginTurn: (draftId, { userContent, placeholderContent, pendingKey }) => {
+  beginTurn: (
+    draftId,
+    { userContent, placeholderContent, mode, classId, lessonDate, lessonTitle },
+  ) => {
     set((state) => {
       const existing = state.draftsById[draftId];
       if (!existing) return state; // I5: removed draft → no-op
@@ -331,7 +371,14 @@ const createWorkflowDraftState = (
         },
         turnByDraftId: {
           ...state.turnByDraftId,
-          [draftId]: { phase: "streaming", startedAt: Date.now(), pendingKey },
+          [draftId]: {
+            phase: "streaming",
+            startedAt: Date.now(),
+            mode,
+            classId,
+            lessonDate,
+            lessonTitle,
+          },
         },
       };
     });
@@ -362,11 +409,6 @@ const createWorkflowDraftState = (
           ...state.draftsById,
           [draftId]: {
             ...existing,
-            messages: [
-              ...existing.messages,
-              { role: "user", content: patch.userText },
-              { role: "assistant", content: patch.reply },
-            ],
             artifactMarkdown: patch.artifactMarkdown,
             artifactRevision: patch.artifactRevision ?? existing.artifactRevision,
             artifactHash: patch.artifactHash ?? existing.artifactHash,
@@ -393,14 +435,7 @@ const createWorkflowDraftState = (
           ...state.threadMessagesByDraftId,
           [draftId]: replaceLastAssistantContent(previous, patch.content),
         },
-        turnByDraftId: {
-          ...state.turnByDraftId,
-          [draftId]: {
-            phase: "settled",
-            startedAt: turn?.startedAt ?? Date.now(),
-            pendingKey: turn?.pendingKey,
-          },
-        },
+        turnByDraftId: settleTurn(state.turnByDraftId, draftId, turn),
       };
     });
   },
@@ -450,14 +485,7 @@ const createWorkflowDraftState = (
             { type: "text", text: friendlyMessage },
           ]),
         },
-        turnByDraftId: {
-          ...state.turnByDraftId,
-          [draftId]: {
-            phase: "settled",
-            startedAt: turn?.startedAt ?? Date.now(),
-            pendingKey: turn?.pendingKey,
-          },
-        },
+        turnByDraftId: settleTurn(state.turnByDraftId, draftId, turn),
       };
     });
   },

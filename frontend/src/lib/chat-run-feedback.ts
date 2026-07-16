@@ -1,10 +1,10 @@
 import type { ChatModelRunResult } from "@assistant-ui/react";
 
 import type { ArtifactMode } from "@/components/assistant-ui/artifact-runtime-config";
-import type { PendingJobMode } from "@/lib/pending-chat-turns";
+import type { RunningJobMode } from "@/lib/running-jobs";
 
 export type WorkflowTaskLabelContext = {
-  mode: PendingJobMode;
+  mode: RunningJobMode;
   lessonDate?: string;
   lessonTitle?: string;
 };

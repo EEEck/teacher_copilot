@@ -157,11 +157,19 @@ correctly — it resolved 2026-09-28 from the message.)
 > → spinner clears; (4) Running box + off-page completion toast. Bug A regression
 > (discard → immediate send) confirmed clean.
 >
-> **What's still deferred (not blocking):** the sessionStorage marker system +
-> `PendingTurnNotifier` remain — runner-lite demoted them to driving toasts only
-> and the reducer makes their upserts unable to corrupt the thread. Fully removing
-> that 4th source of truth (a global `GET /api/workflow/active` query) is **M2**;
-> live re-stream after hard refresh (attach/replay) is **M3** (parked).
+> **M2 landed 2026-07-16 — the 4th source of truth is gone.** The sessionStorage
+> marker system (`pending-chat-turns.ts`), the provider's recovery poll,
+> `fetchDraft`, and `completeTurn`'s `snapshot.messages` mirror are all deleted.
+> `PendingTurnNotifier` now asks the backend what it is running
+> (`GET /api/workflow/active`), so the Running box survives a hard refresh and
+> reports work started in another tab. Browser-verified: off-page completion
+> toasts exactly once, an on-screen turn never toasts, and a hard refresh
+> mid-turn restores the box + spinner from the poll alone. Details in
+> `implementation_plans/runner_lite_implementation_log.md`.
+>
+> **What's still deferred (not blocking):** live re-stream after hard refresh
+> (attach/replay) is **M3** (parked) — a refreshed turn resumes with the
+> spinner and the plain reply, without the reasoning trace.
 
 The original finding (below) is kept as the pre-fix record. The merged hybrid
 worked — I saw it recover a stuck spinner after a mid-turn SSE reset — but it
@@ -533,9 +541,9 @@ next page mount, the bootstrap upsert does. Three entry points, one rule.
 | `mergeFinalReplyIntoThread` | **kept, one reducer row only** (Stop / stream-drop) |
 | `lastAssistantLacksText`, `lastSnapshotAssistantReply` | deleted as gates (merge keeps its internal reply lookup) |
 | Six mirrored `useState`s + 2 sync effects | **deleted** — store selectors |
-| Recovery poll | **kept**, crisp condition (§A.1.7) |
-| `pending-chat-turns.ts`, `PendingTurnNotifier`, toast heuristics, Running box | **untouched** (M2 deletes them; notifier's always-upsert now flows through the reducer and is harmless by construction) |
-| `workflow-turn-state.ts` (`flagsForPhase`) | kept as the flag vocabulary |
+| Recovery poll | kept in H3; **deleted in M2** (the notifier's poll covers it) |
+| `pending-chat-turns.ts`, `PendingTurnNotifier`, toast heuristics, Running box | untouched in H3; **M2 (2026-07-16) deleted the markers + heuristics** and re-drove the notifier off `GET /api/workflow/active` |
+| `workflow-turn-state.ts` (`flagsForPhase`) | kept in H3; **deleted 2026-07-15** (phase-vocabulary unification) |
 | Stop button `onCancel` | kept → `cancelTurn(draftId)` |
 | Session recovery (`withSessionRecovery` inside `chatStream`) | unchanged |
 | Artifact editor / undo / `patchDraft` | unchanged |

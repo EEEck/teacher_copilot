@@ -49,7 +49,8 @@ function beginRichTurn(store: ReturnType<typeof createWorkflowDraftStore>) {
   store.getState().beginTurn("draft-1", {
     userContent: "Record lesson results.",
     placeholderContent: [{ type: "reasoning", text: "Starting..." }],
-    pendingKey: "pending-1",
+    mode: "ingest",
+    classId: "chemie_9b_2026_27",
   });
   store
     .getState()
@@ -188,8 +189,6 @@ describe("snapshot reducer (design §A.1.4)", () => {
         { type: "reasoning", text: "Reading class memory..." },
         { type: "text", text: "Here is the draft." },
       ],
-      reply: "Here is the draft.",
-      userText: "Record lesson results.",
       artifactMarkdown: "# Updated",
       artifactRevision: 2,
       artifactHash: "hash-2",
@@ -219,8 +218,6 @@ describe("snapshot reducer (design §A.1.4)", () => {
     beginRichTurn(store);
     store.getState().completeTurn("draft-1", {
       content: [{ type: "text", text: "Done." }],
-      reply: "Done.",
-      userText: "Record lesson results.",
       artifactMarkdown: "# Updated",
       readyToSave: true,
       lastChangeSummary: "Filled sections.",
@@ -254,6 +251,8 @@ describe("turn actions", () => {
     store.getState().beginTurn("draft-1", {
       userContent: "New note",
       placeholderContent: [{ type: "reasoning", text: "Starting..." }],
+      mode: "ingest",
+      classId: "chemie_9b_2026_27",
     });
 
     const thread = store.getState().threadMessagesByDraftId["draft-1"];
@@ -274,8 +273,6 @@ describe("turn actions", () => {
     ]);
     store.getState().completeTurn("draft-1", {
       content: [{ type: "text", text: "late final" }],
-      reply: "late final",
-      userText: "x",
       artifactMarkdown: "# Late",
     });
     store.getState().failTurn("draft-1", "late failure");
@@ -286,13 +283,11 @@ describe("turn actions", () => {
     expect(store.getState().turnByDraftId["draft-1"]).toBeUndefined();
   });
 
-  it("completeTurn writes reply, artifact, meta, message mirror, and settles", () => {
+  it("completeTurn writes artifact + meta into the snapshot and settles", () => {
     const store = createWorkflowDraftStore();
     beginRichTurn(store);
     store.getState().completeTurn("draft-1", {
       content: [{ type: "text", text: "Done." }],
-      reply: "Done.",
-      userText: "Record lesson results.",
       artifactMarkdown: "# Updated diary",
       artifactRevision: 5,
       artifactHash: "hash-5",
@@ -309,9 +304,11 @@ describe("turn actions", () => {
     expect(snap.latestTurnComplete).toBe(true);
     expect(snap.readyToSave).toBe(true);
     expect(snap.lastChangeSummary).toBe("Filled sections.");
-    expect(snap.messages.slice(-2)).toEqual([
+    // The thread — not snapshot.messages — is what the chat renders. Mirroring
+    // the reply into both let them disagree; the snapshot's message list now
+    // only ever holds what the server sent.
+    expect(snap.messages).toEqual([
       { role: "user", content: "Record lesson results." },
-      { role: "assistant", content: "Done." },
     ]);
     const thread = store.getState().threadMessagesByDraftId["draft-1"];
     expect(thread[thread.length - 1].content).toEqual([
@@ -328,6 +325,8 @@ describe("turn actions", () => {
     store.getState().beginTurn("draft-1", {
       userContent: "New note",
       placeholderContent: [{ type: "reasoning", text: "Starting..." }],
+      mode: "ingest",
+      classId: "chemie_9b_2026_27",
     });
     store.getState().failTurn("draft-1", "Something broke");
 

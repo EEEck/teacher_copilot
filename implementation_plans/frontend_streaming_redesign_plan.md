@@ -389,6 +389,17 @@ design. Branches off the current branch.
 
 ## M2 — global active-work endpoint + notifier re-drive (one PR)
 
+> **Shipped 2026-07-16.** Built as designed below; see the M2 entry in
+> [`runner_lite_implementation_log.md`](runner_lite_implementation_log.md) for
+> the browser pass. Deltas from this section:
+> - `ActiveWorkItem` drops `turn_in_progress` and `status` (the endpoint only
+>   ever returns running work, so both were constants) and gains `review_id`,
+>   which the sweep toast dedupes on — keying on class meant a *regenerated*
+>   sweep could never toast again.
+> - Transition detection stayed inside the notifier (it is a five-line list
+>   diff); the extracted-and-tested pure function is the Running-box union
+>   instead (`running-jobs.ts`), which is where the real merge rules live.
+
 ### Backend
 
 `GET /api/workflow/active` → `ActiveWorkResponse`:

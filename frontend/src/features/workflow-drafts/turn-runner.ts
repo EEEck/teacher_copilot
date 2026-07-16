@@ -15,13 +15,10 @@ import { toast } from "sonner";
 import type { ThreadMessageLike } from "@assistant-ui/react";
 
 import type { ChatStreamChunk, ArtifactMode } from "@/components/assistant-ui/artifact-runtime-config";
-import { chatFailureToastLabel } from "@/lib/chat-run-feedback";
 import {
-  clearPendingChatTurn,
-  isPendingTurnOnCurrentPage,
-  listPendingChatTurns,
-  type PendingTurnStorage,
-} from "@/lib/pending-chat-turns";
+  chatCompletionToastLabel,
+  chatFailureToastLabel,
+} from "@/lib/chat-run-feedback";
 import type { SessionAttachment } from "@/lib/session-attachments";
 import { streamPartsToRunContent } from "@/lib/sse-chat";
 
@@ -50,13 +47,11 @@ export function cancelTurn(draftId: string): void {
 
 export type RunTurnArgs = {
   draftId: string;
+  /** Toast/label context, carried on the store's turn record. */
   mode: ArtifactMode;
+  classId: string;
   lessonDate?: string;
   lessonTitle?: string;
-  /** pending-chat-turns marker key written by the page before calling. */
-  pendingKey?: string;
-  /** Marker storage; defaults to window.sessionStorage (injectable in tests). */
-  pendingStorage?: PendingTurnStorage;
   userText: string;
   userContent: ThreadMessageLike["content"];
   placeholderContent: ThreadMessageLike["content"];
@@ -74,7 +69,10 @@ export async function runTurn(args: RunTurnArgs): Promise<void> {
   store().beginTurn(args.draftId, {
     userContent: args.userContent,
     placeholderContent: args.placeholderContent,
-    pendingKey: args.pendingKey,
+    mode: args.mode,
+    classId: args.classId,
+    lessonDate: args.lessonDate,
+    lessonTitle: args.lessonTitle,
   });
 
   let gotFinal = false;
@@ -103,8 +101,6 @@ export async function runTurn(args: RunTurnArgs): Promise<void> {
           : [{ type: "text" as const, text: chunk.result.reply }];
       store().completeTurn(args.draftId, {
         content,
-        reply: chunk.result.reply,
-        userText: args.userText,
         artifactMarkdown: chunk.result.artifactMarkdown,
         artifactRevision: chunk.result.artifactRevision,
         artifactHash: chunk.result.artifactHash,
@@ -114,6 +110,7 @@ export async function runTurn(args: RunTurnArgs): Promise<void> {
         memoryState: chunk.result.memoryState,
         memoryCandidates: chunk.result.memoryCandidates,
       });
+      notifyTurnFinished(args, chunk.result.artifactRevision);
     }
     if (!gotFinal) settleWithoutFinal(args, ctl, undefined, streamedContent);
   } catch (err) {
@@ -148,34 +145,42 @@ function settleWithoutFinal(
   notifyTurnFailed(args);
 }
 
+/** True when this chat is not the one on screen — i.e. worth a toast. */
+function isOffScreen(draftId: string): boolean {
+  return useWorkflowDraftStore.getState().mountedDraftId !== draftId;
+}
+
 /**
- * Hard failure: clear the pending marker (no false completion toast) and,
- * when the teacher is not looking at this chat, tell them it failed
- * (design decision Q5, 2026-07-14).
+ * The turn finished in this context. Toast immediately when the teacher is
+ * elsewhere (no need to wait for a notifier poll tick); the shared
+ * markTurnNotified dedupe keeps the notifier from toasting it again.
+ */
+function notifyTurnFinished(args: RunTurnArgs, artifactRevision?: number): void {
+  if (!isOffScreen(args.draftId)) return;
+  const store = useWorkflowDraftStore.getState();
+  const revision =
+    artifactRevision ?? store.draftsById[args.draftId]?.artifactRevision ?? 0;
+  if (!store.markTurnNotified(args.draftId, revision)) return;
+  toast.success(
+    chatCompletionToastLabel({
+      mode: args.mode,
+      lessonDate: args.lessonDate,
+      lessonTitle: args.lessonTitle,
+    }),
+  );
+}
+
+/**
+ * Hard failure: when the teacher is not looking at this chat, tell them it
+ * failed (the error reply itself lands in the unwatched thread).
  */
 function notifyTurnFailed(args: RunTurnArgs): void {
-  const storage =
-    args.pendingStorage ??
-    (typeof window === "undefined" ? undefined : window.sessionStorage);
-  if (!storage || !args.pendingKey) return;
-  const marker = listPendingChatTurns(storage).find(
-    (turn) => turn.key === args.pendingKey,
+  if (!isOffScreen(args.draftId)) return;
+  toast.error(
+    chatFailureToastLabel({
+      mode: args.mode,
+      lessonDate: args.lessonDate,
+      lessonTitle: args.lessonTitle,
+    }),
   );
-  clearPendingChatTurn(storage, args.pendingKey);
-  if (typeof window === "undefined") return;
-  const onCurrentPage = marker
-    ? isPendingTurnOnCurrentPage(
-        marker,
-        `${window.location.pathname}${window.location.search}`,
-      )
-    : true;
-  if (!onCurrentPage) {
-    toast.error(
-      chatFailureToastLabel({
-        mode: args.mode,
-        lessonDate: args.lessonDate,
-        lessonTitle: args.lessonTitle,
-      }),
-    );
-  }
 }

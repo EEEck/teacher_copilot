@@ -5,19 +5,16 @@ import { Loader2Icon, XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { chatRunningTaskLabel } from "@/lib/chat-run-feedback";
-import {
-  pendingTurnWorkflowHref,
-  type PendingChatTurn,
-} from "@/lib/pending-chat-turns";
+import { runningJobHref, type RunningJob } from "@/lib/running-jobs";
 
 export function RunningTasksBox({
-  turns,
+  jobs,
   onDismiss,
 }: {
-  turns: PendingChatTurn[];
+  jobs: RunningJob[];
   onDismiss: () => void;
 }) {
-  if (turns.length === 0) return null;
+  if (jobs.length === 0) return null;
 
   return (
     <div
@@ -40,13 +37,10 @@ export function RunningTasksBox({
         </Button>
       </div>
       <ul className="overflow-hidden rounded-md border border-foreground/25 divide-y divide-foreground/25">
-        {turns.map((turn, index) => (
-          <li
-            key={turn.key}
-            className={index % 2 === 0 ? "bg-card" : "bg-muted"}
-          >
+        {jobs.map((job, index) => (
+          <li key={job.key} className={index % 2 === 0 ? "bg-card" : "bg-muted"}>
             <Link
-              href={pendingTurnWorkflowHref(turn)}
+              href={runningJobHref(job)}
               className="flex items-start gap-2 px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
             >
               <span className="mt-px w-4 shrink-0 tabular-nums text-foreground/70">
@@ -55,9 +49,9 @@ export function RunningTasksBox({
               <Loader2Icon className="mt-0.5 size-3.5 shrink-0 animate-spin" />
               <span className="leading-snug">
                 {chatRunningTaskLabel({
-                  mode: turn.mode,
-                  lessonDate: turn.lessonDate,
-                  lessonTitle: turn.lessonTitle,
+                  mode: job.mode,
+                  lessonDate: job.lessonDate,
+                  lessonTitle: job.lessonTitle,
                 })}
               </span>
             </Link>

@@ -20,7 +20,6 @@ import type { MemoryCandidate } from "@/lib/api";
 import type { ChatStreamChunk } from "@/components/assistant-ui/artifact-runtime-config";
 import type { ArtifactMode } from "@/components/assistant-ui/artifact-runtime-config";
 import { initialAssistantRunContent, lessonContextFromMemoryState } from "@/lib/chat-run-feedback";
-import { markPendingChatTurn } from "@/lib/pending-chat-turns";
 import { extractSessionAttachments, type SessionAttachment } from "@/lib/session-attachments";
 import { cancelTurn, runTurn } from "@/features/workflow-drafts/turn-runner";
 import { useWorkflowChatRuntime, type UpdateWorkflowThread } from "@/features/workflow-drafts/workflow-chat-runtime";
@@ -62,18 +61,6 @@ export type ArtifactSessionConfig = {
     attachments?: SessionAttachment[];
     signal?: AbortSignal;
   }) => AsyncGenerator<ChatStreamChunk>;
-  /** Poll draft status while showing the resumed Still-working spinner. */
-  fetchDraft?: () => Promise<{
-    draftId: string;
-    artifactRevision: number;
-    artifactHash: string;
-    turnInProgress: boolean;
-    latestTurnComplete: boolean;
-    messages: ChatMessage[];
-    artifactMarkdown: string;
-    completeness?: CompletenessChecklist | null;
-    memoryState?: Record<string, unknown> | null;
-  }>;
   patchDraft?: (markdown: string) => Promise<{
     completeness?: CompletenessChecklist;
     readyToSave?: boolean;
@@ -164,7 +151,6 @@ export function ArtifactSessionRuntimeProvider({
     initialMemoryState = null,
     chatStream,
     patchDraft,
-    fetchDraft,
     getSessionId: configGetSessionId,
     onSessionLost,
     onCompletenessChange,
@@ -256,46 +242,15 @@ export function ArtifactSessionRuntimeProvider({
     }));
   }, []);
 
-  // Recovery poll (design §A.1.7): only after Stop / a dropped stream
-  // (awaiting_backend) or a hard refresh into a running turn (no turn record,
-  // snapshot says in progress). Resolution happens in the store reducer.
-  const needRecoveryPoll =
-    turn?.phase === "awaiting_backend" ||
-    (turn == null && (storedDraft?.turnInProgress ?? turnInProgress) === true);
+  // Tell the app-wide notifier which chat is on screen, so it doesn't toast a
+  // completion the teacher is already watching.
   useEffect(() => {
-    if (!fetchDraft || !needRecoveryPoll) return;
-    let cancelled = false;
-    const refresh = async () => {
-      try {
-        const draft = await fetchDraft();
-        if (cancelled || draft.turnInProgress) return;
-        useWorkflowDraftStore.getState().upsert({
-          mode,
-          classId,
-          sessionId: sessionIdRef.current,
-          draftId: draft.draftId,
-          messages: draft.messages,
-          artifactMarkdown: draft.artifactMarkdown,
-          artifactRevision: draft.artifactRevision,
-          artifactHash: draft.artifactHash,
-          turnInProgress: draft.turnInProgress,
-          latestTurnComplete: draft.latestTurnComplete,
-          completeness: draft.completeness ?? null,
-          memoryState: draft.memoryState ?? null,
-        });
-      } catch {
-        // Keep polling; the notifier or the next poll can still recover.
-      }
-    };
-    void refresh();
-    const interval = window.setInterval(() => {
-      void refresh();
-    }, 2000);
+    useWorkflowDraftStore.getState().setMountedDraftId(draftKey);
     return () => {
-      cancelled = true;
-      window.clearInterval(interval);
+      const store = useWorkflowDraftStore.getState();
+      if (store.mountedDraftId === draftKey) store.setMountedDraftId(null);
     };
-  }, [needRecoveryPoll, fetchDraft, mode, classId]);
+  }, [draftKey]);
 
   const runWithSessionRecovery = useCallback(
     async <T,>(run: (sessionId: string) => Promise<T>, preserveMarkdown?: string): Promise<T> => {
@@ -332,28 +287,13 @@ export function ArtifactSessionRuntimeProvider({
         fromMemory.lessonDate || configLessonDateRef.current.trim() || undefined;
       const lessonTitle =
         fromMemory.lessonTitle || configLessonTitleRef.current.trim() || undefined;
-      // Marker for PendingTurnNotifier (toasts / Running box) — unchanged
-      // until M2. The runner clears it only on hard failure.
-      const pendingKey =
-        typeof window !== "undefined"
-          ? markPendingChatTurn(window.sessionStorage, {
-              mode,
-              classId,
-              sessionId: sessionIdRef.current,
-              draftId: draftId || undefined,
-              lessonDate,
-              lessonTitle,
-              resumeHref: `${window.location.pathname}${window.location.search}`,
-              baselineMessageCount: snapshot?.messages.length ?? 0,
-            })
-          : undefined;
 
       await runTurn({
         draftId: draftKey,
         mode,
+        classId,
         lessonDate,
         lessonTitle,
-        pendingKey,
         userText: text,
         userContent: (message.content ?? []) as ThreadMessageLike["content"],
         placeholderContent: initialAssistantRunContent() ?? [],

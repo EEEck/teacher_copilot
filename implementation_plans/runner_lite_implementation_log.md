@@ -223,3 +223,53 @@ with the markers in M2. Verified: markers survive hard refresh and the
 root-layout notifier covers all happy paths through the same reducer.
 
 Suite after: `tsc` clean; 153/153 (4 tests removed with the deleted file).
+
+### 2026-07-16 — M2: the backend owns "what's running"
+
+Deletes the sessionStorage marker system in favor of asking the backend what
+it is running. The markers were a client-side model of backend state that no
+one could keep honest: they survived hard refresh but not a different tab or
+device, they were written by whoever happened to start the turn, and the
+notifier had to guess completion from `baselineMessageCount` diffs. The turn
+was already backend-owned (H3) — M2 just makes the *reporting* follow the same
+owner.
+
+**Backend** (commit 6b238ef):
+- `GET /api/workflow/active` → draft turns running right now across all classes
+  (`workflow_drafts.list_in_progress`, workspace-scoped, terminal + idle rows
+  excluded) plus generating sweeps (`memory_sweep_reviews.list_generating`).
+  Idle-but-active drafts are deliberately excluded: resumable work is not
+  running work.
+- 4 hermetic tests (`tests/test_api_workflow_active.py`).
+
+**Frontend:**
+- `PendingTurnNotifier` polls the endpoint every 3s (visible tab + focus),
+  diffs against the previous list, and for each job that *stopped* hydrates the
+  draft through `upsert` and toasts once. Sweep dedupe keys on `review_id`, not
+  class — a regenerated sweep must be able to toast again.
+- `markTurnNotified(draftId, artifactRevision)` in the store replaces the
+  `seenInProgress` / `baselineMessageCount` bookkeeping; `mountedDraftId`
+  answers "is the teacher watching this chat?" so an on-screen turn never
+  toasts.
+- `running-jobs.ts` unions poll items with this tab's live runners: a turn is
+  visible the instant it is sent, a short turn that starts and finishes between
+  polls still shows, and local labels win (they carry the resolved lesson
+  date/title a draft row lacks).
+- Deleted with the markers: `pending-chat-turns.ts` + test, the provider's
+  recovery poll, `fetchDraft` (39 lines), and `completeTurn`'s
+  `snapshot.messages` mirror — each existed only to feed or compensate for the
+  marker heuristics. `TurnRecord` now carries the label context instead.
+
+**Browser pass** (dev mode, economy profile, sandbox wiki — all verified before
+commit):
+
+| Criterion | Result |
+|---|---|
+| Turn started, teacher navigates away | Running box follows across pages |
+| Off-page completion | exactly one toast ("Finished updating memory") |
+| Return to the page | reply + reasoning/tool trace + artifact all hydrated |
+| On-page completion | zero toasts; box clears; later poll does not double-toast |
+| Hard refresh mid-turn | box + "Still working…" restored from the poll alone |
+| Refreshed turn completes | spinner clears, reply lands, no toast |
+
+Suite: backend hermetic (exit 0); frontend `tsc` clean, 152/152.

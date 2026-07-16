@@ -4,8 +4,11 @@
  * leave/return, hard-refresh, Stop, and failure paths are exercised end to
  * end (no simulated flag flips). 3 workflows × the scenario matrix.
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThreadMessageLike } from "@assistant-ui/react";
+
+const toastSpy = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toastSpy }));
 
 import type {
   ArtifactMode,
@@ -24,22 +27,8 @@ import {
   type WorkflowDraftSnapshot,
 } from "@/features/workflow-drafts/workflow-draft-store";
 import { workflowTurnActivity } from "@/features/workflow-drafts/workflow-turn-activity";
-import {
-  listPendingChatTurns,
-  markPendingChatTurn,
-  type PendingTurnStorage,
-} from "@/lib/pending-chat-turns";
 
 const MODES: ArtifactMode[] = ["plan", "ingest", "discuss"];
-
-function memoryStorage(): PendingTurnStorage {
-  const storage = new Map<string, string>();
-  return {
-    getItem: (key: string) => storage.get(key) ?? null,
-    setItem: (key: string, value: string) => storage.set(key, value),
-    removeItem: (key: string) => storage.delete(key),
-  };
-}
 
 function baseSnapshot(
   mode: ArtifactMode,
@@ -123,21 +112,14 @@ function final(mode: ArtifactMode): ChatStreamChunk {
   };
 }
 
-function startTurn(
-  mode: ArtifactMode,
-  opts: {
-    storage?: PendingTurnStorage;
-    pendingKey?: string;
-  } = {},
-) {
+function startTurn(mode: ArtifactMode) {
   const draftId = `${mode}-draft`;
   useWorkflowDraftStore.getState().upsert(baseSnapshot(mode));
   const { stream, push } = controlledStream();
   const args: RunTurnArgs = {
     draftId,
     mode,
-    pendingKey: opts.pendingKey,
-    pendingStorage: opts.storage,
+    classId: "chemie_9b_2026_27",
     userText: "Please draft the next step.",
     userContent: "Please draft the next step.",
     placeholderContent: [{ type: "reasoning", text: "Starting..." }],
@@ -200,10 +182,14 @@ function hasRichParts(messages: ThreadMessageLike[]): boolean {
 }
 
 beforeEach(() => {
+  toastSpy.success.mockClear();
+  toastSpy.error.mockClear();
   useWorkflowDraftStore.setState({
     draftsById: {},
     threadMessagesByDraftId: {},
     turnByDraftId: {},
+    notifiedTurns: {},
+    mountedDraftId: null,
   });
 });
 
@@ -327,16 +313,8 @@ describe.each(MODES)("chat turn scenarios — %s", (mode) => {
     expect(lastAssistantText(merged)).toBe(`Recovered ${mode} reply.`);
   });
 
-  it("dropped stream after content: awaiting backend, not failed (invariant I3/I4)", async () => {
-    const storage = memoryStorage();
-    const pendingKey = markPendingChatTurn(storage, {
-      mode,
-      classId: "chemie_9b_2026_27",
-      sessionId: `${mode}-session`,
-      draftId: `${mode}-draft`,
-      baselineMessageCount: 0,
-    });
-    const { draftId, push, done } = startTurn(mode, { storage, pendingKey });
+  it("dropped stream after content: awaiting backend, not failed (invariant I3)", async () => {
+    const { draftId, push, done } = startTurn(mode);
     await flush();
     push({ chunk: progress() });
     await flush();
@@ -344,21 +322,15 @@ describe.each(MODES)("chat turn scenarios — %s", (mode) => {
     push({ error: new TypeError("network error") });
     await done;
 
+    // The backend may still finish; the notifier's poll resolves it.
     expect(observe(draftId)).toEqual({ stopButton: false, stillWorking: true });
-    // Marker stays — the backend may still finish; notifier owns it.
-    expect(listPendingChatTurns(storage)).toHaveLength(1);
+    expect(useWorkflowDraftStore.getState().turnByDraftId[draftId].phase).toBe(
+      "awaiting_backend",
+    );
   });
 
-  it("failure before any content: error reply, marker cleared exactly once (I4)", async () => {
-    const storage = memoryStorage();
-    const pendingKey = markPendingChatTurn(storage, {
-      mode,
-      classId: "chemie_9b_2026_27",
-      sessionId: `${mode}-session`,
-      draftId: `${mode}-draft`,
-      baselineMessageCount: 0,
-    });
-    const { draftId, push, done } = startTurn(mode, { storage, pendingKey });
+  it("failure before any content: error reply, turn settled", async () => {
+    const { draftId, push, done } = startTurn(mode);
     await flush();
 
     push({ error: new Error("API 500: boom") });
@@ -366,7 +338,43 @@ describe.each(MODES)("chat turn scenarios — %s", (mode) => {
 
     expect(observe(draftId)).toEqual({ stopButton: false, stillWorking: false });
     expect(lastAssistantText(thread(draftId))).toBe(CHAT_ERROR_REPLY);
-    expect(listPendingChatTurns(storage)).toHaveLength(0);
+    expect(useWorkflowDraftStore.getState().turnByDraftId[draftId].phase).toBe(
+      "settled",
+    );
+  });
+
+  it("completion toast fires once off-page, never for the chat on screen", async () => {
+    const draftId = `${mode}-draft`;
+    const store = useWorkflowDraftStore.getState();
+
+    // On screen: the teacher is watching, so nothing to announce.
+    store.setMountedDraftId(draftId);
+    const onScreen = startTurn(mode);
+    await flush();
+    onScreen.push({ chunk: final(mode) });
+    onScreen.push({ end: true });
+    await onScreen.done;
+    expect(toastSpy.success).not.toHaveBeenCalled();
+
+    // Off page: announce once, and the notifier can't double-toast it.
+    useWorkflowDraftStore.setState({
+      draftsById: {},
+      threadMessagesByDraftId: {},
+      turnByDraftId: {},
+      notifiedTurns: {},
+      mountedDraftId: null,
+    });
+    const offPage = startTurn(mode);
+    await flush();
+    offPage.push({ chunk: final(mode) });
+    offPage.push({ end: true });
+    await offPage.done;
+
+    expect(toastSpy.success).toHaveBeenCalledTimes(1);
+    // artifactRevision 2 comes from the final chunk.
+    expect(
+      useWorkflowDraftStore.getState().markTurnNotified(draftId, 2),
+    ).toBe(false);
   });
 
   it("duplicate send while streaming is a no-op (one turn per draft)", async () => {
@@ -379,6 +387,7 @@ describe.each(MODES)("chat turn scenarios — %s", (mode) => {
     await runTurn({
       draftId,
       mode,
+      classId: "chemie_9b_2026_27",
       userText: "duplicate",
       userContent: "duplicate",
       placeholderContent: [],

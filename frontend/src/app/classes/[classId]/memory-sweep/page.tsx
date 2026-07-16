@@ -30,10 +30,6 @@ import {
   memorySweepLoadingSavedText,
   memorySweepProgressText,
 } from "@/lib/memory-sweep-review-status";
-import {
-  clearPendingMemorySweep,
-  markPendingMemorySweep,
-} from "@/lib/pending-chat-turns";
 
 const REVIEW_LATER_TOOLTIP =
   "Hide while the system waits for more evidence. It returns when newer matching evidence arrives, or after 7 days if it still needs review.";
@@ -343,14 +339,9 @@ export default function MemorySweepPage() {
       }
       return drafts;
     });
-    if (typeof window === "undefined") return;
-    if (next.status === "generating" && next.review_id) {
-      markPendingMemorySweep(window.sessionStorage, {
-        classId,
-        reviewId: next.review_id,
-      });
-    }
-  }, [classId]);
+    // A generating sweep needs no client-side marker: the backend reports it
+    // via GET /api/workflow/active and PendingTurnNotifier picks it up.
+  }, []);
 
   const load = useCallback(async (
     reason: "refresh" | "submit" = "refresh",
@@ -361,9 +352,6 @@ export default function MemorySweepPage() {
     setShowAllWarnings(false);
     setError(null);
     setNotice(null);
-    if (options?.refresh && typeof window !== "undefined") {
-      clearPendingMemorySweep(window.sessionStorage, classId);
-    }
     try {
       const opened = await client.openMemorySweepReview(classId, options);
       applyReview(opened);
@@ -534,9 +522,6 @@ export default function MemorySweepPage() {
     setError(null);
     try {
       await client.discardMemorySweepReview(classId, reviewId);
-      if (typeof window !== "undefined") {
-        clearPendingMemorySweep(window.sessionStorage, classId);
-      }
       setReview(null);
       setProposal(null);
       setDraftByCard({});

@@ -1,8 +1,19 @@
 # Chat message / turn lifecycle issue report
 
-**Status:** Open / recurring UI stuck on “Still working on your response…”  
+> **Superseded (2026-07-16) — historical record.** The hybrid architecture this
+> report describes was replaced by *runner-lite* (H3) and the backend-owned
+> Running box (M2). Turn phases are now `streaming` / `awaiting_backend` /
+> `settled` in `workflow-draft-store.ts` (`workflow-turn-state.ts` is gone);
+> the sessionStorage marker system (`pending-chat-turns.ts`) and the runtime's
+> recovery poll are deleted, and `PendingTurnNotifier` reads
+> `GET /api/workflow/active` instead. For the current design see
+> `docs/beta_readiness_audit_2026-07-13.md` (§A.1) and
+> `frontend/ARCHITECTURE.md`. Keep this file for the bug history and the
+> product intent in §1, which still hold.
+
+**Status:** Resolved by runner-lite + M2; kept for history  
 **Worktree:** `feature/class-home-discussion` (KlassenPilot)  
-**Last updated:** 2026-07-13  
+**Last updated:** 2026-07-13 (banner added 2026-07-16)  
 **Scope:** Plan, Update Memory (ingest), and Discuss — shared chat stack
 
 This document captures the product intent, the hybrid architecture we shipped,
