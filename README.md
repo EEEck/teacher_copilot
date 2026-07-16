@@ -305,8 +305,8 @@ docker compose exec backend python -m app.services.beta_cli `
 ```
 
 Telemetry is stored in `beta.sqlite3`: app sessions, visible user/assistant
-messages, draft snapshots, app events, and per-file wiki diffs for approved
-writes.
+messages, draft snapshots, app events, teacher feedback notes (Give feedback
+form), and per-file wiki diffs for approved writes.
 
 Generate a tester review report from telemetry and wiki diffs:
 

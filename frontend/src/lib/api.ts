@@ -556,6 +556,11 @@ export const client = {
     }),
   betaLogout: () => api<{ status: string }>("/api/beta/logout", { method: "POST" }),
   betaMe: () => api<BetaIdentity>("/api/beta/me"),
+  betaFeedback: (message: string, page?: string) =>
+    api<{ status: string }>("/api/beta/feedback", {
+      method: "POST",
+      body: JSON.stringify({ message, ...(page ? { page } : {}) }),
+    }),
   getClasses: () => api<{ classes: ClassSummary[] }>("/api/classes"),
   getTimeline: (classId: string) =>
     api<ClassTimeline>(`/api/classes/${classId}/timeline`),

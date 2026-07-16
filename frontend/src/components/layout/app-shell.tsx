@@ -66,6 +66,9 @@ export function AppShell({
                 <Link href="/docs">Docs</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
+                <Link href="/beta/feedback">Feedback</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
                 <Link href="/settings">Settings</Link>
               </DropdownMenuItem>
             </DropdownMenuContent>

@@ -439,7 +439,7 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
                 loops, watch items, or what to do next (opens the chat dock).
               </li>
               <li>
-                <span className="font-medium">Sharpen your assistant:</span>{" "}
+                <span className="font-medium">Sharpen assistant:</span>{" "}
                 review quiet insights so it gets more personal for this class.
                 Aim for about once a week; we nudge after 5 days.
               </li>
@@ -496,7 +496,7 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
               size="lg"
               className="relative w-full flex-col justify-center gap-0 px-3 leading-tight"
             >
-              <span>Sharpen your assistant</span>
+              <span>Sharpen assistant</span>
               {memorySweepQuietSubtitle ? (
                 <span className="text-[10px] font-normal text-muted-foreground">
                   {memorySweepQuietSubtitle}

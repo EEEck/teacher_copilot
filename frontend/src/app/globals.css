@@ -84,4 +84,46 @@
       linear-gradient(to bottom, hsl(var(--primary) / 0.04) 1px, transparent 1px);
     background-size: 2.5rem 2.5rem;
   }
+
+  /* Agent mark idle life — rare blink + soft lumen pulse (`alive` prop) */
+  @keyframes kp-agent-blink {
+    0%,
+    88%,
+    100% {
+      transform: scaleY(1);
+    }
+    91%,
+    93% {
+      transform: scaleY(0.08);
+    }
+  }
+
+  @keyframes kp-agent-node-pulse {
+    0%,
+    100% {
+      opacity: 0.45;
+      transform: scale(0.92);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.28);
+    }
+  }
+
+  .kp-agent-blink {
+    transform-box: view-box;
+    transform-origin: 32px 29px;
+    animation: kp-agent-blink 5.4s ease-in-out infinite;
+  }
+
+  .kp-agent-node-pulse {
+    animation: kp-agent-node-pulse 2.8s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .kp-agent-blink,
+    .kp-agent-node-pulse {
+      animation: none !important;
+    }
+  }
 }

@@ -105,7 +105,7 @@ dashboard, not a second product surface. Layout is three titled sections
 2. **Actions** — dismissible `StickyNote` + compact equal-width row
    (`inline-grid` + `auto-cols-[1fr]`, sized to the widest label; `size="lg"`).
    Core order: Plan, Update memory, Discuss (`variant="soft"`) with wow-tone
-   hover copy (`CLASS_HOME_HOVER`); Sharpen your assistant + Browse class files
+   hover copy (`CLASS_HOME_HOVER`); Sharpen assistant + Browse class files
    use `outline`. Sharpen (Memory Sweep route) shows a quiet “Draft saved…”
    subtitle when useful, an attention chip for generating/stale/failed, and a
    due chip after 5 days / never applied, resetting also on empty all-caught-up

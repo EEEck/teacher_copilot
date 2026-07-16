@@ -37,6 +37,19 @@ def _enable_beta(monkeypatch, tmp_path: Path, service: BetaAuthService) -> None:
         beta_cookie_secure=False,
     )
     monkeypatch.setattr(deps, "get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.routes.get_settings", lambda: settings)
+    app.dependency_overrides[deps.get_beta_auth_service] = lambda: service
+
+
+def _disable_beta(monkeypatch, tmp_path: Path, service: BetaAuthService) -> None:
+    settings = Settings(
+        beta_enabled=False,
+        beta_data_root=tmp_path / "beta_data",
+        beta_cookie_name="kp_beta_session",
+        beta_cookie_secure=False,
+    )
+    monkeypatch.setattr(deps, "get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.routes.get_settings", lambda: settings)
     app.dependency_overrides[deps.get_beta_auth_service] = lambda: service
 
 
@@ -426,5 +439,91 @@ def test_memory_sweep_propose_records_beta_telemetry_with_warnings(
         # notice; raw internal failure reasons stay in server logs.
         assert "could not consolidate" in event[1]
         assert "offline consolidation" not in event[1]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_beta_feedback_requires_beta_mode(tmp_path: Path, monkeypatch):
+    service = _service(tmp_path)
+    service.provision_tester(
+        tester_id="t_anna",
+        workspace_id="w_anna_chem9b",
+        invite_code="anna-invite",
+    )
+    _disable_beta(monkeypatch, tmp_path, service)
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            res = client.post(
+                "/api/beta/feedback",
+                json={"message": "Nice tool"},
+            )
+            assert res.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+def test_beta_feedback_requires_login(tmp_path: Path, monkeypatch):
+    service = _service(tmp_path)
+    _enable_beta(monkeypatch, tmp_path, service)
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            res = client.post(
+                "/api/beta/feedback",
+                json={"message": "Nice tool"},
+            )
+            assert res.status_code == 401
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_beta_feedback_stores_event(tmp_path: Path, monkeypatch):
+    service = _service(tmp_path)
+    service.provision_tester(
+        tester_id="t_anna",
+        workspace_id="w_anna_chem9b",
+        invite_code="anna-invite",
+    )
+    _enable_beta(monkeypatch, tmp_path, service)
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            assert (
+                client.post(
+                    "/api/beta/login", json={"invite_code": "anna-invite"}
+                ).status_code
+                == 200
+            )
+            res = client.post(
+                "/api/beta/feedback",
+                json={"message": "  Sweep triage felt slow.  ", "page": "/beta/feedback"},
+            )
+            assert res.status_code == 200, res.text
+            assert res.json() == {"status": "ok"}
+
+        with sqlite3.connect(tmp_path / "beta.sqlite3") as conn:
+            row = conn.execute(
+                """
+                select tester_id, workspace_id, type, payload_json
+                from event
+                where type = 'teacher_feedback'
+                """
+            ).fetchone()
+            message_row = conn.execute(
+                """
+                select mode, role, content, app_session_id
+                from message
+                where role = 'teacher_feedback'
+                """
+            ).fetchone()
+
+        assert row is not None
+        assert row[0] == "t_anna"
+        assert row[1] == "w_anna_chem9b"
+        assert row[2] == "teacher_feedback"
+        assert '"message": "Sweep triage felt slow."' in row[3]
+        assert '"page": "/beta/feedback"' in row[3]
+        assert message_row is not None
+        assert message_row[0] == "feedback"
+        assert message_row[1] == "teacher_feedback"
+        assert message_row[2] == "[/beta/feedback] Sweep triage felt slow."
+        assert message_row[3] == "feedback"
     finally:
         app.dependency_overrides.clear()

@@ -104,6 +104,7 @@ def render_beta_report(
     ]
     lines.extend(_render_sessions(sessions))
     lines.extend(_render_warnings(events, diffs))
+    lines.extend(_render_teacher_feedback(events, messages))
     lines.extend(_render_timeline(events))
     lines.extend(_render_messages(messages))
     lines.extend(_render_artifacts(artifacts))
@@ -225,6 +226,41 @@ def _incomplete_chat_turns(
     return incomplete
 
 
+def _render_teacher_feedback(
+    events: list[sqlite3.Row],
+    messages: list[sqlite3.Row],
+) -> list[str]:
+    """Dedicated rollup for Give-feedback notes (events + message rows)."""
+    lines = ["## Teacher feedback", ""]
+    feedback_events = [row for row in events if row["type"] == "teacher_feedback"]
+    feedback_messages = [
+        row
+        for row in messages
+        if row["mode"] == "feedback" or row["role"] == "teacher_feedback"
+    ]
+    if not feedback_events and not feedback_messages:
+        return [*lines, "_No teacher feedback submitted._", ""]
+
+    if feedback_events:
+        for row in feedback_events:
+            payload = _payload_dict(row["payload_json"])
+            page = payload.get("page")
+            message = str(payload.get("message") or "").strip()
+            page_bit = f" page=`{page}`" if page else ""
+            lines.append(f"### {row['timestamp']}{page_bit}")
+            lines.append("")
+            lines.append(_clip(message or "_empty_", 2000))
+            lines.append("")
+        return lines
+
+    for row in feedback_messages:
+        lines.append(f"### {row['timestamp']} `{row['role']}`")
+        lines.append("")
+        lines.append(_clip(row["content"], 2000))
+        lines.append("")
+    return lines
+
+
 def _render_timeline(rows: list[sqlite3.Row]) -> list[str]:
     lines = ["## Event timeline", ""]
     if not rows:
@@ -241,9 +277,15 @@ def _render_timeline(rows: list[sqlite3.Row]) -> list[str]:
 
 def _render_messages(rows: list[sqlite3.Row]) -> list[str]:
     lines = ["## Messages", ""]
-    if not rows:
+    # Feedback has its own section; keep chat Messages focused on workflow turns.
+    chat_rows = [
+        row
+        for row in rows
+        if not (row["mode"] == "feedback" or row["role"] == "teacher_feedback")
+    ]
+    if not chat_rows:
         return [*lines, "_No matching messages._", ""]
-    for row in rows:
+    for row in chat_rows:
         lines.append(
             f"### {row['timestamp']} `{row['role']}` "
             f"session=`{row['app_session_id']}`"
@@ -252,6 +294,14 @@ def _render_messages(rows: list[sqlite3.Row]) -> list[str]:
         lines.append(_clip(row["content"], 1200))
         lines.append("")
     return lines
+
+
+def _payload_dict(raw: str) -> dict[str, Any]:
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def _render_artifacts(rows: list[sqlite3.Row]) -> list[str]:

@@ -12,6 +12,7 @@ import { Maximize2Icon, MinusIcon, XIcon } from "lucide-react";
 import { createArtifactRuntimeConfig } from "@/components/assistant-ui/artifact-runtime-config";
 import { ArtifactSessionRuntimeProvider } from "@/components/assistant-ui/artifact-session-runtime";
 import { DiscussThread } from "@/components/assistant-ui/discuss-thread";
+import { AgentMark, EEEck } from "@/components/klassenpilot/agent-mark";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { client, type ChatMessage } from "@/lib/api";
@@ -19,6 +20,10 @@ import { toWorkflowDraftSnapshot } from "@/features/workflow-drafts/workflow-dra
 import { workflowDraftRuntimeKey } from "@/features/workflow-drafts/workflow-draft-runtime-key";
 import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 import { cn } from "@/lib/utils";
+
+/** Discuss FAB — a step above the size-12 ? button. */
+const FAB_BOX_PX = 76;
+const HEADER_BOX_PX = 28;
 
 export type DiscussDockState = "closed" | "minimized" | "expanded";
 
@@ -49,6 +54,7 @@ const MAX_WIDTH_VW = 0.92;
  */
 export function DiscussDock({ classId, state, onStateChange }: DiscussDockProps) {
   const upsert = useWorkflowDraftStore((s) => s.upsert);
+  const draftsById = useWorkflowDraftStore((s) => s.draftsById);
   const [boot, setBoot] = useState<BootstrapState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -170,6 +176,10 @@ export function DiscussDock({ classId, state, onStateChange }: DiscussDockProps)
 
   const showFab = state === "closed";
   const minimized = state === "minimized";
+  const turnInProgress = boot
+    ? Boolean(draftsById[boot.draftId]?.turnInProgress ?? boot.turnInProgress)
+    : false;
+  const headerMood = minimized ? "sleeping" : turnInProgress ? "thinking" : "default";
 
   const sessionChat =
     boot != null && state !== "closed" ? (
@@ -195,18 +205,32 @@ export function DiscussDock({ classId, state, onStateChange }: DiscussDockProps)
   return (
     <>
       {showFab ? (
-        <button
-          type="button"
-          aria-label="Discuss class state"
-          onClick={() => onStateChange("expanded")}
-          className={cn(
-            "fixed bottom-4 right-4 z-50 flex size-12 items-center justify-center rounded-full",
-            "bg-primary text-3xl font-semibold leading-none text-primary-foreground shadow-sm",
-            "hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-          )}
-        >
-          ?
-        </button>
+        <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Open discuss with EEEck"
+            onClick={() => onStateChange("expanded")}
+            className={cn(
+              "relative flex items-center justify-center overflow-visible rounded-full",
+              "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+            )}
+            style={{ width: FAB_BOX_PX, height: FAB_BOX_PX }}
+          >
+            <EEEck boxSize={FAB_BOX_PX} />
+          </button>
+          <button
+            type="button"
+            aria-label="Discuss class state"
+            onClick={() => onStateChange("expanded")}
+            className={cn(
+              "flex size-12 items-center justify-center rounded-full",
+              "bg-primary text-3xl font-semibold leading-none text-primary-foreground shadow-sm",
+              "hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+            )}
+          >
+            ?
+          </button>
+        </div>
       ) : null}
 
       {state !== "closed" ? (
@@ -232,6 +256,7 @@ export function DiscussDock({ classId, state, onStateChange }: DiscussDockProps)
           <DockHeader
             title="Discuss class state"
             minimized={minimized}
+            mood={headerMood}
             onExpand={() => onStateChange("expanded")}
             onMinimize={() => onStateChange("minimized")}
             onClose={() => onStateChange("closed")}
@@ -280,18 +305,26 @@ export function DiscussDock({ classId, state, onStateChange }: DiscussDockProps)
 function DockHeader({
   title,
   minimized,
+  mood,
   onExpand,
   onMinimize,
   onClose,
 }: {
   title: string;
   minimized?: boolean;
+  mood: "default" | "sleeping" | "thinking";
   onExpand: () => void;
   onMinimize: () => void;
   onClose: () => void;
 }) {
   return (
     <div className="flex shrink-0 items-center gap-1 border-b border-border bg-muted px-2 py-1.5">
+      <AgentMark
+        boxSize={HEADER_BOX_PX}
+        mood={mood}
+        title="EEEck"
+        className="shrink-0"
+      />
       <button
         type="button"
         className="min-w-0 flex-1 truncate px-1 text-left text-sm font-medium text-foreground"

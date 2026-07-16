@@ -154,3 +154,72 @@ Customize brand by editing `--primary` and `--ring` in `globals.css` only.
 - Dark mode
 - Separate chat color theme
 - Storybook / Figma token pipeline
+
+## Agent mark
+
+Locked **Final Mark S / EEEck** — the production KlassenPilot agent presence mark.
+
+**Import library:** [`@/components/klassenpilot/agent-mark`](src/components/klassenpilot/agent-mark.tsx)
+
+```tsx
+import {
+  AgentMark,          // full API: mood / workflow / alive / size / boxSize
+  EEEck,              // default mood, size lg
+  EEEckSleeping,
+  EEEckThinking,
+  EEEckDoh,
+  EEEckHappy,
+  EEECK_BY_MOOD,      // Record<mood, component>
+  AGENT_MARK_MOODS,
+  AGENT_MARK_WORKFLOWS,
+} from "@/components/klassenpilot/agent-mark";
+
+<EEEck />                              // landing / hero scale (lg)
+<EEEck boxSize={76} />                 // FAB: same proportions, fitted to px box
+<EEEckThinking boxSize={28} />         // dock header while a turn runs
+<AgentMark mood="happy" workflow="plan" alive />
+```
+
+`boxSize` always composes at `size="lg"` then CSS-scales into a fixed outer box — that is how FABs/chips keep Final Mark S proportions. Do not shrink `size` to a tiny face number for chips.
+
+**Home:** [`HomeLanding`](src/components/klassenpilot/home-landing.tsx) uses `AgentMark` (`alive`)  
+**Workflow pages:** Plan / Update memory / Memory Sweep headers use `AgentMark boxSize={76}` with the matching `workflow` badge (same as Discuss FAB; no `alive`)  
+**Discuss dock:** `EEEck boxSize={76}` beside `?`; header uses `AgentMark boxSize={28}` with mood from turn state
+
+### Composition
+
+- Soft green halo behind the face (`bg-primary/20` blur); face SVG is `relative z-[1]` so halo blur never tints the eyes
+- Dark brand-green core disc + mesh hex of lumen nodes (all-to-all links)
+- Pure white eye sclera + dark pupils
+- Clipboard workflow badge (~64 at face ~120 / `size="lg"`), slightly rotated on a hex vertex
+- Size presets: `sm` ≈ face 72, `md` ≈ 96, `lg` ≈ 120 (or pass a pixel face size). Mesh orbit makes the total mark larger than the face
+
+### Moods (`mood`)
+
+| Mood | Face | Typical use | Shortcut |
+|------|------|-------------|----------|
+| `default` | White eyes, no mouth/nose | Idle brand presence | `EEEck` |
+| `sleeping` | Closed lids + ZZZ (unless sweep) | Waiting / idle | `EEEckSleeping` |
+| `thinking` | Straight `\` `/` brows, pupils right, no mouth | Working on a request | `EEEckThinking` |
+| `doh` | X eyes, no mouth | Error / blocked | `EEEckDoh` |
+| `happy` | White eyes + smile | Success / saved | `EEEckHappy` |
+
+### Workflows (`workflow`)
+
+| Workflow | Badge | Face extras |
+|----------|-------|-------------|
+| `memory` (default) | Clipboard with note lines; mood may swap to moon (sleep) or spinner (thinking) | — |
+| `plan` | Lucide `ListChecks` on clipboard board | — |
+| `sweep` | Lucide `RefreshCw` on clipboard | Sleeping lids (no ZZZ), broken left brick face + flying bricks |
+| any + `doh` | Lucide `AlertTriangle` on clipboard | Overrides other badge motifs |
+
+Badge icons use Lucide with `absoluteStrokeWidth`.
+
+### Rules
+
+1. **No mouth/nose** except the happy smile.
+2. **Green is scarce** — the mark is one of the few places solid brand green appears; do not flood screens with green marks.
+3. **Eyes above halo** — keep the face SVG above blur layers so sclera stays pure white.
+4. Use the shared `AgentMark` / `EEEck*` exports; do not fork mark SVG into pages.
+5. **`alive`** — optional idle life (rare blink on default/happy + soft staggered lumen pulse). Off by default; landing/marketing may opt in. Honors `prefers-reduced-motion`.
+6. **`boxSize`** — for fixed UI footprints (FAB, header). Never fake “small” by passing a tiny face `size`.

@@ -73,6 +73,11 @@ def _populate_report_fixture(tmp_path: Path) -> Path:
         ],
         metadata={"intent": "correct_existing_results"},
     )
+    telemetry.record_teacher_feedback(
+        identity,
+        message="Timeline felt hard to scan on a phone.",
+        page="/classes/chemie_9b_2026_27",
+    )
     return db_path
 
 
@@ -97,6 +102,9 @@ def test_beta_report_summarizes_tester_activity_and_wiki_diff(tmp_path: Path) ->
     assert "Incomplete chat turns" in report
     assert "No-op wiki diffs" in report
     assert "open_loops.md" in report
+    assert "## Teacher feedback" in report
+    assert "Timeline felt hard to scan on a phone." in report
+    assert "page=`/classes/chemie_9b_2026_27`" in report
 
 
 def test_beta_cli_report_writes_markdown_file(tmp_path: Path) -> None:
