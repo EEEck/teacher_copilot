@@ -161,7 +161,8 @@ Locked **Final Mark S / EEEck** — the production KlassenPilot agent presence m
 
 **Component:** [`@/components/klassenpilot/agent-mark`](src/components/klassenpilot/agent-mark.tsx) — import once; variants via `mood`, `workflow`, and `alive` (same pattern as `Button` variants).  
 **Gallery (temporary):** [`/dev/agent-avatars`](src/app/dev/agent-avatars/page.tsx) — mood / workflow / `alive` demos for iteration and customer comparison; not product nav.  
-**Home:** [`/`](src/app/page.tsx) uses [`HomeLanding`](src/components/klassenpilot/home-landing.tsx) with locked `AgentMark` (`alive`); [`/dev/new-main-page`](src/app/dev/new-main-page/page.tsx) mirrors `/`.
+**Home:** [`/`](src/app/page.tsx) uses [`HomeLanding`](src/components/klassenpilot/home-landing.tsx) with locked `AgentMark` (`alive`); [`/dev/new-main-page`](src/app/dev/new-main-page/page.tsx) mirrors `/`.  
+**Discuss dock:** FAB pair on class home — EEEck beside the `?` chip (same `size-12` footprint); when the panel opens, EEEck moves into the dock header (`thinking` while a turn runs, `sleeping` when minimized).
 
 ### Composition
 
