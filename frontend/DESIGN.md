@@ -159,10 +159,32 @@ Customize brand by editing `--primary` and `--ring` in `globals.css` only.
 
 Locked **Final Mark S / EEEck** — the production KlassenPilot agent presence mark.
 
-**Component:** [`@/components/klassenpilot/agent-mark`](src/components/klassenpilot/agent-mark.tsx) — import once; variants via `mood`, `workflow`, and `alive` (same pattern as `Button` variants).  
-**Gallery (temporary):** [`/dev/agent-avatars`](src/app/dev/agent-avatars/page.tsx) — mood / workflow / `alive` demos for iteration and customer comparison; not product nav.  
-**Home:** [`/`](src/app/page.tsx) uses [`HomeLanding`](src/components/klassenpilot/home-landing.tsx) with locked `AgentMark` (`alive`); [`/dev/new-main-page`](src/app/dev/new-main-page/page.tsx) mirrors `/`.  
-**Discuss dock:** FAB pair on class home — EEEck beside the `?` chip (same `size-12` footprint); when the panel opens, EEEck moves into the dock header (`thinking` while a turn runs, `sleeping` when minimized).
+**Import library:** [`@/components/klassenpilot/agent-mark`](src/components/klassenpilot/agent-mark.tsx)
+
+```tsx
+import {
+  AgentMark,          // full API: mood / workflow / alive / size / boxSize
+  EEEck,              // default mood, size lg
+  EEEckSleeping,
+  EEEckThinking,
+  EEEckDoh,
+  EEEckHappy,
+  EEECK_BY_MOOD,      // Record<mood, component>
+  AGENT_MARK_MOODS,
+  AGENT_MARK_WORKFLOWS,
+} from "@/components/klassenpilot/agent-mark";
+
+<EEEck />                              // landing / hero scale (lg)
+<EEEck boxSize={76} />                 // FAB: same proportions, fitted to px box
+<EEEckThinking boxSize={28} />         // dock header while a turn runs
+<AgentMark mood="happy" workflow="plan" alive />
+```
+
+`boxSize` always composes at `size="lg"` then CSS-scales — that is how FABs stay faithful to `/dev/agent-avatars`. Do not shrink `size` to a tiny face number for chips.
+
+**Gallery (temporary):** [`/dev/agent-avatars`](src/app/dev/agent-avatars/page.tsx)  
+**Home:** [`HomeLanding`](src/components/klassenpilot/home-landing.tsx) uses `AgentMark` (`alive`)  
+**Discuss dock:** `EEEck boxSize={76}` beside `?`; header uses `AgentMark boxSize={28}` with mood from turn state
 
 ### Composition
 
@@ -174,13 +196,13 @@ Locked **Final Mark S / EEEck** — the production KlassenPilot agent presence m
 
 ### Moods (`mood`)
 
-| Mood | Face | Typical use |
-|------|------|-------------|
-| `default` | White eyes, no mouth/nose | Idle brand presence |
-| `sleeping` | Closed lids + ZZZ (unless sweep) | Waiting / idle |
-| `thinking` | Straight `\` `/` brows, pupils right, no mouth | Working on a request |
-| `doh` | X eyes, no mouth | Error / blocked |
-| `happy` | White eyes + smile | Success / saved |
+| Mood | Face | Typical use | Shortcut |
+|------|------|-------------|----------|
+| `default` | White eyes, no mouth/nose | Idle brand presence | `EEEck` |
+| `sleeping` | Closed lids + ZZZ (unless sweep) | Waiting / idle | `EEEckSleeping` |
+| `thinking` | Straight `\` `/` brows, pupils right, no mouth | Working on a request | `EEEckThinking` |
+| `doh` | X eyes, no mouth | Error / blocked | `EEEckDoh` |
+| `happy` | White eyes + smile | Success / saved | `EEEckHappy` |
 
 ### Workflows (`workflow`)
 
@@ -198,5 +220,6 @@ Badge icons use Lucide with `absoluteStrokeWidth`.
 1. **No mouth/nose** except the happy smile.
 2. **Green is scarce** — the mark is one of the few places solid brand green appears; do not flood screens with green marks.
 3. **Eyes above halo** — keep the face SVG above blur layers so sclera stays pure white.
-4. Use the shared `AgentMark`; do not fork mark SVG into pages.
+4. Use the shared `AgentMark` / `EEEck*` exports; do not fork mark SVG into pages.
 5. **`alive`** — optional idle life (rare blink on default/happy + soft staggered lumen pulse). Off by default; landing/marketing may opt in. Honors `prefers-reduced-motion`.
+6. **`boxSize`** — for fixed UI footprints (FAB, header). Never fake “small” by passing a tiny face `size`.

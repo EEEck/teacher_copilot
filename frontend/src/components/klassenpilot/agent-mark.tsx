@@ -8,10 +8,29 @@ import { cn } from "@/lib/utils";
 export type AgentMarkMood = "default" | "sleeping" | "thinking" | "doh" | "happy";
 export type AgentMarkWorkflow = "memory" | "plan" | "sweep";
 
+export const AGENT_MARK_MOODS = [
+  "default",
+  "sleeping",
+  "thinking",
+  "doh",
+  "happy",
+] as const satisfies readonly AgentMarkMood[];
+
+export const AGENT_MARK_WORKFLOWS = [
+  "memory",
+  "plan",
+  "sweep",
+] as const satisfies readonly AgentMarkWorkflow[];
+
 export type AgentMarkProps = {
   className?: string;
-  /** Pixel face size or presets (sm≈72, md≈96, lg≈120). Mesh orbit makes the total mark larger. */
+  /** Pixel face size or presets (sm≈72, md≈96, lg≈120). Mesh orbit makes the total mark larger. Ignored when `boxSize` is set. */
   size?: "sm" | "md" | "lg" | number;
+  /**
+   * Fit the canonical Final Mark S (`size="lg"`) into this outer box (px).
+   * Keeps agent-avatars proportions — use for FABs/chips next to fixed controls.
+   */
+  boxSize?: number;
   title?: string;
   mood?: AgentMarkMood;
   workflow?: AgentMarkWorkflow;
@@ -27,6 +46,17 @@ const FACE_PRESETS = {
 
 /** Badge size relative to face — locked S uses 64 at face 120. */
 const BADGE_RATIO = 64 / 120;
+
+/** Natural outer box for `size="lg"` (face 120) — used by `boxSize` scaling. */
+export const AGENT_MARK_LG_BOX_PX = (() => {
+  const faceSize = FACE_PRESETS.lg;
+  const badgeSize = Math.round(faceSize * BADGE_RATIO);
+  const haloPad = faceSize * 0.16;
+  const orbit = faceSize / 2 + haloPad * 0.35;
+  const clipH = badgeSize;
+  const clipW = (28 / 34) * badgeSize;
+  return Math.ceil(orbit * 2 + Math.max(clipW, clipH) + 16);
+})();
 
 const WORKFLOW_LABEL: Record<AgentMarkWorkflow, string> = {
   memory: "Update memory",
@@ -397,15 +427,71 @@ function WorkflowBadge({
 /**
  * Locked KlassenPilot agent mark (Final Mark S): mesh hex + lumen nodes + soft halo,
  * pure-white eyes above the blur, clipboard workflow badge.
+ *
+ * Plug-and-play:
+ * ```tsx
+ * import { EEEck, EEEckThinking, AgentMark } from "@/components/klassenpilot/agent-mark";
+ * <EEEck size="lg" />
+ * <EEEckThinking boxSize={76} />           // same proportions as /dev/agent-avatars, scaled
+ * <AgentMark mood="happy" workflow="plan" alive />
+ * ```
  */
 export function AgentMark({
+  className,
+  size = "md",
+  boxSize,
+  title = "KlassenPilot agent",
+  mood: moodProp,
+  workflow = "memory",
+  alive = false,
+}: AgentMarkProps) {
+  // boxSize always composes at lg so FAB/chip marks match agent-avatars proportions.
+  if (boxSize != null && boxSize > 0) {
+    const scale = boxSize / AGENT_MARK_LG_BOX_PX;
+    return (
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center overflow-visible",
+          className,
+        )}
+        style={{ width: boxSize, height: boxSize }}
+      >
+        <span
+          className="pointer-events-none inline-flex origin-center"
+          style={{ transform: `scale(${scale})` }}
+        >
+          <AgentMarkGlyph
+            size="lg"
+            title={title}
+            mood={moodProp}
+            workflow={workflow}
+            alive={alive}
+          />
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <AgentMarkGlyph
+      className={className}
+      size={size}
+      title={title}
+      mood={moodProp}
+      workflow={workflow}
+      alive={alive}
+    />
+  );
+}
+
+function AgentMarkGlyph({
   className,
   size = "md",
   title = "KlassenPilot agent",
   mood: moodProp,
   workflow = "memory",
   alive = false,
-}: AgentMarkProps) {
+}: Omit<AgentMarkProps, "boxSize">) {
   const isSweep = workflow === "sweep";
   const mood = moodProp ?? (isSweep ? "sleeping" : "default");
   const faceOverlay = isSweep ? "bricks" : "none";
@@ -509,3 +595,45 @@ export function AgentMark({
     </span>
   );
 }
+
+/** Props for named EEEck mood shortcuts (mood is fixed). */
+export type EEEckProps = Omit<AgentMarkProps, "mood" | "title"> & {
+  title?: string;
+};
+
+function eeeck(
+  mood: AgentMarkMood,
+  { title = "EEEck", size = "lg", ...rest }: EEEckProps,
+) {
+  return <AgentMark {...rest} size={size} mood={mood} title={title} />;
+}
+
+/** Default EEEck — Final Mark S (`size="lg"`). Pass `boxSize` for FAB/chip fit. */
+export function EEEck(props: EEEckProps) {
+  return eeeck("default", props);
+}
+
+export function EEEckSleeping(props: EEEckProps) {
+  return eeeck("sleeping", props);
+}
+
+export function EEEckThinking(props: EEEckProps) {
+  return eeeck("thinking", props);
+}
+
+export function EEEckDoh(props: EEEckProps) {
+  return eeeck("doh", props);
+}
+
+export function EEEckHappy(props: EEEckProps) {
+  return eeeck("happy", props);
+}
+
+/** Pick a mood component by id — handy for dynamic UI. */
+export const EEECK_BY_MOOD: Record<AgentMarkMood, typeof EEEck> = {
+  default: EEEck,
+  sleeping: EEEckSleeping,
+  thinking: EEEckThinking,
+  doh: EEEckDoh,
+  happy: EEEckHappy,
+};

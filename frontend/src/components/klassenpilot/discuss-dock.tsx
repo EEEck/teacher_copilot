@@ -12,7 +12,7 @@ import { Maximize2Icon, MinusIcon, XIcon } from "lucide-react";
 import { createArtifactRuntimeConfig } from "@/components/assistant-ui/artifact-runtime-config";
 import { ArtifactSessionRuntimeProvider } from "@/components/assistant-ui/artifact-session-runtime";
 import { DiscussThread } from "@/components/assistant-ui/discuss-thread";
-import { AgentMark } from "@/components/klassenpilot/agent-mark";
+import { AgentMark, EEEck } from "@/components/klassenpilot/agent-mark";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { client, type ChatMessage } from "@/lib/api";
@@ -21,9 +21,9 @@ import { workflowDraftRuntimeKey } from "@/features/workflow-drafts/workflow-dra
 import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 import { cn } from "@/lib/utils";
 
-/** FAB is `size-12` (48px); scale the mesh mark to that footprint. */
-const FAB_MARK_FACE = 36;
-const HEADER_MARK_FACE = 22;
+/** Discuss FAB — a step above the size-12 ? button. */
+const FAB_BOX_PX = 76;
+const HEADER_BOX_PX = 28;
 
 export type DiscussDockState = "closed" | "minimized" | "expanded";
 
@@ -211,16 +211,12 @@ export function DiscussDock({ classId, state, onStateChange }: DiscussDockProps)
             aria-label="Open discuss with EEEck"
             onClick={() => onStateChange("expanded")}
             className={cn(
-              "flex size-12 items-center justify-center overflow-visible rounded-full",
+              "relative flex items-center justify-center overflow-visible rounded-full",
               "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
             )}
+            style={{ width: FAB_BOX_PX, height: FAB_BOX_PX }}
           >
-            <AgentMark
-              size={FAB_MARK_FACE}
-              alive
-              title="EEEck"
-              className="origin-center scale-[0.72]"
-            />
+            <EEEck boxSize={FAB_BOX_PX} />
           </button>
           <button
             type="button"
@@ -324,10 +320,10 @@ function DockHeader({
   return (
     <div className="flex shrink-0 items-center gap-1 border-b border-border bg-muted px-2 py-1.5">
       <AgentMark
-        size={HEADER_MARK_FACE}
+        boxSize={HEADER_BOX_PX}
         mood={mood}
         title="EEEck"
-        className="shrink-0 scale-90"
+        className="shrink-0"
       />
       <button
         type="button"
