@@ -247,6 +247,29 @@ class MemorySweepReviewResponse(BaseModel):
     error: str = ""
 
 
+ActiveWorkKind = Literal["draft_turn", "memory_sweep"]
+
+
+class ActiveWorkItem(BaseModel):
+    """One job the backend is running right now, for any class."""
+
+    kind: ActiveWorkKind
+    class_id: str
+    # draft_turn only:
+    mode: str = ""  # "ingest" | "plan" | "discuss"
+    draft_id: str = ""
+    session_id: str = ""
+    lesson_date: str = ""
+    lesson_title: str = ""
+    # memory_sweep only:
+    review_id: str = ""
+    updated_at: str = ""
+
+
+class ActiveWorkResponse(BaseModel):
+    items: list[ActiveWorkItem] = Field(default_factory=list)
+
+
 class TimelineEntry(BaseModel):
     date: str
     title: str

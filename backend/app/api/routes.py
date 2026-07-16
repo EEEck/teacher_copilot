@@ -18,12 +18,15 @@ from app.api.deps import (
     get_memory_candidate_ledger,
     get_memory_sweep_review_store,
     get_plan_service,
+    get_request_identity,
     get_workflow_draft_store,
     get_wiki,
 )
 from app.config import get_settings
 from app.openai_bootstrap import is_openai_configured
 from app.schemas.api import (
+    ActiveWorkItem,
+    ActiveWorkResponse,
     BetaIdentityResponse,
     BetaLoginRequest,
     ChatRequest,
@@ -81,7 +84,7 @@ from app.schemas.api import (
     WikiPageSummary,
     WikiPagesResponse,
 )
-from app.services.beta import BetaAuthService
+from app.services.beta import BetaAuthService, RequestIdentity
 from app.services.class_brief_service import ClassBriefService
 from app.services.discussion_service import DiscussionService
 from app.services.ingest_service import IngestService
@@ -687,6 +690,49 @@ def beta_me(
 @router.get("/classes", response_model=ClassesResponse)
 def list_classes(wiki: WikiStore = Depends(get_wiki)) -> ClassesResponse:
     return ClassesResponse(classes=wiki.list_classes())
+
+
+@router.get("/workflow/active", response_model=ActiveWorkResponse)
+def list_active_work(
+    identity: RequestIdentity = Depends(get_request_identity),
+    workflow_drafts: WorkflowDraftStore = Depends(get_workflow_draft_store),
+    memory_sweep_reviews: MemorySweepReviewStore = Depends(
+        get_memory_sweep_review_store
+    ),
+) -> ActiveWorkResponse:
+    """Jobs running right now for this workspace, across every class.
+
+    The single source of truth for the Running-tasks box and completion
+    toasts: the frontend asks what is running instead of keeping its own
+    sessionStorage markers.
+    """
+    items: list[ActiveWorkItem] = [
+        ActiveWorkItem(
+            kind="draft_turn",
+            class_id=draft.class_id,
+            mode=draft.mode,
+            draft_id=draft.draft_id,
+            session_id=draft.backend_session_id,
+            lesson_date=draft.lesson_date,
+            lesson_title=draft.lesson_title,
+            updated_at=draft.updated_at,
+        )
+        for draft in workflow_drafts.list_in_progress(
+            workspace_id=identity.workspace_id
+        )
+    ]
+    items.extend(
+        ActiveWorkItem(
+            kind="memory_sweep",
+            class_id=review.class_id,
+            review_id=review.review_id,
+            updated_at=review.updated_at,
+        )
+        for review in memory_sweep_reviews.list_generating(
+            workspace_id=identity.workspace_id
+        )
+    )
+    return ActiveWorkResponse(items=items)
 
 
 @router.get("/classes/{class_id}/timeline", response_model=ClassTimeline)
