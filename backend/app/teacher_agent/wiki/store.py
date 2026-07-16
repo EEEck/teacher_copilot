@@ -214,8 +214,8 @@ class WikiStore:
     def build_review_query_pack(self, class_id):
         return context_packs.build_review_query_pack(self, class_id)
 
-    def empty_plan_template(self, lesson_date=None):
-        return context_packs.empty_plan_template(self, lesson_date)
+    def empty_plan_template(self):
+        return context_packs.empty_plan_template(self)
 
     def is_plan_ready(self, plan_md):
         return context_packs.is_plan_ready(self, plan_md)

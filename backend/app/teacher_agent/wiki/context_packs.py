@@ -742,15 +742,13 @@ def build_ingest_context(store, class_id: str) -> str:
     return "\n".join(parts)
 
 
-def empty_plan_template(store, lesson_date: Optional[str] = None) -> str:
-    # The lesson date is chosen at save time, not at draft creation. Use a
-    # placeholder rather than baking in today's date, which would otherwise
-    # persist into the saved plan (see parsing.normalize_plan_target_date, which
-    # reconciles this at the save boundary).
-    d = lesson_date or "(set when saving)"
+def empty_plan_template(store) -> str:
+    # No target date in drafts: the prompt's plan structure has none and the
+    # date is chosen at save time — parsing.normalize_plan_target_date stamps
+    # it onto the Duration line at the save boundary (audit H2).
     return (
-        f"# Lesson Plan — Next lesson\n\n"
-        f"> Duration: 45 min | Target date: {d}\n\n"
+        "# Lesson Plan — Next lesson\n\n"
+        "> Duration: 45 min\n\n"
         "## Learning goals\n\n\n"
         "## Lesson flow\n\n"
         "- **Opening** (5 min):\n\n"

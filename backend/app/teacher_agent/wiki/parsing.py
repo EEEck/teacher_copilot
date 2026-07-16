@@ -53,25 +53,35 @@ def clean_results_title(title: str) -> str:
     return cleaned
 
 
-_PLAN_TARGET_DATE_RE = re.compile(r"(Target date:\s*)([^\n]*)")
+# Stop at `|` so replacing the date can never eat a following ` | …` segment.
+_PLAN_TARGET_DATE_RE = re.compile(r"(Target date:\s*)([^|\n]*?)(\s*(?:\||\n|$))")
+_PLAN_DURATION_LINE_RE = re.compile(r"^(>\s*Duration:[^\n]*?)\s*$", re.M)
 
 
 def normalize_plan_target_date(markdown: str, lesson_date: str) -> str:
-    """Make the plan's ``Target date:`` line reflect the saved lesson date.
+    """Stamp the saved lesson date into the plan markdown.
 
-    The plan template bakes in a placeholder (or, historically, ``date.today()``)
-    at draft-creation time — before the teacher has picked the lesson date — and
-    nothing rewrites that heading afterward. Left alone, a plan filed under
-    ``lessons/2026-09-28/`` can carry ``Target date: 2026-07-13`` on disk. This
-    reconciles the heading at the save boundary. Idempotent; inserts a metadata
-    line after the title if the token is missing. No-op when ``lesson_date`` is
-    empty.
+    Drafts intentionally carry no target date (the prompt's plan structure has
+    none; the date is chosen at save time). At the save boundary this appends
+    ``| Target date: {lesson_date}`` to the ``> Duration`` line — matching the
+    format of historically saved plans — or, as defense, replaces a date the
+    model/teacher wrote into the draft (in-flight drafts predating this rule,
+    or the model mimicking old saved plans it read as context). Idempotent;
+    no-op when ``lesson_date`` is empty.
     """
     if not lesson_date:
         return markdown
     if _PLAN_TARGET_DATE_RE.search(markdown):
         return _PLAN_TARGET_DATE_RE.sub(
-            lambda m: f"{m.group(1)}{lesson_date}", markdown, count=1
+            lambda m: f"{m.group(1)}{lesson_date}{m.group(3)}", markdown, count=1
+        )
+    duration = _PLAN_DURATION_LINE_RE.search(markdown)
+    if duration:
+        line = duration.group(1)
+        return (
+            markdown[: duration.start(1)]
+            + f"{line} | Target date: {lesson_date}"
+            + markdown[duration.end(1) :]
         )
     lines = markdown.splitlines()
     for i, line in enumerate(lines):
