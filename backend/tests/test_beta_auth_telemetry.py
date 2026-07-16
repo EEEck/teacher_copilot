@@ -506,6 +506,13 @@ def test_beta_feedback_stores_event(tmp_path: Path, monkeypatch):
                 where type = 'teacher_feedback'
                 """
             ).fetchone()
+            message_row = conn.execute(
+                """
+                select mode, role, content, app_session_id
+                from message
+                where role = 'teacher_feedback'
+                """
+            ).fetchone()
 
         assert row is not None
         assert row[0] == "t_anna"
@@ -513,5 +520,10 @@ def test_beta_feedback_stores_event(tmp_path: Path, monkeypatch):
         assert row[2] == "teacher_feedback"
         assert '"message": "Sweep triage felt slow."' in row[3]
         assert '"page": "/beta/feedback"' in row[3]
+        assert message_row is not None
+        assert message_row[0] == "feedback"
+        assert message_row[1] == "teacher_feedback"
+        assert message_row[2] == "[/beta/feedback] Sweep triage felt slow."
+        assert message_row[3] == "feedback"
     finally:
         app.dependency_overrides.clear()

@@ -706,13 +706,10 @@ def beta_feedback(
     message = body.message.strip()
     if not message:
         raise HTTPException(status_code=422, detail="message is required")
-    payload: dict[str, str] = {"message": message}
-    if body.page and body.page.strip():
-        payload["page"] = body.page.strip()
-    beta_auth.telemetry.record_event(
+    beta_auth.telemetry.record_teacher_feedback(
         identity,
-        event_type="teacher_feedback",
-        payload=payload,
+        message=message,
+        page=body.page.strip() if body.page and body.page.strip() else None,
     )
     return BetaFeedbackResponse()
 

@@ -278,6 +278,38 @@ class BetaTelemetry(BetaStorage):
                 ),
             )
 
+    def record_teacher_feedback(
+        self,
+        identity: RequestIdentity,
+        *,
+        message: str,
+        page: str | None = None,
+        class_id: str | None = None,
+    ) -> None:
+        """Persist free-form teacher feedback like chat messages + a timeline event."""
+        payload: dict[str, Any] = {"message": message}
+        if page:
+            payload["page"] = page
+        resolved_class = (class_id or "").strip() or "_"
+        # One durable row per note in `message` (same table as chat), plus an
+        # event so operator reports can section feedback without scanning chat.
+        self.record_message(
+            identity,
+            app_session_id="feedback",
+            class_id=resolved_class,
+            mode="feedback",
+            role="teacher_feedback",
+            content=message if not page else f"[{page}] {message}",
+        )
+        self.record_event(
+            identity,
+            event_type="teacher_feedback",
+            class_id=None if resolved_class == "_" else resolved_class,
+            app_session_id="feedback",
+            mode="feedback",
+            payload=payload,
+        )
+
     def record_artifact_snapshot(
         self,
         identity: RequestIdentity,
