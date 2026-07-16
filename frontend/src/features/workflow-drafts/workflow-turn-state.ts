@@ -65,12 +65,3 @@ export function resolveClientStreamEnd(args: {
   if (args.hadStreamedContent) return "backend_running";
   return "failed";
 }
-
-export function applyBackendDraftFlags(args: {
-  turnInProgress: boolean;
-  latestTurnComplete: boolean;
-}): WorkflowTurnPhase {
-  if (args.turnInProgress) return "backend_running";
-  if (args.latestTurnComplete) return "complete";
-  return "idle";
-}

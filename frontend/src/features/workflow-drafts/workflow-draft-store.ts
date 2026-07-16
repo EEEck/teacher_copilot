@@ -206,6 +206,24 @@ const createWorkflowDraftState = (
       const key = snapshot.draftId;
       const previous = state.threadMessagesByDraftId[key] ?? [];
       const turn = state.turnByDraftId[key];
+      const existing = state.draftsById[key];
+      // Draft GET responses never carry final-turn meta; undefined means
+      // "unknown", not "cleared" — keep what completeTurn wrote (same
+      // semantics as applyDraftPatch).
+      const nextSnapshot: WorkflowDraftSnapshot = {
+        ...snapshot,
+        ...(snapshot.readyToSave === undefined && existing?.readyToSave !== undefined
+          ? { readyToSave: existing.readyToSave }
+          : null),
+        ...(snapshot.lastChangeSummary === undefined &&
+        existing?.lastChangeSummary !== undefined
+          ? { lastChangeSummary: existing.lastChangeSummary }
+          : null),
+        ...(snapshot.memoryCandidates === undefined &&
+        existing?.memoryCandidates !== undefined
+          ? { memoryCandidates: existing.memoryCandidates }
+          : null),
+      };
 
       let nextThread = previous;
       let nextTurn = turn;
@@ -230,7 +248,7 @@ const createWorkflowDraftState = (
       // streaming / settled → untouched
 
       return {
-        draftsById: { ...state.draftsById, [key]: snapshot },
+        draftsById: { ...state.draftsById, [key]: nextSnapshot },
         threadMessagesByDraftId: {
           ...state.threadMessagesByDraftId,
           [key]: nextThread,

@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  applyBackendDraftFlags,
-  flagsForPhase,
-  resolveClientStreamEnd,
-} from "./workflow-turn-state";
+import { flagsForPhase, resolveClientStreamEnd } from "./workflow-turn-state";
 import { workflowTurnActivity } from "./workflow-turn-activity";
 
 describe("workflow turn state", () => {
@@ -59,20 +55,5 @@ describe("workflow turn state", () => {
     expect(
       resolveClientStreamEnd({ gotFinal: false, hadStreamedContent: false }),
     ).toBe("failed");
-  });
-
-  it("maps draft poll flags into phases", () => {
-    expect(
-      applyBackendDraftFlags({
-        turnInProgress: true,
-        latestTurnComplete: false,
-      }),
-    ).toBe("backend_running");
-    expect(
-      applyBackendDraftFlags({
-        turnInProgress: false,
-        latestTurnComplete: true,
-      }),
-    ).toBe("complete");
   });
 });

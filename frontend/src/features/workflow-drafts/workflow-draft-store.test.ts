@@ -213,6 +213,36 @@ describe("snapshot reducer (design §A.1.4)", () => {
     expect(store.getState().threadMessagesByDraftId["draft-1"]).toBe(before);
     expect(store.getState().turnByDraftId["draft-1"].phase).toBe("settled");
   });
+
+  it("GET-shaped upserts keep final-turn meta (undefined means unknown, not cleared)", () => {
+    const store = createWorkflowDraftStore();
+    beginRichTurn(store);
+    store.getState().completeTurn("draft-1", {
+      content: [{ type: "text", text: "Done." }],
+      reply: "Done.",
+      userText: "Record lesson results.",
+      artifactMarkdown: "# Updated",
+      readyToSave: true,
+      lastChangeSummary: "Filled sections.",
+      memoryCandidates: [{ target: "class_state.md", candidate_update: "x" }],
+    });
+
+    // Notifier/recovery polls upsert GET-draft snapshots, which never carry
+    // final-turn meta fields.
+    store.getState().upsert(
+      snapshot({
+        turnInProgress: false,
+        latestTurnComplete: true,
+        artifactRevision: 2,
+      }),
+    );
+
+    const snap = store.getState().draftsById["draft-1"];
+    expect(snap.readyToSave).toBe(true);
+    expect(snap.lastChangeSummary).toBe("Filled sections.");
+    expect(snap.memoryCandidates).toHaveLength(1);
+    expect(snap.artifactRevision).toBe(2); // fields the snapshot carries still replace
+  });
 });
 
 describe("turn actions", () => {
