@@ -12,16 +12,10 @@ import {
 } from "@/components/klassenpilot/artifact-session-page";
 import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
 import { fromPlanSave, ReviewBrief } from "@/components/klassenpilot/review";
-import {
-  MemorySignalsReview,
-  ProposedMemoryUpdates,
-  splitPostSaveMemoryCandidates,
-} from "@/components/klassenpilot/proposed-memory-updates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { client, type MemoryCandidate } from "@/lib/api";
-import { dedupeMemoryCandidates } from "@/lib/memory-candidates";
+import { client } from "@/lib/api";
 import { errorMessageFromUnknown } from "@/lib/write-verification-error";
 import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 
@@ -182,65 +176,10 @@ function PlanWorkspace({
   const [beforePlan, setBeforePlan] = useState("");
   const [approved, setApproved] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [proposedMemory, setProposedMemory] = useState<MemoryCandidate[] | null>(null);
-  const [memorySignals, setMemorySignals] = useState<MemoryCandidate[] | null>(null);
-  const [applyingMemory, setApplyingMemory] = useState(false);
-  const [savingSignals, setSavingSignals] = useState(false);
 
   const goToLesson = useCallback(() => {
     router.push(`/classes/${classId}/lessons/${encodeURIComponent(lessonDate.trim())}`);
   }, [router, classId, lessonDate]);
-
-  const applyMemory = useCallback(
-    async (approved: MemoryCandidate[]) => {
-      setApplyingMemory(true);
-      onError(null);
-      try {
-        await client.memoryApply(
-          classId,
-          approved.map((c) => ({
-            target: c.target,
-            section: c.section,
-            content: c.candidate_update,
-            candidate_ids: c.candidate_id ? [c.candidate_id] : [],
-          })),
-        );
-        goToLesson();
-      } catch (e) {
-        onError(e instanceof Error ? e.message : "Could not apply memory updates");
-      } finally {
-        setApplyingMemory(false);
-      }
-    },
-    [classId, onError, goToLesson],
-  );
-
-  const continueAfterSignals = useCallback(
-    async (_kept: MemoryCandidate[], removed: MemoryCandidate[]) => {
-      setSavingSignals(true);
-      onError(null);
-      try {
-        await Promise.all(
-          removed
-            .filter((candidate) => candidate.candidate_id)
-            .map((candidate) =>
-              client.memoryCandidateStatus(
-                classId,
-                candidate.candidate_id as string,
-                "deleted",
-                "Teacher removed this post-save signal.",
-              ),
-            ),
-        );
-        goToLesson();
-      } catch (e) {
-        onError(e instanceof Error ? e.message : "Could not update memory signals");
-      } finally {
-        setSavingSignals(false);
-      }
-    },
-    [classId, onError, goToLesson],
-  );
 
   const fileItem = useMemo(() => {
     if (!inReview || !lessonDate.trim()) return null;
@@ -252,22 +191,16 @@ function PlanWorkspace({
     setLoading(true);
     onError(null);
     try {
-      const res = await runWithSessionRecovery((sessionId) =>
+      // Staged remember(...) candidates stay in the ledger for Memory Sweep;
+      // do not surface a post-save preference / signal review screen.
+      await runWithSessionRecovery((sessionId) =>
         client.planSave(classId, sessionId, lessonDate.trim(), artifactMarkdown, {
           draftId,
           expectedArtifactRevision: artifactRevision,
           expectedArtifactHash: artifactHash,
         }),
       );
-      const candidates = dedupeMemoryCandidates(res?.memory_candidates ?? []);
-      const split = splitPostSaveMemoryCandidates(candidates);
-      if (split.immediate.length) {
-        setProposedMemory(split.immediate);
-      } else if (split.signals.length) {
-        setMemorySignals(split.signals);
-      } else {
-        goToLesson();
-      }
+      goToLesson();
     } catch (e) {
       onError(errorMessageFromUnknown(e, "Save failed"));
       setLoading(false);
@@ -301,38 +234,6 @@ function PlanWorkspace({
       cancelled = true;
     };
   }, [inReview, classId, lessonDate]);
-
-  if (proposedMemory) {
-    return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-4 p-4">
-        <p className="text-sm text-muted-foreground">
-          Lesson plan saved for {lessonDate.trim()}.
-        </p>
-        <ProposedMemoryUpdates
-          candidates={proposedMemory}
-          onApply={applyMemory}
-          applying={applyingMemory}
-          onContinue={goToLesson}
-          continueLabel="Skip and continue"
-        />
-      </div>
-    );
-  }
-
-  if (memorySignals) {
-    return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-4 p-4">
-        <p className="text-sm text-muted-foreground">
-          Lesson plan saved for {lessonDate.trim()}.
-        </p>
-        <MemorySignalsReview
-          candidates={memorySignals}
-          saving={savingSignals}
-          onContinue={continueAfterSignals}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
