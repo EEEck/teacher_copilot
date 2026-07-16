@@ -520,14 +520,23 @@ export default function MemorySweepPage() {
       setNotice(
         `Updated ${result.updated_candidate_ids.length} ledger row(s).${appliedText}${skippedText}`,
       );
-      await load("submit");
+      // Apply marks the review completed. Do NOT call openMemorySweepReview —
+      // with no active review it would start a second LLM sweep. Resume/read
+      // only; the teacher starts a new sweep explicitly via Refresh.
+      if (typeof window !== "undefined") {
+        clearPendingMemorySweep(window.sessionStorage, classId);
+      }
+      const next = await client.getMemorySweepReview(classId);
+      applyReview(next);
+      setDraftByCard({});
+      setDecisionsByCard({});
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not submit sweep decisions");
     } finally {
       setBusy(false);
     }
-  }, [classId, decisionsByCard, load, reviewId, router]);
+  }, [applyReview, classId, decisionsByCard, reviewId, router]);
 
   const discard = useCallback(async () => {
     if (!reviewId) return;

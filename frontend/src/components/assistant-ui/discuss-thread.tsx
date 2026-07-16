@@ -2,6 +2,7 @@
 
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { Thread } from "@/components/assistant-ui/thread";
+import { StagedMemoryBanner } from "@/components/klassenpilot/staged-memory-banner";
 
 /**
  * Thin welcome wrapper over shared Thread — same pattern as PlanThread.
@@ -9,16 +10,9 @@ import { Thread } from "@/components/assistant-ui/thread";
  */
 export function DiscussThread() {
   const { draftId, turnInProgress, memoryCandidates } = useArtifactSession();
-  const candidateCount = memoryCandidates.length;
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      {candidateCount > 0 ? (
-        <p className="shrink-0 border-b border-border bg-muted px-4 py-2 text-xs text-muted-foreground">
-          {candidateCount} review-only memory candidate
-          {candidateCount === 1 ? "" : "s"} staged this session. Wiki files are
-          unchanged — review them in Memory Sweep when ready.
-        </p>
-      ) : null}
+      <StagedMemoryBanner candidateCount={memoryCandidates.length} />
       <div className="h-full min-h-0 flex-1 overflow-hidden">
         <Thread
           composerStorageKey={draftId ? `kp:composer:${draftId}` : undefined}

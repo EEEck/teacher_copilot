@@ -201,6 +201,8 @@ Primary items:
 | **OWASP ASI red-team pass** | Add optional DeepTeam/manual red-team runs for ASI-style risks, starting with goal hijack, tool misuse, memory/context poisoning, and human-agent trust exploitation. Promote useful findings into deterministic DeepEval goldens. |
 | **Retire legacy broad wiki tools** | Replace or fence the broader `create_wiki_tools()` read path before the agent has external search or more sensitive data. Main chat tools should remain class-scoped and purpose-specific. |
 | **EU/Germany launch boundary note** | Keep this lightweight unless launch plans become concrete: document that KlassenPilot is a teacher copilot, not an automated grading/placement/diagnosis/discipline system; identify which future features would trigger legal review. |
+| **Staged-memory signal (all workflows)** | Done for MVP: Discuss + Plan use dismissible `StagedMemoryBanner`; Update Memory shows staged count on the session status strip. Post-save preference / signal / class-evolution cards are disconnected — review lives in Memory Sweep. |
+| **In-chat memory confirmation cards** | When `remember(...)` fires, offer an embedded chat card (assistant-ui generative UI / tool UI) to apply or reject immediately via existing `/memory/apply` and candidate-status APIs. Reuse fast-lane eligibility + apply infrastructure; Sweep remains the default review home until the teacher acts in chat. |
 
 Non-goals:
 

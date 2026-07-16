@@ -670,7 +670,18 @@ Shared memory-capture rules:
 Purpose:
 
 - Promote durable memory only with explicit teacher approval (HITL); planning
-  chat and ingest chat never write profile/state pages.
+  chat and ingest chat never write profile/state pages during the chat turn.
+- One teacher mental model across plan, update-memory, and discuss:
+  `remember(...)` → ledger (review-only) → Memory Sweep (or later in-chat
+  cards). There is no post-save preference / signal / class-evolution card
+  after plan save or ingest commit.
+
+In-session staged signal (no wiki writes):
+
+- Discuss and Plan show a dismissible `StagedMemoryBanner` when the session
+  has staged candidates.
+- Update Memory surfaces the same count on the existing session status strip
+  (`N staged for Memory Sweep`), not a second chat banner.
 
 Proposal (read-only, no writes):
 
@@ -678,16 +689,18 @@ Proposal (read-only, no writes):
   (`planning_brief`, `teaching_patterns`, `copilot_profile`,
   `session_summaries`) plus a `stale_report`. It does not write. (`class_state`
   / `taught_so_far` were retired — mem_v3 PR2.)
-- After a successful teacher-approved ingest commit, the commit response may
-  include the same proposal shape as `class_memory_proposal`. This is an
-  immediate class-evolution review aid, not an automatic compact-memory write.
+- Ingest commit and plan save may still return `memory_candidates` /
+  `class_memory_proposal` in the API payload for ledger / tooling, but the
+  frontend does not mount post-save review cards for them. Staged candidates
+  stay open in the ledger for Memory Sweep; deferred class-evolution review
+  is Sweep-owned (not an immediate post-commit gate).
 - `POST /classes/{id}/memory/profile/propose` proposes `teacher_profile.md` /
   `copilot_profile.md`
   updates from a finished session, labeling each candidate `explicit` vs
   `inferred` with a confidence. It does not write.
-- Plan save returns the compact planning-state snapshot needed to call
-  `/memory/profile/propose`; profile learning is best-effort after the lesson
-  plan has already been saved.
+- Plan save may return planning-state / candidate payloads; the UI navigates
+  to the lesson after save and does not ask the teacher to apply preferences
+  or cull signals before leaving.
 
 Apply (the only durable-write path for these pages):
 
@@ -698,12 +711,17 @@ Apply (the only durable-write path for these pages):
   Unsupported targets such as `canonical_wiki` or a different subject guide are
   skipped, not written. It also closes the originating ledger rows for applied
   fast-lane candidates so the sweep never re-proposes them (mem_v3 PR1).
+  The apply API remains available for Memory Sweep and for future in-chat
+  confirmation cards; it is not triggered by a post-save preference screen.
 - `POST /classes/{id}/memory/compact/apply` writes teacher-reviewed compact
   pages exactly as approved from a proposal payload. It is for full compact page
   replacement and uses the deterministic compact-memory allowlist; it must not
   be used for teacher-profile or canonical-wiki edits.
 - `POST /classes/{id}/memory/compact` remains the full derived-page rebuild for
   the surviving compact pages, each clamped to budget.
+- After a successful ingest commit, the UI shows a brief “Memory saved”
+  confirmation and auto-navigates to class home (optional highlight ring).
+  Wiki lesson/results writes from that commit are already applied.
 
 ## Query Pack Contract
 

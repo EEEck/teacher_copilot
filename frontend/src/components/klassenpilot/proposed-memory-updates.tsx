@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * @deprecated Post-save preference / signal UI is disconnected (harmonize memory
+ * review). Keep helpers for tests and v1.3 in-chat cards that will call
+ * `/memory/apply`. Do not mount after plan save or memory commit.
+ */
+
 import { useState } from "react";
 import type { MemoryCandidate } from "@/lib/api";
 import { Button } from "@/components/ui/button";

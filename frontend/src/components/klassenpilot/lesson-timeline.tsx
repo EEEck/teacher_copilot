@@ -92,6 +92,7 @@ export function LessonTimeline({
   classId: string;
   entries?: TimelineEntry[];
   months?: string[];
+  /** Post-save focus ring only (from `?highlight=`). */
   highlightDate?: string | null;
   /** Optional tooltip on the plan-next + control. */
   planHover?: string;
@@ -216,11 +217,6 @@ function LessonTimelineCard({
                 <h4 className="text-base font-semibold">{entry.title}</h4>
               </div>
               <div className="flex flex-wrap gap-1">
-                {highlighted && (
-                  <Badge variant="default" className="text-xs">
-                    Just saved
-                  </Badge>
-                )}
                 {timelineStatusBadges(entry).map((badge) => (
                   <Badge
                     key={badge.label}

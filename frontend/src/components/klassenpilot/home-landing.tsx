@@ -85,14 +85,19 @@ export function HomeLanding() {
             </p>
           </div>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5 sm:gap-y-2">
-            <Button asChild>
-              <Link href={MOCK_CLASS_HREF}>
-                Explore the mock class
-                <ArrowRight className="size-3.5" aria-hidden />
-              </Link>
-            </Button>
-            <span className="text-sm text-muted-foreground underline decoration-border underline-offset-4">
+          <div className="mt-8 flex flex-col gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
+              <Button asChild>
+                <Link href={MOCK_CLASS_HREF}>
+                  Explore the mock class
+                  <ArrowRight className="size-3.5" aria-hidden />
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/dev/how-to">How it works (1 min)</Link>
+              </Button>
+            </div>
+            <span className="text-sm text-foreground/70 underline decoration-border underline-offset-4">
               Bring your own class · coming soon
             </span>
           </div>

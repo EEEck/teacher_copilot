@@ -11,7 +11,6 @@ import {
 } from "@/components/klassenpilot/artifact-session-page";
 import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
 import { DiaryDraftPanel } from "@/components/klassenpilot/diary-draft-panel";
-import { ProposedMemoryUpdates } from "@/components/klassenpilot/proposed-memory-updates";
 import {
   MarkdownLineDiff,
   ReviewBrief,
@@ -25,7 +24,6 @@ import {
   uniqueWikiProposals,
   type IngestStartHint,
   type MemoryCandidate,
-  type MemoryProposalResponse,
   type WikiUpdateProposal,
 } from "@/lib/api";
 import { markClassHomeTimelineRefresh } from "@/lib/class-home-refresh";
@@ -44,7 +42,6 @@ import {
   loadPendingMemoryReview,
   savePendingMemoryReview,
 } from "@/lib/pending-memory-review";
-import { dedupeMemoryCandidates } from "@/lib/memory-candidates";
 import { errorMessageFromUnknown } from "@/lib/write-verification-error";
 import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 import { useAuiState } from "@assistant-ui/react";
@@ -56,12 +53,8 @@ type CommitResult = {
   applied_wiki_paths: string[];
 };
 
-const COMPACT_PAGE_LABELS: Record<string, string> = {
-  planning_brief: "Planning brief",
-  teaching_patterns: "Teaching patterns",
-  copilot_profile: "Class copilot profile",
-  session_summaries: "Session summaries",
-};
+/** Brief pause so the teacher sees “Memory saved” before class-home highlight. */
+const POST_COMMIT_HOME_DELAY_MS = 3000;
 
 function ReadyToSaveButton({
   onReady,
@@ -96,98 +89,8 @@ function boolFromRecord(value: unknown): boolean {
   return typeof value === "boolean" ? value : false;
 }
 
-function CompactMemoryProposalCard({
-  proposal,
-  applying,
-  onApply,
-  onContinue,
-}: {
-  proposal: MemoryProposalResponse;
-  applying: boolean;
-  onApply: (pages: Record<string, string>) => void;
-  onContinue: () => void;
-}) {
-  const pageKeys = useMemo(() => Object.keys(proposal.pages ?? {}), [proposal.pages]);
-  const [approved, setApproved] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(pageKeys.map((key) => [key, true])),
-  );
-  const approvedPages = Object.fromEntries(
-    pageKeys
-      .filter((key) => approved[key])
-      .map((key) => [key, proposal.pages[key]]),
-  );
-  const approvedCount = Object.keys(approvedPages).length;
-
-  if (!pageKeys.length && !proposal.warnings.length) return null;
-
-  return (
-    <Card variant="highlight" size="sm">
-      <CardHeader>
-        <CardTitle>Refresh class memory</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Review the compact class-memory pages generated from the saved lesson.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {proposal.warnings.length > 0 && (
-          <ul className="space-y-1 text-xs text-destructive">
-            {proposal.warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        )}
-        <ul className="flex flex-col gap-3">
-          {pageKeys.map((key) => {
-            const preview = proposal.pages[key]
-              .split("\n")
-              .filter((line) => line.trim() && !line.startsWith("#"))
-              .slice(0, 2)
-              .join(" ");
-            return (
-              <li key={key} className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={!!approved[key]}
-                  disabled={applying}
-                  onChange={(e) =>
-                    setApproved((prev) => ({ ...prev, [key]: e.target.checked }))
-                  }
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium">
-                    {COMPACT_PAGE_LABELS[key] ?? key}
-                  </div>
-                  {preview && (
-                    <p className="line-clamp-2 text-xs text-muted-foreground">
-                      {preview}
-                    </p>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </CardContent>
-      <div className="flex flex-wrap gap-3 px-6 pb-6">
-        {pageKeys.length > 0 && (
-          <Button
-            onClick={() => onApply(approvedPages)}
-            disabled={applying || approvedCount === 0}
-          >
-            {applying ? "Applying..." : `Apply ${approvedCount} page(s)`}
-          </Button>
-        )}
-        <Button variant="outline" onClick={onContinue} disabled={applying}>
-          Skip for now
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
 function MemoryTargetStatus() {
-  const { memoryState, lastChangeSummary } = useArtifactSession();
+  const { memoryState, lastChangeSummary, memoryCandidates } = useArtifactSession();
   if (!memoryState) return null;
   const target = memoryState.target;
   const targetRecord = target && typeof target === "object" ? (target as Record<string, unknown>) : {};
@@ -196,19 +99,31 @@ function MemoryTargetStatus() {
   const date = textFromRecord(targetRecord.lesson_date);
   const title = textFromRecord(targetRecord.lesson_title);
   const confirmed = boolFromRecord(targetRecord.target_confirmed);
+  const stagedCount = memoryCandidates.length;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-[11px] leading-tight">
-      <span className="font-medium text-foreground">
-        {date ? `Target: ${date}${title ? ` · ${title}` : ""}` : "Target: not selected"}
-      </span>
-      {intent && <span className="text-muted-foreground">Intent: {intent}</span>}
-      {phase && <span className="text-muted-foreground">Phase: {phase}</span>}
-      <span className={confirmed ? "text-primary" : "text-muted-foreground"}>
-        {confirmed ? "Confirmed" : "Needs confirmation"}
-      </span>
+    <div className="space-y-1 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-[11px] leading-tight">
+      <p className="text-muted-foreground">
+        Session status — which lesson this diary is for and the last draft
+        change (not a chat message).
+      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+        <span className="font-medium text-foreground">
+          {date ? `Target: ${date}${title ? ` · ${title}` : ""}` : "Target: not selected"}
+        </span>
+        {intent && <span className="text-muted-foreground">Intent: {intent}</span>}
+        {phase && <span className="text-muted-foreground">Phase: {phase}</span>}
+        <span className={confirmed ? "text-primary" : "text-muted-foreground"}>
+          {confirmed ? "Confirmed" : "Needs confirmation"}
+        </span>
+      </div>
       {lastChangeSummary && (
-        <span className="basis-full text-muted-foreground">{lastChangeSummary}</span>
+        <p className="text-muted-foreground">Last change: {lastChangeSummary}</p>
+      )}
+      {stagedCount > 0 && (
+        <p className="text-muted-foreground">
+          {stagedCount} staged for Memory Sweep (wiki unchanged)
+        </p>
       )}
     </div>
   );
@@ -244,16 +159,12 @@ function MemoryWorkspace({
   const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
   const commitResultRef = useRef<HTMLDivElement>(null);
   const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidate[]>([]);
-  const [applyingMemory, setApplyingMemory] = useState(false);
   const [reviewBaseMarkdown, setReviewBaseMarkdown] = useState<string | null>(null);
   const [reviewSnapshot, setReviewSnapshot] = useState<{
     draftId: string;
     artifactRevision: number;
     artifactHash: string;
   } | null>(null);
-  const [classMemoryProposal, setClassMemoryProposal] =
-    useState<MemoryProposalResponse | null>(null);
-  const [applyingClassMemory, setApplyingClassMemory] = useState(false);
   const restoredReviewRef = useRef(false);
   const hasDraftMessage = useAuiState((s) => !s.composer.isEmpty);
 
@@ -375,7 +286,6 @@ function MemoryWorkspace({
     setMemoryCandidates([]);
     setReviewBaseMarkdown(null);
     setReviewSnapshot(null);
-    setClassMemoryProposal(null);
     clearReview();
     if (typeof window !== "undefined") {
       clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
@@ -391,7 +301,6 @@ function MemoryWorkspace({
     setMemoryCandidates([]);
     setReviewBaseMarkdown(null);
     setReviewSnapshot(null);
-    setClassMemoryProposal(null);
     clearReview();
     if (typeof window !== "undefined") {
       clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
@@ -437,17 +346,22 @@ function MemoryWorkspace({
     }
   }, [classId, discardRedirectHref, draftId, onError, reviewStorageKey, router]);
 
-  // After a successful commit, bring the "Memory saved" confirmation into view
-  // so the save is unmissable (beta: teachers re-clicked Save when the card
-  // rendered below the fold, causing a duplicate commit).
+  const homeHrefAfterCommit = commitResult
+    ? commitResult.lesson_date
+      ? `/classes/${classId}?highlight=${encodeURIComponent(commitResult.lesson_date)}`
+      : `/classes/${classId}`
+    : `/classes/${classId}`;
+
+  // Brief success flash, then auto-return to class home (timeline highlight ring).
   useEffect(() => {
     if (!commitResult) return;
     commitResultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [commitResult]);
+    const timer = window.setTimeout(() => {
+      router.push(homeHrefAfterCommit);
+    }, POST_COMMIT_HOME_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [commitResult, homeHrefAfterCommit, router]);
 
-  const viewerAllHref = commitResult
-    ? `/classes/${classId}/wiki/view?paths=${encodeURIComponent(commitResult.applied_wiki_paths.join(","))}`
-    : "";
   const reviewActionsDisabled = loading || isUpdating;
   const reviewSaveDisabled = isMemoryReviewSaveDisabled({
     saving: loading,
@@ -467,7 +381,6 @@ function MemoryWorkspace({
     setLoading(true);
     onError(null);
     setCommitResult(null);
-    setClassMemoryProposal(null);
     try {
       await runWithSessionRecovery((sessionId) =>
         client.ingestUpdateDraft(classId, sessionId, diaryMarkdown),
@@ -476,7 +389,8 @@ function MemoryWorkspace({
         client.ingestPropose(classId, sessionId),
       );
       const unique = uniqueWikiProposals(d.wiki_proposals);
-      setMemoryCandidates(dedupeMemoryCandidates(d.memory_candidates ?? []));
+      // Preference candidates stay in the ledger for Sweep — not a post-save UI list.
+      setMemoryCandidates([]);
       setProposals(unique);
       setReviewBaseMarkdown(d.diary_markdown);
       setReviewSnapshot({
@@ -530,12 +444,7 @@ function MemoryWorkspace({
         log_entry_id: result.log_entry_id,
         applied_wiki_paths: result.applied_wiki_paths,
       });
-      const proposal = result.class_memory_proposal;
-      setClassMemoryProposal(
-        proposal && (Object.keys(proposal.pages ?? {}).length > 0 || proposal.warnings.length > 0)
-          ? proposal
-          : null,
-      );
+      setMemoryCandidates([]);
       setInReview(false);
       setProposals([]);
       setReviewBaseMarkdown(null);
@@ -543,6 +452,7 @@ function MemoryWorkspace({
       clearReview();
       if (typeof window !== "undefined") {
         clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
+        markClassHomeTimelineRefresh(window.sessionStorage, classId);
       }
       router.refresh();
     } catch (e) {
@@ -568,53 +478,6 @@ function MemoryWorkspace({
     reviewSnapshot,
   ]);
 
-  const applyClassMemory = useCallback(
-    async (pages: Record<string, string>) => {
-      setApplyingClassMemory(true);
-      onError(null);
-      try {
-        if (!classMemoryProposal) return;
-        await client.memoryCompactApply(
-          classId,
-          pages,
-          classMemoryProposal.source_paths ?? [],
-        );
-        setClassMemoryProposal(null);
-        router.refresh();
-      } catch (e) {
-        onError(e instanceof Error ? e.message : "Could not refresh class memory");
-      } finally {
-        setApplyingClassMemory(false);
-      }
-    },
-    [classId, classMemoryProposal, onError, router],
-  );
-
-  const applyMemory = useCallback(
-    async (approved: MemoryCandidate[]) => {
-      setApplyingMemory(true);
-      onError(null);
-      try {
-        await client.memoryApply(
-          classId,
-          approved.map((c) => ({
-            target: c.target,
-            section: c.section,
-            content: c.candidate_update,
-            candidate_ids: c.candidate_id ? [c.candidate_id] : [],
-          })),
-        );
-        setMemoryCandidates([]);
-        router.refresh();
-      } catch (e) {
-        onError(e instanceof Error ? e.message : "Could not apply memory updates");
-      } finally {
-        setApplyingMemory(false);
-      }
-    },
-    [classId, onError, router],
-  );
-
   const keepAll = useCallback(() => {
     approveAll();
     void commit();
@@ -627,7 +490,6 @@ function MemoryWorkspace({
     setMemoryCandidates([]);
     setReviewBaseMarkdown(null);
     setReviewSnapshot(null);
-    setClassMemoryProposal(null);
     clearReview();
     if (typeof window !== "undefined") {
       clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
@@ -641,11 +503,36 @@ function MemoryWorkspace({
         wikiPath={selectedPath}
         markdown={contentByPath[selectedPath]}
         onChange={(value) => updateContent(selectedPath, value)}
-        onBackToDiary={() => setEditingWiki(false)}
       />
     ) : (
       <DiaryDraftPanel />
     );
+
+  // Brief success, then auto-navigate home (no post-save preference / class cards).
+  if (commitResult) {
+    return (
+      <div className="mx-auto flex w-full max-w-md min-h-0 flex-1 flex-col items-center justify-center gap-3 pb-8">
+        <Card variant="highlight" ref={commitResultRef} className="w-full">
+          <CardHeader>
+            <CardTitle className="text-base">Memory saved</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {commitResult.title} ({commitResult.lesson_date}) —{" "}
+              {commitResult.applied_wiki_paths.length} file
+              {commitResult.applied_wiki_paths.length === 1 ? "" : "s"} updated.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Returning to class home…
+            </p>
+            <Button variant="outline" size="sm" className="mt-3" asChild>
+              <Link href={homeHrefAfterCommit}>Go now</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -693,6 +580,7 @@ function MemoryWorkspace({
               before={selectedChange.before}
               after={selectedChange.after}
               className="h-full min-h-[12rem]"
+              onDismiss={() => setEditingWiki(false)}
             />
           ) : null
         }
@@ -722,72 +610,6 @@ function MemoryWorkspace({
         <p className="text-xs text-destructive">
           Keep the lesson results change selected to save this lesson to memory.
         </p>
-      )}
-
-      {commitResult && (
-        <Card variant="highlight" ref={commitResultRef}>
-          <CardHeader>
-            <CardTitle className="text-base">Memory saved</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {commitResult.title} ({commitResult.lesson_date}) — log entry{" "}
-              <span className="font-mono text-xs">{commitResult.log_entry_id}</span>
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-foreground">
-              {commitResult.applied_wiki_paths.length} file
-              {commitResult.applied_wiki_paths.length === 1 ? "" : "s"} updated.
-            </p>
-            <ul className="space-y-1 text-sm">
-              {commitResult.applied_wiki_paths.map((path) => (
-                <li key={path}>
-                  <Link
-                    href={`/classes/${classId}/wiki/view?path=${encodeURIComponent(path)}`}
-                    className="font-mono text-xs text-primary hover:underline"
-                  >
-                    {path}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <div className="flex flex-wrap gap-3 pt-1">
-              <Button asChild>
-                <Link href={viewerAllHref}>View all changes</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link
-                  href={
-                    commitResult.lesson_date
-                      ? `/classes/${classId}?highlight=${encodeURIComponent(commitResult.lesson_date)}`
-                      : `/classes/${classId}`
-                  }
-                >
-                  Back to class home
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {commitResult && memoryCandidates.length > 0 && (
-        <ProposedMemoryUpdates
-          candidates={memoryCandidates}
-          onApply={applyMemory}
-          applying={applyingMemory}
-          onContinue={() => setMemoryCandidates([])}
-          continueLabel="Skip for now"
-        />
-      )}
-
-      {commitResult && classMemoryProposal && (
-        <CompactMemoryProposalCard
-          key={`${commitResult.log_entry_id}-class-memory`}
-          proposal={classMemoryProposal}
-          onApply={applyClassMemory}
-          applying={applyingClassMemory}
-          onContinue={() => setClassMemoryProposal(null)}
-        />
       )}
     </div>
   );
