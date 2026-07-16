@@ -28,7 +28,6 @@ import { streamPartsToRunContent } from "@/lib/sse-chat";
 import { CHAT_ERROR_REPLY, friendlyChatError } from "./chat-errors";
 import { isPlaceholderAssistantContent } from "./thread-messages";
 import { useWorkflowDraftStore } from "./workflow-draft-store";
-import { resolveClientStreamEnd } from "./workflow-turn-state";
 
 export type ChatStreamFn = (args: {
   message: string;
@@ -126,11 +125,10 @@ export async function runTurn(args: RunTurnArgs): Promise<void> {
 }
 
 /**
- * The client stream ended without a final event. Same classification as the
- * old resolveClientStreamEnd, now confined here: an explicit Stop or a
- * mid-stream drop means the backend may still finish (awaiting_backend, the
- * reducer merges the reply later); nothing streamed means the turn never
- * started (failed).
+ * The client stream ended without a final event. An explicit Stop, or a
+ * mid-stream drop after content arrived, means the backend may still finish
+ * the turn — await it (the reducer merges the reply later). Nothing streamed
+ * means the turn never started: fail it.
  */
 function settleWithoutFinal(
   args: RunTurnArgs,
@@ -139,10 +137,7 @@ function settleWithoutFinal(
   streamedContent: boolean,
 ): void {
   const store = useWorkflowDraftStore.getState();
-  const phase = ctl.signal.aborted
-    ? "backend_running"
-    : resolveClientStreamEnd({ gotFinal: false, hadStreamedContent: streamedContent });
-  if (phase === "backend_running") {
+  if (ctl.signal.aborted || streamedContent) {
     store.markAwaitingBackend(args.draftId);
     return;
   }

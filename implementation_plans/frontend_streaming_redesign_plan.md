@@ -443,6 +443,22 @@ Implementation:
   `baselineMessageCount`, `isPendingTurnOnCurrentPage`,
   `consumeCompletedPendingChatTurn`, dismissal keys, the 1 s storage poll).
 
+**Expanded M2 scope (embedding review, 2026-07-15):** two more pieces exist
+only to serve the marker system and go with it:
+
+- **The provider's recovery poll** (`artifact-session-runtime.tsx`). Verified:
+  sessionStorage markers survive a hard refresh and `PendingTurnNotifier` is
+  mounted in the root layout, so the notifier's own poll already covers every
+  happy path (refresh-into-running-turn, Stop, dropped stream) through the
+  same reducer. The provider poll only guards against the legacy marker
+  heuristics clearing a marker too early — once M2 replaces markers with the
+  backend query, delete the poll.
+- **The `snapshot.messages` mirror maintained by `completeTurn`**
+  (`workflow-draft-store.ts`). Its only real consumer is
+  `baselineMessageCount` for toast gating; post-M2 the mirror append can go
+  (threads render from `threadMessagesByDraftId`; fresh snapshots come from
+  draft GETs).
+
 ### M2 tests
 
 - Backend: endpoint test over a tmp SQLite store — in-progress drafts across

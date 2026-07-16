@@ -11,7 +11,6 @@ import type {
 
 import { CHAT_ERROR_REPLY } from "./chat-errors";
 import { newThreadMessageId, replaceLastAssistantContent } from "./thread-messages";
-import { flagsForPhase } from "./workflow-turn-state";
 
 export type WorkflowDraftSnapshot = {
   mode: ArtifactMode;
@@ -304,15 +303,14 @@ const createWorkflowDraftState = (
     set((state) => {
       const existing = state.draftsById[draftId];
       if (!existing) return state; // I5: removed draft → no-op
-      const flags = flagsForPhase("streaming");
       const previous = state.threadMessagesByDraftId[draftId] ?? [];
       return {
         draftsById: {
           ...state.draftsById,
           [draftId]: {
             ...existing,
-            turnInProgress: flags.turnInProgress,
-            latestTurnComplete: flags.latestTurnComplete,
+            turnInProgress: true,
+            latestTurnComplete: false,
           },
         },
         threadMessagesByDraftId: {
@@ -357,7 +355,6 @@ const createWorkflowDraftState = (
     set((state) => {
       const existing = state.draftsById[draftId];
       if (!existing) return state;
-      const flags = flagsForPhase("complete");
       const previous = state.threadMessagesByDraftId[draftId] ?? [];
       const turn = state.turnByDraftId[draftId];
       return {
@@ -373,8 +370,8 @@ const createWorkflowDraftState = (
             artifactMarkdown: patch.artifactMarkdown,
             artifactRevision: patch.artifactRevision ?? existing.artifactRevision,
             artifactHash: patch.artifactHash ?? existing.artifactHash,
-            turnInProgress: flags.turnInProgress,
-            latestTurnComplete: flags.latestTurnComplete,
+            turnInProgress: false,
+            latestTurnComplete: true,
             ...(patch.completeness !== undefined
               ? { completeness: patch.completeness }
               : null),
@@ -413,14 +410,14 @@ const createWorkflowDraftState = (
       const existing = state.draftsById[draftId];
       const turn = state.turnByDraftId[draftId];
       if (!existing || !turn) return state;
-      const flags = flagsForPhase("backend_running");
       return {
         draftsById: {
           ...state.draftsById,
           [draftId]: {
             ...existing,
-            turnInProgress: flags.turnInProgress,
-            latestTurnComplete: flags.latestTurnComplete,
+            // Backend may still be running the turn; not complete yet.
+            turnInProgress: true,
+            latestTurnComplete: false,
           },
         },
         turnByDraftId: {
@@ -435,7 +432,6 @@ const createWorkflowDraftState = (
     set((state) => {
       const existing = state.draftsById[draftId];
       if (!existing) return state;
-      const flags = flagsForPhase("failed");
       const previous = state.threadMessagesByDraftId[draftId] ?? [];
       const turn = state.turnByDraftId[draftId];
       return {
@@ -443,8 +439,9 @@ const createWorkflowDraftState = (
           ...state.draftsById,
           [draftId]: {
             ...existing,
-            turnInProgress: flags.turnInProgress,
-            latestTurnComplete: flags.latestTurnComplete,
+            // The failed turn is over; the error reply in the thread is the outcome.
+            turnInProgress: false,
+            latestTurnComplete: true,
           },
         },
         threadMessagesByDraftId: {

@@ -198,3 +198,28 @@ three items, all applied after sign-off:
 Suite: backend H2 tests 9/9 hermetic; frontend `tsc` clean, 157/157 (one
 known pre-existing slow-render flake on cold runs, passes on re-run;
 workflow-drafts suites 57/57 stable across repeated runs).
+
+### 2026-07-15 — Phase-vocabulary unification (H2-v2-style embedding pass)
+
+Applying the same "read the surroundings" lens that produced H2 v2 to
+runner-lite found the codebase carrying **two phase vocabularies**: the old
+hybrid's 5-phase `WorkflowTurnPhase` (`workflow-turn-state.ts`) and the store's
+real 3-phase `TurnPhase`. The old file survived only as two trivial lookups —
+`flagsForPhase` (4 store call sites, each discarding one of the three returned
+fields) and `resolveClientStreamEnd` (one runner call site, always
+`gotFinal:false`, i.e. a ternary needing vocabulary translation back). Applied:
+
+- Inlined the four two-boolean flag writes in the store actions (with comments
+  on the non-obvious pairs) and the abort/streamed ternary in the runner.
+- Deleted `workflow-turn-state.ts` + its test (~70 lines, one whole concept).
+- `frontend/ARCHITECTURE.md` updated to describe the runner-lite lifecycle
+  (it still documented the old hybrid), the 24-scenario test matrix, and the
+  M1 Upcoming-card change.
+
+Also recorded (NOT applied — expanded M2 scope in the redesign plan): the
+provider recovery poll and `completeTurn`'s `snapshot.messages` mirror exist
+only to compensate for / feed the legacy marker heuristics; both get deleted
+with the markers in M2. Verified: markers survive hard refresh and the
+root-layout notifier covers all happy paths through the same reducer.
+
+Suite after: `tsc` clean; 153/153 (4 tests removed with the deleted file).

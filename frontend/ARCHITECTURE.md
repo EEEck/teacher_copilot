@@ -47,26 +47,39 @@ app/pages  →  klassenpilot shells  →  assistant-ui Thread
   reasoning/tool parts are **client-session** overlays (MVP hybrid). Hard
   refresh will not restore Reasoning UI; turn flags + plain reply still resume.
 
-## Chat turn lifecycle (shared)
+## Chat turn lifecycle (runner-lite)
 
-Module: [`workflow-turn-state.ts`](src/features/workflow-drafts/workflow-turn-state.ts)
+Design: `docs/beta_readiness_audit_2026-07-13.md` §A.1.
 
-Phases: `idle` → `streaming` → (`backend_running` | `complete` | `failed`)
+- SSE owner: [`turn-runner.ts`](src/features/workflow-drafts/turn-runner.ts) —
+  a module-level runner outside React. Navigation never touches a running
+  turn; only the composer Stop button aborts the client stream.
+- Turn phases live on the store (`turnByDraftId`):
+  `streaming` → (`settled` | `awaiting_backend` → `settled`).
+  `awaiting_backend` = Stop or a dropped connection while the backend may
+  still finish; the store's snapshot reducer (`upsert`) merges the final
+  reply when the completed draft arrives.
+- Every backend snapshot (bootstrap, notifier, recovery poll) goes through
+  `upsert`; thread handling is decided purely from (phase, snapshot) — see the
+  reducer table in `workflow-draft-store.ts`.
 
 Expected product behavior (all of plan / ingest / discuss):
 
 1. On page while streaming: show reasoning + tool calls.
-2. Leave and return in the same browser session while backend still running:
-   keep already-streamed rich parts; show **Still working on your response…**.
-3. When final arrives: spinner clears; reply visible.
+2. Leave and return in the same browser session: the runner keeps streaming —
+   rich parts continue advancing; if the client stream ended (Stop/drop), show
+   **Still working on your response…** until the reducer merges the reply.
+3. When the turn finishes: spinner clears; reply visible.
 
 UI mapping: [`workflow-turn-activity.ts`](src/features/workflow-drafts/workflow-turn-activity.ts)
-→ Thread `isRunning` vs resumed spinner.
+→ Thread `isRunning` vs resumed spinner, fed from the store phase.
 
-Runtime owner: [`artifact-session-runtime.tsx`](src/components/assistant-ui/artifact-session-runtime.tsx)
-(`onNew` + SSE). Shells must not clear `turnInProgress` ad hoc.
+Intent dispatcher: [`artifact-session-runtime.tsx`](src/components/assistant-ui/artifact-session-runtime.tsx)
+(`onNew` → `runTurn`, `onCancel` → `cancelTurn`; owns the page-local artifact
+editor). Shells must not clear `turnInProgress` ad hoc.
 
-**MVP non-goal:** backend persistence/replay of reasoning/tool traces.
+**MVP non-goal:** backend persistence/replay of reasoning/tool traces (hard
+refresh resumes with plain reply + turn flags).
 
 ## How to add a chat mode
 
@@ -99,8 +112,9 @@ dashboard, not a second product surface. Layout is three titled sections
    Page title formats `chemie_9b_2026_27` → **Chemie 9b** with subtitle
    `2026/27 · STEM track` (or Language track). At a glance keeps 2×2 with a
    shortened unit label and larger metric type. Brief merges **Watch**
-   (misconceptions first, then brief watch items; max 3). Upcoming uses mock
-   dates (`class-home-mock-dates.ts`); notes are localStorage
+   (misconceptions first, then brief watch items; max 3). Upcoming shows an
+   honest empty state ("No key dates yet") until a real dates source exists
+   (assessment calendar is a later backlog item); notes are localStorage
    (`kp:class-notes:{classId}` via `class-home-notes.ts`) — browser-local only.
 2. **Actions** — dismissible `StickyNote` + compact equal-width row
    (`inline-grid` + `auto-cols-[1fr]`, sized to the widest label; `size="lg"`).
@@ -132,12 +146,16 @@ wiki-backed todos here without an explicit product decision.
 
 ## Testing chat turns
 
-Deterministic Vitest (no OpenAI / browser). The matrix is **3 workflows × 2 cases**:
+Deterministic Vitest (no OpenAI / browser). The scenarios drive the REAL
+runner + store with controllable fake SSE streams — **3 workflows × 8
+scenarios** (stay, leave-mid-turn, hard refresh, Stop, dropped stream,
+fail-before-content, duplicate send, discard-mid-turn). Key cases:
 
 | Case | Meaning | Expected observations |
 |---|---|---|
-| **1 — Stay on page** | Live SSE until final | Stop button while streaming; no “Still working…”; final reply visible; spinner off |
-| **2 — Leave mid-turn** | Abort/unmount SSE; backend finishes | Rich reasoning/tools kept; “Still working…”; notifier upsert merges final reply; spinner off |
+| **Stay on page** | Live SSE until final | Stop button while streaming; no “Still working…”; final reply visible; spinner off |
+| **Leave mid-turn** | Runner keeps streaming (no abort) | Thread keeps advancing after unmount; final lands without any upsert; later flat upserts can't flatten the settled thread |
+| **Stop / dropped stream** | Client stream ends; backend finishes | “Still working…”; reducer merges the reply into rich parts; spinner off |
 
 Workflows: `plan`, `ingest` (Update Memory), `discuss`.
 
@@ -152,10 +170,9 @@ Related unit coverage:
 
 | File | Covers |
 |---|---|
-| [`chat-turn-scenarios.test.ts`](src/features/workflow-drafts/chat-turn-scenarios.test.ts) | 6 scenario observations (matrix above) |
-| [`workflow-turn-state.test.ts`](src/features/workflow-drafts/workflow-turn-state.test.ts) | Phase → flags (streaming / backend_running / complete) |
+| [`chat-turn-scenarios.test.ts`](src/features/workflow-drafts/chat-turn-scenarios.test.ts) | 24 runner-driven scenario observations (matrix above) |
 | [`workflow-turn-activity.test.ts`](src/features/workflow-drafts/workflow-turn-activity.test.ts) | Stop vs Still-working mapping |
-| [`workflow-draft-store.test.ts`](src/features/workflow-drafts/workflow-draft-store.test.ts) | Keep rich thread; merge final reply after leave/return |
+| [`workflow-draft-store.test.ts`](src/features/workflow-drafts/workflow-draft-store.test.ts) | Snapshot reducer rows, turn actions, meta preservation, selector stability |
 | [`pending-chat-turns.test.ts`](src/lib/pending-chat-turns.test.ts) | Pending markers + discuss resume href |
 | [`thread-background-status.test.ts`](src/components/assistant-ui/thread-background-status.test.ts) | Still-working banner copy |
 
