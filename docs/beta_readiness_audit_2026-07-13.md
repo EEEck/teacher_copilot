@@ -111,6 +111,18 @@ Key evidence and caveats:
 > rather than the stub (their openings/plans cite real seed data) — they fail
 > identically with this fix stashed and with prod or dev `.env`, so they are not
 > caused by H2; worth a separate look since they claim to run offline.
+> (Root cause later confirmed: a real `OPENAI_API_KEY` in `backend/.env` leaks
+> into pytest; with the key blanked they all pass — run hermetically.)
+>
+> **v2 simplification (2026-07-14, commit `5f87089`):** review found the
+> placeholder half of v1 contradicted the plan prompt's mandated structure
+> (prompts.py has no Target date line at all). Drafts now carry **no** target
+> date — `empty_plan_template` emits only `> Duration: 45 min`, matching the
+> prompt — and `normalize_plan_target_date` stamps
+> `| Target date: {lesson_date}` onto the Duration line at save (historical
+> saved-plan format preserved). The replace branch remains as defense for
+> in-flight drafts / model-mimicked lines, with the regex hardened to stop at
+> `|`. 9 hermetic unit tests.
 
 `empty_plan_template()` bakes in `date.today()`
 ([context_packs.py:746](../backend/app/teacher_agent/wiki/context_packs.py:746)):

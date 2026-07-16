@@ -174,3 +174,27 @@ thread-background-status, ~2–4.5 s — cleared on re-run; runner scenario test
 24/24 stable across repeated runs). Debug `console.log`s removed.
 
 **Status: runner-lite verified end-to-end, ready to commit.**
+
+### 2026-07-14 — Post-review lightweight refactor (commits `5f87089`, `de01b4c`)
+
+Embedding review of the shipped changes against the original asks surfaced
+three items, all applied after sign-off:
+
+1. **H2 v2 — dateless drafts.** The v1 placeholder (`Target date: (set when
+   saving)`) contradicted the plan prompt's mandated structure, which has no
+   Target date line. Template now emits only `> Duration: 45 min`;
+   `normalize_plan_target_date` stamps the date onto the Duration line at save
+   (replace branch kept as defense, regex hardened to stop at `|`). Dead
+   `lesson_date` param dropped from `empty_plan_template`.
+2. **Store reducer merge gap.** `upsert()` full-replaced snapshots while draft
+   GET responses never carry `readyToSave` / `lastChangeSummary` /
+   `memoryCandidates`, so notifier/recovery upserts silently reset what
+   `completeTurn` wrote. `upsert` now treats undefined as "unknown, keep
+   existing" for those three fields (same semantics as `applyDraftPatch`);
+   regression test added.
+3. **Dead code:** `applyBackendDraftFlags` + its test deleted (zero call
+   sites).
+
+Suite: backend H2 tests 9/9 hermetic; frontend `tsc` clean, 157/157 (one
+known pre-existing slow-render flake on cold runs, passes on re-run;
+workflow-drafts suites 57/57 stable across repeated runs).
