@@ -28,7 +28,7 @@ export type AgentMarkProps = {
   size?: "sm" | "md" | "lg" | number;
   /**
    * Fit the canonical Final Mark S (`size="lg"`) into this outer box (px).
-   * Keeps agent-avatars proportions — use for FABs/chips next to fixed controls.
+   * Keeps locked mark proportions — use for FABs/chips next to fixed controls.
    */
   boxSize?: number;
   title?: string;
@@ -432,7 +432,7 @@ function WorkflowBadge({
  * ```tsx
  * import { EEEck, EEEckThinking, AgentMark } from "@/components/klassenpilot/agent-mark";
  * <EEEck size="lg" />
- * <EEEckThinking boxSize={76} />           // same proportions as /dev/agent-avatars, scaled
+ * <EEEckThinking boxSize={76} />           // same proportions as Final Mark S, scaled
  * <AgentMark mood="happy" workflow="plan" alive />
  * ```
  */
@@ -445,7 +445,7 @@ export function AgentMark({
   workflow = "memory",
   alive = false,
 }: AgentMarkProps) {
-  // boxSize always composes at lg so FAB/chip marks match agent-avatars proportions.
+  // boxSize always composes at lg so FAB/chip marks keep Final Mark S proportions.
   if (boxSize != null && boxSize > 0) {
     const scale = boxSize / AGENT_MARK_LG_BOX_PX;
     return (

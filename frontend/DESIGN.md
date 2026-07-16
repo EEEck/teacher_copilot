@@ -180,9 +180,8 @@ import {
 <AgentMark mood="happy" workflow="plan" alive />
 ```
 
-`boxSize` always composes at `size="lg"` then CSS-scales — that is how FABs stay faithful to `/dev/agent-avatars`. Do not shrink `size` to a tiny face number for chips.
+`boxSize` always composes at `size="lg"` then CSS-scales into a fixed outer box — that is how FABs/chips keep Final Mark S proportions. Do not shrink `size` to a tiny face number for chips.
 
-**Gallery (temporary):** [`/dev/agent-avatars`](src/app/dev/agent-avatars/page.tsx)  
 **Home:** [`HomeLanding`](src/components/klassenpilot/home-landing.tsx) uses `AgentMark` (`alive`)  
 **Workflow pages:** Plan / Update memory / Memory Sweep headers use `AgentMark boxSize={76}` with the matching `workflow` badge (same as Discuss FAB; no `alive`)  
 **Discuss dock:** `EEEck boxSize={76}` beside `?`; header uses `AgentMark boxSize={28}` with mood from turn state
