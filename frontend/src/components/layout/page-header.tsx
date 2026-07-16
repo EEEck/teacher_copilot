@@ -2,9 +2,13 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
+const backLinkClass = (compact: boolean) =>
+  cn("text-primary hover:underline", compact ? "text-xs" : "text-sm");
+
 export function PageHeader({
   backHref,
   backLabel = "Back",
+  onBack,
   title,
   description,
   trailing,
@@ -13,6 +17,8 @@ export function PageHeader({
 }: {
   backHref?: string;
   backLabel?: string;
+  /** Client-side back (e.g. router.back). Ignored when backHref is set. */
+  onBack?: () => void;
   title: string;
   description?: string;
   /** Right-side presence (e.g. workflow EEEck); vertically centered with the title block. */
@@ -23,17 +29,19 @@ export function PageHeader({
   const compact = variant === "compact";
   return (
     <div className={cn(compact ? "mb-1.5" : "mb-8", className)}>
-      {backHref && (
-        <Link
-          href={backHref}
-          className={cn(
-            "text-primary hover:underline",
-            compact ? "text-xs" : "text-sm",
-          )}
-        >
+      {backHref ? (
+        <Link href={backHref} className={backLinkClass(compact)}>
           ← {backLabel}
         </Link>
-      )}
+      ) : onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className={backLinkClass(compact)}
+        >
+          ← {backLabel}
+        </button>
+      ) : null}
       <div className="flex items-center gap-4">
         <div className="min-w-0 flex-1">
           <h1

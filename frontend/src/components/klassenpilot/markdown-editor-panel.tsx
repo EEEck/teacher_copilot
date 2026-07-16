@@ -28,6 +28,9 @@ export type MarkdownEditorPanelProps = {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
+  /** Optional dismiss control (e.g. close wiki proposal → lesson diary). */
+  onDismiss?: () => void;
+  dismissAriaLabel?: string;
 };
 
 export function MarkdownEditorPanel({
@@ -46,6 +49,8 @@ export function MarkdownEditorPanel({
   onRedo,
   canUndo = false,
   canRedo = false,
+  onDismiss,
+  dismissAriaLabel = "Dismiss",
 }: MarkdownEditorPanelProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("preview");
   const editable = !readOnly && Boolean(onChange);
@@ -63,9 +68,9 @@ export function MarkdownEditorPanel({
         className,
       )}
     >
-      <div className="flex shrink-0 items-center justify-between">
-        <p className="text-sm font-medium">{label}</p>
-        <div className="flex items-center gap-1">
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <p className="min-w-0 flex-1 truncate text-sm font-medium">{label}</p>
+        <div className="flex shrink-0 items-center gap-1">
           {showUndoRedo && (
             <>
               <Button
@@ -104,6 +109,18 @@ export function MarkdownEditorPanel({
                 { value: "edit", label: "Edit" },
               ]}
             />
+          )}
+          {onDismiss && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={dismissAriaLabel}
+              className="shrink-0 text-base leading-none text-muted-foreground hover:text-foreground"
+              onClick={onDismiss}
+            >
+              ×
+            </Button>
           )}
         </div>
       </div>

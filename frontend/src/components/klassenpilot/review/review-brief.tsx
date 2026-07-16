@@ -26,7 +26,7 @@ import type { FileChange } from "./types";
 const SECTION_TITLES: Record<BriefEntry["category"], string> = {
   new: "New",
   updated: "Updated",
-  removed: "Removed / replaced",
+  removed: "Rewritten",
 };
 
 const SECTION_ORDER: BriefEntry["category"][] = ["new", "updated", "removed"];

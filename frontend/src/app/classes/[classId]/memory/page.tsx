@@ -198,17 +198,23 @@ function MemoryTargetStatus() {
   const confirmed = boolFromRecord(targetRecord.target_confirmed);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-[11px] leading-tight">
-      <span className="font-medium text-foreground">
-        {date ? `Target: ${date}${title ? ` · ${title}` : ""}` : "Target: not selected"}
-      </span>
-      {intent && <span className="text-muted-foreground">Intent: {intent}</span>}
-      {phase && <span className="text-muted-foreground">Phase: {phase}</span>}
-      <span className={confirmed ? "text-primary" : "text-muted-foreground"}>
-        {confirmed ? "Confirmed" : "Needs confirmation"}
-      </span>
+    <div className="space-y-1 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-[11px] leading-tight">
+      <p className="text-muted-foreground">
+        Session status — which lesson this diary is for and the last draft
+        change (not a chat message).
+      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+        <span className="font-medium text-foreground">
+          {date ? `Target: ${date}${title ? ` · ${title}` : ""}` : "Target: not selected"}
+        </span>
+        {intent && <span className="text-muted-foreground">Intent: {intent}</span>}
+        {phase && <span className="text-muted-foreground">Phase: {phase}</span>}
+        <span className={confirmed ? "text-primary" : "text-muted-foreground"}>
+          {confirmed ? "Confirmed" : "Needs confirmation"}
+        </span>
+      </div>
       {lastChangeSummary && (
-        <span className="basis-full text-muted-foreground">{lastChangeSummary}</span>
+        <p className="text-muted-foreground">Last change: {lastChangeSummary}</p>
       )}
     </div>
   );
@@ -641,11 +647,82 @@ function MemoryWorkspace({
         wikiPath={selectedPath}
         markdown={contentByPath[selectedPath]}
         onChange={(value) => updateContent(selectedPath, value)}
-        onBackToDiary={() => setEditingWiki(false)}
       />
     ) : (
       <DiaryDraftPanel />
     );
+
+  // After commit, drop the dual-pane (it eats the viewport and hid Apply/Skip
+  // below an unscrollable fold). Show a scrollable post-save column instead.
+  if (commitResult) {
+    return (
+      <div className="mx-auto flex w-full max-w-2xl min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-8">
+        <Card variant="highlight" ref={commitResultRef}>
+          <CardHeader>
+            <CardTitle className="text-base">Memory saved</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {commitResult.title} ({commitResult.lesson_date}) — log entry{" "}
+              <span className="font-mono text-xs">{commitResult.log_entry_id}</span>
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-foreground">
+              {commitResult.applied_wiki_paths.length} file
+              {commitResult.applied_wiki_paths.length === 1 ? "" : "s"} updated.
+            </p>
+            <ul className="space-y-1 text-sm">
+              {commitResult.applied_wiki_paths.map((path) => (
+                <li key={path}>
+                  <Link
+                    href={`/classes/${classId}/wiki/view?path=${encodeURIComponent(path)}`}
+                    className="font-mono text-xs text-primary hover:underline"
+                  >
+                    {path}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-3 pt-1">
+              <Button asChild>
+                <Link href={viewerAllHref}>View all changes</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link
+                  href={
+                    commitResult.lesson_date
+                      ? `/classes/${classId}?highlight=${encodeURIComponent(commitResult.lesson_date)}`
+                      : `/classes/${classId}`
+                  }
+                >
+                  Back to class home
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {memoryCandidates.length > 0 && (
+          <ProposedMemoryUpdates
+            candidates={memoryCandidates}
+            onApply={applyMemory}
+            applying={applyingMemory}
+            onContinue={() => setMemoryCandidates([])}
+            continueLabel="Skip for now"
+          />
+        )}
+
+        {classMemoryProposal && (
+          <CompactMemoryProposalCard
+            key={`${commitResult.log_entry_id}-class-memory`}
+            proposal={classMemoryProposal}
+            onApply={applyClassMemory}
+            applying={applyingClassMemory}
+            onContinue={() => setClassMemoryProposal(null)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -693,6 +770,7 @@ function MemoryWorkspace({
               before={selectedChange.before}
               after={selectedChange.after}
               className="h-full min-h-[12rem]"
+              onDismiss={() => setEditingWiki(false)}
             />
           ) : null
         }
@@ -722,72 +800,6 @@ function MemoryWorkspace({
         <p className="text-xs text-destructive">
           Keep the lesson results change selected to save this lesson to memory.
         </p>
-      )}
-
-      {commitResult && (
-        <Card variant="highlight" ref={commitResultRef}>
-          <CardHeader>
-            <CardTitle className="text-base">Memory saved</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {commitResult.title} ({commitResult.lesson_date}) — log entry{" "}
-              <span className="font-mono text-xs">{commitResult.log_entry_id}</span>
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-foreground">
-              {commitResult.applied_wiki_paths.length} file
-              {commitResult.applied_wiki_paths.length === 1 ? "" : "s"} updated.
-            </p>
-            <ul className="space-y-1 text-sm">
-              {commitResult.applied_wiki_paths.map((path) => (
-                <li key={path}>
-                  <Link
-                    href={`/classes/${classId}/wiki/view?path=${encodeURIComponent(path)}`}
-                    className="font-mono text-xs text-primary hover:underline"
-                  >
-                    {path}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <div className="flex flex-wrap gap-3 pt-1">
-              <Button asChild>
-                <Link href={viewerAllHref}>View all changes</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link
-                  href={
-                    commitResult.lesson_date
-                      ? `/classes/${classId}?highlight=${encodeURIComponent(commitResult.lesson_date)}`
-                      : `/classes/${classId}`
-                  }
-                >
-                  Back to class home
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {commitResult && memoryCandidates.length > 0 && (
-        <ProposedMemoryUpdates
-          candidates={memoryCandidates}
-          onApply={applyMemory}
-          applying={applyingMemory}
-          onContinue={() => setMemoryCandidates([])}
-          continueLabel="Skip for now"
-        />
-      )}
-
-      {commitResult && classMemoryProposal && (
-        <CompactMemoryProposalCard
-          key={`${commitResult.log_entry_id}-class-memory`}
-          proposal={classMemoryProposal}
-          onApply={applyClassMemory}
-          applying={applyingClassMemory}
-          onContinue={() => setClassMemoryProposal(null)}
-        />
       )}
     </div>
   );

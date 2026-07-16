@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { MessageSquarePlus } from "lucide-react";
 
+import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { client } from "@/lib/api";
 
 export default function BetaFeedbackPage() {
+  const router = useRouter();
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
@@ -47,14 +50,16 @@ export default function BetaFeedbackPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-[60vh] max-w-lg items-center">
-      <Card className="w-full">
-        <CardHeader>
+    <div>
+      <PageHeader
+        onBack={() => router.back()}
+        backLabel="Back"
+        title="Give feedback"
+        description="What helped, what was confusing, or what you wish worked differently. Short notes are fine."
+      />
+      <Card className="mx-auto w-full max-w-lg">
+        <CardHeader className="sr-only">
           <CardTitle>Give feedback</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            What helped, what was confusing, or what you wish worked differently. Short notes are
-            fine.
-          </p>
         </CardHeader>
         <CardContent>
           {sent && (
@@ -98,6 +103,6 @@ export default function BetaFeedbackPage() {
           </form>
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }

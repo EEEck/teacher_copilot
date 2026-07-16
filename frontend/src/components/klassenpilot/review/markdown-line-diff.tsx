@@ -1,8 +1,9 @@
 "use client";
 
 import { computeMarkdownDiff, shortWikiPath, type DiffLine } from "@/lib/markdown-diff";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 function DiffLineRow({ line, lineNo }: { line: DiffLine; lineNo: number }) {
   return (
@@ -37,19 +38,40 @@ export function MarkdownLineDiff({
   before,
   after,
   className,
+  onDismiss,
+  dismissAriaLabel = "Close file and return to lesson diary",
 }: {
   path: string;
   before: string;
   after: string;
   className?: string;
+  onDismiss?: () => void;
+  dismissAriaLabel?: string;
 }) {
   const lines = computeMarkdownDiff(before, after);
 
   return (
     <div className={cn("flex min-h-0 flex-col", className)}>
-      <p className="mb-2 truncate font-mono text-xs text-muted-foreground" title={path}>
-        {shortWikiPath(path)}
-      </p>
+      <div className="mb-2 flex items-center gap-2">
+        <p
+          className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
+          title={path}
+        >
+          {shortWikiPath(path)}
+        </p>
+        {onDismiss ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={dismissAriaLabel}
+            className="shrink-0 text-base leading-none text-muted-foreground hover:text-foreground"
+            onClick={onDismiss}
+          >
+            ×
+          </Button>
+        ) : null}
+      </div>
       <ScrollArea className="min-h-0 flex-1 rounded-md border border-border bg-card">
         <div className="min-h-[8rem]">
           {lines.length === 0 ? (
