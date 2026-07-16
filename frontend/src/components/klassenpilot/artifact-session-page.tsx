@@ -6,6 +6,10 @@ import {
   createArtifactRuntimeConfig,
   type ArtifactMode,
 } from "@/components/assistant-ui/artifact-runtime-config";
+import {
+  AgentMark,
+  type AgentMarkWorkflow,
+} from "@/components/klassenpilot/agent-mark";
 import { PageHeader } from "@/components/layout/page-header";
 import { useArtifactSessionShell } from "@/components/layout/shell-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,6 +17,12 @@ import type { ChatMessage, CompletenessChecklist } from "@/lib/api";
 import { toWorkflowDraftSnapshot } from "@/features/workflow-drafts/workflow-draft-bootstrap";
 import { workflowDraftRuntimeKey } from "@/features/workflow-drafts/workflow-draft-runtime-key";
 import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
+
+function workflowForMode(mode: ArtifactMode): AgentMarkWorkflow | null {
+  if (mode === "plan") return "plan";
+  if (mode === "ingest") return "memory";
+  return null;
+}
 
 export type ArtifactBootstrapOptions = {
   /** Re-apply draft after the server lost the in-memory session (e.g. backend restart). */
@@ -158,6 +168,7 @@ export function ArtifactSessionPage({
     [mode, classId, data, lessonDate, lessonTitle, onSessionLost],
   );
 
+  const workflow = workflowForMode(mode);
   const header = (
     <PageHeader
       backHref={`/classes/${classId}`}
@@ -166,6 +177,11 @@ export function ArtifactSessionPage({
       description={description}
       variant="compact"
       className="shrink-0"
+      trailing={
+        workflow ? (
+          <AgentMark boxSize={76} workflow={workflow} title={`EEEck · ${title}`} />
+        ) : undefined
+      }
     />
   );
 

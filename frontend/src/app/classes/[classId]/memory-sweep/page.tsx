@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2Icon } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { AgentMark } from "@/components/klassenpilot/agent-mark";
 import {
   MemorySweepBrief,
   MemorySweepBulkToolbar,
@@ -555,6 +556,9 @@ export default function MemorySweepPage() {
       <PageHeader
         title="Memory Sweep"
         description="Review accumulated memory candidates before they become durable memory."
+        trailing={
+          <AgentMark boxSize={76} workflow="sweep" title="EEEck · Memory Sweep" />
+        }
       />
 
       <div className="mb-6 flex flex-wrap gap-3">
