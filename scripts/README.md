@@ -67,7 +67,9 @@ files in the default prompt context.
 
 The plan and memory trace scripts intentionally have the same developer shape:
 start an artifact session, stream fixed teacher turns, fetch the trace endpoint,
-and write a run bundle. If another workflow needs this, create a shared
+and write a run bundle. In local development, each turn also writes raw
+reasoning events extracted from the SSE response as `*-reasoning.txt` and
+`*-reasoning.json`. If another workflow needs this, create a shared
 scenario-driven runner instead of copying either script again.
 
 ## Memory Candidate Scenario Traces
@@ -126,3 +128,26 @@ cd .
 By default the script removes its temporary smoke bullets from wiki files after
 verification while leaving applied ledger rows as audit history. Use
 `--keep-writes` to inspect the durable wiki changes in place.
+
+## Memory V4 Golden Trace Bundle
+
+- `run_memory_v4_golden_trace.py`
+
+This diagnostic reuses the memory-capture goldens and writes a bundle organized
+around the four V4 control stages: Admission, Priority, Sweep, and Apply. The
+default deterministic mode does not call the API:
+
+```powershell
+.\backend\.venv\Scripts\python .\scripts\run_memory_v4_golden_trace.py
+```
+
+To capture the full live workflow trace, prompt assembly, SSE stream, runtime
+candidates, and optional Sweep response:
+
+```powershell
+.\backend\.venv\Scripts\python .\scripts\run_memory_v4_golden_trace.py `
+  --mode live --scenario two --run-sweep
+```
+
+The diagnostic never applies or writes curated Markdown. Generated bundles are
+written under `backend/runs/`.

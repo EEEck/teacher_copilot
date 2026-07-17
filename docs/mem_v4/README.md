@@ -15,6 +15,7 @@ Supporting dumps: `_ledger_snapshot.json`, `_sweep_cards.json`.
 Related:
 
 - V3 design and learnings: [`../mem_v3/`](../mem_v3/)
+- Codex hardening design: [`mem_v4_codex.md`](mem_v4_codex.md)
 - Behavior contract: [`../agent_contracts.md`](../agent_contracts.md)
 - Architecture: [`../agent_architecture.md`](../agent_architecture.md)
 

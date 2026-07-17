@@ -7,8 +7,9 @@ The ledger remains review evidence only; this module never writes wiki files.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 
 from pydantic import BaseModel, Field
 
@@ -38,6 +39,12 @@ MEMORY_SOURCES = (
 )
 CONFIDENCE = ("low", "medium", "high")
 BASIS = ("explicit", "inferred")
+SPEECH_ACTS = ("conduct_request", "store_request", "observation", "unknown")
+MEMORY_SCOPES = ("turn", "lesson", "block", "class", "global", "unknown")
+ADMISSION_DECISIONS = ("ignore", "stage", "needs_review")
+FAST_LANE_ACTS = {"conduct_request", "store_request"}
+KNOWN_SPEECH_ACTS = FAST_LANE_ACTS | {"observation"}
+KNOWN_MEMORY_SCOPES = {"turn", "lesson", "block", "class", "global"}
 
 
 class MemoryCandidate(BaseModel):
@@ -60,16 +67,39 @@ class MemoryCandidate(BaseModel):
     )
     requires_teacher_approval: bool = True
     speech_act: str = Field(
-        default="",
+        default="unknown",
         description=(
             "How the teacher's message relates to this candidate: "
             "conduct_request (teacher directs the agent's behavior or states a "
             "standing preference, not bounded to the current document), "
             "store_request (teacher explicitly asks to remember/add/remove "
             "something in memory), observation (teacher reports what happened). "
-            "Leave empty when unsure."
+            "Use unknown when unsure."
         ),
     )
+    scope: str = Field(
+        default="unknown",
+        description=(
+            "How broadly the claim remains valid: turn, lesson, block, class, "
+            "global, or unknown."
+        ),
+    )
+    scope_label: str = Field(
+        default="",
+        description="Compact bounded label such as 'organic chemistry' for block scope.",
+    )
+    # Backend-owned provenance/admission fields. The model may leave these at
+    # their defaults; discipline_memory_candidates computes them from the
+    # current teacher message before anything reaches the ledger.
+    origin_kind: str = Field(default="", description="Backend provenance kind.")
+    origin_turn_index: int = Field(default=0, ge=0)
+    origin_message_hash: str = Field(default="", description="Hash of the source teacher message.")
+    quote_fingerprint: str = Field(default="", description="Hash of the verified teacher quote.")
+    admission: str = Field(
+        default="",
+        description="Backend-owned Admission decision: ignore, stage, or needs_review.",
+    )
+    admission_reason_codes: list[str] = Field(default_factory=list)
     fast_lane: bool = Field(
         default=False,
         description=(
@@ -92,6 +122,16 @@ class MemoryCaptureContext:
     artifact_markdown: str = ""
     runtime: Any | None = None
     existing_candidates: tuple[MemoryCandidate, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class MemoryAdmissionResult:
+    """Backend-owned Admission and Priority verdict for one candidate."""
+
+    candidate: MemoryCandidate
+    admission: Literal["ignore", "stage", "needs_review"]
+    fast_lane: bool = False
+    reason_codes: list[str] = field(default_factory=list)
 
 
 class MemoryCaptureLifecycle:
@@ -305,15 +345,15 @@ def _strip_quote_prefix(evidence: str) -> str:
 def _verified_quote(evidence: str, teacher_message: str) -> str | None:
     """Verify the model's claimed teacher quote against the real message.
 
-    Returns the verified quote, "" when the model quoted nothing (caller may
-    fall back to the whole message), or None when the model FABRICATED a
-    quote that does not appear in what the teacher typed.
+    Returns the verified quote, or None when the candidate omitted or
+    fabricated a quote. A missing quote is not authorization to use the whole
+    message: that was the old shortcut that allowed weak candidates through.
     """
     evidence_clean = clean_text(evidence)
     lower = evidence_clean.lower()
     prefix = DIRECT_TEACHER_QUOTE_PREFIX.lower()
     if prefix not in lower:
-        return ""
+        return None
     start = lower.index(prefix) + len(prefix)
     quoted = evidence_clean[start:].split("|", 1)[0].strip().strip('"“”')
     message_normalized = clean_text(teacher_message).lower()
@@ -325,68 +365,197 @@ def _verified_quote(evidence: str, teacher_message: str) -> str | None:
     return None
 
 
+def _message_fingerprint(value: str) -> str:
+    normalized = clean_text(value).casefold().encode("utf-8")
+    return hashlib.sha256(normalized).hexdigest() if normalized else ""
+
+
+def _quote_fingerprint(value: str) -> str:
+    normalized = clean_text(value).casefold().encode("utf-8")
+    return hashlib.sha256(normalized).hexdigest() if normalized else ""
+
+
+def admit_memory_candidate(
+    candidate: MemoryCandidate,
+    *,
+    teacher_message: str,
+    origin_message_id: str,
+    origin_turn_index: int = 0,
+) -> MemoryAdmissionResult:
+    """Compute the V4 Admission/Priority verdict for one model candidate.
+
+    The model supplies semantic hints; this function owns the trust boundary.
+    In particular, unknown speech act/scope, missing provenance, and missing or
+    fabricated quotes can only move a candidate to review, never to fast lane.
+    """
+
+    speech_act = clean_text(candidate.speech_act).casefold() or "unknown"
+    scope = clean_text(candidate.scope).casefold() or "unknown"
+    reasons: list[str] = []
+    quote = _verified_quote(candidate.evidence, teacher_message)
+
+    if not candidate.candidate_update.strip():
+        reasons.append("empty_claim")
+    if not candidate_is_allowed(candidate):
+        reasons.append("unsupported_target_or_source")
+
+    # Non-explicit evidence can be useful review material, but it is never a
+    # fast-lane candidate and does not need to masquerade as a teacher request.
+    if candidate.source != "teacher_explicit":
+        if reasons:
+            decision: Literal["ignore", "stage", "needs_review"] = "ignore"
+        else:
+            decision = "stage"
+            reasons.append("non_explicit_signal")
+        bound = candidate.model_copy(
+            update={
+                "speech_act": speech_act,
+                "scope": scope,
+                "origin_kind": "teacher_message" if teacher_message else "",
+                "origin_turn_index": max(0, origin_turn_index),
+                "origin_message_hash": origin_message_id or _message_fingerprint(teacher_message),
+                "quote_fingerprint": _quote_fingerprint(quote or ""),
+                "admission": decision,
+                "admission_reason_codes": reasons,
+                "fast_lane": False,
+            }
+        )
+        return MemoryAdmissionResult(bound, decision, False, reasons)
+
+    if speech_act not in KNOWN_SPEECH_ACTS:
+        reasons.append("unknown_speech_act")
+    if scope not in KNOWN_MEMORY_SCOPES:
+        reasons.append("unknown_scope")
+    if scope == "turn":
+        reasons.append("turn_scope_not_durable")
+    if not origin_message_id:
+        reasons.append("missing_origin")
+    if not clean_text(candidate.evidence):
+        reasons.append("missing_quote")
+    elif quote is None:
+        reasons.append(
+            "missing_quote"
+            if DIRECT_TEACHER_QUOTE_PREFIX.lower() not in clean_text(candidate.evidence).casefold()
+            else "quote_not_in_origin_message"
+        )
+
+    if reasons:
+        decision = "ignore" if "unsupported_target_or_source" in reasons else "needs_review"
+        bound = candidate.model_copy(
+            update={
+                "speech_act": speech_act,
+                "scope": scope,
+                "origin_kind": "teacher_message",
+                "origin_turn_index": max(0, origin_turn_index),
+                "origin_message_hash": origin_message_id,
+                "quote_fingerprint": _quote_fingerprint(quote or ""),
+                "admission": decision,
+                "admission_reason_codes": reasons,
+                "fast_lane": False,
+            }
+        )
+        return MemoryAdmissionResult(bound, decision, False, reasons)
+
+    if speech_act == "observation":
+        reasons.append("observation_signal")
+        decision = "stage"
+        fast_lane = False
+    else:
+        fast_lane = (
+            speech_act in FAST_LANE_ACTS
+            and scope in {"class", "global"}
+            and candidate.confidence == "high"
+            and is_fast_lane_explicit_target(candidate.target)
+            and (
+                fast_lane_policy(candidate.target) == "always"
+                or speech_act == "store_request"
+            )
+        )
+        decision = "stage"
+        reasons.append("explicit_request" if fast_lane else "regular_signal")
+
+    bound = candidate.model_copy(
+        update={
+            "speech_act": speech_act,
+            "scope": scope,
+            "origin_kind": "teacher_message",
+            "origin_turn_index": max(0, origin_turn_index),
+            "origin_message_hash": origin_message_id,
+            "quote_fingerprint": _quote_fingerprint(quote or ""),
+            "admission": decision,
+            "admission_reason_codes": reasons,
+            "fast_lane": fast_lane,
+        }
+    )
+    return MemoryAdmissionResult(bound, decision, fast_lane, reasons)
+
+
 def discipline_memory_candidates(
     candidates: Iterable[MemoryCandidate],
     *,
     teacher_message: str,
+    origin_turn_index: int = 0,
 ) -> list[MemoryCandidate]:
     """Keep only defensible explicit claims; downgrade the rest to signals.
 
-    The workflow model judges the speech act (conduct_request /
-    store_request / observation) — that is the primary classification, per
-    the direct-agent-instruction pattern (ChatGPT memory, LangMem procedural
-    memory). Deterministic code enforces exactly three things:
-    1. the lane policy of the target (dictation vs observation boundary);
-    2. quote provenance — a quoted sentence must actually appear in the
-       teacher's message; a fabricated quote downgrades the candidate;
-    3. the future-scope markers as fallback corroboration when the model
-       did not classify the speech act (legacy/typed-state paths).
-    Kept candidates get the canonical verified-quote prefix stamped into
-    evidence and ``fast_lane=True``; downgraded candidates have any quote
-    prefix stripped so the token cannot leak into the ledger.
+    The workflow model proposes speech act and scope. Backend Admission then
+    verifies origin and quote provenance, and Priority grants fast lane only
+    for a narrow explicit-request policy. Marker words such as ``always`` are
+    evidence the model may consider, never authorization. Candidates bound to
+    an earlier teacher message are not rechecked against the latest message;
+    full transcript storage is intentionally out of scope.
     """
-    marker_scoped = has_durable_preference_scope(teacher_message)
     out: list[MemoryCandidate] = []
     for candidate in candidates:
         if candidate.source != "teacher_explicit":
-            if candidate.fast_lane:
-                candidate = candidate.model_copy(update={"fast_lane": False})
-            out.append(candidate)
+            # Inferred/tool evidence is already a regular review signal. Do
+            # not mutate its provenance merely because this turn is being
+            # persisted, but never allow a model-provided fast-lane bit to
+            # survive.
+            out.append(
+                candidate
+                if not candidate.fast_lane
+                else candidate.model_copy(update={"fast_lane": False})
+            )
+            continue
+        if candidate.origin_message_hash and candidate.admission in ADMISSION_DECISIONS:
+            # This candidate was already admitted against its source message.
+            # Do not compare its quote with a later turn's text.
+            out.append(candidate.model_copy(update={"fast_lane": bool(candidate.fast_lane and candidate.admission == "stage")}))
             continue
 
-        policy = fast_lane_policy(candidate.target)
-        speech_act = (candidate.speech_act or "").strip().lower()
-        act_ok = (
-            speech_act == "store_request"
-            if policy == "store_request"
-            else speech_act in ("conduct_request", "store_request") or marker_scoped
+        result = admit_memory_candidate(
+            candidate,
+            teacher_message=teacher_message,
+            origin_message_id=_message_fingerprint(teacher_message),
+            origin_turn_index=origin_turn_index,
         )
+        candidate = result.candidate
         quote = _verified_quote(candidate.evidence, teacher_message)
-
-        if policy == "never" or not act_ok or quote is None:
-            evidence = _strip_quote_prefix(candidate.evidence)
+        if result.fast_lane and quote is not None:
+            rest = _strip_quote_prefix(candidate.evidence)
+            evidence = f"{DIRECT_TEACHER_QUOTE_PREFIX} {quote}"
+            if rest:
+                evidence = f"{evidence} | {rest}"
+            candidate = candidate.model_copy(update={"evidence": evidence[:1600]})
+        else:
+            # Keep regular/uncertain signals review-only and prevent the quote
+            # token from acting as a legacy fast-lane capability.
             candidate = candidate.model_copy(
                 update={
-                    "source": "inferred_from_session",
-                    "basis": "inferred",
-                    "confidence": "low",
+                    "source": "inferred_from_session"
+                    if candidate.source == "teacher_explicit"
+                    else candidate.source,
+                    "basis": "inferred"
+                    if candidate.source == "teacher_explicit"
+                    else candidate.basis,
+                    "confidence": "low"
+                    if candidate.source == "teacher_explicit"
+                    else candidate.confidence,
                     "fast_lane": False,
-                    "evidence": evidence[:1600],
+                    "evidence": _strip_quote_prefix(candidate.evidence)[:1600],
                 }
             )
-            out.append(candidate)
-            continue
-
-        # Kept: stamp the canonical verified quote (model's verified quote,
-        # or the whole teacher message when the model quoted nothing).
-        verified = quote or clean_text(teacher_message)
-        rest = _strip_quote_prefix(candidate.evidence)
-        evidence = f"{DIRECT_TEACHER_QUOTE_PREFIX} {verified}"
-        if rest:
-            evidence = f"{evidence} | {rest}"
-        candidate = candidate.model_copy(
-            update={"evidence": evidence[:1600], "fast_lane": True}
-        )
         out.append(candidate)
     return out
 
@@ -407,6 +576,7 @@ def validate_remember_call(
     content: str,
     quote: str,
     speech_act: str = "",
+    scope: str = "unknown",
     routing_reason: str = "",
     teacher_message: str,
 ) -> tuple[MemoryCandidate | None, str]:
@@ -453,6 +623,7 @@ def validate_remember_call(
         confidence="high",
         routing_reason=clean_text(routing_reason)[:320],
         speech_act=clean_text(speech_act).lower(),
+        scope=clean_text(scope).lower() or "unknown",
         requires_teacher_approval=True,
     )
     return candidate, ""

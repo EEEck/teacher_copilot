@@ -55,6 +55,7 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
         target: str,
         content: str,
         speech_act: str,
+        scope: str,
         quote: str,
         routing_reason: str,
     ) -> str:
@@ -75,6 +76,9 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
             content: the durable fact/instruction, in your own concise words.
             speech_act: "conduct_request" if the teacher directed your behavior,
                 or "store_request" if they explicitly asked you to remember it.
+            scope: how broadly it applies: "class" or "global" for standing
+                preferences, "block" for a bounded unit, or "unknown" when
+                the scope is unclear.
             quote: the teacher's exact sentence that asked for this, verbatim.
             routing_reason: one compact internal sentence explaining why this
                 target was chosen. Do not include hidden reasoning; just the
@@ -121,6 +125,7 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
             content=content,
             quote=quote,
             speech_act=speech_act,
+            scope=scope,
             routing_reason=routing_reason,
             teacher_message=ctx.teacher_message,
         )

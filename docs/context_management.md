@@ -118,6 +118,39 @@ Update Memory now mirrors planning's runtime-state strategy:
 5. **Verbatim window** — last `ingest_history_turns` teacher turns in the user
    message (default 8); older decisions must survive in `MemoryRuntime`.
 
+### Shared memory-classification context pack
+
+Durable-memory classification uses a shared **compact context pack** across all
+three chat workflows. It is assembled from:
+
+1. the current teacher message verbatim;
+2. the last eight teacher turns plus interleaved assistant replies;
+3. the workflow's typed runtime state;
+4. the compact Teacher Layer and Active Class Core;
+5. the current plan or diary when the workflow has one;
+6. task-specific continuity such as the ingest target/lesson context;
+7. compact evidence briefs and review-only memory candidates.
+
+The workflow-specific runtime state is the structured summary mechanism. Plan
+uses `PlanRuntime`, Update Memory uses `MemoryRuntime`, and Class Discussion
+uses `ClassDiscussionRuntime` with `ClassDiscussionState`. The model proposes a
+typed `state_patch`; the backend merges it rather than accepting a full model
+snapshot. This is commonly called backend-owned structured state or a rolling
+structured summary, not a raw transcript summary.
+
+The model uses this pack to classify speech act and scope. The backend still
+uses the current teacher message as the provenance authority for exact quote
+checks. Context can resolve “that”, standing-vs-temporary intent, and block or
+class scope; it cannot turn assistant/tool/wiki text into teacher evidence.
+
+The context pack must be traceable by section and source. Raw tool results stay
+behind `raw_ref` and are fetched only when needed. Full chat-history storage is
+still out of scope.
+
+Class Discussion has no lesson-plan artifact. Its compact state is:
+`current_focus`, `answered_questions`, `key_observations`, `confusion_signals`,
+`open_questions`, and `next_best_actions`, plus evidence briefs and candidates.
+
 ### Durable wiki memory (Hermes-style)
 
 `MEMORY_PAGE_BUDGETS` in `wiki/memory.py` cap each memory page at write and

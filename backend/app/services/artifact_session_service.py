@@ -417,8 +417,13 @@ class ArtifactSessionService:
             "",
         )
         candidates = discipline_memory_candidates(
-            candidates, teacher_message=last_teacher_message
+            candidates,
+            teacher_message=last_teacher_message,
+            origin_turn_index=sum(1 for msg in session.messages if msg.role == "user"),
         )
+        # Keep backend-owned Admission/Priority/provenance fields in runtime
+        # state so a later turn is not revalidated against the newest message.
+        session.runtime.memory_candidates = candidates
         subject = self.wiki.get_class(session.class_id).subject
         turn_index = sum(1 for msg in session.messages if msg.role == "user")
         # Occasion anchor: reinforcement counts distinct occasions (one

@@ -22,6 +22,42 @@ For file-by-file memory scope and update rules, see `memory_hierarchy.md`.
 - Ask at most one targeted question when blocked.
 - Never silently mutate wiki files from a planning turn.
 
+## Shared Memory-Classification Context Contract
+
+Speech-act and scope classification is context-aware in every workflow. The
+model must receive one labeled compact context pack, not an isolated sentence
+and not an unbounded raw transcript.
+
+The pack contains:
+
+- the current teacher message verbatim;
+- the last eight teacher turns plus interleaved assistant replies;
+- the workflow-specific backend-owned runtime state;
+- the compact Teacher Layer and Active Class Core;
+- the current plan or diary when applicable;
+- task-specific continuity such as the Update Memory lesson target;
+- compact evidence briefs and existing review-only memory candidates.
+
+The three runtime state containers are:
+
+- `PlanRuntime` with `SessionState` and `LessonPlanningState`;
+- `MemoryRuntime` with target/session/lesson-result state;
+- `ClassDiscussionRuntime` with `ClassDiscussionState`.
+
+The model proposes a typed `state_patch`. The backend validates and merges the
+patch into runtime state; it does not accept a model-generated full state
+snapshot as authoritative. This is backend-owned structured runtime state,
+also describable as a rolling structured summary or compact context pack.
+
+The current teacher message is the provenance authority. Broader context helps
+interpret references, speech act, and scope, but assistant, wiki, upload, and
+tool text must remain source-labeled and cannot satisfy the exact teacher-quote
+requirement. Raw tool output stays behind `raw_ref` and is fetched on demand.
+
+The default verbatim window is eight teacher turns. This is a prompt boundary,
+not a loss of important state: durable workflow decisions and useful evidence
+must be carried in the typed runtime state and evidence briefs.
+
 ## Workflow Draft Persistence Contract
 
 Artifact-style workflows use a shared backend-owned `WorkflowDraft` store under

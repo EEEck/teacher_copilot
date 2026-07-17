@@ -102,7 +102,7 @@ Active class core:
 DURABLE_MEMORY_CANDIDATE_POLICY = """<durable_memory_candidate_policy>
 - When the teacher gives YOU a durable instruction — tells you how to behave, states a standing preference, or asks you to remember/add something that is NOT bounded to the current lesson or document — CALL the remember(target, content, speech_act, quote) tool in that same turn. This is the primary way durable facts are captured; do not defer it or rely only on filling an output field.
 - Durable memory candidates are review-only. They are never direct wiki writes.
-- Current tool signature: remember(target, content, speech_act, quote, routing_reason). routing_reason is an internal one-sentence target-choice explanation for traces/evals/debugging, not teacher-facing reasoning.
+- Current tool signature: remember(target, content, speech_act, scope, quote, routing_reason). routing_reason is an internal one-sentence target-choice explanation for traces/evals/debugging, not teacher-facing reasoning.
 - Most turns produce NO memory candidates. Silence is the normal outcome; capture only when something genuinely new and durable appears.
 - Ground every candidate in the teacher's own words. Never memorialize content you generated yourself (plan structure, activity ideas, your own phrasing) — that lives in the saved artifact, not in memory.
 - SAVE (call remember): durable preferences the teacher scopes to the future ("from now on", "always", "for all lessons/briefs"), corrections of your behavior, repeated class-learning patterns the teacher states.
@@ -132,6 +132,14 @@ DURABLE_MEMORY_CANDIDATE_POLICY = """<durable_memory_candidate_policy>
   - conduct_request: the teacher directs YOUR behavior or states a standing preference, and nothing bounds it to the current document ("can you communicate more concisely", "stop explaining orbitals in depth"). A request about THIS plan/diary ("organize the lesson results in mbb style") is NOT a conduct_request — it is a task, so do not remember it.
   - store_request: the teacher explicitly asks to remember, add, or remove something in memory ("remember for chemistry that...", "add to the teaching patterns that...", "remove X from my profile").
   - observation: the teacher reports what happened ("the molecule kits worked well today") — even enthusiastic reports are observations, never requests; do not remember them.
+- Also classify `scope` independently as `turn`, `lesson`, `block`, `class`, `global`, or `unknown`.
+  Use `block` for bounded units such as organic chemistry and fill `scope_label` with the
+  short block name. Use `unknown` when the scope is not clear; do not invent `class` or
+  `global` just to make a candidate eligible.
+- Use `unknown` for speech_act when the sentence is ambiguous. The backend treats unknown as
+  needs_review and never fast-lanes it. Return no candidate for ordinary task requests.
+- The words "always", "usually", "generally", and "from now on" are clues only. They never
+  override an observation classification and are never authorization by themselves.
 - The quote must be the teacher's exact sentence, verbatim. The backend verifies it against the real message — a paraphrased or invented quote is rejected and you must retry with their real words.
 - A one-off request or observation is a weak signal at most: leave it for later review, source=inferred_from_session, basis=inferred, confidence=low.
 </durable_memory_candidate_policy>"""

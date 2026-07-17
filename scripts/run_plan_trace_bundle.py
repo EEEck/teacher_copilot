@@ -26,6 +26,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from memory_scenario_helpers import write_reasoning_artifacts
+
 
 DEFAULT_PROMPT_1 = """Plan the next 45-minute lesson for Chemie 9b. Topic: redox reactions applied to CFC/FCKW compounds (Chlorfluorkohlenwasserstoffe). Include about 10 minutes on environmental impact (ozone layer, Montreal Protocol, alternatives). Build on our existing redox lessons in the wiki. Exam-oriented Gymnasium level.
 Structure the lesson flow: 5 min redox recap, 15 min FCKW structure and redox half-reactions, 10 min environmental impact with one example (e.g. CFC-11), 10 min practice, 5 min exit ticket. Note the misconception: oxidation number vs charge.
@@ -199,6 +201,7 @@ def _write_readme(
         "- `01-session-start.json`: API session start response",
         "- `02-trace-before-first-message.json`: exact trace before any chat",
         "- `NN-turnX-sse.txt`: raw SSE stream for each turn",
+        "- `NN-turnX-reasoning.txt` / `.json`: raw local development reasoning events",
         "- `NN-trace-after-turnX.json`: trace after each teacher prompt",
         "- `NN-final-lessonplan.md`: final teacher-facing plan artifact",
         "- `prompt-XX-*-instructions.txt`: exact model instructions for each model call",
@@ -294,6 +297,7 @@ def run(args: argparse.Namespace) -> pathlib.Path:
     for turn_idx, prompt in enumerate(prompts, start=1):
         turn = _request_text("POST", f"{base}/{session_id}/chat/stream", {"message": prompt})
         _write_text(run_dir / f"{file_idx:02d}-turn{turn_idx}-sse.txt", turn)
+        write_reasoning_artifacts(run_dir, f"{file_idx:02d}-turn{turn_idx}", turn)
         file_idx += 1
         final_trace = _request_json("GET", f"{base}/{session_id}/trace")
         _write_json(run_dir / f"{file_idx:02d}-trace-after-turn{turn_idx}.json", final_trace)

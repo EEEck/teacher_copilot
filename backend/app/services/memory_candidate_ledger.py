@@ -465,6 +465,12 @@ def rows_from_runtime_candidates(
         if not is_supported_runtime_target(raw_target):
             continue
         target = canonical_memory_target(raw_target)
+        # A turn-scoped item is useful as an in-turn signal but is explicitly
+        # not durable memory. Drop it at the ledger boundary rather than
+        # relying on a later Sweep decision to undo persistence.
+        scope = (_field(candidate, "scope") or "unknown").strip().lower()
+        if scope == "turn":
+            continue
         # Mem V3: normalize free-form LLM section names onto the fixed
         # per-target vocabulary before cluster keys are derived.
         section = normalize_section(target, _field(candidate, "section") or "General")
