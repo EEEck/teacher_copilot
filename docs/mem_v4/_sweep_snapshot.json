@@ -1,0 +1,115 @@
+[
+  {
+    "review_id": "16d65ab6-9577-4868-bc4f-21035a440044",
+    "class_id": "chemie_9b_2026_27",
+    "status": "ready",
+    "generated_at": "2026-07-16T20:43:02Z",
+    "created_at": "2026-07-16T20:41:46Z",
+    "proposal_count": 4,
+    "cards": [
+      {
+        "raw": "chemie_9b_2026_27"
+      },
+      {
+        "id": null,
+        "kind": null,
+        "target": null,
+        "title": "",
+        "explicit": null,
+        "section": null,
+        "summary": "",
+        "keys": [
+          "Student Memory",
+          "Teacher/Copilot Preferences"
+        ]
+      },
+      {
+        "raw": "chemie"
+      },
+      {
+        "raw": "[]"
+      }
+    ],
+    "proposals_json_type": "dict",
+    "proposals_top_keys": [
+      "class_id",
+      "queues",
+      "subject",
+      "warnings"
+    ]
+  },
+  {
+    "review_id": "b554df76-d797-496e-91f0-95349cbd0f4b",
+    "class_id": "chemie_9b_2026_27",
+    "status": "discarded",
+    "generated_at": "2026-07-16T18:58:51Z",
+    "created_at": "2026-07-16T18:58:36Z",
+    "proposal_count": 4,
+    "cards": [
+      {
+        "raw": "chemie_9b_2026_27"
+      },
+      {
+        "id": null,
+        "kind": null,
+        "target": null,
+        "title": "",
+        "explicit": null,
+        "section": null,
+        "summary": "",
+        "keys": []
+      },
+      {
+        "raw": "chemie"
+      },
+      {
+        "raw": "[]"
+      }
+    ],
+    "proposals_json_type": "dict",
+    "proposals_top_keys": [
+      "class_id",
+      "queues",
+      "subject",
+      "warnings"
+    ]
+  },
+  {
+    "review_id": "43b4807c-1516-4866-819d-bdf64d2cec67",
+    "class_id": "chemie_9b_2026_27",
+    "status": "completed",
+    "generated_at": "2026-07-16T18:56:59Z",
+    "created_at": "2026-07-16T18:56:44Z",
+    "proposal_count": 4,
+    "cards": [
+      {
+        "raw": "chemie_9b_2026_27"
+      },
+      {
+        "id": null,
+        "kind": null,
+        "target": null,
+        "title": "",
+        "explicit": null,
+        "section": null,
+        "summary": "",
+        "keys": [
+          "Teacher/Copilot Preferences"
+        ]
+      },
+      {
+        "raw": "chemie"
+      },
+      {
+        "raw": "[]"
+      }
+    ],
+    "proposals_json_type": "dict",
+    "proposals_top_keys": [
+      "class_id",
+      "queues",
+      "subject",
+      "warnings"
+    ]
+  }
+]
