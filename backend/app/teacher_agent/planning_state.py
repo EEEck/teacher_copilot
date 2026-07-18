@@ -70,6 +70,8 @@ class LessonPlanningState(BaseModel):
 
     lesson_topic: str = ""
     lesson_goal: str = ""
+    workflow_kind: str = "lesson_planning"
+    learning_targets: list[str] = Field(default_factory=list)
     success_criteria: list[str] = Field(default_factory=list)
     target_class: str = ""
     duration_minutes: int = 0
@@ -114,6 +116,8 @@ class LessonPlanningStatePatch(BaseModel):
 
     lesson_topic: str | None = None
     lesson_goal: str | None = None
+    workflow_kind: str | None = None
+    learning_targets: list[str] | None = None
     success_criteria: list[str] | None = None
     target_class: str | None = None
     duration_minutes: int | None = None
@@ -148,6 +152,7 @@ class PlanRuntime:
         default_factory=LessonPlanningState
     )
     evidence_briefs: list[EvidenceBrief] = field(default_factory=list)
+    consulted_sources: list[dict[str, str]] = field(default_factory=list)
     raw_store: dict[str, str] = field(default_factory=dict)
     memory_candidates: list[MemoryCandidate] = field(default_factory=list)
     plan_version: int = 0
@@ -167,6 +172,19 @@ class PlanRuntime:
             for stale in list(self.raw_store)[:-cap]:
                 del self.raw_store[stale]
         return ref
+
+    def record_source_read(self, source_id: str, section_id: str) -> None:
+        """Record provenance for a source section read during this session."""
+        item = {
+            "source_id": str(source_id).strip(),
+            "section_id": str(section_id).strip() or "summary",
+        }
+        if not item["source_id"]:
+            return
+        if item not in self.consulted_sources:
+            self.consulted_sources.append(item)
+        if len(self.consulted_sources) > get_context_limits().briefs_store_cap:
+            self.consulted_sources = self.consulted_sources[-get_context_limits().briefs_store_cap :]
 
 
 # --- merge: fold one model turn into the persisted runtime ------------------
@@ -233,7 +251,10 @@ def _apply_lesson_patch(
                 data[field_name] = text
     if patch.duration_minutes and patch.duration_minutes > 0:
         data["duration_minutes"] = patch.duration_minutes
+    if patch.workflow_kind in {"lesson_planning", "lesson_differentiation"}:
+        data["workflow_kind"] = patch.workflow_kind
     for field_name in (
+        "learning_targets",
         "success_criteria",
         "teacher_preferences_for_this_lesson",
         "constraints",
@@ -430,6 +451,7 @@ def render_session_state(s: SessionState) -> str:
 
 def render_lesson_planning_state(s: LessonPlanningState) -> str:
     parts = ["## Lesson planning state"]
+    parts.append(f"- workflow: {s.workflow_kind}")
     fields = [
         ("topic", s.lesson_topic),
         ("goal", s.lesson_goal),
@@ -438,6 +460,7 @@ def render_lesson_planning_state(s: LessonPlanningState) -> str:
     ]
     parts.extend(f"- {label}: {value[:200]}" for label, value in fields if value)
     sections = [
+        ("Learning targets", s.learning_targets),
         ("Success criteria", s.success_criteria),
         ("Teacher preferences (this lesson)", s.teacher_preferences_for_this_lesson),
         ("Constraints", s.constraints),
@@ -467,6 +490,7 @@ def planning_api_payload(rt: PlanRuntime) -> dict:
         "plan_version": rt.plan_version,
         "session_state": rt.session_state.model_dump(),
         "lesson_planning_state": rt.lesson_planning_state.model_dump(),
+        "consulted_sources": list(rt.consulted_sources),
         "memory_candidates": [c.model_dump() for c in rt.memory_candidates],
     }
 

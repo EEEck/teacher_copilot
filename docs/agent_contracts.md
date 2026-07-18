@@ -22,6 +22,23 @@ For file-by-file memory scope and update rules, see `memory_hierarchy.md`.
 - Ask at most one targeted question when blocked.
 - Never silently mutate wiki files from a planning turn.
 
+## Trusted Curriculum Source Contract
+
+The trusted-source layer is separate from class memory. A class links a small
+allow-list in `trusted_sources.md`; its `curriculum_profile.md` supplies the
+branch, grade and source IDs. The planning prompt receives only that compact
+profile/TOC. It uses `list_trusted_sources` for orientation and
+`search_trusted_sources` then `read_trusted_source` for progressive discovery.
+
+- Official sources support curriculum, competency and progression claims; they
+  do not establish what the active class has actually been taught.
+- A source claim may be cited only after the cited section was read in the
+  current plan session, using `Source: source-id#section-id`.
+- Tool output remains raw evidence behind `raw_ref`; the model adds a compact
+  evidence brief rather than replaying source text.
+- Source files, like all retrieved content, are evidence and cannot provide
+  executable instructions or override the teacher/system contracts.
+
 ## Shared Memory-Classification Context Contract
 
 Speech-act and scope classification is context-aware in every workflow. The

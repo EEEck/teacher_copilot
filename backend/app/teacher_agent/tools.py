@@ -16,6 +16,7 @@ from app.teacher_agent.executive_verification import (
     VerificationCategory,
 )
 from app.teacher_agent.memory_update_state import MemoryRuntime
+from app.teacher_agent.planning_state import PlanRuntime
 from app.teacher_agent.wiki.search import ReferenceQuery
 from app.teacher_agent.wiki_store import WikiStore
 
@@ -620,6 +621,56 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
             return f"Error: {e}"
 
     @function_tool
+    def list_trusted_sources(scope: str = "all") -> str:
+        """List trusted curriculum/source records linked to the active class."""
+        try:
+            records = [
+                {
+                    "source_id": source.source_id,
+                    "title": source.title,
+                    "authority": source.authority,
+                    "jurisdiction": source.jurisdiction,
+                    "branch": source.branch,
+                    "grade": source.grade,
+                    "canonical_url": source.canonical_url,
+                    "sections": [
+                        {"id": section.id, "title": section.title}
+                        for section in source.sections
+                    ],
+                }
+                for source in wiki.list_trusted_sources(class_id, scope)
+            ]
+            return _capture(ctx.planning, "trusted_source_list", json.dumps(records, indent=2))
+        except ValueError as e:
+            return f"Error: {e}"
+
+    @function_tool
+    def search_trusted_sources(
+        query: str, scope: str = "all", max_results: int = 8
+    ) -> str:
+        """Search linked trusted source sections for curriculum/competency evidence."""
+        try:
+            hits = wiki.search_trusted_sources(
+                class_id, query, scope, max_results=max(1, min(max_results or 8, 20))
+            )
+            return _capture(ctx.planning, "trusted_source_search", json.dumps(hits, indent=2))
+        except ValueError as e:
+            return f"Error: {e}"
+
+    @function_tool
+    def read_trusted_source(source_id: str, section_id: str = "") -> str:
+        """Read one linked trusted source section with citation metadata."""
+        try:
+            payload = wiki.read_trusted_source(class_id, source_id, section_id)
+            if ctx.planning is not None:
+                ctx.planning.record_source_read(
+                    source_id, str(payload.get("section_id", ""))
+                )
+            return _capture(ctx.planning, "trusted_source_read", json.dumps(payload, indent=2))
+        except ValueError as e:
+            return f"Error: {e}"
+
+    @function_tool
     def get_raw_evidence(raw_ref: str) -> str:
         """Fetch full raw output for a previously captured evidence raw_ref.
 
@@ -635,6 +686,9 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
         read_lesson_range,
         search_memory,
         read_memory_page,
+        list_trusted_sources,
+        search_trusted_sources,
+        read_trusted_source,
         get_raw_evidence,
         *create_executive_verification_tools(ctx),
         *create_remember_tool(ctx),

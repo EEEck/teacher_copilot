@@ -50,6 +50,7 @@ from app.teacher_agent.prompts import (
     TEACHER_AGENT_SECURITY_POLICY,
     apply_prompt,
 )
+from app.teacher_agent.skills import lesson_skill_for_subject
 from app.teacher_agent.wiki_store import DIARY_SECTION_HEADINGS
 from app.teacher_agent.wiki import memory as wiki_memory
 
@@ -457,6 +458,9 @@ def build_plan_chat_prompt_assembly(
     rt = runtime or PlanRuntime()
     executive_rt = executive or ExecutiveRuntime()
     lim = get_context_limits()
+    class_config = wiki.get_class(class_id)
+    subject_skill = lesson_skill_for_subject(class_config.subject)
+    active_skill = "\n\n".join(part for part in (PLAN_SKILL, subject_skill) if part)
     teacher_trace = wiki.build_teacher_context_trace()
     class_trace = wiki.build_active_class_core_context_trace(class_id)
     session_state = render_session_state(rt.session_state)
@@ -474,7 +478,7 @@ def build_plan_chat_prompt_assembly(
         PLAN_CHAT_SYSTEM,
         executive_assistant_policy=EXECUTIVE_ASSISTANT_POLICY,
         executive_state=executive_state,
-        skill=PLAN_SKILL,
+        skill=active_skill,
         memory_policy=PLAN_MEMORY_POLICY,
         durable_memory_candidate_policy=DURABLE_MEMORY_CANDIDATE_POLICY,
         teacher_context=teacher_trace["text"],
@@ -499,8 +503,8 @@ def build_plan_chat_prompt_assembly(
         _section(
             name="Active skill",
             function="build_plan_chat_agent",
-            source="prompts.PLAN_SKILL",
-            text=PLAN_SKILL,
+            source="prompts.PLAN_SKILL + skills.lesson_skill_for_subject",
+            text=active_skill,
         ),
         _section(
             name="Memory policy",

@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     ingest_saved_plan_chars: int = 0
     ingest_draft_chars: int = 0
     upload_attachment_chars: int = 0
+    # Compact trusted-source metadata/TOC injected into active class context.
+    trusted_source_index_chars: int = 1200
     # Runtime session memory (PlanRuntime) — see context_limits.py
     plan_state_list_limit: int = 24
     plan_state_bullet_max_chars: int = 160

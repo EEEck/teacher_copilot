@@ -37,11 +37,15 @@ def test_plan_context_slim_trace_names_context_contributors():
     assert "Top misconceptions" in names
     assert "Recent lessons" in names
     assert "Subject guide: chemie" in names
+    assert "Curriculum profile" in names
+    assert "Trusted source index" in names
     assert "Class memory: planning_brief.md" in names
     assert "Class memory: teaching_patterns.md" in names
     assert "Class memory: copilot_profile.md" in names
     assert "Class memory: session_summaries.md" in names
     assert "Common lesson patterns" in trace["text"]
+    assert "by-lehrplanplus-chemie-9-ntg" in trace["text"]
+    assert "Atombau und Periodensystem" not in trace["text"]
     assert all("function" in section for section in trace["sections"])
     assert all("source" in section for section in trace["sections"])
 

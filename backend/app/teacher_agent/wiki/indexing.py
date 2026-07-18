@@ -114,6 +114,18 @@ def rebuild_index(store, class_id: Optional[str] = None) -> None:
             for path in memory_pages:
                 title = parsing.extract_title(store.read_text(path)) or path.stem
                 lines.append(f"- [{title}]({store.rel_wiki(path)})")
+        profile_path = store.class_dir(cid) / "curriculum_profile.md"
+        sources_path = store.class_dir(cid) / "trusted_sources.md"
+        if profile_path.exists() or sources_path.exists():
+            lines.extend(["", "### Curriculum & trusted sources"])
+            if profile_path.exists():
+                lines.append(
+                    f"- [Curriculum profile]({store.rel_wiki(profile_path)})"
+                )
+            if sources_path.exists():
+                lines.append(
+                    f"- [Trusted source index]({store.rel_wiki(sources_path)})"
+                )
         lines.extend(["", "### Lessons", ""])
         if timeline.entries:
             lines.append("| Date | Title | Summary | Plan | Path |")

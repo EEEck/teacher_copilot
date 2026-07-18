@@ -7,6 +7,7 @@ from app.teacher_agent.tools import (
     create_memory_update_tools,
 )
 from app.teacher_agent.wiki_store import WikiStore
+from app.teacher_agent.planning_state import PlanRuntime
 from pathlib import Path
 
 CLASS_ID = "chemie_9b_2026_27"
@@ -24,11 +25,28 @@ def test_create_chat_wiki_tools_exposes_mvp_names():
         "read_lesson_range",
         "search_memory",
         "read_memory_page",
+        "list_trusted_sources",
+        "search_trusted_sources",
+        "read_trusted_source",
         "get_raw_evidence",
         "remember",
         "report_verification_finding",
         "resolve_wiki_references",
     }
+
+
+def test_trusted_source_tools_have_bounded_planner_contracts():
+    wiki = WikiStore(root=_WIKI_ROOT)
+    tools = create_chat_wiki_tools(
+        WikiToolContext(wiki=wiki, class_id=CLASS_ID, planning=PlanRuntime())
+    )
+    search = next(tool for tool in tools if tool.name == "search_trusted_sources")
+    read = next(tool for tool in tools if tool.name == "read_trusted_source")
+
+    assert {"query", "scope", "max_results"} <= set(
+        search.params_json_schema["properties"]
+    )
+    assert {"source_id", "section_id"} <= set(read.params_json_schema["properties"])
 
 
 def test_memory_update_tools_include_shared_verification_tools():

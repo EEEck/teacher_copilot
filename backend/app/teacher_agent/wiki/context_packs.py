@@ -290,6 +290,63 @@ def _active_memory_files(store, class_id: str) -> list[Path]:
     )
 
 
+def build_trusted_source_context_trace(store, class_id: str) -> dict:
+    """Build the bounded profile/source TOC injected into class context.
+
+    This intentionally exposes only metadata and section labels.  Source bodies
+    stay behind the typed trusted-source tools and the session raw-evidence
+    store, matching the existing progressive-exposure contract.
+    """
+    lim = get_context_limits()
+    profile_path = store.class_dir(class_id) / "curriculum_profile.md"
+    toc_path = store.class_dir(class_id) / "trusted_sources.md"
+    profile = store.get_curriculum_profile(class_id)
+    sources = store.list_trusted_sources(class_id, "all")
+    profile_text = store.read_text(profile_path).strip()
+    if not profile_text and not sources:
+        return {"text": "", "sections": []}
+
+    profile_lines = [
+        "## Curriculum profile",
+        f"State: {profile.state or 'Unspecified'} | School type: {profile.school_type or 'Unspecified'}",
+        f"Branch: {profile.branch or 'Unspecified'} | Grade: {profile.grade or 'Unspecified'}",
+        f"Subject: {profile.subject or 'Unspecified'}",
+    ]
+    if profile_text:
+        profile_lines.append("Profile note: " + " ".join(profile_text.split())[:420])
+    source_lines = ["## Trusted source index"]
+    for source in sources:
+        sections = ", ".join(section.id for section in source.sections[:5]) or "summary"
+        source_lines.append(
+            f"- {source.source_id} | {source.authority} | {source.jurisdiction} "
+            f"{source.school_type} {source.branch} Grade {source.grade} | sections: {sections}"
+        )
+    source_lines.append(
+        "Read a source section through trusted-source tools before making a curriculum claim."
+    )
+    text = "\n".join(profile_lines + [""] + source_lines)
+    text = apply_char_limit(text, lim.trusted_source_index_chars)
+    sections = [
+        _trace_section(
+            name="Curriculum profile",
+            function="build_trusted_source_context_trace",
+            source=store.rel_wiki(profile_path),
+            text="\n".join(profile_lines),
+            authority="class_configuration",
+            included=bool(profile_text),
+        ),
+        _trace_section(
+            name="Trusted source index",
+            function="build_trusted_source_context_trace",
+            source=store.rel_wiki(toc_path),
+            text="\n".join(source_lines),
+            authority="official_source_index",
+            included=bool(sources),
+        ),
+    ]
+    return {"text": text, "sections": sections}
+
+
 def build_active_class_core_context_trace(store, class_id: str) -> dict:
     """Return the active class core: identity, subject guide, and compact memory.
 
@@ -381,6 +438,12 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
                 included=False,
             )
         )
+
+    source_trace = build_trusted_source_context_trace(store, class_id)
+    for source_section in source_trace["sections"]:
+        sections.append(source_section)
+    if source_trace["text"]:
+        parts.extend(["", "[authority=official_source_index; source=class curriculum profile]", source_trace["text"]])
 
     memory_files = _active_memory_files(store, class_id)
     seen_memory = False

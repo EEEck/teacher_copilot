@@ -1,0 +1,9 @@
+ID,Bucket,Criterion,What pass requires,Notes,Conditional
+P-DIFF-1,P,Shared core,All routes retain the same chemical question context and evidence task.,Access may vary but claim does not,
+P-DIFF-2,P,Scaffold quality,Supports access without revealing the answer.,Use vocabulary representation prompts or worked structure,
+P-DIFF-3,P,Scaffold release,Each substantial scaffold has a fade or release point.,Avoid permanent supports,when scaffolds are offered
+R-DIFF-1,R,Maintained demand,Explains how supports preserve scientific reasoning.,Do not lower the target,
+R-DIFF-2,R,Flexible grouping,Groups are based on current evidence and can change.,No fixed ability labels,when groups are offered
+O-DIFF-1,O,Student-facing language,Student materials use neutral clear German and omit teacher diagnostics.,Separate teacher notes from student tasks,when student material is drafted
+O-DIFF-2,O,Task alignment,Teacher actions student actions and checks align to the shared target.,Keep task runnable,
+M-DIFF-1,M,No false differentiation,Does not create superficially different worksheets with changed objectives.,Use same core evidence,

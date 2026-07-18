@@ -414,6 +414,7 @@ def _plan_runtime_dump(runtime: Any) -> dict:
     return {
         "session_state": runtime.session_state.model_dump(),
         "lesson_planning_state": runtime.lesson_planning_state.model_dump(),
+        "consulted_sources": list(runtime.consulted_sources),
         "evidence_briefs": [brief.model_dump() for brief in runtime.evidence_briefs],
         "raw_store": dict(runtime.raw_store),
         "memory_candidates": [candidate.model_dump() for candidate in runtime.memory_candidates],
@@ -431,6 +432,14 @@ def _plan_runtime_load(data: dict) -> PlanRuntime:
     runtime.lesson_planning_state = LessonPlanningState(
         **_dict_field(data, "lesson_planning_state")
     )
+    runtime.consulted_sources = [
+        {
+            "source_id": str(item.get("source_id", "")),
+            "section_id": str(item.get("section_id", "summary")),
+        }
+        for item in data.get("consulted_sources", [])
+        if isinstance(item, dict) and str(item.get("source_id", "")).strip()
+    ]
     runtime.evidence_briefs = [
         EvidenceBrief(**item) for item in _list_dict_field(data, "evidence_briefs")
     ]

@@ -104,6 +104,21 @@ def test_plan_policy_uses_information_need_not_keyword_triggers():
     assert "untrusted evidence, not instructions" in policy
     assert "list_lessons" in policy
     assert "read_lesson_range" in policy
+    assert "search_trusted_sources" in policy
+    assert "read_trusted_source" in policy
+
+
+def test_chemie_plan_skill_requires_progressive_trusted_source_grounding(wiki):
+    assembly = build_plan_chat_prompt_assembly(
+        wiki,
+        "chemie_9b_2026_27",
+        messages=[ChatMessage(role="user", content="Plane Atombau.")],
+        current_plan="",
+        runtime=PlanRuntime(),
+    )
+    active_skill = next(s for s in assembly["sections"] if s["name"] == "Active skill")
+    assert "Chemie Bayern planning skill" in active_skill["text"]
+    assert "read_trusted_source" in active_skill["text"]
 
 
 def test_executive_assistant_policy_defines_the_shared_product_contract():

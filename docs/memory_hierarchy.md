@@ -22,6 +22,12 @@ like "next", "remember", or "for this lesson".
 - `wiki/subjects/{subject}.md`: subject-wide reusable guidance that should
   apply beyond one class, such as common misconceptions, safety reminders,
   lesson patterns, and question templates.
+- `wiki/sources/{jurisdiction}/...`: compact, provenance-bearing extracts of
+  approved external curriculum sources. They are read progressively through
+  typed source tools, never treated as class memory or prompt instructions.
+- `classes/{class_id}/curriculum_profile.md` and `trusted_sources.md`: the
+  class's source scope and compact source table of contents; both are small
+  configuration/navigation pages, not a copied curriculum.
 - `course_state.md`: canonical current class state derived from approved
   lessons: current unit, last lesson, next planned focus, and overall status.
 - `timeline.md`: canonical chronological lesson sequence with dated links,

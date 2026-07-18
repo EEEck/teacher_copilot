@@ -140,10 +140,17 @@ The product uses tiered class memory.
    `wiki/classes/{class_id}/memory/*.md` pages. Legacy stacked pack builders are
    compatibility/debug views, not the model-facing contract.
 
+   Planning also receives a bounded trusted-source profile: class branch/grade
+   plus an allow-listed source TOC. It does not receive curriculum bodies. The
+   planner progressively calls typed list/search/read source tools when making
+   an official curriculum claim; section reads are captured as raw evidence and
+   their provenance is retained in `PlanRuntime.consulted_sources`.
+
 4. **Runtime session memory (lesson planning and update memory)**
    `PlanRuntime` (in `planning_state.py`): backend-owned `SessionState`,
    `LessonPlanningState`, compact `EvidenceBrief`s with a raw-output store
-   behind `raw_ref` (progressive exposure via `get_raw_evidence`), and
+   behind `raw_ref` (progressive exposure via `get_raw_evidence`), consulted
+   trusted-source sections, and
    accumulated `MemoryCandidate`s. The model proposes `state_patch` updates;
    backend code validates and applies them. Runtime state is persisted on the
    session and re-injected compactly each turn so the verbatim window can be

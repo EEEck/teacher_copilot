@@ -204,7 +204,8 @@ Primary items:
 
 | Item | Engineering notes |
 |---|---|
-| **Trusted search tool** | Bounded search/read over allowlisted sources: PhET, Wikipedia, official curriculum pages, reputable education sites, and approved news/source categories. |
+| **Trusted source layer (Bavaria Chemistry pilot)** | Initial deterministic source library is done: class allow-list, compact source TOC/profile, progressive list/search/read tools, provenance capture, and seed extracts for LehrplanPLUS NTG 8/9, Fachprofil, and KMK AHR Chemistry. Broaden only after teacher validation; this is not open-web search. |
+| **Trusted search tool** | Future bounded search/read over allowlisted sources: PhET, Wikipedia, official curriculum pages, reputable education sites, and approved news/source categories. |
 | **Resource adaptation workflow** | Return adaptation notes, links, risks, and classroom fit; never auto-insert external facts into wiki memory. |
 | **Source cards** | Show external source, class memory, and uploaded-material provenance in one evidence UI. |
 | **Subject teaching-practice library v1** | Start narrow with chemistry: common misconceptions, diagnostic questions, safe experiments, activity formats, and assessment templates. |

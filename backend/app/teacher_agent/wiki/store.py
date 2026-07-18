@@ -17,6 +17,7 @@ from . import (
     registry,
     rollups,
     search,
+    trusted_sources,
 )
 
 
@@ -77,6 +78,25 @@ class WikiStore:
 
     def search_wiki(self, class_id, query, max_results=15):
         return search.search_wiki(self, class_id, query, max_results)
+
+    def load_trusted_sources(self):
+        return trusted_sources.load_trusted_sources(self.root)
+
+    def get_curriculum_profile(self, class_id):
+        return trusted_sources.load_curriculum_profile(self.root, class_id)
+
+    def list_trusted_sources(self, class_id, scope="all"):
+        return trusted_sources.list_sources_for_class(self.root, class_id, scope)
+
+    def search_trusted_sources(self, class_id, query, scope="all", max_results=8):
+        return trusted_sources.search_sources_for_class(
+            self.root, class_id, query, scope, max_results
+        )
+
+    def read_trusted_source(self, class_id, source_id, section_id="", max_chars=12000):
+        return trusted_sources.read_source_for_class(
+            self.root, class_id, source_id, section_id, max_chars
+        )
 
     def is_class_memory_path(self, class_id, relative_path):
         return search.is_class_memory_path(self, class_id, relative_path)
