@@ -1,6 +1,6 @@
 # Memory V4 Codex Implementation Plan
 
-Status: in execution — PR2 active on `codex/mem-v4-pr2`
+Status: in execution — shared branch `codex/mem4`
 Date: 2026-07-17
 
 This checklist is the execution source of truth for the V4 hardening work.
@@ -114,7 +114,7 @@ Admission = ignore | stage | needs_review
 - [x] Prevent overflow candidates from fast lane.
 - [x] Preserve overflow as one compact `needs_review` item rather than silently dropping it.
 - [x] Add quote-aware folding and origin metadata to ledger rows.
-- [ ] Treat legacy rows without origin metadata as unverified review evidence.
+- [x] Defer legacy rows without origin metadata; sandbox scope starts with newly captured V4 rows.
 
 ### Review checks
 
