@@ -50,6 +50,18 @@ Shipped:
 Known PM gaps:
 
 - Class home is useful but not yet proactive.
+- **V1.0 Discuss task-anchor and response discipline:** Discuss may briefly
+  engage a teacher's personal aside when it helps rapport or reveals a
+  preference, but must answer it concisely and actively return to the current
+  class/lesson task. Avoid open-ended topic drift such as an extended game chat
+  that displaces the teacher's classroom goal. Add focused trace/eval cases for
+  personal-aside -> one-sentence response -> task-return behavior.
+- **V1.0 development reasoning trace hygiene:** Raw development reasoning can
+  expose the model debating optional structured-output fields (for example,
+  whether to omit an empty `state_patch`). Preserve the diagnostic signal, but
+  make the output contract unambiguous and avoid duplicate/noisy reasoning
+  events. Verify that an empty patch is valid when no class-discussion state
+  should change; production stream sanitization remains unchanged.
 - Evidence is mostly embedded in agent output, not first-class UI metadata.
 - Wiki viewer is functional but not a teacher-friendly memory explorer.
 - Memory compaction/profile learning exists but is only partly productized.
