@@ -92,6 +92,7 @@ class ContextLimits:
     briefs_store_cap: int
     raw_store_cap: int
     candidates_cap: int
+    memory_capture_batch_max_candidates: int
 
     @classmethod
     def from_settings(cls, settings: Settings) -> ContextLimits:
@@ -121,6 +122,7 @@ class ContextLimits:
             briefs_store_cap=settings.plan_briefs_store_cap,
             raw_store_cap=settings.plan_raw_store_cap,
             candidates_cap=settings.plan_candidates_cap,
+            memory_capture_batch_max_candidates=settings.memory_capture_batch_max_candidates,
         )
 
 

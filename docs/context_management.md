@@ -170,6 +170,7 @@ forgetting.
 | `plan_instructions_backstop` | **0** | Emergency cap on full plan instructions; 0 = disabled |
 | `ingest_context_backstop` | **0** | Emergency cap on ingest context pack; 0 = disabled |
 | `ingest_history_turns` | 8 | Verbatim teacher turns in ingest user message |
+| `memory_capture_batch_max_candidates` | 8 | Operational per-turn capture guard; overflow becomes one review bundle |
 | `plan_opening_context_chars` | **0** | Plan opening agent context; 0 = unlimited |
 | `compile_context_chars` | **0** | Compile diary context; 0 = unlimited |
 | `plan_lesson_context_chars` | **0** | One-shot plan lesson context; 0 = unlimited |

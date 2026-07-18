@@ -31,6 +31,7 @@ from app.services.memory_skills import (
     write_skill_for_target,
 )
 from app.teacher_agent.memory_capture import (
+    bound_memory_capture_batch,
     discipline_memory_candidates,
     occasion_key_for,
     runtime_candidates_to_ledger_rows,
@@ -434,8 +435,26 @@ class ArtifactSessionService:
         occasion_key = occasion_key_for(
             session.mode, session.session_id, lesson_date
         )
+        existing_ids = {
+            row.id for row in self.memory_candidate_ledger.list_candidates()
+        }
+        pending_candidates = []
+        for candidate in candidates:
+            candidate_rows = runtime_candidates_to_ledger_rows(
+                [candidate],
+                class_id=session.class_id,
+                subject=subject,
+                workflow=session.mode,
+                session_id=session.session_id,
+                turn_index=turn_index,
+                occasion_key=occasion_key,
+            )
+            row_ids = {row.id for row in candidate_rows}
+            if row_ids and not row_ids.issubset(existing_ids):
+                pending_candidates.append(candidate)
+        pending_candidates = bound_memory_capture_batch(pending_candidates)
         rows = runtime_candidates_to_ledger_rows(
-            candidates,
+            pending_candidates,
             class_id=session.class_id,
             subject=subject,
             workflow=session.mode,

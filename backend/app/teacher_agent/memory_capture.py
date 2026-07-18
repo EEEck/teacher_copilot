@@ -95,6 +95,7 @@ class MemoryCandidate(BaseModel):
     origin_turn_index: int = Field(default=0, ge=0)
     origin_message_hash: str = Field(default="", description="Hash of the source teacher message.")
     quote_fingerprint: str = Field(default="", description="Hash of the verified teacher quote.")
+    capture_batch_id: str = Field(default="", description="Backend batch identity for one teacher turn.")
     admission: str = Field(
         default="",
         description="Backend-owned Admission decision: ignore, stage, or needs_review.",
@@ -163,9 +164,102 @@ def clean_text(value: str | None) -> str:
 
 def candidate_key(candidate: MemoryCandidate) -> tuple[str, str]:
     return (
-        canonical_memory_target(candidate.target),
-        " ".join(candidate.candidate_update.lower().split()),
+        "|".join(
+            (
+                canonical_memory_target(candidate.target),
+                clean_text(candidate.section).casefold(),
+                clean_text(candidate.scope).casefold() or "unknown",
+                clean_text(candidate.scope_label).casefold(),
+                " ".join(candidate.candidate_update.lower().split()),
+            )
+        ),
+        clean_text(candidate.candidate_update).casefold(),
     )
+
+
+def group_memory_candidates(
+    candidates: Iterable[MemoryCandidate],
+) -> list[MemoryCandidate]:
+    """Group exact same-purpose claims within one capture batch.
+
+    Scope and section are part of identity. A claim reused for a bounded block
+    must not erase an otherwise identical class-wide claim before ledger
+    folding has a chance to review both.
+    """
+
+    out: list[MemoryCandidate] = []
+    seen: set[tuple[str, str]] = set()
+    for candidate in candidates:
+        if not candidate.candidate_update.strip():
+            continue
+        key = candidate_key(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(candidate)
+    return out
+
+
+def bound_memory_capture_batch(
+    candidates: Iterable[MemoryCandidate],
+    *,
+    max_candidates: int | None = None,
+) -> list[MemoryCandidate]:
+    """Apply the operational per-turn guard without silently dropping claims.
+
+    The guard is deliberately applied after exact grouping. When the batch is
+    too large, reserve one ledger item for a compact ``needs_review`` bundle
+    containing the overflow evidence. It cannot fast-lane and uses the
+    canonical review target rather than pretending the overflow is a normal
+    class or teacher preference.
+    """
+
+    limit = (
+        max_candidates
+        if max_candidates is not None
+        else get_context_limits().memory_capture_batch_max_candidates
+    )
+    if limit < 1:
+        raise ValueError("max_candidates must be at least 1")
+    grouped = group_memory_candidates(candidates)
+    if len(grouped) <= limit:
+        return grouped
+
+    keep_count = limit - 1
+    kept = grouped[:keep_count]
+    overflow = grouped[keep_count:]
+    claims = [
+        (
+            f"- {candidate.target}/{candidate.section}/"
+            f"{candidate.scope}: {clean_text(candidate.candidate_update)}"
+        )
+        for candidate in overflow
+    ]
+    first = overflow[0]
+    bundle = first.model_copy(
+        update={
+            "target": "canonical_wiki",
+            "section": "Memory capture overflow",
+            "candidate_update": (
+                f"{len(overflow)} additional memory capture claims require review."
+            ),
+            "evidence": (
+                "Operational batch guard preserved these unbounded claims for review:\n"
+                + "\n".join(claims)
+            )[:1600],
+            "source": "inferred_from_session",
+            "basis": "inferred",
+            "confidence": "low",
+            "speech_act": "unknown",
+            "scope": "unknown",
+            "scope_label": "",
+            "admission": "needs_review",
+            "admission_reason_codes": ["batch_overflow"],
+            "fast_lane": False,
+            "requires_teacher_approval": True,
+        }
+    )
+    return [*kept, bundle]
 
 
 def candidate_is_allowed(candidate: MemoryCandidate) -> bool:
@@ -415,6 +509,7 @@ def admit_memory_candidate(
                 "origin_turn_index": max(0, origin_turn_index),
                 "origin_message_hash": origin_message_id or _message_fingerprint(teacher_message),
                 "quote_fingerprint": _quote_fingerprint(quote or ""),
+                "capture_batch_id": origin_message_id or _message_fingerprint(teacher_message),
                 "admission": decision,
                 "admission_reason_codes": reasons,
                 "fast_lane": False,
@@ -449,6 +544,7 @@ def admit_memory_candidate(
                 "origin_turn_index": max(0, origin_turn_index),
                 "origin_message_hash": origin_message_id,
                 "quote_fingerprint": _quote_fingerprint(quote or ""),
+                "capture_batch_id": origin_message_id,
                 "admission": decision,
                 "admission_reason_codes": reasons,
                 "fast_lane": False,
@@ -482,6 +578,7 @@ def admit_memory_candidate(
             "origin_turn_index": max(0, origin_turn_index),
             "origin_message_hash": origin_message_id,
             "quote_fingerprint": _quote_fingerprint(quote or ""),
+            "capture_batch_id": origin_message_id,
             "admission": decision,
             "admission_reason_codes": reasons,
             "fast_lane": fast_lane,

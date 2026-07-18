@@ -1,6 +1,6 @@
 # Memory V4 Codex Implementation Plan
 
-Status: in execution
+Status: in execution — PR2 active on `codex/mem-v4-pr2`
 Date: 2026-07-17
 
 This checklist is the execution source of truth for the V4 hardening work.
@@ -107,22 +107,22 @@ Admission = ignore | stage | needs_review
 
 ### Implementation
 
-- [ ] Collect one capture batch per teacher turn.
-- [ ] Group candidates by target, section, scope, and material claim.
-- [ ] Fold exact and near duplicates before ledger insertion.
-- [ ] Add configurable `memory_capture_batch_max_candidates = 8` as an operational overflow guard.
-- [ ] Prevent overflow candidates from fast lane.
-- [ ] Preserve overflow as one compact `needs_review` item rather than silently dropping it.
-- [ ] Add quote-aware folding and origin metadata to ledger rows.
+- [x] Collect one capture batch per teacher turn.
+- [x] Group candidates by target, section, scope, and material claim.
+- [x] Fold exact and near duplicates before ledger insertion.
+- [x] Add configurable `memory_capture_batch_max_candidates = 8` as an operational overflow guard.
+- [x] Prevent overflow candidates from fast lane.
+- [x] Preserve overflow as one compact `needs_review` item rather than silently dropping it.
+- [x] Add quote-aware folding and origin metadata to ledger rows.
 - [ ] Treat legacy rows without origin metadata as unverified review evidence.
 
 ### Review checks
 
 - [ ] Short messages cannot create 10–20 fast-lane rows.
-- [ ] Long legitimate multi-claim messages remain representable.
-- [ ] Same-message retries count once.
-- [ ] Separate lessons can still reinforce a claim.
-- [ ] New fast-lane rows always contain origin and quote metadata.
+- [x] Long legitimate multi-claim messages remain representable.
+- [x] Same-message retries count once.
+- [x] Separate lessons can still reinforce a claim.
+- [x] New fast-lane rows always contain origin and quote metadata.
 
 ## PR 3 — Memory Sweep as the second critical judge
 

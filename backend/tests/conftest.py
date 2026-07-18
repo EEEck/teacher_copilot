@@ -317,6 +317,7 @@ class StubAgentRunner:
                     basis="explicit",
                     confidence="high",
                     speech_act="conduct_request",
+                    scope="global",
                     evidence=f"Direct teacher quote: {latest.strip()}",
                 )
                 if "from now on" in latest.lower()
@@ -526,6 +527,7 @@ class StubAgentRunner:
                     basis="explicit",
                     confidence="high",
                     speech_act="store_request",
+                    scope="class",
                 )
             )
         out = ClassDiscussionTurnOutput(

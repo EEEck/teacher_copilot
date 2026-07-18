@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     plan_briefs_store_cap: int = 40
     plan_raw_store_cap: int = 60
     plan_candidates_cap: int = 50
+    # Operational guard for one teacher-turn capture batch. This is not a
+    # semantic limit; overflow is preserved as one review bundle.
+    memory_capture_batch_max_candidates: int = 8
     wiki_root: Path = Path(__file__).resolve().parent.parent / "teacher_wiki"
     cors_origins: list[str] = ["http://localhost:3000"]
     app_env: Literal["development", "production"] = "development"
