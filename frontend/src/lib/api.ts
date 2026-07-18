@@ -10,6 +10,18 @@ function getApiBase(): string {
   return process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
 }
 
+export function betaLoginHref(pathname: string, search = ""): string {
+  return `/beta/login?next=${encodeURIComponent(`${pathname}${search}`)}`;
+}
+
+function redirectToBetaLoginIfNeeded(status: number): void {
+  if (status !== 401 || typeof window === "undefined") return;
+  if (window.location.pathname === "/beta/login") return;
+  window.location.assign(
+    betaLoginHref(window.location.pathname, window.location.search),
+  );
+}
+
 export type ClassSummary = { id: string; label: string; subject: string };
 export type BetaIdentity = {
   tester_id: string;
@@ -481,6 +493,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
   if (!res.ok) {
+    redirectToBetaLoginIfNeeded(res.status);
     const text = await res.text();
     let message = text || res.statusText;
     try {
@@ -532,6 +545,7 @@ async function apiStreamPost(path: string, body: object, signal?: AbortSignal): 
     );
   }
   if (!res.ok) {
+    redirectToBetaLoginIfNeeded(res.status);
     const text = await res.text();
     let message = text || res.statusText;
     try {

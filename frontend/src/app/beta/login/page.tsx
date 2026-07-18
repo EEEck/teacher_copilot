@@ -2,7 +2,7 @@
 
 import { LogIn } from "lucide-react";
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { client } from "@/lib/api";
 
 export default function BetaLoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -22,7 +23,11 @@ export default function BetaLoginPage() {
     setError(null);
     try {
       await client.betaLogin(inviteCode);
-      router.push("/");
+      const next = searchParams.get("next");
+      const returnTo = next?.startsWith("/") && !next.startsWith("//")
+        ? next
+        : "/";
+      router.replace(returnTo);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Invite code failed");

@@ -1,10 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { WriteVerificationBlockedError, client } from "./api";
+import {
+  WriteVerificationBlockedError,
+  betaLoginHref,
+  client,
+} from "./api";
 
 describe("client beta auth transport", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("preserves the protected route when redirecting to beta login", () => {
+    expect(betaLoginHref("/classes/chemie_9b_2026_27", "?discuss=open")).toBe(
+      "/beta/login?next=%2Fclasses%2Fchemie_9b_2026_27%3Fdiscuss%3Dopen",
+    );
   });
 
   it("sends browser credentials on beta login and normal API calls", async () => {
