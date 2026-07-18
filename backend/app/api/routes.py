@@ -23,6 +23,7 @@ from app.api.deps import (
 )
 from app.config import get_settings
 from app.openai_bootstrap import is_openai_configured
+from app.services.memory_v4_debug_capture import MemoryV4DebugRecorder
 from app.schemas.api import (
     BetaFeedbackRequest,
     BetaFeedbackResponse,
@@ -477,6 +478,46 @@ def _record_beta_message(
     )
 
 
+def _start_memory_v4_debug_capture(
+    request: Request,
+    beta_auth: BetaAuthService,
+    *,
+    class_id: str,
+    session_id: str,
+    workflow: str,
+    turn_index: int,
+    teacher_message: str,
+    attachment_count: int,
+) -> tuple[MemoryV4DebugRecorder | None, str | None]:
+    settings = get_settings()
+    identity = getattr(request.state, "identity", None)
+    if (
+        not settings.is_memory_v4_debug_capture_enabled()
+        or identity is None
+        or getattr(identity, "workspace_id", "local") == "local"
+    ):
+        return None, None
+    recorder = MemoryV4DebugRecorder(
+        db_path=beta_auth.db_path,
+        beta_data_root=settings.beta_data_root,
+    )
+    trace_id = recorder.capture_turn(
+        identity,
+        class_id=class_id,
+        session_id=session_id,
+        workflow=workflow,
+        turn_index=turn_index,
+        payload={
+            "teacher_message": teacher_message,
+            "attachment_count": attachment_count,
+            "model_profile": settings.resolved_model_profile(),
+            "chat_model": settings.resolved_chat_model(),
+            "chat_reasoning_effort": settings.resolved_chat_effort(),
+        },
+    )
+    return recorder, trace_id
+
+
 def _sse_payload_of_type(line: str, event_type: str) -> dict | None:
     if not line.startswith("data:"):
         return None
@@ -509,6 +550,9 @@ async def _stream_chat_with_beta_telemetry(
     mode: str,
     artifact_kind: str,
     completed_payload: Callable[[dict], dict],
+    debug_recorder: MemoryV4DebugRecorder | None = None,
+    debug_trace_id: str | None = None,
+    workflow_trace: Callable[[], dict] | None = None,
 ) -> AsyncIterator[str]:
     """Pass SSE lines through while recording beta chat-turn telemetry.
 
@@ -531,8 +575,31 @@ async def _stream_chat_with_beta_telemetry(
         )
 
     terminal_seen = False
+    workflow_trace_recorded = False
+
+    def _record_debug_stream_event(line: str) -> None:
+        if debug_recorder is None:
+            return
+        if not line.startswith("data:"):
+            return
+        try:
+            payload = json.loads(line.removeprefix("data:").strip())
+        except json.JSONDecodeError:
+            payload = {"type": "unparsed_sse", "line": line}
+        debug_recorder.append(debug_trace_id, "stream_event", payload)
+
+    def _record_workflow_trace() -> None:
+        nonlocal workflow_trace_recorded
+        if workflow_trace_recorded or debug_recorder is None or workflow_trace is None:
+            return
+        workflow_trace_recorded = True
+        try:
+            debug_recorder.append(debug_trace_id, "workflow_trace", workflow_trace())
+        except Exception:  # noqa: BLE001 - capture must not fail the stream
+            logger.exception("Memory V4 workflow trace capture failed")
     try:
         async for line in stream:
+            _record_debug_stream_event(line)
             final = _sse_final_payload(line)
             if final is not None:
                 terminal_seen = True
@@ -563,6 +630,7 @@ async def _stream_chat_with_beta_telemetry(
                     mode=mode,
                     payload=completed_payload(final),
                 )
+                _record_workflow_trace()
             else:
                 error = _sse_payload_of_type(line, "error")
                 if error is not None:
@@ -574,10 +642,12 @@ async def _stream_chat_with_beta_telemetry(
                             "message": (error.get("message") or "")[:300],
                         }
                     )
+                    _record_workflow_trace()
             yield line
     except Exception as e:  # noqa: BLE001 — turn any stream crash into a client-visible error
         logger.exception("Chat stream failed (mode=%s, session=%s)", mode, session_id)
         _record_failed({"reason": "exception", "error": str(e)[:300]})
+        _record_workflow_trace()
         yield sse_encode(
             SseError(
                 message="Something went wrong while generating the reply. Please send your message again.",
@@ -1036,6 +1106,16 @@ async def discussion_chat_stream(
         role="user",
         content=body.message,
     )
+    debug_recorder, debug_trace_id = _start_memory_v4_debug_capture(
+        request,
+        beta_auth,
+        class_id=class_id,
+        session_id=session_id,
+        workflow="discuss",
+        turn_index=len(session.messages) + 1,
+        teacher_message=body.message,
+        attachment_count=len(body.attachments),
+    )
     return StreamingResponse(
         _stream_chat_with_beta_telemetry(
             discussion_svc.chat_stream(
@@ -1054,6 +1134,11 @@ async def discussion_chat_stream(
                 "memory_candidates": len(final.get("memory_candidates") or []),
                 "stream": True,
             },
+            debug_recorder=debug_recorder,
+            debug_trace_id=debug_trace_id,
+            workflow_trace=lambda: discussion_svc.trace(class_id, session_id).model_dump(
+                mode="json"
+            ),
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -1868,6 +1953,16 @@ async def ingest_chat_stream(
             role="user",
             content=body.message,
         )
+        debug_recorder, debug_trace_id = _start_memory_v4_debug_capture(
+            request,
+            beta_auth,
+            class_id=class_id,
+            session_id=session_id,
+            workflow="ingest",
+            turn_index=len(session.messages) + 1,
+            teacher_message=body.message,
+            attachment_count=len(body.attachments),
+        )
 
         return StreamingResponse(
             _stream_chat_with_beta_telemetry(
@@ -1887,6 +1982,11 @@ async def ingest_chat_stream(
                     "ready": final.get("ready"),
                     "stream": True,
                 },
+                debug_recorder=debug_recorder,
+                debug_trace_id=debug_trace_id,
+                workflow_trace=lambda: ingest.trace(class_id, session_id).model_dump(
+                    mode="json"
+                ),
             ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -2246,6 +2346,16 @@ async def plan_chat_stream(
             role="user",
             content=body.message,
         )
+        debug_recorder, debug_trace_id = _start_memory_v4_debug_capture(
+            request,
+            beta_auth,
+            class_id=class_id,
+            session_id=session_id,
+            workflow="plan",
+            turn_index=len(session.messages) + 1,
+            teacher_message=body.message,
+            attachment_count=len(body.attachments),
+        )
 
         return StreamingResponse(
             _stream_chat_with_beta_telemetry(
@@ -2266,6 +2376,11 @@ async def plan_chat_stream(
                     "phase": final.get("phase"),
                     "stream": True,
                 },
+                debug_recorder=debug_recorder,
+                debug_trace_id=debug_trace_id,
+                workflow_trace=lambda: plan_svc.trace(class_id, session_id).model_dump(
+                    mode="json"
+                ),
             ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
