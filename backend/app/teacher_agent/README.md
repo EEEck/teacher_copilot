@@ -36,9 +36,11 @@ prompt trace diagnostics.
   wiki/profile writes happen through separate save/apply flows.
 - Memory compaction/profile proposal agents propose bounded updates; backend
   code validates scope and persistence.
-- Memory Sweep uses the V3 path: candidate capture flows through
-  `remember(...)`, ledger folding and the promotion gate reduce noise, and one
-  high-reasoning consolidation call returns teacher-reviewable operations.
+- Memory Sweep uses the V3/V4 path: candidate capture flows through
+  `remember(...)`, ledger folding and the promotion gate provide priority
+  metadata, and one high-reasoning consolidation call reviews both reinforced
+  claims and held singleton evidence before returning teacher-reviewable
+  operations.
 
 ## Boundaries
 

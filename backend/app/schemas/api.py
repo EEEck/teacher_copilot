@@ -154,7 +154,11 @@ class MemorySweepCandidate(BaseModel):
     replaces_content: str = ""
     status_recommendation: Literal[
         "promote",
+        "merge",
         "already_covered",
+        "downgrade",
+        "reject",
+        "needs_review",
         "needs_decision",
         "reject_low_signal",
     ] = "promote"

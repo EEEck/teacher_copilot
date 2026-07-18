@@ -244,6 +244,14 @@ class MemoryConsolidationOpOutput(BaseModel):
             "the claim or it is not worth writing."
         ),
     )
+    sweep_action: str = Field(
+        default="",
+        description=(
+            "Second-judge recommendation: promote, merge, already_covered, "
+            "downgrade, reject, or needs_review. Leave blank only for backward "
+            "compatibility; the backend derives the safe default from operation."
+        ),
+    )
     target: str = Field(description="Memory file the operation applies to.")
     section: str = Field(default="", description="Section within the target file.")
     memory_id: str = Field(

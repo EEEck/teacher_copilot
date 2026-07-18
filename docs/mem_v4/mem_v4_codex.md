@@ -644,6 +644,12 @@ claim, exact teacher quote, origin reference, scope, occasion metadata, current
 curated-memory excerpt, and relevant applied/rejected history. That satisfies
 the current constraint that transcript storage is out of scope.
 
+The implementation keeps the deterministic promotion gate as metadata rather
+than a filter: each claim carries `sweep_gate` (`eligible` or `held`) and
+`priority` (`fast_lane`, `reinforced`, or `singleton`). The model therefore has
+enough context to downgrade a weak or inconsistent explicit-looking claim
+without making singleton evidence silently disappear.
+
 The Sweep operation model should be extended conceptually as follows:
 
 ```python
@@ -667,6 +673,13 @@ something, but it must not force promotion if the quote, scope, target, or
 claim is inconsistent. The current prompt’s instruction not to drop explicit
 claims as “low signal” should become “do not discard solely because it is a
 single signal; still validate meaning and scope.”
+
+The wire contract uses `sweep_action` alongside the existing structural memory
+operation (`add`, `update`, `delete`, or `none`). This keeps semantic judgment
+separate from write mechanics: `downgrade`, `reject`, and `needs_review` map to
+review-only cards, while `promote` and `merge` may become teacher-approved
+writes. `already_covered` closes the loop only through the existing teacher
+approval/apply flow.
 
 ## 11. Reference-repository patterns worth reusing
 

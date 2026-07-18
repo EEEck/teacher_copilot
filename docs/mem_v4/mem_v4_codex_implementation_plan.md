@@ -39,8 +39,8 @@ writes remain out of scope.
 - [x] Raw reasoning capture added to local developer traces.
 - [x] Shared memory-classification context contract documented for all three workflows.
 - [x] Production Admission behavior changed.
-- [ ] Production Priority/batching behavior changed.
-- [ ] Memory Sweep singleton visibility changed.
+- [x] Production Priority/batching behavior changed.
+- [x] Memory Sweep singleton visibility changed.
 - [ ] DeepEval layer added.
 
 ## PR 0 — Developer traces and golden baseline
@@ -128,20 +128,20 @@ Admission = ignore | stage | needs_review
 
 ### Implementation
 
-- [ ] Keep occasion counting as priority/reinforcement metadata.
-- [ ] Stop hiding all singleton candidates from Sweep.
-- [ ] Send bounded singleton, reinforced, fast-lane, and useful `needs_review` candidates to Sweep.
-- [ ] Add Sweep actions: promote, merge, already_covered, downgrade, reject, needs_review.
-- [ ] Allow Sweep to overturn weak explicit-looking candidates.
-- [ ] Preserve current teacher approval and Apply behavior.
+- [x] Keep occasion counting as priority/reinforcement metadata.
+- [x] Stop hiding all singleton candidates from Sweep.
+- [x] Send bounded singleton, reinforced, fast-lane, and useful `needs_review` candidates to Sweep.
+- [x] Add Sweep actions: promote, merge, already_covered, downgrade, reject, needs_review.
+- [x] Allow Sweep to overturn weak explicit-looking candidates.
+- [x] Preserve current teacher approval and Apply behavior.
 
 ### Review checks
 
-- [ ] Singleton inferred candidates reach Sweep.
-- [ ] False fast-lane candidates can be downgraded.
-- [ ] Already-covered claims become no-op decisions.
-- [ ] Related claims produce one review card.
-- [ ] Sweep never writes Markdown directly.
+- [x] Singleton inferred candidates reach Sweep.
+- [x] False fast-lane candidates can be downgraded.
+- [x] Already-covered claims become no-op decisions.
+- [x] Related claims produce one review card.
+- [x] Sweep never writes Markdown directly.
 
 ## PR 4 — Optional DeepEval layer
 
