@@ -78,7 +78,7 @@ export function AppShell({
       <main
         className={cn(
           "mx-auto flex w-full min-h-0 flex-1 flex-col",
-          flush ? "px-3 py-2" : "px-6 py-6",
+          flush ? "overflow-y-auto px-3 py-2" : "px-6 py-6",
           contentWidth,
         )}
       >
