@@ -156,6 +156,18 @@ class BetaStorage:
                     diff_text text not null,
                     foreign key(commit_id) references wiki_commit(commit_id)
                 );
+
+                create table if not exists memory_v4_debug_trace (
+                    trace_id text primary key,
+                    timestamp text not null,
+                    tester_id text not null,
+                    workspace_id text not null,
+                    class_id text not null,
+                    session_id text,
+                    workflow text not null,
+                    turn_index integer,
+                    bundle_path text not null
+                );
                 """
             )
 

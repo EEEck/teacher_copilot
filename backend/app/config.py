@@ -95,6 +95,9 @@ class Settings(BaseSettings):
     beta_session_days: int = 30
     beta_cookie_secure: bool = False
     beta_dev_workspace_id: str = ""
+    # Local beta-only Memory V4 diagnostic capture. This is intentionally
+    # disabled unless beta + development + this explicit flag are all set.
+    memory_v4_debug_capture: bool = False
     # Debug endpoints exposing prompt assemblies, session messages, and raw tool
     # evidence. Default: enabled outside production, disabled in production.
     agent_trace_enabled: bool | None = None
@@ -113,6 +116,13 @@ class Settings(BaseSettings):
 
     def is_plan_trace_enabled(self) -> bool:
         return self.is_agent_trace_enabled()
+
+    def is_memory_v4_debug_capture_enabled(self) -> bool:
+        return (
+            self.beta_enabled
+            and self.app_env == "development"
+            and self.memory_v4_debug_capture
+        )
 
     def resolved_model_profile(self) -> str:
         if self.model_profile is not None:
