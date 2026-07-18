@@ -70,8 +70,11 @@ It includes only data already present in the local workflow/runtime.
    ledger closure, changed paths, and local wiki diff.
 
 Raw content is allowed only because this is an explicit local beta debugging
-run. It must never be added to standard beta reports, normal event payloads, or
-teacher-visible server-sent events.
+run. It must never be added to standard beta reports or normal event payloads.
+The existing development stream may continue to show the API/SDK events it
+already exposes for local debugging; this recorder does not create a new UI
+surface or widen production visibility. Production stream sanitization remains
+unchanged.
 
 ## Integration boundaries
 
@@ -123,8 +126,9 @@ are logged and do not fail a teacher workflow.
   the flag is on and produces no bundle when it is off.
 - A bundle explains the full Admission -> Priority -> Sweep -> Apply path for
   a candidate, including reason codes and the underlying context/prompt.
-- Existing teacher stream safety remains unchanged: raw reasoning and tool
-  payloads are not exposed in ordinary UI events.
+- Existing teacher stream safety remains unchanged: production sanitizes raw
+  reasoning and tool payloads, while development retains its current local
+  debugging behavior.
 - Existing beta telemetry/reporting and normal tests continue to work.
 - A developer can select a real bundle and create a deterministic golden from
   it without rerunning a live model call.
