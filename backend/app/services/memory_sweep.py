@@ -216,7 +216,15 @@ async def propose_memory_sweep_review(
                 today=now.date().isoformat(),
                 validation_error=validation_error,
             )
-            ops = validate_consolidation_ops(output.operations, flat_index, claim_ids)
+            ops = validate_consolidation_ops(
+                output.operations,
+                flat_index,
+                claim_ids,
+                claim_targets={
+                    claim["claim_id"]: canonical_memory_target(claim["target"])
+                    for claim in claims
+                },
+            )
             warnings.extend(output.warnings)
             break
         except Exception as exc:
@@ -915,12 +923,15 @@ def validate_consolidation_ops(
     ops: Iterable[Any],
     memory_index: dict[str, str],
     claim_ids: set[str],
+    *,
+    claim_targets: dict[str, str] | None = None,
 ) -> list[ConsolidationOp]:
     """Structurally validate the single-call sweep output.
 
     Checks: known operations; update/delete reference an existing memory id
-    from the enumerated index; update/add carry new_text; every input claim
-    id is accounted for exactly once across operations. Raises ValueError
+    from the enumerated index; update/add carry new_text; operations do not
+    cross the deterministic target ownership of their claims; every input
+    claim id is accounted for exactly once across operations. Raises ValueError
     with an actionable message (fed back to the model for one retry).
     """
     validated: list[ConsolidationOp] = []
@@ -966,6 +977,26 @@ def validate_consolidation_ops(
         ]
         if not op_claims:
             raise ValueError(f"{operation} operation lists no claim_ids")
+        target_raw = str(_op_field(op, "target", "") or "").strip()
+        target = canonical_memory_target(target_raw) if target_raw else ""
+        if claim_targets is not None:
+            missing_targets = [cid for cid in op_claims if cid not in claim_targets]
+            if missing_targets:
+                raise ValueError(
+                    "missing target provenance for claim ids: "
+                    + ", ".join(sorted(missing_targets))
+                )
+            expected_targets = {
+                canonical_memory_target(claim_targets[cid]) for cid in op_claims
+            }
+            if len(expected_targets) != 1:
+                raise ValueError("one operation cannot merge claims across targets")
+            expected_target = next(iter(expected_targets))
+            if target and target != expected_target:
+                raise ValueError(
+                    f"operation target {target_raw!r} does not match claim target "
+                    f"{expected_target!r}"
+                )
         memory_id_raw = _op_field(op, "memory_id")
         memory_id = str(memory_id_raw).strip() if memory_id_raw else None
         new_text = str(_op_field(op, "new_text", "") or "").strip()
@@ -996,7 +1027,7 @@ def validate_consolidation_ops(
             ConsolidationOp(
                 claim_ids=op_claims,
                 operation=operation,
-                target=str(_op_field(op, "target", "") or "").strip(),
+                target=target_raw,
                 section=str(_op_field(op, "section", "") or "").strip(),
                 memory_id=memory_id,
                 new_text=new_text,

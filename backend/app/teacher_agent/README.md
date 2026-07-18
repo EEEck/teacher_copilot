@@ -40,11 +40,15 @@ prompt trace diagnostics.
   `remember(...)`, ledger folding and the promotion gate provide priority
   metadata, and one high-reasoning consolidation call reviews both reinforced
   claims and held singleton evidence before returning teacher-reviewable
-  operations.
+  operations. The model's `sweep_action` is a semantic recommendation; the
+  backend keeps target ownership, write mechanics, and teacher approval
+  deterministic.
 
 ## Boundaries
 
-- Tools are read-only during chat.
+- Wiki tools are read-only during chat. The `remember(...)` tool only stages a
+  review-only runtime candidate; it does not write a ledger row or wiki file
+  directly.
 - Memory Sweep never writes memory during proposal. It returns structured
   operations; backend validators own claim coverage, target consistency,
   operation mapping, and exact replacement checks.
@@ -72,4 +76,4 @@ prompt trace diagnostics.
 - `../../../docs/agent_architecture.md`
 - `../../../docs/memory_hierarchy.md`
 - `../../../docs/context_management.md`
-- `../../../docs/mem_v3/README.md`
+- `../../../docs/mem_v4/README.md`

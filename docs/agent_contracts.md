@@ -536,9 +536,10 @@ Proposal behavior:
   backend job tracked like other pending turns. Class-home badges show
   “Stale draft” only when teacher edits are at risk; unedited fingerprint drift
   keeps a quieter “Draft saved …” label while open/refresh can regenerate.
-- The promotion gate decides which rows reach review: explicit teacher asks are
-  eligible immediately, inferred claims need reinforcement across distinct
-  occasions, stale unreinforced singletons expire silently, and rejected
+- The promotion gate supplies review priority rather than hiding all weak
+  evidence: verified explicit asks receive high priority, inferred claims carry
+  distinct-occasion metadata, stale unreinforced singletons expire silently,
+  and held singletons still reach Sweep for second-judge review. Rejected
   clusters resurface only on a fresh explicit ask.
 - Student Memory cards use targets shaped like `students/S-###.md` and section
   `Student Summary`. Their content must be one neutral sentence about current
@@ -548,20 +549,24 @@ Proposal behavior:
   `card_id` is the review-card identity, `candidate_id` is the primary row,
   `candidate_ids` lists all represented rows, and `signal_count` is the count
   of represented evidence rows.
-- Memory Sweep runs one consolidation call over all gate-passing claims,
-  in-scope memory bullets, recent applied/rejected texts, page-budget usage, and
-  today's date. The model returns ID-referenced operations (`add`,
-  `update(id)`, `delete(id)`, or `none`) and must account for every input claim
-  exactly once.
+- Memory Sweep runs one consolidation call over reinforced and held claims,
+  each carrying `sweep_gate` and `priority`, plus in-scope memory bullets,
+  recent applied/rejected texts, page-budget usage, and today's date. The model
+  returns ID-referenced write operations (`add`, `update(id)`, `delete(id)`, or
+  `none`) plus `sweep_action` (`promote`, `merge`, `already_covered`,
+  `downgrade`, `reject`, or `needs_review`) and must account for every input
+  claim exactly once.
 - Backend validation is structural only: every claim is covered once,
-  referenced memory ids exist, updates quote the existing bullet they replace,
-  targets/sections are allowed, and candidate ownership is preserved. Semantic
-  judgments such as "already covered" or "broaden existing memory" belong to the
-  strong model plus teacher review, not lexical backend validators.
+  referenced memory ids exist, operations cannot cross deterministic claim
+  targets, updates quote the existing bullet they replace, and candidate
+  ownership is preserved. Semantic judgments such as "already covered" or
+  "broaden existing memory" belong to the strong model plus teacher review, not
+  lexical backend validators.
 - Card operations are `add`, `adjust`, `already_covered`, `needs_decision`, or
   `reject_low_signal`. `update(id)` maps to `adjust` with
-  `replaces_content`; `none` maps to `already_covered`; low-signal or invalid
-  cases surface as teacher-visible review decisions rather than hidden writes.
+  `replaces_content`; `none` maps to `already_covered` unless its explicit
+  `sweep_action` is `downgrade`, `reject`, or `needs_review`; those remain
+  teacher-visible review decisions rather than hidden writes.
 - For `adjust`, `replaces_content` must exactly match an existing bullet in the
   current memory excerpt. If validation fails after retry, the run degrades to
   one plain-language notice rather than multiplying unresolved cards.
@@ -681,7 +686,7 @@ Shared memory-capture rules:
 - Candidate capture mechanics are shared: validation, target allowlisting,
   dedupe, caps, evidence refs, ledger conversion, and ledger persistence.
 - The primary capture path is the explicit `remember(target, content,
-  speech_act, quote, routing_reason)` tool the model calls in the same turn
+  speech_act, scope, quote, routing_reason)` tool the model calls in the same turn
   when the teacher gives a durable instruction (mem_v3 PR4). Its deterministic guard
   (`validate_remember_call`) requires a supported preference target and verbatim
   quote provenance, returning a structured error the model retries on; the

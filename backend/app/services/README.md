@@ -24,10 +24,12 @@ wiki storage.
   behavior for lesson diaries.
 - `memory_candidate_ledger.py` - SQLite-backed durable memory candidate ledger
   for cross-session Memory Sweep evidence, grouping, and status transitions.
-- `memory_gate.py` - promotion gate and silent decay for ledger candidates.
-- `memory_sweep.py` - V3 single-call Memory Sweep consolidation: builds the
-  gate-passing claim packet, validates ID-referenced operations structurally,
-  and assembles teacher-reviewable cards.
+- `memory_gate.py` - occasion/reinforcement priority metadata and silent decay
+  for ledger candidates. It does not hide held singleton evidence from Sweep.
+- `memory_sweep.py` - V4 second-judge Memory Sweep consolidation: builds a
+  bounded claim packet containing reinforced and held singleton evidence,
+  validates ID-referenced operations plus target ownership structurally, and
+  assembles teacher-reviewable cards.
 - `memory_sweep_reviews.py` - backend-owned saved Memory Sweep review sessions
   (generate/resume, fingerprint/stale detection, edits/decisions, apply,
   discard, refresh).
@@ -51,9 +53,9 @@ wiki storage.
 - `IngestService` and `PlanService` are API-facing adapters.
 - Durable wiki mutations are explicit service methods, not side effects of chat.
 - Memory Sweep treats the candidate ledger as raw evidence. Folding and the
-  promotion gate decide what reaches review; one high-reasoning consolidation
-  call proposes operations; only teacher-approved decisions write durable wiki
-  memory.
+  promotion gate attach priority metadata; one high-reasoning second judge
+  proposes `sweep_action` plus write mechanics; only teacher-approved decisions
+  write durable wiki memory.
 - Update Memory start hints are resolved before the agent turn. Known planned
   or taught lessons can be confirmed and moved to `collect_results`; unknown
   hinted dates must stay in `identify_target` with `needs_confirmation=true`.
@@ -77,4 +79,4 @@ wiki storage.
 - `../teacher_agent/README.md`
 - `../../tests/README.md`
 - `../../../docs/agent_architecture.md`
-- `../../../docs/mem_v3/README.md`
+- `../../../docs/mem_v4/README.md`

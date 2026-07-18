@@ -140,6 +140,25 @@ def test_sweep_merge_is_a_reviewable_update_for_related_claims():
     assert set(cards[0].candidate_ids) == {"candidate-1", "candidate-2"}
 
 
+def test_sweep_rejects_model_operation_that_crosses_claim_target():
+    with pytest.raises(ValueError, match="target"):
+        validate_consolidation_ops(
+            [
+                {
+                    "claim_ids": ["C1"],
+                    "operation": "add",
+                    "target": "teaching_patterns.md",
+                    "section": "What Worked Well",
+                    "new_text": "A class learning pattern.",
+                    "sweep_action": "promote",
+                }
+            ],
+            {},
+            {"C1"},
+            claim_targets={"C1": "teacher_profile.md"},
+        )
+
+
 @pytest.mark.anyio
 async def test_proposal_sends_singletons_to_the_second_judge(tmp_path, wiki):
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")

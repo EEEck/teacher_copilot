@@ -188,6 +188,13 @@ context does not support a confident interpretation, the model must return
 `unknown`; it must not be prompted to choose a known class merely to fill the
 schema.
 
+Implementation status: the bounded history, workflow runtime state, compact
+memory, and evidence briefs already exist in the three workflow prompt
+builders, but the conceptual `MemoryClassificationContext` has not yet been
+extracted as one shared production assembler. Until that refactor lands, the
+workflow-specific builders remain the source of truth and V4 must not claim
+that a separate classifier service or full transcript store exists.
+
 Raw tool output is not injected by default. It remains behind `raw_ref` and
 can be fetched when exact wording or provenance is needed. The package is
 therefore rich enough for classification without storing or replaying the

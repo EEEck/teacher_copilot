@@ -43,6 +43,13 @@ writes remain out of scope.
 - [x] Memory Sweep singleton visibility changed.
 - [ ] DeepEval layer added.
 
+Known integration boundary: the three workflows already provide bounded
+history, typed runtime state, compact memory, evidence briefs, and review
+candidates through their own prompt builders. A shared production
+`MemoryClassificationContext` assembler is still intentionally pending; the
+current implementation does not store or replay the full chat transcript and
+does not introduce a separate classifier service.
+
 ## PR 0 — Developer traces and golden baseline
 
 ### Implementation

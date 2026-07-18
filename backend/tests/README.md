@@ -125,6 +125,15 @@ cd backend
 .\.venv\Scripts\python -m pytest tests\test_memory_targets.py tests\test_memory_sweep_backend.py tests\test_prompts.py -q
 ```
 
+Memory V4 second-judge contracts:
+
+```powershell
+.\.venv\Scripts\python -m pytest tests\test_memory_v4_sweep.py -q
+```
+
+These tests cover held-singleton visibility, priority metadata, semantic Sweep
+actions, target ownership, and the teacher-review-only apply boundary.
+
 Core live drift check for memory merging:
 
 ```powershell

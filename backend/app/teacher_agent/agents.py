@@ -1196,7 +1196,7 @@ class AgentRunner:
         today: str = "",
         validation_error: str = "",
     ) -> "MemoryConsolidationOutput":
-        """Mem V3 single-call sweep: claims + enumerated memory -> operations."""
+        """Mem V4 second-judge sweep: claims + memory -> review operations."""
         import json
 
         from app.teacher_agent.agent import build_memory_sweep_consolidation_agent
@@ -1214,7 +1214,7 @@ class AgentRunner:
             f"Subject: {subject}\n"
             f"Today: {today}\n\n"
             f"{retry_block}"
-            "Claims (gate-passing durable-memory candidates):\n"
+            "Claims (reinforced and held durable-memory candidates, with priority metadata):\n"
             f"{apply_char_limit(json.dumps(claims, indent=2), field_cap * 4)}\n\n"
             "Current memory, bullets enumerated with ids:\n"
             f"{apply_char_limit(json.dumps(memory_indexes, indent=2), field_cap * 4)}\n\n"

@@ -216,10 +216,10 @@ The product uses tiered class memory.
    context, not durable memory. Profile context is advisory; it never expands
    the active class, available tools, or durable-write authority.
 
-7. **Candidate ledger and Memory Sweep (Memory V3)**
+7. **Candidate ledger and Memory Sweep (Memory V4)**
    Planning and Update Memory chats capture review-only durable facts. The
    **primary path is an explicit
-   `remember(target, content, speech_act, quote, routing_reason)` tool** the
+   `remember(target, content, speech_act, scope, quote, routing_reason)` tool** the
    model calls the moment the teacher gives a standing instruction (mem_v3
    PR4). This replaced a passive `memory_candidates` output field the
    model reliably forgot to fill while doing planning/ingest work — the measured
@@ -249,28 +249,31 @@ The product uses tiered class memory.
    on arrival. The ledger stays episodic working memory, not prompt-facing
    truth and not durable wiki memory.
 
-   Between the ledger and the sweep sits a promotion gate
-   (`memory_gate.py`, OpenClaw-inspired): explicit teacher asks are always
-   sweep-eligible, inferred claims need captures in at least two distinct
-   sessions, and stale unreinforced singletons expire silently. Teacher
-   rejections have teeth — a rejected cluster resurfaces only on a fresh
-   explicit ask.
+   Between the ledger and the sweep sits a deterministic priority gate
+   (`memory_gate.py`, OpenClaw-inspired): explicit teacher asks receive the
+   highest priority when provenance is verified, inferred claims receive
+   reinforcement/occasion metadata, and stale unreinforced singletons expire
+   silently. Held singletons still reach the second judge with lower priority;
+   they are not silently hidden. Teacher rejections have teeth — a rejected
+   cluster resurfaces only on a fresh explicit ask.
 
    Memory Sweep itself is teacher-triggered and runs ONE consolidation call on
    the strongest reasoning model (`OPENAI_SWEEP_MODEL`; mini models fail the
    add-vs-adjust judgment — verified live). The call sees everything at once:
-   all gate-passing claims with reinforcement metadata, every in-scope memory
-   file with its bullets enumerated by ephemeral ids, recently applied and
-   rejected texts, page-budget usage, and today's date. It returns mem0-style
-   ID-referenced operations (`add` / `update(id)` / `delete(id)` / `none`).
-   Backend validation is STRUCTURAL ONLY: every claim accounted for exactly
-   once, referenced ids must exist, updates quote their bullet — no lexical
-   token-overlap second-guessing of the model's semantics; teacher review is
-   the safety net. A failed run degrades to one plain-language notice, never
-   per-candidate fallback cards. Operations map onto review cards (update →
-   adjust with the referenced bullet as `replaces_content`; `none` →
-   already-covered, which retires ledger rows on approval), and the sweep
-   brief UI pins explicitly requested changes first. The MBB/executive
+   reinforced and held singleton claims with priority metadata, every
+   in-scope memory file with its bullets enumerated by ephemeral ids, recently
+   applied and rejected texts, page-budget usage, and today's date. It returns
+   mem0-style ID-referenced write operations (`add` / `update(id)` /
+   `delete(id)` / `none`) plus a semantic `sweep_action` (`promote`, `merge`,
+   `already_covered`, `downgrade`, `reject`, or `needs_review`). Backend
+   validation is structural: every claim is accounted for exactly once,
+   referenced ids must exist, operations cannot cross their claim targets, and
+   updates quote their bullet — no lexical token-overlap second-guessing of the
+   model's semantics; teacher review is the safety net. A failed run degrades
+   to one plain-language notice, never per-candidate fallback cards. Semantic
+   actions map onto review cards (update → adjust with the referenced bullet as
+   `replaces_content`; downgrade/reject/needs_review stay review-only), and the
+   sweep brief UI pins explicitly requested changes first. The MBB/executive
    communication scenario remains a live trace and regression test, not a
    hardcoded system-prompt alias or backend synonym rule.
 
@@ -451,8 +454,8 @@ should receive enough context to start well and use tools for the long tail.
 - Post-save `/memory/apply` ledger-close (mem_v3 PR1): `backend/app/api/routes.py` (`apply_memory`)
 - Memory candidate ledger + insert-time folding: `backend/app/services/memory_candidate_ledger.py`
 - Promotion gate and silent decay: `backend/app/services/memory_gate.py`
-- Single-call Memory Sweep consolidation (Mem V3): `backend/app/services/memory_sweep.py`
-- Memory V3 design, learnings, and test strategy: `docs/mem_v3/`
+- Single-call Memory Sweep consolidation (Mem V4 second judge): `backend/app/services/memory_sweep.py`
+- Memory V4 design, learnings, and test strategy: `docs/mem_v4/`
 - Memory refresh/propose/apply endpoints: `backend/app/api/routes.py`
 - Wiki schema rules: `backend/teacher_wiki/AGENTS.md`
 
