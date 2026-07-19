@@ -955,6 +955,15 @@ Class home may open an inline read-only “Discuss class state” chat.
 - Tools: class-scoped read tools from `create_chat_wiki_tools` (list/read
   lessons, search memory, read memory page, raw evidence), plus `remember(...)`
   and executive verification tools.
+- When a trusted-source section is read, `ClassDiscussionRuntime` records its
+  `source_id` and `section_id`. The model may use the English wiki material only
+  as a **KlassenPilot reviewed English summary**, never as a verbatim official
+  German quotation. The backend resolves recorded provenance into the official
+  title, section, and canonical German-source link. Model-written `Source:` /
+  `Quelle:` lines and URLs are rejected once and corrected; a second invalid
+  response has those lines removed before the backend footer is added. The
+  recorded source list persists with a resumed Discuss draft so its trace and
+  later turns retain the same provenance.
 
 ### Writes / side effects
 

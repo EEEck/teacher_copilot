@@ -650,6 +650,7 @@ def _discuss_runtime_dump(runtime: Any) -> dict:
     return {
         "discussion_state": runtime.discussion_state.model_dump(),
         "evidence_briefs": [brief.model_dump() for brief in runtime.evidence_briefs],
+        "consulted_sources": list(runtime.consulted_sources),
         "raw_store": dict(runtime.raw_store),
         "memory_candidates": [
             candidate.model_dump() for candidate in runtime.memory_candidates
@@ -669,6 +670,15 @@ def _discuss_runtime_load(data: dict) -> ClassDiscussionRuntime:
     )
     runtime.evidence_briefs = [
         EvidenceBrief(**item) for item in _list_dict_field(data, "evidence_briefs")
+    ]
+    runtime.consulted_sources = [
+        {
+            "source_id": str(item.get("source_id", "")).strip(),
+            "section_id": str(item.get("section_id", "summary")).strip()
+            or "summary",
+        }
+        for item in _list_dict_field(data, "consulted_sources")
+        if str(item.get("source_id", "")).strip()
     ]
     runtime.raw_store = {
         str(key): str(value) for key, value in _dict_field(data, "raw_store").items()

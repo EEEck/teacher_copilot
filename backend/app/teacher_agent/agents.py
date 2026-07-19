@@ -39,6 +39,7 @@ from app.teacher_agent.models import (
     ClassDiscussionTurnOutput,
     CompileOutput,
     IngestTurnOutput,
+    MemoryConsolidationOutput,
     MemoryCompactOutput,
     PlanOutput,
     PlanTurnOutput,
@@ -57,6 +58,11 @@ from app.teacher_agent.class_discussion_state import (
     ClassDiscussionStatePatch,
     discussion_api_payload,
     merge_class_discussion_turn,
+)
+from app.teacher_agent.citation_presentation import (
+    render_reviewed_source_footer,
+    strip_model_source_presentation,
+    validate_discussion_source_presentation,
 )
 from app.teacher_agent.memory_update_state import (
     MemoryRuntime,
@@ -877,6 +883,7 @@ class AgentRunner:
 
     def _finalize_discuss_turn(
         self,
+        class_id: str,
         parsed: Any,
         runtime: ClassDiscussionRuntime,
         *,
@@ -894,7 +901,61 @@ class AgentRunner:
         )
         executive_runtime = executive or ExecutiveRuntime()
         apply_executive_patch(executive_runtime, parsed.executive_patch)
-        return parsed.reply
+        footer = render_reviewed_source_footer(
+            self.wiki, class_id, runtime.consulted_sources
+        )
+        return f"{parsed.reply.rstrip()}{footer}"
+
+    @staticmethod
+    def _discussion_citation_correction_input(
+        original_user_input: str, draft: str, errors: list[str]
+    ) -> str:
+        """Tell the model exactly how to repair a rejected source presentation."""
+        rendered_errors = "\n".join(f"- {error}" for error in errors)
+        return (
+            f"{original_user_input}\n\n"
+            "Citation presentation correction:\n"
+            "Return a complete corrected answer to the teacher. English content from "
+            "the wiki is a KlassenPilot reviewed English summary, not a verbatim "
+            "official German quotation. Do not include `Source:`/`Quelle:` lines or "
+            "source URLs; the backend will add the official German source link.\n\n"
+            f"Rejected draft:\n{draft}\n\nValidation errors:\n{rendered_errors}"
+        )
+
+    async def _correct_discussion_source_presentation(
+        self,
+        agent: Any,
+        original_user_input: str,
+        parsed: Any,
+        runtime: ClassDiscussionRuntime,
+    ) -> Any:
+        """Run at most one correction turn, then fall back to backend provenance."""
+        if not isinstance(parsed, ClassDiscussionTurnOutput):
+            return parsed
+        errors = validate_discussion_source_presentation(
+            parsed.reply, runtime.consulted_sources
+        )
+        if not errors:
+            return parsed
+        try:
+            corrected = await self._run_structured(
+                agent,
+                self._discussion_citation_correction_input(
+                    original_user_input, parsed.reply, errors
+                ),
+            )
+        except Exception:
+            logger.warning("Discussion citation correction failed; using backend footer.")
+            corrected = parsed
+        if isinstance(corrected, ClassDiscussionTurnOutput):
+            parsed = corrected
+        if validate_discussion_source_presentation(
+            parsed.reply, runtime.consulted_sources
+        ):
+            return parsed.model_copy(
+                update={"reply": strip_model_source_presentation(parsed.reply)}
+            )
+        return parsed
 
     def _discuss_final_event(
         self,
@@ -953,8 +1014,11 @@ class AgentRunner:
                 suggested_actions=out.suggested_actions,
             )
             return out.reply
+        parsed = await self._correct_discussion_source_presentation(
+            turn.agent, turn.user_input, parsed, turn.runtime
+        )
         finalized = self._finalize_discuss_turn(
-            parsed, turn.runtime, executive=executive
+            class_id, parsed, turn.runtime, executive=executive
         )
         if finalized is None:
             return "I had trouble processing that — could you try again?"
@@ -997,8 +1061,11 @@ class AgentRunner:
         out = result_holder.get("result")
         if out is None:
             return
+        parsed = await self._correct_discussion_source_presentation(
+            turn.agent, turn.user_input, out.final_output, turn.runtime
+        )
         finalized = self._finalize_discuss_turn(
-            out.final_output, turn.runtime, executive=executive
+            class_id, parsed, turn.runtime, executive=executive
         )
         if finalized is None:
             yield SseError(

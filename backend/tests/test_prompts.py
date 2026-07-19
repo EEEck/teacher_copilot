@@ -14,6 +14,7 @@ import pytest
 
 from app.teacher_agent.prompts import (
     CHAT_WIKI_TOOLS_POLICY,
+    CLASS_DISCUSSION_WIKI_TOOLS_POLICY,
     DURABLE_MEMORY_CANDIDATE_POLICY,
     EXECUTIVE_ASSISTANT_POLICY,
     INGEST_SYSTEM,
@@ -207,6 +208,15 @@ def test_pedagogical_discussion_receives_the_full_subject_expert(wiki):
     assert "Active subject expert" in [section["name"] for section in assembly["sections"]]
     assert "Chemistry Grade 9 NTG - key summary" in assembly["instructions"]
     assert "Teaching Framework Adjustments" in assembly["instructions"]
+
+
+def test_discussion_requires_trusted_source_read_for_official_curriculum_claims():
+    policy = CLASS_DISCUSSION_WIKI_TOOLS_POLICY.lower()
+
+    assert "official bavaria scope" in policy
+    assert "search_trusted_sources" in policy
+    assert "read_trusted_source" in policy
+    assert "not curriculum evidence" in policy
 
 
 def test_executive_assistant_policy_defines_the_shared_product_contract():

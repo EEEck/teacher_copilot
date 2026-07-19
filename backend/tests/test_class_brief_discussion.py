@@ -5,12 +5,23 @@ import asyncio
 import pytest
 
 from app.services.discussion_service import DiscussionService
+from app.services.artifact_spec import _discuss_runtime_dump, _discuss_runtime_load
 from app.services.memory_candidate_ledger import OPEN_STATUSES
 from app.services.output_safety import SAFE_INTERNAL_DATA_REPLY
-from app.teacher_agent.models import ClassDiscussionTurnOutput
-from app.teacher_agent.stream_events import SseFinal
+from app.teacher_agent.class_discussion_state import ClassDiscussionRuntime
 
 from conftest import CLASS_ID
+
+
+def test_discussion_runtime_persists_trusted_source_provenance():
+    runtime = ClassDiscussionRuntime()
+    runtime.record_source_read("by-lehrplanplus-chemie-9-ntg", "c9_atombau")
+
+    restored = _discuss_runtime_load(_discuss_runtime_dump(runtime))
+
+    assert restored.consulted_sources == [
+        {"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_atombau"}
+    ]
 
 
 def test_class_brief_refresh_is_read_only(client, wiki):
