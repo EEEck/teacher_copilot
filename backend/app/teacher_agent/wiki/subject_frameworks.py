@@ -205,6 +205,24 @@ def regenerate_class_framework_profile(store, class_id: str) -> str:
     return rendered
 
 
+def add_teacher_framework_adjustment(store, class_id: str, content: str) -> str:
+    """Apply one teacher-approved class adjustment, then regenerate the profile."""
+    path = framework_profile_path(store, class_id)
+    existing = store.read_text(path)
+    adjustments = _section_bullets(existing, "Teacher-approved adjustments")
+    if content not in adjustments:
+        adjustments.append(content)
+    rendered = compose_class_framework_profile(
+        store,
+        class_id=class_id,
+        framework=framework_for_class(store, class_id),
+        teacher_adjustments=adjustments,
+        class_cautions=_section_bullets(existing, "Class-specific cautions"),
+    )
+    store.write_text(path, rendered)
+    return store.rel_wiki(path)
+
+
 def _active_framework_directory(store, class_id: str) -> tuple[Path, FrameworkSummary]:
     framework = framework_for_class(store, class_id)
     return _framework_root(store, framework.subject) / f"{framework.grade:02d}", framework

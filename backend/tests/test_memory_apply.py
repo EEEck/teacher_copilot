@@ -123,3 +123,24 @@ def test_apply_leaves_row_open_when_write_does_not_land(
 
     still_open = memory_candidate_ledger.list_candidates(statuses=["captured"])
     assert any(r.id == "cand-skip-1" for r in still_open)
+
+
+def test_approved_framework_adjustment_regenerates_only_the_class_profile(
+    client: TestClient,
+    wiki: WikiStore,
+):
+    base_path = (
+        wiki.root / "wiki" / "subjects" / "chemie" / "teaching_frameworks" / "09" / "key_summary.md"
+    )
+    base = wiki.read_text(base_path)
+    adjustment = "Use particle-model drawings before formal ion notation."
+
+    resp = client.post(
+        f"/api/classes/{CLASS_ID}/memory/apply",
+        json={"items": [{"target": "teaching_framework_profile.md", "section": "Teacher-approved adjustments", "content": adjustment}]},
+    )
+
+    assert resp.status_code == 200, resp.text
+    profile = wiki.read_text(wiki.memory_dir(CLASS_ID) / "teaching_framework_profile.md")
+    assert adjustment in profile
+    assert wiki.read_text(base_path) == base

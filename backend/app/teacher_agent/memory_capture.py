@@ -24,6 +24,7 @@ MEMORY_TARGETS = (
     "planning_brief.md",
     "teaching_patterns.md",
     "copilot_profile.md",
+    "teaching_framework_profile.md",
     "teacher_profile.md",
     "copilot.md",
     "user.md",
@@ -330,7 +331,11 @@ DIRECT_TEACHER_QUOTE_PREFIX = "Direct teacher quote:"
 # - content files are teachable -> only an explicit store/remove request
 #   ("remember/add/remove ...") qualifies;
 # - compiled files are built from lessons, never dictated -> never fast lane.
-FAST_LANE_ALWAYS_TARGETS = {"teacher_profile.md", "copilot_profile.md"}
+FAST_LANE_ALWAYS_TARGETS = {
+    "teacher_profile.md",
+    "copilot_profile.md",
+    "teaching_framework_profile.md",
+}
 FAST_LANE_STORE_REQUEST_TARGETS = {"teaching_patterns.md", "planning_brief.md"}
 _MIN_VERIFIED_QUOTE_CHARS = 10
 
@@ -661,6 +666,7 @@ def discipline_memory_candidates(
 REMEMBER_TARGET_HINT = (
     "teacher_profile.md (how to communicate with the teacher), "
     "copilot_profile.md (how to plan for this class), "
+    "teaching_framework_profile.md (teacher-approved subject teaching adjustments for this class), "
     "teaching_patterns.md (how this class learns), "
     "planning_brief.md (current planning priorities), or "
     "wiki/subjects/<subject>.md (subject-wide teaching guidance)"
