@@ -317,7 +317,12 @@ compose_active_skill(subject: str, grade: int, branch: str | None, task: str) ->
   accessibility check. The deliberate MVP divergence is one structured
   artifact rather than a teacher plan plus three separately rendered worksheets.
 - [ ] Replace US standards and Learning Commons assumptions with `curriculum_profile.md`, Bavaria trusted-source tools, the class-effective profile, and progressive wiki reads. Keep the source policy, copyright guardrails, and teacher-review boundaries.
-- [ ] Create `chemie_bayern_reference.md` as the direct functional equivalent of Anthropic `references/science.md`, limited to Bavaria Gymnasium Chemistry Grade 9 NTG: investigation before explanation, model revision, three-dimensional observable targets, anticipated misconceptions with what/why/teacher move, representations with rationale, safety, realistic timing, look-fors, and exit checks.
+- [x] Created `chemie_bayern_reference.md` as the direct functional equivalent
+  of the science reference, limited to Bavaria Gymnasium Chemistry Grade 9 NTG:
+  C8 prerequisite bridge, C9 course branches, investigation before explanation,
+  model revision, observable goals, anticipated misconceptions with
+  what/why/teacher move, representation rationale, safety, timing, look-fors,
+  exit checks, and `LessonArtifact` mapping.
 - [ ] Keep Markdown files as the reviewable canonical skill/reference content; the loader supplies bounded text to prompt assembly and records source/function/size trace metadata. Do not duplicate the same long guidance in Python constants.
 - [ ] Add tests for required sections, subject/grade routing, absence of US-only assumptions, bounded loading, and prompt trace provenance.
 - [ ] Replace the provisional `PLAN_CHAT_SYSTEM` checklist rather than extending

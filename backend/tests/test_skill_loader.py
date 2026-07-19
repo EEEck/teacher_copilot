@@ -36,6 +36,27 @@ def test_chemie_9_ntg_reference_contains_required_science_pedagogy():
     assert "Learning Commons" not in reference
 
 
+def test_chemie_9_ntg_reference_has_the_subject_specific_production_map():
+    reference = load_subject_reference("chemie", 9, "NTG")
+
+    for heading in (
+        "## Clarify",
+        "## Standards grounding",
+        "## Build the lesson",
+        "## Course branch",
+        "## Section structure",
+        "## Exit evidence guidance",
+        "## Writing the LessonArtifact",
+    ):
+        assert heading in reference
+
+    assert "C8" in reference
+    assert "C9" in reference
+    assert "observation" in reference
+    assert "particle model" in reference
+    assert "explanation" in reference
+
+
 def test_composed_planning_skill_combines_core_reference_and_differentiation():
     skill = compose_active_skill("chemie", 9, "NTG", "planning")
 
