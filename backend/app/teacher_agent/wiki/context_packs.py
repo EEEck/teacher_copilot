@@ -427,10 +427,19 @@ def build_active_subject_expert_context_trace(store, class_id: str, *, purpose: 
             ).rstrip()
             sections.append(
                 _trace_section(
-                    name="Teaching framework profile",
+                    name="Selected teaching framework",
                     function="build_active_subject_expert_context_trace",
-                    source=f"{framework.path} + {store.rel_wiki(adjustments_path)}",
-                    text=profile_text,
+                    source=framework.path,
+                    text=framework.text.strip(),
+                    authority="curated_guidance",
+                )
+            )
+            sections.append(
+                _trace_section(
+                    name="Class teaching framework adjustments",
+                    function="build_active_subject_expert_context_trace",
+                    source=store.rel_wiki(adjustments_path),
+                    text=adjustments,
                     authority="teacher_adjusted_class_profile",
                 )
             )
@@ -438,9 +447,19 @@ def build_active_subject_expert_context_trace(store, class_id: str, *, purpose: 
         else:
             sections.append(
                 _trace_section(
-                    name="Teaching framework profile",
+                    name="Selected teaching framework",
                     function="build_active_subject_expert_context_trace",
-                    source=f"{framework.path} + {store.rel_wiki(adjustments_path)}",
+                    source=framework.path,
+                    text="",
+                    authority="curated_guidance",
+                    included=False,
+                )
+            )
+            sections.append(
+                _trace_section(
+                    name="Class teaching framework adjustments",
+                    function="build_active_subject_expert_context_trace",
+                    source=store.rel_wiki(adjustments_path),
                     text="",
                     authority="teacher_adjusted_class_profile",
                     included=False,

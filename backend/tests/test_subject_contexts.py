@@ -10,6 +10,7 @@ CLASS_ID = "chemie_9b_2026_27"
 
 def test_plan_composes_shared_framework_and_class_adjustments_once(wiki):
     trace = build_active_subject_expert_context_trace(wiki, CLASS_ID, purpose="plan")
+    sources = {section["source"] for section in trace["sections"]}
 
     assert "# Chemie" in trace["text"]
     assert "# Chemistry Grade 9 NTG - key summary" in trace["text"]
@@ -20,6 +21,11 @@ def test_plan_composes_shared_framework_and_class_adjustments_once(wiki):
         "teacher_adjusted_class_profile",
         "official_source_index",
     }
+    assert "wiki/subjects/chemie/teaching_frameworks/09/key_summary.md" in sources
+    assert (
+        "wiki/classes/chemie_9b_2026_27/memory/teaching_framework_adjustments.md"
+        in sources
+    )
 
 
 def test_framework_adjustments_are_not_duplicated_in_active_class_core(wiki):

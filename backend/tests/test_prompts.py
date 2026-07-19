@@ -32,6 +32,7 @@ from app.schemas.api import ChatAttachment, ChatMessage
 from app.teacher_agent.memory_update_state import MemoryRuntime
 from app.teacher_agent.planning_state import PlanRuntime
 from app.teacher_agent.prompt_assembly import (
+    build_class_discussion_prompt_assembly,
     build_ingest_chat_prompt_assembly,
     build_plan_chat_prompt_assembly,
     build_plan_user_input_assembly,
@@ -189,6 +190,23 @@ def test_plan_assembly_injects_the_compiled_subject_expert_once(wiki):
     assert "Active subject expert" in section_names
     assert "# Teaching Framework Adjustments" in assembly["instructions"]
     assert "Chemistry Grade 9 NTG - key summary" in assembly["instructions"]
+
+
+def test_pedagogical_discussion_receives_the_full_subject_expert(wiki):
+    assembly = build_class_discussion_prompt_assembly(
+        wiki,
+        "chemie_9b_2026_27",
+        messages=[
+            ChatMessage(
+                role="user",
+                content="Pedagogically, how should I introduce particle-model drawings?",
+            )
+        ],
+    )
+
+    assert "Active subject expert" in [section["name"] for section in assembly["sections"]]
+    assert "Chemistry Grade 9 NTG - key summary" in assembly["instructions"]
+    assert "Teaching Framework Adjustments" in assembly["instructions"]
 
 
 def test_executive_assistant_policy_defines_the_shared_product_contract():

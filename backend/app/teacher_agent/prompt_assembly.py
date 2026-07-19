@@ -705,6 +705,29 @@ def build_class_discussion_user_input_assembly(
     }
 
 
+def _discussion_needs_full_subject_expert(messages: list[ChatMessage]) -> bool:
+    """Keep Discuss slim unless the teacher asks for pedagogical guidance.
+
+    This is deliberately a narrow, deterministic routing cue rather than a
+    judgment about the class. Detailed framework pages still remain on-demand.
+    """
+    recent_text = " ".join(message.content.lower() for message in messages[-3:])
+    cues = (
+        "pedagog",
+        "how should i",
+        "how do i",
+        "introduce",
+        "scaffold",
+        "differentiat",
+        "representation",
+        "particle model",
+        "teaching approach",
+        "curriculum",
+        "competenc",
+    )
+    return any(cue in recent_text for cue in cues)
+
+
 def build_class_discussion_prompt_assembly(
     wiki,
     class_id: str,
@@ -718,8 +741,9 @@ def build_class_discussion_prompt_assembly(
     executive_rt = executive or ExecutiveRuntime()
     teacher_trace = wiki.build_teacher_context_trace()
     class_trace = wiki.build_active_class_core_context_trace(class_id)
+    full_subject_expert = _discussion_needs_full_subject_expert(messages)
     subject_trace = wiki.build_active_subject_expert_context_trace(
-        class_id, purpose="discuss"
+        class_id, purpose="differentiation" if full_subject_expert else "discuss"
     )
     user_input = build_class_discussion_user_input_assembly(
         messages, history_turns=history_turns
@@ -768,9 +792,13 @@ def build_class_discussion_prompt_assembly(
             text=class_trace["text"],
         ),
         _section(
-            name="Subject routing",
+            name="Active subject expert" if full_subject_expert else "Subject routing",
             function="wiki.build_active_subject_expert_context_trace",
-            source=f"wiki/classes/{class_id}/curriculum_profile.md",
+            source=(
+                "nested active-subject-expert trace"
+                if full_subject_expert
+                else f"wiki/classes/{class_id}/curriculum_profile.md"
+            ),
             text=subject_trace["text"],
         ),
         _section(
@@ -822,6 +850,7 @@ def build_class_discussion_prompt_assembly(
             "teacher_context": teacher_trace,
             "active_class_core": class_trace,
             "subject_routing": subject_trace,
+            "subject_context": subject_trace,
             "user_input": user_input,
         },
     }

@@ -35,9 +35,12 @@ record for the consolidated plan.
 - [x] Tasks 7–8 — P/R/O/M rubric coverage, source/adjustment trace provenance,
   gated trace documentation, regenerated wiki index, and durable product/agent
   documentation.
-- [ ] Live validation — start the isolated development/beta/economy stack and
-  inspect Plan, Discuss, and Update Memory trace endpoints after Docker Desktop
-  is available. This is the only remaining external-runtime acceptance step.
+- [x] Live validation — started the isolated development/beta/economy stack
+  with `AGENT_TRACE_ENABLED=true`; authenticated local beta sessions confirmed
+  that Plan receives the key summary plus adjustment page, pedagogical Discuss
+  receives the full subject expert, and Update Memory receives neither detailed
+  framework text nor adjustments. Planner traces also recorded Grade 9 trusted
+  source provenance.
 
 ## Canonical project scope
 
