@@ -36,6 +36,27 @@ def test_composed_planning_skill_combines_core_reference_and_differentiation():
     assert "# Lesson Differentiation Procedure" in skill
 
 
+def test_differentiation_core_preserves_routed_workflow_and_eight_rules():
+    skill = load_skill("differentiation")
+
+    for heading in (
+        "## Step 0 — Route",
+        "## Step 1 — Identify the source lesson",
+        "## Step 2 — Ground in trusted sources",
+        "## Step 3 — The differentiation rules",
+        "## Step 4 — The draft offer",
+        "## Step 5 — Output",
+        "## Step 6 — Complete",
+    ):
+        assert heading in skill
+
+    for rule in range(1, 9):
+        assert f"### R{rule} —" in skill
+
+    assert "same central Chemistry question" in skill
+    assert "Consistency sweep" in skill
+
+
 def test_unknown_subject_or_grade_has_no_subject_reference():
     assert load_subject_reference("physik", 9, "NTG") == ""
     assert load_subject_reference("chemie", 10, "NTG") == ""

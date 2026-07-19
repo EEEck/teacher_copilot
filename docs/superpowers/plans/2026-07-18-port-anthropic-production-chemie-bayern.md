@@ -310,7 +310,12 @@ compose_active_skill(subject: str, grade: int, branch: str | None, task: str) ->
   completion**. Preserve their control flow and imperatives closely; translate
   only Learning Commons KG → trusted-source tools, Word documents → one
   `LessonArtifact`, and US K–12 science → Bavaria Chemistry 9 NTG.
-- [ ] Port the structure of `k12-lesson-differentiation/SKILL.md`, including a shared core question/evidence task, access and representation changes, language/grouping supports, fading scaffolds, and an accessibility check.
+- [x] Ported the structure of `k12-lesson-differentiation/SKILL.md`, including
+  routed source-lesson identification, trusted-source grounding, the eight
+  differentiation rules, a shared core question/evidence task, access and
+  representation changes, language/grouping supports, fading scaffolds, and an
+  accessibility check. The deliberate MVP divergence is one structured
+  artifact rather than a teacher plan plus three separately rendered worksheets.
 - [ ] Replace US standards and Learning Commons assumptions with `curriculum_profile.md`, Bavaria trusted-source tools, the class-effective profile, and progressive wiki reads. Keep the source policy, copyright guardrails, and teacher-review boundaries.
 - [ ] Create `chemie_bayern_reference.md` as the direct functional equivalent of Anthropic `references/science.md`, limited to Bavaria Gymnasium Chemistry Grade 9 NTG: investigation before explanation, model revision, three-dimensional observable targets, anticipated misconceptions with what/why/teacher move, representations with rationale, safety, realistic timing, look-fors, and exit checks.
 - [ ] Keep Markdown files as the reviewable canonical skill/reference content; the loader supplies bounded text to prompt assembly and records source/function/size trace metadata. Do not duplicate the same long guidance in Python constants.
