@@ -34,7 +34,10 @@ record for the consolidated plan.
   active-route guidance tools.
 - [x] Tasks 7–8 — P/R/O/M rubric coverage, source/adjustment trace provenance,
   gated trace documentation, regenerated wiki index, and durable product/agent
-  documentation.
+  documentation. The deterministic Tier-1 trace contracts verify the separate
+  Plan subject-expert layer, routing-only Update Memory layer, and the
+  production trace gate; the committed reference trace is a compact semantic
+  fixture rather than a full prompt dump.
 - [x] Live validation — started the isolated development/beta/economy stack
   with `AGENT_TRACE_ENABLED=true`; authenticated local beta sessions confirmed
   that Plan receives the key summary plus adjustment page, pedagogical Discuss
@@ -44,7 +47,7 @@ record for the consolidated plan.
 
 ## Canonical project scope
 
-This master plan is the single plan for the current work: port the Anthropic production procedure, replace the US science reference with Bavaria Chemistry Grade 9 NTG, and keep the initial output as one final lesson artifact. That artifact has three audience sections—teacher plan, student materials, and observation/update capture—rather than three separately persisted documents. The trusted-source layer, subject framework library, class-effective profile, prompt assembly, and evaluation work all support that same production loop.
+This master plan is the single plan for the current work: port the Anthropic production procedure, replace the US science reference with Bavaria Chemistry Grade 9 NTG, and keep the initial output as one final lesson artifact. That artifact has three audience sections—teacher plan, student materials, and observation/update capture—rather than three separately persisted documents. The trusted-source layer, subject framework library, class-effective profile, prompt assembly, and evaluation work all support that same production loop. The detailed unchecked items below are retained as the original design checklist; the reconciliation status above is the authoritative completion record.
 
 ### Reference-port fidelity rule
 
@@ -344,28 +347,28 @@ compose_active_skill(subject: str, grade: int, branch: str | None, task: str) ->
   representation changes, language/grouping supports, fading scaffolds, and an
   accessibility check. The deliberate MVP divergence is one structured
   artifact rather than a teacher plan plus three separately rendered worksheets.
-- [ ] Replace US standards and Learning Commons assumptions with `curriculum_profile.md`, Bavaria trusted-source tools, the class-effective profile, and progressive wiki reads. Keep the source policy, copyright guardrails, and teacher-review boundaries.
+- [x] Replace US standards and Learning Commons assumptions with `curriculum_profile.md`, Bavaria trusted-source tools, the class-effective profile, and progressive wiki reads. Keep the source policy, copyright guardrails, and teacher-review boundaries.
 - [x] Created `chemie_bayern_reference.md` as the direct functional equivalent
   of the science reference, limited to Bavaria Gymnasium Chemistry Grade 9 NTG:
   C8 prerequisite bridge, C9 course branches, investigation before explanation,
   model revision, observable goals, anticipated misconceptions with
   what/why/teacher move, representation rationale, safety, timing, look-fors,
   exit checks, and `LessonArtifact` mapping.
-- [ ] Keep Markdown files as the reviewable canonical skill/reference content; the loader supplies bounded text to prompt assembly and records source/function/size trace metadata. Do not duplicate the same long guidance in Python constants.
-- [ ] Add tests for required sections, subject/grade routing, absence of US-only assumptions, bounded loading, and prompt trace provenance.
-- [ ] Replace the provisional `PLAN_CHAT_SYSTEM` checklist rather than extending
+- [x] Keep Markdown files as the reviewable canonical skill/reference content; the loader supplies bounded text to prompt assembly and records source/function/size trace metadata. Do not duplicate the same long guidance in Python constants.
+- [x] Add tests for required sections, subject/grade routing, absence of US-only assumptions, bounded loading, and prompt trace provenance.
+- [x] Replace the provisional `PLAN_CHAT_SYSTEM` checklist rather than extending
   it incrementally. The Anthropic skill core becomes the authoritative
   procedure for routing, clarification, source grounding, pedagogy,
   differentiation, artifact construction, and evaluation.
-- [ ] Remove the rigid six-section output contract (`learning goals`, `lesson
+- [x] Remove the rigid six-section output contract (`learning goals`, `lesson
   flow`, `warmup`, `practice tasks`, `homework`, `teacher notes`) from the
   production contract. Those are only possible sections inside the richer
   artifact, not the definition of lesson quality.
-- [ ] Remove the unconditional `Use English` behavior. Internal skill files,
+- [x] Remove the unconditional `Use English` behavior. Internal skill files,
   traces, tests, developer documentation, and the initial artifact use English;
   official Bavaria labels, German chemical terms, and supplied German source
   excerpts retain their source language through explicit metadata.
-- [ ] Run `cd backend; .venv\\Scripts\\python -m pytest tests/test_skill_loader.py tests/test_prompts.py -q`; keep the changes on the current branch.
+- [x] Run `cd backend; .venv\\Scripts\\python -m pytest tests/test_skill_loader.py tests/test_prompts.py -q`; keep the changes on the current branch.
 
 ### Task B: Add one structured final lesson artifact
 
@@ -435,16 +438,16 @@ render_markdown_artifact(artifact: LessonArtifact) -> str
 carry their own language metadata; German curriculum headings, chemical terms,
 and quoted source labels may remain German inside an otherwise English artifact.
 
-- [ ] Make the agent produce one `LessonArtifact` as the source of truth; repeated learning goals, vocabulary, safety, and exit criteria must come from `shared` rather than independently generated sections.
-- [ ] Preserve the existing `PlanTurnOutput` and `plan_markdown` compatibility while adding artifact serialization to runtime state/API responses without storing full source bodies.
-- [ ] Render one Markdown artifact with exactly three top-level audience sections: teacher lesson plan, student materials, and observation/update capture. The observation section must map to existing memory-update fields (what was covered, participation/evidence, misconceptions, what worked, follow-up) and remain lightweight.
-- [ ] Enforce cross-section consistency: shared goals and the core evidence task appear identically where needed; student materials contain no teacher-only notes; safety statements are present for practical work; observation fields are actionable.
-- [ ] Require the quality dimensions currently absent from the provisional prompt: phenomenon/context before explanation, model revision, knowledge/practice/meaning goals, anticipated student ideas with why and teacher move, representation rationale, common evidence task across differentiation, formative look-fors, realistic timing, safety, and exit evidence.
+- [x] Make the agent produce one `LessonArtifact` as the source of truth; repeated learning goals, vocabulary, safety, and exit criteria must come from `shared` rather than independently generated sections.
+- [x] Preserve the existing `PlanTurnOutput` and `plan_markdown` compatibility while adding artifact serialization to runtime state/API responses without storing full source bodies.
+- [x] Render one Markdown artifact with exactly three top-level audience sections: teacher lesson plan, student materials, and observation/update capture. The observation section must map to existing memory-update fields (what was covered, participation/evidence, misconceptions, what worked, follow-up) and remain lightweight.
+- [x] Enforce cross-section consistency: shared goals and the core evidence task appear identically where needed; student materials contain no teacher-only notes; safety statements are present for practical work; observation fields are actionable.
+- [x] Require the quality dimensions currently absent from the provisional prompt: phenomenon/context before explanation, model revision, knowledge/practice/meaning goals, anticipated student ideas with why and teacher move, representation rationale, common evidence task across differentiation, formative look-fors, realistic timing, safety, and exit evidence.
 - [x] Added deterministic validation for required audiences, duration, safety,
   source references, Chemie 9 NTG representation/differentiation fields, and
   student/teacher audience boundaries within the single artifact. Curriculum
   provenance is constrained to linked trusted sources at plan finalization.
-- [ ] Run `cd backend; .venv\\Scripts\\python -m pytest tests/test_lesson_package.py tests/test_package_renderer.py tests/test_api_plan.py -q`; keep the changes on the current branch.
+- [x] Run `cd backend; .venv\\Scripts\\python -m pytest tests/test_lesson_package.py tests/test_package_renderer.py tests/test_api_plan.py -q`; keep the changes on the current branch.
 
 ### Task 1: Register and validate the source/document layer
 
@@ -456,11 +459,11 @@ and quoted source labels may remain German inside an otherwise English artifact.
 - Modify: `backend/app/teacher_agent/wiki/trusted_sources.py`
 - Test: `backend/tests/test_trusted_sources.py`
 
-- [ ] Add source metadata fields `source_format`, `ingestion_method`, `review_status`, and `artifact_path` while retaining canonical URL, retrieval date, and content hash.
-- [ ] Require stable section headings `## Section: <id> — <official heading>` in faithful Markdown; preserve page markers where available.
-- [ ] Add tests that source records parse, source IDs are stable, unlinked sources are rejected, and source bodies remain outside compact context.
-- [ ] Keep initial PDF conversion/manual Markdown acceptance outside runtime; a future Docling CLI may produce the same format.
-- [ ] Run `cd backend; .venv\Scripts\python -m pytest tests/test_trusted_sources.py -q`; keep the changes on the current branch.
+- [x] Add source metadata fields `source_format`, `ingestion_method`, `review_status`, and `artifact_path` while retaining canonical URL, retrieval date, and content hash.
+- [x] Require stable section headings `## Section: <id> — <official heading>` in faithful Markdown; preserve page markers where available.
+- [x] Add tests that source records parse, source IDs are stable, unlinked sources are rejected, and source bodies remain outside compact context.
+- [x] Keep initial PDF conversion/manual Markdown acceptance outside runtime; a future Docling CLI may produce the same format.
+- [x] Run `cd backend; .venv\Scripts\python -m pytest tests/test_trusted_sources.py -q`; keep the changes on the current branch.
 
 ### Task 2: Build the shared Chemistry framework library
 
@@ -474,12 +477,12 @@ and quoted source labels may remain German inside an otherwise English artifact.
 - Modify: `backend/teacher_wiki/wiki/subjects/chemie.md`
 - Test: `backend/tests/test_subject_frameworks.py`
 
-- [ ] Define frontmatter `framework_id`, `subject`, `grade`, `branch`, `authority`, `source_refs`, `status`, and `version`.
-- [ ] Make `index.md` navigation-only: grade slots, purposes, links, source IDs, and update status.
-- [ ] Compile Grade 8/9 summaries from the faithful source Markdown with original instructional wording, observable teacher-useful principles, prerequisites, difficulties, safety, and representation guidance.
-- [ ] Keep detailed competencies/differentiation/model pages on demand; do not copy student-facing curriculum passages.
-- [ ] Test that every framework source reference points to an existing source section and that `index.md` never embeds full page bodies.
-- [ ] Run focused tests and keep the changes on the current branch.
+- [x] Define frontmatter `framework_id`, `subject`, `grade`, `branch`, `authority`, `source_refs`, `status`, and `version`.
+- [x] Make `index.md` navigation-only: grade slots, purposes, links, source IDs, and update status.
+- [x] Compile Grade 8/9 summaries from the faithful source Markdown with original instructional wording, observable teacher-useful principles, prerequisites, difficulties, safety, and representation guidance.
+- [x] Keep detailed competencies/differentiation/model pages on demand; do not copy student-facing curriculum passages.
+- [x] Test that every framework source reference points to an existing source section and that `index.md` never embeds full page bodies.
+- [x] Run focused tests and keep the changes on the current branch.
 
 ### Task 3: Implement grade selection and runtime effective-subject composition
 
@@ -518,13 +521,13 @@ build_active_subject_expert_context_trace(store, class_id, purpose) -> dict
 - Modify: `backend/app/teacher_agent/agents.py`
 - Test: `backend/tests/test_wiki_context_packs.py`, `backend/tests/test_prompts.py`
 
-- [ ] Add separate budgets for subject guide, framework index, grade summary, and class profile.
-- [ ] Add `build_subject_knowledge_trace(..., purpose=...)` and trace authorities `curated_guidance`, `teacher_adjusted_class_profile`, and `official_source_index`.
-- [ ] Add `build_active_subject_expert_context_trace(store, class_id, purpose)` and `build_base_assistant_context_trace(store, class_id, purpose)`; the base trace always includes the Teacher Layer, Active Class Core, and compact subject routing, while the full subject expert is purpose-selected.
-- [ ] Make Plan and differentiation receive `chemie.md` plus the compiled effective profile and source TOC; do not inject the Grade 9 summary separately. Make Update Memory omit detailed teaching framework bodies and include only subject/profile identity when needed; keep Discuss progressive and source-aware.
-- [ ] Give Plan a bounded planning-only orientation for recent taught sequence, misconception priorities, open loops, and planning brief. Reuse the existing recent-lesson snapshot and planning query-pack fields without stacking duplicate class packs; retain `list_lessons`/`read_lesson`/`read_lesson_range` for deeper evidence.
-- [ ] Test that oversized framework content is clamped per section and cannot displace class memory or user input.
-- [ ] Run context/prompt tests and keep the changes on the current branch.
+- [x] Add separate budgets for subject guide, framework index, grade summary, and class profile.
+- [x] Add `build_subject_knowledge_trace(..., purpose=...)` and trace authorities `curated_guidance`, `teacher_adjusted_class_profile`, and `official_source_index`.
+- [x] Add `build_active_subject_expert_context_trace(store, class_id, purpose)` and `build_base_assistant_context_trace(store, class_id, purpose)`; the base trace always includes the Teacher Layer, Active Class Core, and compact subject routing, while the full subject expert is purpose-selected.
+- [x] Make Plan and differentiation receive `chemie.md` plus the compiled effective profile and source TOC; do not inject the Grade 9 summary separately. Make Update Memory omit detailed teaching framework bodies and include only subject/profile identity when needed; keep Discuss progressive and source-aware.
+- [x] Give Plan a bounded planning-only orientation for recent taught sequence, misconception priorities, open loops, and planning brief. Reuse the existing recent-lesson snapshot and planning query-pack fields without stacking duplicate class packs; retain `list_lessons`/`read_lesson`/`read_lesson_range` for deeper evidence.
+- [x] Test that oversized framework content is clamped per section and cannot displace class memory or user input.
+- [x] Run context/prompt tests and keep the changes on the current branch.
 
 ### Task 5: Add progressive subject-guidance retrieval
 
@@ -543,11 +546,11 @@ search_subject_guidance(query, max_results=8)
 read_subject_guidance(path)
 ```
 
-- [ ] Search only the active subject framework root and return path, grade, page, section, source refs, matched terms, and a bounded snippet.
-- [ ] Read only allowlisted active-subject framework paths and capture raw evidence behind `raw_ref`.
-- [ ] Update planning policy: summary/profile for orientation, subject tools for deeper pedagogy, trusted-source tools for exact official claims.
-- [ ] Test active-subject isolation, source provenance, bounded outputs, and path rejection.
-- [ ] Verify subject-guidance search tests and keep the changes on the current branch.
+- [x] Search only the active subject framework root and return path, grade, page, section, source refs, matched terms, and a bounded snippet.
+- [x] Read only allowlisted active-subject framework paths and capture raw evidence behind `raw_ref`.
+- [x] Update planning policy: summary/profile for orientation, subject tools for deeper pedagogy, trusted-source tools for exact official claims.
+- [x] Test active-subject isolation, source provenance, bounded outputs, and path rejection.
+- [x] Verify subject-guidance search tests and keep the changes on the current branch.
 
 ### Task 6: Add teacher-adjustable class know-how through HITL
 
@@ -577,13 +580,13 @@ read_subject_guidance(path)
 - Create: `backend/tests/evals/rubrics/chemie_bayern_framework_context.csv`
 - Test: `backend/tests/test_prompts.py`, `backend/tests/test_plan_context_manager.py`
 
-- [ ] Ensure the active profile is treated as teacher-adjusted guidance, not official curriculum authority.
-- [ ] Require prerequisites, observable targets, `what/why/teacher move` difficulties, evidence-generating tasks, exit checks, and safe realistic timing in planning.
-- [ ] Preserve one Chemistry question/context/core evidence task across differentiation routes; vary access, representation, language, grouping, and fading scaffolds.
-- [ ] Add P/R/O/M criteria for grade selection, profile provenance, source-read behavior, workflow isolation, and no source-body dumping.
-- [ ] Test prompt traces and state patches without storing full framework bodies in runtime state.
-- [ ] Treat Tasks A and B as the implementation of the reusable skill/output contract; this task adds the runtime integration and regression coverage rather than another parallel prompt implementation.
-- [ ] Run the evaluation tests and keep the changes on the current branch.
+- [x] Ensure the active profile is treated as teacher-adjusted guidance, not official curriculum authority.
+- [x] Require prerequisites, observable targets, `what/why/teacher move` difficulties, evidence-generating tasks, exit checks, and safe realistic timing in planning.
+- [x] Preserve one Chemistry question/context/core evidence task across differentiation routes; vary access, representation, language, grouping, and fading scaffolds.
+- [x] Add P/R/O/M criteria for grade selection, profile provenance, source-read behavior, workflow isolation, and no source-body dumping.
+- [x] Test prompt traces and state patches without storing full framework bodies in runtime state.
+- [x] Treat Tasks A and B as the implementation of the reusable skill/output contract; this task adds the runtime integration and regression coverage rather than another parallel prompt implementation.
+- [x] Run the evaluation tests and keep the changes on the current branch.
 
 ### Task 8: Index, document, and validate the complete system
 
@@ -597,14 +600,14 @@ read_subject_guidance(path)
 - Test: `backend/tests/test_wiki_indexing.py` and the focused suite
 
 - [x] Add root-index links for shared subject frameworks and each class adjustment page without embedding detailed bodies.
-- [ ] Document the four authority layers and the class-setup composition contract.
-- [ ] Document the structured lesson artifact as the single source for its three audience sections and explain which fields feed Update Memory.
-- [ ] Document that Update Memory excludes detailed teaching guidance by default.
-- [ ] Regenerate `backend/teacher_wiki/index.md` using `WikiStore.rebuild_index()`.
-- [ ] Run:
+- [x] Document the four authority layers and the class-setup composition contract.
+- [x] Document the structured lesson artifact as the single source for its three audience sections and explain which fields feed Update Memory.
+- [x] Document that Update Memory excludes detailed teaching guidance by default.
+- [x] Regenerate `backend/teacher_wiki/index.md` using `WikiStore.rebuild_index()`.
+- [x] Run:
   `cd backend; .venv\Scripts\python -m pytest tests/test_skill_loader.py tests/test_lesson_package.py tests/test_package_renderer.py tests/test_trusted_sources.py tests/test_subject_frameworks.py tests/test_wiki_context_packs.py tests/test_wiki_tools.py tests/test_prompts.py tests/test_memory_capture.py tests/test_memory_apply.py tests/test_wiki_indexing.py -q`
-- [ ] Run focused Ruff checks and `git diff --check`.
-- [ ] Run the documentation/index checks and keep the changes on the current branch.
+- [x] Run focused Ruff checks and `git diff --check`.
+- [x] Run the documentation/index checks and keep the changes on the current branch.
 
 ## Later Source Ingestion Track
 
