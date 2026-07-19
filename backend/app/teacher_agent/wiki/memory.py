@@ -35,6 +35,7 @@ MEMORY_PAGE_BUDGETS: dict[str, int] = {
     "planning_brief": 1200,
     "session_summaries": 1200,
     "subject_guide": 1400,
+    "framework_profile": 2600,
 }
 _DEFAULT_PAGE_BUDGET = 1800
 

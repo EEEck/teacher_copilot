@@ -50,7 +50,7 @@ from app.teacher_agent.prompts import (
     TEACHER_AGENT_SECURITY_POLICY,
     apply_prompt,
 )
-from app.teacher_agent.skills import lesson_skill_for_subject
+from app.teacher_agent.skills import compose_active_skill, lesson_skill_for_subject
 from app.teacher_agent.wiki_store import DIARY_SECTION_HEADINGS
 from app.teacher_agent.wiki import memory as wiki_memory
 
@@ -219,6 +219,7 @@ def build_ingest_chat_prompt_assembly(
     teacher_trace = wiki.build_teacher_context_trace()
     ingest_trace = wiki.build_ingest_context_slim_trace(class_id)
     active_class_core = ingest_trace["nested"]["active_class_core"]["text"]
+    subject_routing = ingest_trace["nested"]["subject_routing"]["text"]
     ingest_task_context = ingest_trace["nested"]["task_context"]["text"]
     ingest_context = apply_char_limit(ingest_trace["text"], lim.ingest_context_backstop)
     target_state = render_memory_target_state(rt.target)
@@ -239,6 +240,7 @@ def build_ingest_chat_prompt_assembly(
         sections=sections_text,
         teacher_context=teacher_trace["text"],
         active_class_core=active_class_core,
+        subject_routing=subject_routing,
         ingest_task_context=ingest_task_context,
         target_state=target_state,
         session_state=session_state,
@@ -290,8 +292,14 @@ def build_ingest_chat_prompt_assembly(
             _section(
                 name="Active class core",
                 function="wiki.build_active_class_core_context_trace",
-                source=f"wiki/classes/{class_id}/memory/*.md + selected subject guide",
+                source=f"wiki/classes/{class_id}/memory/*.md",
                 text=active_class_core,
+            ),
+            _section(
+                name="Subject routing",
+                function="wiki.build_active_subject_expert_context_trace",
+                source=f"wiki/classes/{class_id}/curriculum_profile.md",
+                text=subject_routing,
             ),
             _section(
                 name="Update Memory task context",
@@ -459,10 +467,27 @@ def build_plan_chat_prompt_assembly(
     executive_rt = executive or ExecutiveRuntime()
     lim = get_context_limits()
     class_config = wiki.get_class(class_id)
-    subject_skill = lesson_skill_for_subject(class_config.subject)
+    curriculum = wiki.get_curriculum_profile(class_id)
+    try:
+        grade = int(curriculum.grade)
+    except (TypeError, ValueError):
+        grade = 0
+    subject_skill = compose_active_skill(
+        class_config.subject,
+        grade,
+        curriculum.branch,
+        "planning",
+    )
+    if not subject_skill:
+        # Keep existing subjects working until each has a reviewable production
+        # reference. The Chemistry 9 NTG route above never takes this fallback.
+        subject_skill = lesson_skill_for_subject(class_config.subject)
     active_skill = "\n\n".join(part for part in (PLAN_SKILL, subject_skill) if part)
     teacher_trace = wiki.build_teacher_context_trace()
     class_trace = wiki.build_active_class_core_context_trace(class_id)
+    subject_trace = wiki.build_active_subject_expert_context_trace(
+        class_id, purpose="plan"
+    )
     session_state = render_session_state(rt.session_state)
     lesson_state = render_lesson_planning_state(rt.lesson_planning_state)
     current_plan_text = (
@@ -483,6 +508,7 @@ def build_plan_chat_prompt_assembly(
         durable_memory_candidate_policy=DURABLE_MEMORY_CANDIDATE_POLICY,
         teacher_context=teacher_trace["text"],
         active_class_core=class_trace["text"],
+        active_subject_expert=subject_trace["text"],
         session_state=session_state,
         lesson_state=lesson_state,
         current_plan=current_plan_text,
@@ -527,8 +553,17 @@ def build_plan_chat_prompt_assembly(
         _section(
             name="Active class core",
             function="wiki.build_active_class_core_context_trace",
-            source=f"wiki/classes/{class_id}/memory/*.md + selected subject guide",
+            source=f"wiki/classes/{class_id}/memory/*.md",
             text=class_trace["text"],
+        ),
+        _section(
+            name="Active subject expert",
+            function="wiki.build_active_subject_expert_context_trace",
+            source=(
+                f"wiki/subjects/{class_config.subject}.md + "
+                f"wiki/classes/{class_id}/memory/teaching_framework_profile.md + source TOC"
+            ),
+            text=subject_trace["text"],
         ),
         _section(
             name="Executive state",
@@ -584,6 +619,7 @@ def build_plan_chat_prompt_assembly(
         "nested": {
             "teacher_context": teacher_trace,
             "active_class_core": class_trace,
+            "active_subject_expert": subject_trace,
             "user_input": user_input,
         },
     }
@@ -591,8 +627,19 @@ def build_plan_chat_prompt_assembly(
 
 def build_plan_opening_prompt_assembly(wiki, class_id: str) -> dict:
     lim = get_context_limits()
-    class_trace = wiki.build_plan_context_slim_trace(class_id)
-    context = apply_char_limit(class_trace["text"], lim.plan_opening_context_chars)
+    teacher_trace = wiki.build_teacher_context_trace()
+    class_trace = wiki.build_active_class_core_context_trace(class_id)
+    subject_trace = wiki.build_active_subject_expert_context_trace(
+        class_id, purpose="plan_opening"
+    )
+    context = apply_char_limit(
+        "\n\n".join(
+            part
+            for part in (teacher_trace["text"], class_trace["text"], subject_trace["text"])
+            if part
+        ),
+        lim.plan_opening_context_chars,
+    )
     instructions = apply_prompt(PLAN_OPENING_SYSTEM, context=context)
     user_input = "Open the planning session for this class."
     return {
@@ -610,9 +657,9 @@ def build_plan_opening_prompt_assembly(wiki, class_id: str) -> dict:
                 text=PLAN_OPENING_SYSTEM,
             ),
             _section(
-                name="Opening class context",
-                function="wiki.build_plan_context_slim",
-                source="compact class wiki memory",
+                name="Opening base assistant context",
+                function="wiki.build_base_assistant_context_trace",
+                source="teacher profile + compact class wiki memory + subject routing",
                 text=context,
             ),
             _section(
@@ -622,7 +669,12 @@ def build_plan_opening_prompt_assembly(wiki, class_id: str) -> dict:
                 text=user_input,
             ),
         ],
-        "nested": {"active_class_core": class_trace, "class_slice": class_trace},
+        "nested": {
+            "teacher_context": teacher_trace,
+            "active_class_core": class_trace,
+            "active_subject_expert": subject_trace,
+            "class_slice": class_trace,
+        },
     }
 
 
@@ -666,6 +718,9 @@ def build_class_discussion_prompt_assembly(
     executive_rt = executive or ExecutiveRuntime()
     teacher_trace = wiki.build_teacher_context_trace()
     class_trace = wiki.build_active_class_core_context_trace(class_id)
+    subject_trace = wiki.build_active_subject_expert_context_trace(
+        class_id, purpose="discuss"
+    )
     user_input = build_class_discussion_user_input_assembly(
         messages, history_turns=history_turns
     )
@@ -677,6 +732,7 @@ def build_class_discussion_prompt_assembly(
         CLASS_DISCUSSION_SYSTEM,
         teacher_context=teacher_trace["text"],
         active_class_core=class_trace["text"],
+        subject_routing=subject_trace["text"],
         security_policy=TEACHER_AGENT_SECURITY_POLICY,
         executive_assistant_policy=EXECUTIVE_ASSISTANT_POLICY,
         wiki_tools_policy=CLASS_DISCUSSION_WIKI_TOOLS_POLICY,
@@ -708,8 +764,14 @@ def build_class_discussion_prompt_assembly(
         _section(
             name="Active class core",
             function="wiki.build_active_class_core_context_trace",
-            source=f"wiki/classes/{class_id}/memory/*.md + selected subject guide",
+            source=f"wiki/classes/{class_id}/memory/*.md",
             text=class_trace["text"],
+        ),
+        _section(
+            name="Subject routing",
+            function="wiki.build_active_subject_expert_context_trace",
+            source=f"wiki/classes/{class_id}/curriculum_profile.md",
+            text=subject_trace["text"],
         ),
         _section(
             name="Executive state",
@@ -759,6 +821,7 @@ def build_class_discussion_prompt_assembly(
         "nested": {
             "teacher_context": teacher_trace,
             "active_class_core": class_trace,
+            "subject_routing": subject_trace,
             "user_input": user_input,
         },
     }
@@ -767,10 +830,14 @@ def build_class_discussion_prompt_assembly(
 def build_class_brief_prompt_assembly(wiki, class_id: str) -> dict:
     teacher_trace = wiki.build_teacher_context_trace()
     class_trace = wiki.build_active_class_core_context_trace(class_id)
+    subject_trace = wiki.build_active_subject_expert_context_trace(
+        class_id, purpose="brief"
+    )
     instructions = apply_prompt(
         CLASS_BRIEF_SYSTEM,
         teacher_context=teacher_trace["text"],
         active_class_core=class_trace["text"],
+        subject_routing=subject_trace["text"],
         security_policy=TEACHER_AGENT_SECURITY_POLICY,
     )
     user_input = "Prepare the current class-home executive briefing."
@@ -794,12 +861,18 @@ def build_class_brief_prompt_assembly(wiki, class_id: str) -> dict:
                 source="wiki/teacher_profile.md",
                 text=teacher_trace["text"],
             ),
-            _section(
-                name="Active class core",
-                function="wiki.build_active_class_core_context_trace",
-                source=f"wiki/classes/{class_id}/memory/*.md + selected subject guide",
-                text=class_trace["text"],
-            ),
+        _section(
+            name="Active class core",
+            function="wiki.build_active_class_core_context_trace",
+            source=f"wiki/classes/{class_id}/memory/*.md",
+            text=class_trace["text"],
+        ),
+        _section(
+            name="Subject routing",
+            function="wiki.build_active_subject_expert_context_trace",
+            source=f"wiki/classes/{class_id}/curriculum_profile.md",
+            text=subject_trace["text"],
+        ),
             _section(
                 name="Brief user input",
                 function="AgentRunner.class_brief",
@@ -810,6 +883,7 @@ def build_class_brief_prompt_assembly(wiki, class_id: str) -> dict:
         "nested": {
             "teacher_context": teacher_trace,
             "active_class_core": class_trace,
+            "subject_routing": subject_trace,
         },
     }
 

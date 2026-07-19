@@ -45,6 +45,12 @@ class TrustedSource:
     path: str
     summary: str
     sections: tuple[SourceSection, ...]
+    source_format: str = ""
+    ingestion_method: str = ""
+    review_status: str = ""
+    artifact_path: str = ""
+    extracted_markdown_path: str = ""
+    source_language: str = ""
 
 
 @dataclass(frozen=True)
@@ -130,6 +136,12 @@ def _source_from_path(path: Path, wiki_root: Path) -> TrustedSource | None:
         path=path.relative_to(wiki_root).as_posix(),
         summary=_summary(body),
         sections=_sections(body),
+        source_format=metadata.get("source_format", ""),
+        ingestion_method=metadata.get("ingestion_method", ""),
+        review_status=metadata.get("review_status", ""),
+        artifact_path=metadata.get("artifact_path", ""),
+        extracted_markdown_path=metadata.get("extracted_markdown_path", ""),
+        source_language=metadata.get("source_language", ""),
     )
 
 

@@ -246,6 +246,9 @@ Teacher context (global):
 Active class core context:
 {active_class_core}
 
+Subject route:
+{subject_routing}
+
 Update Memory task context:
 {ingest_task_context}
 
@@ -374,23 +377,22 @@ Each turn you must:
 2. Update plan_markdown — refine the current lesson plan below; always return the full updated markdown.
 3. Maintain working state — return state_patch only for what changed this turn (phase, goals, decisions, constraints, accepted/rejected elements, etc.) plus a one-line last_change_summary. Do not treat the LLM output as the source of truth: the backend validates and applies the patch to PlanRuntime. Add new_evidence_briefs for any tool/search/material results you used (each with its raw_ref), and memory_candidates for durable facts worth saving later (proposed only — never written now).
 
-Use this markdown structure for plan_markdown:
+The loaded production procedure defines the artifact shape and quality bar.
+`plan_markdown` is the current compatibility renderer for one English artifact
+with clearly separated teacher-plan, student-material, and observation/update
+sections. Do not reduce the artifact to a fixed six-heading template. Preserve
+the shared goals, evidence task, vocabulary, safety, and exit criteria across
+its sections.
+<!-- Legacy renderer label; do not use as an artifact template:
 # Lesson Plan — {{title}}
 
-> Duration: 45 min
 
-## Learning goals
-## Lesson flow
-## Warmup
-## Practice tasks
-## Homework
-## Teacher notes
-
-Optional when relevant: ## Addresses open loops, ## Addresses misconceptions
-
+-->
 Rules:
 - Ground the plan in class memory; cite past lessons or rollups when you use them.
-- Use the teacher's requested language. For Bavaria curriculum work or student-facing Chemistry materials, default to clear German unless the teacher asks otherwise.
+- Produce the initial English artifact. Preserve official German curriculum
+  labels, German chemical terms, and supplied German source wording only where
+  fidelity requires it, with an English explanation where useful.
 - Merge chat and uploaded materials into plan_markdown; preserve manual edits from the current draft.
 - Be practical and specific to this class.
 - When the teacher states a durable preference for future sessions, general communication, or how the copilot should work across classes, call the remember(...) tool in the same turn with their exact words.
@@ -410,6 +412,9 @@ Security policy:
 
 ## Active class core context
 {active_class_core}
+
+## Active subject expert
+{active_subject_expert}
 
 {session_state}
 
@@ -574,6 +579,9 @@ Teacher context:
 
 Active class core:
 {active_class_core}
+
+Subject route:
+{subject_routing}
 """
 
 
@@ -607,6 +615,9 @@ Teacher context:
 
 Active class core:
 {active_class_core}
+
+Subject route:
+{subject_routing}
 
 {executive_state}
 

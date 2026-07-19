@@ -17,6 +17,7 @@ from . import (
     registry,
     rollups,
     search,
+    subject_frameworks,
     trusted_sources,
 )
 
@@ -97,6 +98,21 @@ class WikiStore:
         return trusted_sources.read_source_for_class(
             self.root, class_id, source_id, section_id, max_chars
         )
+
+    def load_framework_index(self, subject):
+        return subject_frameworks.load_framework_index(self, subject)
+
+    def select_framework(self, subject, grade, branch):
+        return subject_frameworks.select_framework(self, subject, grade, branch)
+
+    def framework_profile_path(self, class_id):
+        return subject_frameworks.framework_profile_path(self, class_id)
+
+    def read_framework_profile(self, class_id):
+        return self.read_text(self.framework_profile_path(class_id))
+
+    def regenerate_framework_profile(self, class_id):
+        return subject_frameworks.regenerate_class_framework_profile(self, class_id)
 
     def is_class_memory_path(self, class_id, relative_path):
         return search.is_class_memory_path(self, class_id, relative_path)
@@ -200,6 +216,19 @@ class WikiStore:
 
     def build_active_class_core_context_trace(self, class_id):
         return context_packs.build_active_class_core_context_trace(self, class_id)
+
+    def build_subject_knowledge_trace(self, class_id, *, purpose):
+        return context_packs.build_subject_knowledge_trace(self, class_id, purpose=purpose)
+
+    def build_active_subject_expert_context_trace(self, class_id, *, purpose):
+        return context_packs.build_active_subject_expert_context_trace(
+            self, class_id, purpose=purpose
+        )
+
+    def build_base_assistant_context_trace(self, class_id, *, purpose):
+        return context_packs.build_base_assistant_context_trace(
+            self, class_id, purpose=purpose
+        )
 
     def build_ingest_task_context_trace(self, class_id):
         return context_packs.build_ingest_task_context_trace(self, class_id)

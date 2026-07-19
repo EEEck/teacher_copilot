@@ -43,3 +43,17 @@ def test_compact_subject_guide_does_not_contain_full_source(wiki):
     subject = (wiki.root / "wiki" / "subjects" / "chemie.md").read_text(encoding="utf-8")
     assert "by-lehrplanplus-chemie-9-ntg" in subject
     assert "c9_atombau" not in subject
+
+
+def test_source_record_links_the_immutable_pdf_and_extracted_markdown(wiki):
+    source = load_trusted_sources(wiki.root)["by-lehrplanplus-chemie-9-ntg"]
+
+    assert source.source_format == "pdf"
+    assert source.ingestion_method == "manual_markdown"
+    assert source.review_status == "source_imported"
+    assert source.artifact_path == "raw/sources/bayern/lehrplanplus/chemie_9_ntg.pdf"
+    assert source.extracted_markdown_path == (
+        "raw/sources/bayern/lehrplanplus/chemie_9_ntg.extracted.md"
+    )
+    assert (wiki.root / source.artifact_path).is_file()
+    assert (wiki.root / source.extracted_markdown_path).is_file()

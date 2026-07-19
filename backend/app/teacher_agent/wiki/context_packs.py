@@ -280,6 +280,7 @@ def _active_memory_files(store, class_id: str) -> list[Path]:
             path
             for path in sorted(memory_root.glob("*.md"))
             if path.name not in known_names
+            and path.name != "teaching_framework_profile.md"
         ]
     order = {
         filename: idx for idx, filename in enumerate(_mem.COMPACT_MEMORY_FILES.values())
@@ -347,11 +348,138 @@ def build_trusted_source_context_trace(store, class_id: str) -> dict:
     return {"text": text, "sections": sections}
 
 
-def build_active_class_core_context_trace(store, class_id: str) -> dict:
-    """Return the active class core: identity, subject guide, and compact memory.
+def _subject_routing_context_trace(store, class_id: str) -> dict:
+    """Describe the configured subject route without injecting pedagogy."""
+    class_config = store.get_class(class_id)
+    curriculum = store.get_curriculum_profile(class_id)
+    profile_path = store.class_dir(class_id) / "curriculum_profile.md"
+    text = "\n".join(
+        [
+            "## Subject routing",
+            "Subject route: "
+            f"{class_config.subject} | Grade: {curriculum.grade or 'Unspecified'} | "
+            f"Branch: {curriculum.branch or 'Unspecified'}",
+        ]
+    )
+    return {
+        "text": text,
+        "sections": [
+            _trace_section(
+                name="Subject route",
+                function="build_subject_knowledge_trace",
+                source=store.rel_wiki(profile_path),
+                text=text,
+                authority="class_configuration",
+            )
+        ],
+    }
 
-    This is the shared class layer for class-scoped chats. Canonical lessons,
-    roll-ups, student pages, and raw diaries remain on-demand tool evidence.
+
+def build_active_subject_expert_context_trace(store, class_id: str, *, purpose: str) -> dict:
+    """Build the bounded subject layer for a workflow purpose.
+
+    The shared Grade summary is deliberately *not* injected.  The compiled
+    class profile is the sole effective Grade/branch guidance so teacher
+    adjustments cannot conflict with an independently injected base copy.
+    """
+    from app.teacher_agent.wiki import memory as _mem
+
+    normalized = purpose.strip().lower()
+    routing = _subject_routing_context_trace(store, class_id)
+    class_config = store.get_class(class_id)
+    subject_path = store.root / "wiki" / "subjects" / f"{class_config.subject}.md"
+    profile_path = store.framework_profile_path(class_id)
+    sections = list(routing["sections"])
+    parts = ["# Active subject expert", routing["text"]]
+    full_pedagogy = normalized in {"plan", "differentiation"}
+    front_door_only = normalized == "plan_opening"
+
+    if full_pedagogy or front_door_only:
+        subject_text = store.read_text(subject_path).strip()
+        if subject_text:
+            subject_text = _mem.clamp_memory_page("subject_guide", subject_text).rstrip()
+            sections.append(
+                _trace_section(
+                    name=f"Subject guide: {class_config.subject}",
+                    function="build_active_subject_expert_context_trace",
+                    source=store.rel_wiki(subject_path),
+                    text=subject_text,
+                    authority="curated_guidance",
+                )
+            )
+            parts.extend(["", f"## Subject guide: {class_config.subject}", subject_text])
+
+    if full_pedagogy:
+        profile_text = store.read_text(profile_path).strip()
+        if profile_text:
+            profile_text = _mem.clamp_memory_page("framework_profile", profile_text).rstrip()
+            sections.append(
+                _trace_section(
+                    name="Teaching framework profile",
+                    function="build_active_subject_expert_context_trace",
+                    source=store.rel_wiki(profile_path),
+                    text=profile_text,
+                    authority="teacher_adjusted_class_profile",
+                )
+            )
+            parts.extend(["", "## Effective teaching framework", profile_text])
+        else:
+            sections.append(
+                _trace_section(
+                    name="Teaching framework profile",
+                    function="build_active_subject_expert_context_trace",
+                    source=store.rel_wiki(profile_path),
+                    text="",
+                    authority="teacher_adjusted_class_profile",
+                    included=False,
+                )
+            )
+        source_trace = build_trusted_source_context_trace(store, class_id)
+        sections.extend(source_trace["sections"])
+        if source_trace["text"]:
+            parts.extend(["", source_trace["text"]])
+
+    rendered = "\n".join(parts)
+    return {
+        "function": "build_active_subject_expert_context_trace",
+        "chars": len(rendered),
+        "text": rendered,
+        "sections": sections,
+    }
+
+
+def build_subject_knowledge_trace(store, class_id: str, *, purpose: str) -> dict:
+    """Public semantic alias used by callers that need subject provenance."""
+    return build_active_subject_expert_context_trace(store, class_id, purpose=purpose)
+
+
+def build_base_assistant_context_trace(store, class_id: str, *, purpose: str) -> dict:
+    """Compose teacher, class, and purpose-specific subject layers explicitly."""
+    teacher = build_teacher_context_trace(store)
+    class_core = build_active_class_core_context_trace(store, class_id)
+    subject = build_active_subject_expert_context_trace(store, class_id, purpose=purpose)
+    rendered = "\n\n".join(
+        part for part in (teacher["text"], class_core["text"], subject["text"]) if part
+    )
+    return {
+        "function": "build_base_assistant_context_trace",
+        "chars": len(rendered),
+        "text": rendered,
+        "sections": teacher["sections"] + class_core["sections"] + subject["sections"],
+        "nested": {
+            "teacher_layer": teacher,
+            "active_class_core": class_core,
+            "active_subject_expert": subject,
+        },
+    }
+
+
+def build_active_class_core_context_trace(store, class_id: str) -> dict:
+    """Return only class facts and compact class memory.
+
+    Subject guidance has a separate authority and is composed purposefully by
+    ``build_active_subject_expert_context_trace``. Canonical lessons, roll-ups,
+    student pages, and raw diaries remain on-demand tool evidence.
     """
     from app.teacher_agent.wiki import memory as _mem
 
@@ -414,37 +542,6 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
             ],
         )
 
-    subject_path = store.root / "wiki" / "subjects" / f"{cls.subject}.md"
-    subject_text = store.read_text(subject_path).strip()
-    if subject_text:
-        add_section(
-            f"Subject guide: {cls.subject}",
-            store.rel_wiki(subject_path),
-            [
-                "",
-                f"## Subject guide: {cls.subject}",
-                _mem.clamp_memory_page("subject_guide", subject_text).rstrip(),
-            ],
-            authority="curated_guidance",
-        )
-    else:
-        sections.append(
-            _trace_section(
-                name=f"Subject guide: {cls.subject}",
-                function="build_active_class_core_context_trace",
-                source=store.rel_wiki(subject_path),
-                text="",
-                authority="curated_guidance",
-                included=False,
-            )
-        )
-
-    source_trace = build_trusted_source_context_trace(store, class_id)
-    for source_section in source_trace["sections"]:
-        sections.append(source_section)
-    if source_trace["text"]:
-        parts.extend(["", "[authority=official_source_index; source=class curriculum profile]", source_trace["text"]])
-
     memory_files = _active_memory_files(store, class_id)
     seen_memory = False
     for path in memory_files:
@@ -498,15 +595,17 @@ def build_plan_context_slim_trace(store, class_id: str) -> dict:
 
     Backward-compatible wrapper over the shared active-class core layer.
     """
-    trace = build_active_class_core_context_trace(store, class_id)
+    core = build_active_class_core_context_trace(store, class_id)
+    subject = build_active_subject_expert_context_trace(store, class_id, purpose="plan")
+    rendered = "\n\n".join(part for part in (core["text"], subject["text"]) if part)
     sections = [
         {**section, "function": "build_plan_context_slim"}
-        for section in trace["sections"]
+        for section in core["sections"] + subject["sections"]
     ]
     return {
         "function": "build_plan_context_slim",
-        "chars": trace["chars"],
-        "text": trace["text"],
+        "chars": len(rendered),
+        "text": rendered,
         "sections": sections,
     }
 
@@ -621,9 +720,10 @@ def build_ingest_task_context_trace(store, class_id: str) -> dict:
 def build_ingest_context_slim_trace(store, class_id: str) -> dict:
     """Return the shared class core plus small Update Memory task context."""
     core = build_active_class_core_context_trace(store, class_id)
+    subject = build_active_subject_expert_context_trace(store, class_id, purpose="ingest")
     task = build_ingest_task_context_trace(store, class_id)
     rendered = "\n\n".join(
-        part for part in (core["text"], task["text"]) if part.strip()
+        part for part in (core["text"], subject["text"], task["text"]) if part.strip()
     )
     return {
         "function": "build_ingest_context_slim",
@@ -638,6 +738,13 @@ def build_ingest_context_slim_trace(store, class_id: str) -> dict:
                 authority="mixed_wiki",
             ),
             _trace_section(
+                name="Subject routing",
+                function="build_active_subject_expert_context_trace",
+                source=f"wiki/classes/{class_id}/curriculum_profile.md",
+                text=subject["text"],
+                authority="class_configuration",
+            ),
+            _trace_section(
                 name="Update Memory task context",
                 function="build_ingest_task_context_trace",
                 source="recent lesson/roster/saved plan",
@@ -645,7 +752,11 @@ def build_ingest_context_slim_trace(store, class_id: str) -> dict:
                 authority="committed_wiki",
             ),
         ],
-        "nested": {"active_class_core": core, "task_context": task},
+        "nested": {
+            "active_class_core": core,
+            "subject_routing": subject,
+            "task_context": task,
+        },
     }
 
 

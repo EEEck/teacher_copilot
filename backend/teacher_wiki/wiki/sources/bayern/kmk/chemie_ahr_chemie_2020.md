@@ -10,6 +10,12 @@ grade: AHR
 canonical_url: https://www.kmk.org/fileadmin/Dateien/veroeffentlichungen_beschluesse/2020/2020_06_18-BildungsstandardsAHR_Chemie.pdf
 retrieved_at: 2026-07-18
 version_label: 2020
+source_format: pdf
+ingestion_method: manual_markdown
+review_status: source_imported
+artifact_path: raw/sources/bayern/kmk/chemie_ahr_2020.pdf
+extracted_markdown_path: raw/sources/bayern/kmk/chemie_ahr_2020.extracted.md
+source_language: de
 ---
 # KMK Bildungsstandards Allgemeine Hochschulreife Chemie 2020
 

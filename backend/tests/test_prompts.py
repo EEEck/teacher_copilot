@@ -117,8 +117,46 @@ def test_chemie_plan_skill_requires_progressive_trusted_source_grounding(wiki):
         runtime=PlanRuntime(),
     )
     active_skill = next(s for s in assembly["sections"] if s["name"] == "Active skill")
-    assert "Chemie Bayern planning skill" in active_skill["text"]
-    assert "read_trusted_source" in active_skill["text"]
+    assert "# Bavaria Chemistry - Gymnasium Grade 9 NTG" in active_skill["text"]
+    assert "search_trusted_sources" in active_skill["text"]
+
+
+def test_chemie_9_ntg_plan_loads_the_reviewable_production_procedure(wiki):
+    assembly = build_plan_chat_prompt_assembly(
+        wiki,
+        "chemie_9b_2026_27",
+        messages=[ChatMessage(role="user", content="Plan the next chemistry lesson.")],
+        current_plan="",
+        runtime=PlanRuntime(),
+    )
+
+    active_skill = next(s for s in assembly["sections"] if s["name"] == "Active skill")
+    assert "# Lesson Planning Production Procedure" in active_skill["text"]
+    assert "# Bavaria Chemistry - Gymnasium Grade 9 NTG" in active_skill["text"]
+    assert "# Lesson Differentiation Procedure" in active_skill["text"]
+
+
+def test_plan_chat_defers_artifact_shape_to_the_loaded_production_procedure():
+    system = PLAN_CHAT_SYSTEM
+
+    assert "Use this markdown structure" not in system
+    assert "loaded production procedure" in system
+    assert "English artifact" in system
+
+
+def test_plan_assembly_injects_the_compiled_subject_expert_once(wiki):
+    assembly = build_plan_chat_prompt_assembly(
+        wiki,
+        "chemie_9b_2026_27",
+        messages=[],
+        current_plan="",
+        runtime=None,
+    )
+
+    section_names = [section["name"] for section in assembly["sections"]]
+    assert "Active subject expert" in section_names
+    assert "Teaching Framework Profile - chemie_9b_2026_27" in assembly["instructions"]
+    assert "Chemistry Grade 9 NTG - key summary" not in assembly["instructions"]
 
 
 def test_executive_assistant_policy_defines_the_shared_product_contract():
@@ -191,10 +229,15 @@ def test_source_authority_policy_does_not_make_wiki_or_teacher_infallible():
 def test_active_class_context_labels_factual_authority(wiki):
     trace = wiki.build_active_class_core_context_trace("chemie_9b_2026_27")
     authorities = {section["authority"] for section in trace["sections"]}
+    subject_trace = wiki.build_active_subject_expert_context_trace(
+        "chemie_9b_2026_27", purpose="plan"
+    )
 
     assert "committed_wiki" in authorities
     assert "curated_advisory" in authorities
-    assert "curated_guidance" in authorities
+    assert "curated_guidance" in {
+        section["authority"] for section in subject_trace["sections"]
+    }
     assert "[authority=committed_wiki;" in trace["text"]
     assert "[authority=curated_advisory;" in trace["text"]
 

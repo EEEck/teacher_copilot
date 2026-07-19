@@ -10,6 +10,12 @@ grade: 8
 canonical_url: https://www.lehrplanplus.bayern.de/fachlehrplan/gymnasium%20/8/chemie
 retrieved_at: 2026-07-18
 version_label: current_snapshot
+source_format: pdf
+ingestion_method: manual_markdown
+review_status: source_imported
+artifact_path: raw/sources/bayern/lehrplanplus/chemie_8_ntg.pdf
+extracted_markdown_path: raw/sources/bayern/lehrplanplus/chemie_8_ntg.extracted.md
+source_language: de
 ---
 # LehrplanPLUS Chemie 8 NTG
 

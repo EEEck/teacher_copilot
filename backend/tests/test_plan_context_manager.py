@@ -596,7 +596,10 @@ def test_build_plan_context_slim_clamps_oversized_pages(wiki: WikiStore):
     budget = wiki_memory.memory_budget("planning_brief")
     # The injected planning-brief section is clamped, so the whole slice stays
     # bounded rather than dumping the oversized page.
-    assert len(slim) < budget + 6000
+    # The plan pack also includes the independently bounded active-subject
+    # expert (guide, compiled profile, and source TOC), so retain a total-pack
+    # bound rather than the legacy class-core-only allowance.
+    assert len(slim) < budget + 8000
     assert "trimmed to size budget" in slim
 
 
