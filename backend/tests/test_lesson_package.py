@@ -1,0 +1,151 @@
+from app.teacher_agent.lesson_package import (
+    AnticipatedStudentIdea,
+    ArtifactSection,
+    DocumentSection,
+    LearningGoal,
+    LessonArtifact,
+    LessonShared,
+    RepresentationChoice,
+    SourceRef,
+    validate_lesson_artifact,
+)
+from app.teacher_agent.models import PlanTurnOutput
+from app.teacher_agent.planning_state import PlanRuntime
+from app.teacher_agent.agents import AgentRunner
+
+
+def valid_artifact() -> LessonArtifact:
+    return LessonArtifact(
+        title="Why do sodium and chlorine form ions?",
+        shared=LessonShared(
+            subject="chemie",
+            grade=9,
+            branch="NTG",
+            artifact_language="en",
+            duration_minutes=45,
+            phenomenon_or_context="Salt formation from sodium and chlorine as a particle-model puzzle.",
+            central_question="How can electron transfer explain ion formation?",
+            big_idea="Electron transfer creates ions and helps explain salt formation.",
+            learning_goals=[
+                LearningGoal(
+                    statement="Explain ion formation with electron transfer.",
+                    knowledge="Valence electrons and ion charge.",
+                    practice="Read and draw a particle model.",
+                    meaning="Use the model to explain a familiar compound.",
+                )
+            ],
+            prerequisites=["Students can read a shortened periodic table."],
+            core_evidence_task="Use a before/after particle drawing to justify electron transfer.",
+            anticipated_student_ideas=[
+                AnticipatedStudentIdea(
+                    idea="Atoms exchange whole shells.",
+                    why_it_may_appear="Students may overgeneralize the shell diagram.",
+                    teacher_move="Compare only the valence-electron change in a paired diagram.",
+                )
+            ],
+            representations=[
+                RepresentationChoice(
+                    representation="particle drawing",
+                    purpose="Make electron transfer visible.",
+                    transition_to_or_from="Connect the drawing to ion symbols.",
+                )
+            ],
+            differentiation_invariants=["All students justify the same particle-model evidence."],
+            success_criteria=["I can identify electron donor and acceptor."],
+            look_fors=["Students distinguish charge from oxidation number."],
+            vocabulary=["ion", "electron transfer", "cation", "anion"],
+            safety_notes=[],
+            exit_ticket=["Draw and label the ions formed from Mg and O."],
+        ),
+        sections=[
+            ArtifactSection(
+                audience="teacher",
+                title="Teacher Lesson Plan",
+                sections=[DocumentSection(title="Lesson flow", items=["Opening: show the phenomenon."])],
+            ),
+            ArtifactSection(
+                audience="student",
+                title="Student Materials",
+                sections=[DocumentSection(title="Evidence task", items=["Complete the particle drawing."])],
+            ),
+            ArtifactSection(
+                audience="observation",
+                title="Observation and Update Capture",
+                sections=[DocumentSection(title="What worked", items=["Record the evidence."])],
+            ),
+        ],
+        consulted_sources=[
+            SourceRef(
+                source_id="by-lehrplanplus-chemie-9-ntg",
+                section_id="c9_atombau",
+            )
+        ],
+    )
+
+
+def test_valid_artifact_has_three_audiences_and_shared_quality_contract():
+    assert validate_lesson_artifact(valid_artifact()) == []
+
+
+def test_practical_artifact_requires_safety_notes():
+    artifact = valid_artifact()
+    artifact.shared.is_practical = True
+
+    assert validate_lesson_artifact(artifact) == [
+        "Practical lessons require at least one safety note."
+    ]
+
+
+def test_artifact_rejects_missing_observation_audience_and_unknown_source():
+    artifact = valid_artifact()
+    artifact.sections = artifact.sections[:2]
+
+    errors = validate_lesson_artifact(
+        artifact, allowed_source_ids={"by-lehrplanplus-chemie-8-ntg"}
+    )
+
+    assert "Artifact must contain exactly one teacher, student, and observation section." in errors
+    assert "Unknown trusted source: by-lehrplanplus-chemie-9-ntg." in errors
+
+
+def test_plan_turn_and_runtime_can_carry_the_structured_artifact():
+    artifact = valid_artifact()
+    turn = PlanTurnOutput(reply="Drafted.", plan_markdown="legacy", lesson_artifact=artifact)
+    runtime = PlanRuntime(lesson_artifact=artifact)
+
+    assert turn.lesson_artifact == artifact
+    assert runtime.lesson_artifact == artifact
+
+
+def test_plan_finalization_renders_a_valid_structured_artifact(wiki):
+    runner = AgentRunner.__new__(AgentRunner)
+    runner.wiki = wiki
+    artifact = valid_artifact()
+    runtime = PlanRuntime()
+
+    _, markdown, _ = runner._finalize_plan_turn(
+        PlanTurnOutput(reply="Drafted.", plan_markdown="legacy", lesson_artifact=artifact),
+        "legacy",
+        runtime,
+    )
+
+    assert markdown.startswith("# Lesson Package - Why do sodium and chlorine form ions?")
+    assert runtime.lesson_artifact == artifact
+    assert wiki.is_plan_ready(markdown) is True
+
+
+def test_plan_finalization_keeps_legacy_draft_when_package_is_invalid(wiki):
+    runner = AgentRunner.__new__(AgentRunner)
+    runner.wiki = wiki
+    artifact = valid_artifact()
+    artifact.shared.is_practical = True
+    runtime = PlanRuntime()
+
+    _, markdown, _ = runner._finalize_plan_turn(
+        PlanTurnOutput(reply="Drafted.", plan_markdown="legacy plan", lesson_artifact=artifact),
+        "existing draft",
+        runtime,
+    )
+
+    assert markdown == "legacy plan\n"
+    assert runtime.lesson_artifact is None

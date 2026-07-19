@@ -581,6 +581,7 @@ class PlanChatResponse(BaseModel):
     last_change_summary: str = ""
     session_state: Optional[dict] = None
     lesson_planning_state: Optional[dict] = None
+    lesson_artifact: Optional[dict] = None
     memory_candidates: list[dict] = Field(default_factory=list)
     executive_state: Optional[dict] = None
 

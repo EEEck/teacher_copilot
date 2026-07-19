@@ -75,6 +75,8 @@ from app.teacher_agent.planning_state import (
     merge_turn_into_runtime,
     planning_api_payload,
 )
+from app.teacher_agent.lesson_package import validate_lesson_artifact
+from app.teacher_agent.package_renderer import render_markdown_artifact
 from app.teacher_agent.tools import WikiToolContext
 from app.teacher_agent.stream_events import (
     SseError,
@@ -333,6 +335,7 @@ class AgentRunner:
             last_change_summary=payload["last_change_summary"],
             session_state=payload["session_state"],
             lesson_planning_state=payload["lesson_planning_state"],
+            lesson_artifact=payload["lesson_artifact"],
             memory_candidates=payload["memory_candidates"],
             executive_state=executive_api_payload(executive),
         )
@@ -480,9 +483,25 @@ class AgentRunner:
         if not isinstance(parsed, PlanTurnOutput):
             return None
         reply = parsed.reply
-        plan_md = _strip_plan_debug_sections(
-            parsed.plan_markdown.strip() or current_draft
-        )
+        artifact = parsed.lesson_artifact
+        if artifact is not None:
+            allowed_source_ids = {
+                source.source_id for source in self.wiki.load_trusted_sources().values()
+            }
+            errors = validate_lesson_artifact(
+                artifact, allowed_source_ids=allowed_source_ids
+            )
+            if not errors:
+                runtime.lesson_artifact = artifact
+                plan_md = render_markdown_artifact(artifact)
+            else:
+                plan_md = _strip_plan_debug_sections(
+                    parsed.plan_markdown.strip() or current_draft
+                )
+        else:
+            plan_md = _strip_plan_debug_sections(
+                parsed.plan_markdown.strip() or current_draft
+            )
         ready = self.wiki.is_plan_ready(plan_md)
         self._merge_plan_turn(
             runtime,

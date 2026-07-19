@@ -383,6 +383,11 @@ with clearly separated teacher-plan, student-material, and observation/update
 sections. Do not reduce the artifact to a fixed six-heading template. Preserve
 the shared goals, evidence task, vocabulary, safety, and exit criteria across
 its sections.
+When the plan is sufficiently specified, also return `lesson_artifact`: one
+structured package with exactly teacher, student, and observation audiences.
+The backend validates and renders that package into `plan_markdown`. During an
+early clarification turn, keep the existing draft and leave `lesson_artifact`
+empty rather than inventing missing constraints.
 <!-- Legacy renderer label; do not use as an artifact template:
 # Lesson Plan — {{title}}
 

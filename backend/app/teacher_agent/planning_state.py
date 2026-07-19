@@ -37,6 +37,7 @@ from app.teacher_agent.memory_capture import (
     merge_memory_candidates,
     render_memory_candidates as render_shared_memory_candidates,
 )
+from app.teacher_agent.lesson_package import LessonArtifact
 
 PLAN_PHASES = ("requirements_discussion", "lesson_refinement", "finalize")
 
@@ -155,6 +156,7 @@ class PlanRuntime:
     consulted_sources: list[dict[str, str]] = field(default_factory=list)
     raw_store: dict[str, str] = field(default_factory=dict)
     memory_candidates: list[MemoryCandidate] = field(default_factory=list)
+    lesson_artifact: LessonArtifact | None = None
     plan_version: int = 0
     last_change_summary: str = ""
     _raw_counter: int = 0
@@ -491,6 +493,9 @@ def planning_api_payload(rt: PlanRuntime) -> dict:
         "session_state": rt.session_state.model_dump(),
         "lesson_planning_state": rt.lesson_planning_state.model_dump(),
         "consulted_sources": list(rt.consulted_sources),
+        "lesson_artifact": rt.lesson_artifact.model_dump()
+        if rt.lesson_artifact
+        else None,
         "memory_candidates": [c.model_dump() for c in rt.memory_candidates],
     }
 

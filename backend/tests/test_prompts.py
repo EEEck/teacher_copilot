@@ -144,6 +144,11 @@ def test_plan_chat_defers_artifact_shape_to_the_loaded_production_procedure():
     assert "English artifact" in system
 
 
+def test_plan_chat_uses_structured_package_when_the_plan_is_complete():
+    assert "lesson_artifact" in PLAN_CHAT_SYSTEM
+    assert "teacher, student, and observation" in PLAN_CHAT_SYSTEM
+
+
 def test_plan_assembly_injects_the_compiled_subject_expert_once(wiki):
     assembly = build_plan_chat_prompt_assembly(
         wiki,

@@ -935,9 +935,20 @@ def empty_plan_template(store, lesson_date: Optional[str] = None) -> str:
 
 
 def is_plan_ready(store, plan_md: str) -> bool:
-    required = ("## Learning goals", "## Lesson flow", "## Warmup")
     text = plan_md.lower()
-    return all(h.lower() in text for h in required) and len(plan_md.strip()) > 200
+    legacy_required = ("## learning goals", "## lesson flow", "## warmup")
+    package_required = (
+        "# lesson package",
+        "## teacher lesson plan",
+        "## student materials",
+        "## observation and update capture",
+        "core evidence task:",
+        "### exit ticket",
+    )
+    return (
+        all(heading in text for heading in legacy_required)
+        or all(heading in text for heading in package_required)
+    ) and len(plan_md.strip()) > 200
 
 
 def load_index_context(

@@ -29,6 +29,7 @@ def test_plan_full_flow(client: TestClient):
     chat_body = chat.json()
     assert chat_body["reply"]
     assert chat_body["plan_markdown"]
+    assert "lesson_artifact" in chat_body
     assert chat_body["ready_to_save"] is True
 
     save = client.post(

@@ -14,6 +14,7 @@ from app.teacher_agent.memory_update_state import (
     MemoryStatePatch,
 )
 from app.teacher_agent.class_discussion_state import ClassDiscussionStatePatch
+from app.teacher_agent.lesson_package import LessonArtifact
 from app.teacher_agent.planning_state import (
     EvidenceBrief,
     LessonPlanningState,
@@ -66,6 +67,13 @@ class IngestTurnOutput(BaseModel):
 class PlanTurnOutput(BaseModel):
     reply: str = Field(description="Conversational reply to the teacher")
     plan_markdown: str = Field(description="Updated full lesson plan markdown")
+    lesson_artifact: LessonArtifact | None = Field(
+        default=None,
+        description=(
+            "Optional structured lesson package. When present, the backend validates "
+            "and renders it into plan_markdown."
+        ),
+    )
     last_change_summary: str = Field(
         default="", description="One-line summary of what changed in the plan this turn"
     )

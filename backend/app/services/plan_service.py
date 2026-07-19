@@ -133,6 +133,7 @@ class PlanService:
             last_change_summary=planning.get("last_change_summary", ""),
             session_state=planning.get("session_state"),
             lesson_planning_state=planning.get("lesson_planning_state"),
+            lesson_artifact=planning.get("lesson_artifact"),
             memory_candidates=planning.get("memory_candidates", []),
             executive_state=result.executive,
         )

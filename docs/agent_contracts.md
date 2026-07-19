@@ -274,20 +274,22 @@ Reads:
 
 Writes:
 
-- Only `plan_markdown` and the runtime state objects in the structured model
-  output (see Runtime Context Manager below).
+- `plan_markdown` plus bounded runtime state. When supplied, a validated
+  `lesson_artifact` is stored in `PlanRuntime` and deterministically rendered
+  into `plan_markdown`; it contains no raw source bodies.
 - No direct wiki writes.
 - Saving a plan is a separate explicit API action.
 
 Output migration:
 
-- The current six-section Markdown checklist is provisional compatibility
-  behavior, not the lesson-quality contract.
-- The target contract is one structured lesson artifact with shared fields and
+- The former six-section Markdown checklist is compatibility-only, not the
+  lesson-quality contract.
+- The active contract is one structured lesson artifact with shared fields and
   teacher, student, and observation/update sections, produced by the ported
   Anthropic planning/differentiation procedure and Bavaria Chemistry reference.
-- The implementation may preserve `plan_markdown` during migration, but the
-  Anthropic-derived artifact schema becomes the source of truth once enabled.
+- The backend accepts legacy Markdown-only turns while transitioning. For a
+  valid structured package, the Anthropic-derived artifact schema is the source
+  of truth and the backend renderer produces the compatible `plan_markdown`.
 
 Runtime context manager:
 
@@ -367,6 +369,10 @@ Output contract:
 
 - Return a conversational `reply`.
 - Return updated `plan_markdown`.
+- When the lesson is sufficiently specified, return `lesson_artifact` with
+  exactly one teacher, student, and observation audience section. The backend
+  validates it, renders the shared contract consistently, and exposes the
+  structured object in plan API/SSE runtime payloads.
 - Preserve manual edits from the current draft when possible.
 - `ready_to_save` is deterministic backend saveability, currently based on the
   markdown artifact passing structural checks. It is not inferred from assistant
