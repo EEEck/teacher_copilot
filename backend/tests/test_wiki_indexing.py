@@ -20,6 +20,9 @@ def test_rebuild_index_includes_sections(tmp_path: Path):
     assert "### Curriculum & trusted sources" in index
     assert "Curriculum profile" in index
     assert "Trusted source index" in index
+    assert "## Shared subject frameworks" in index
+    assert "Chemistry teaching frameworks" in index
+    assert "Teaching Framework Adjustments" in index
     assert "chemie_9b_2026_27" in index
 
 

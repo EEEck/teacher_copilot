@@ -6,7 +6,6 @@ import re
 
 TEACHER_PROFILE_TARGETS = {"user.md", "teacher_profile.md"}
 COPILOT_PROFILE_TARGETS = {"copilot.md", "copilot_profile.md"}
-TEACHING_FRAMEWORK_PROFILE_TARGET = "teaching_framework_profile.md"
 # class_state.md and taught_so_far.md were retired (mem_v3 PR2): the "current
 # unit / taught sequence" facts they held are deterministic projections of the
 # diary + timeline and now live only in the canonical rollups (course_state.md,
@@ -14,6 +13,7 @@ TEACHING_FRAMEWORK_PROFILE_TARGET = "teaching_framework_profile.md"
 COMPACT_TARGETS = {
     "planning_brief.md": "planning_brief",
     "teaching_patterns.md": "teaching_patterns",
+    "teaching_framework_adjustments.md": "teaching_framework_adjustments",
 }
 CANONICAL_REVIEW_TARGET = "canonical_wiki"
 TARGET_ALIASES = {
@@ -65,7 +65,6 @@ def is_supported_runtime_target(target: str) -> bool:
     return (
         normalized in TEACHER_PROFILE_TARGETS
         or normalized in COPILOT_PROFILE_TARGETS
-        or normalized == TEACHING_FRAMEWORK_PROFILE_TARGET
         or normalized in COMPACT_TARGETS
         or normalized == CANONICAL_REVIEW_TARGET
         or is_subject_guide_target(normalized)
@@ -137,8 +136,6 @@ def memory_channel_for_target(target: str) -> str:
     normalized = canonical_memory_target(target)
     if normalized in TEACHER_PROFILE_TARGETS or normalized in COPILOT_PROFILE_TARGETS:
         return "teacher_behavior"
-    if normalized == TEACHING_FRAMEWORK_PROFILE_TARGET:
-        return "class_teaching_framework"
     if normalized == "teaching_patterns.md":
         return "class_learning_pattern"
     if normalized == "planning_brief.md":

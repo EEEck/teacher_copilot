@@ -187,8 +187,8 @@ def test_plan_assembly_injects_the_compiled_subject_expert_once(wiki):
 
     section_names = [section["name"] for section in assembly["sections"]]
     assert "Active subject expert" in section_names
-    assert "Teaching Framework Profile - chemie_9b_2026_27" in assembly["instructions"]
-    assert "Chemistry Grade 9 NTG - key summary" not in assembly["instructions"]
+    assert "# Teaching Framework Adjustments" in assembly["instructions"]
+    assert "Chemistry Grade 9 NTG - key summary" in assembly["instructions"]
 
 
 def test_executive_assistant_policy_defines_the_shared_product_contract():

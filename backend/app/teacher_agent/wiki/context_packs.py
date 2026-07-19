@@ -268,11 +268,16 @@ _MEMORY_SECTION_LABELS: dict[str, str] = {
 
 
 def _active_memory_files(store, class_id: str) -> list[Path]:
-    """Return all compact class memory markdown files in stable order."""
+    """Return class-core memory, excluding subject-expert-only adjustments."""
     from app.teacher_agent.wiki import memory as _mem
 
     memory_root = store.memory_dir(class_id)
-    known = [path for path in store.memory_paths(class_id).values() if path.exists()]
+    subject_expert_only = {"teaching_framework_adjustments.md"}
+    known = [
+        path
+        for path in store.memory_paths(class_id).values()
+        if path.exists() and path.name not in subject_expert_only
+    ]
     known_names = {path.name for path in known}
     extras = []
     if memory_root.exists():
@@ -280,7 +285,7 @@ def _active_memory_files(store, class_id: str) -> list[Path]:
             path
             for path in sorted(memory_root.glob("*.md"))
             if path.name not in known_names
-            and path.name != "teaching_framework_profile.md"
+            and path.name not in subject_expert_only
         ]
     order = {
         filename: idx for idx, filename in enumerate(_mem.COMPACT_MEMORY_FILES.values())
@@ -378,9 +383,8 @@ def _subject_routing_context_trace(store, class_id: str) -> dict:
 def build_active_subject_expert_context_trace(store, class_id: str, *, purpose: str) -> dict:
     """Build the bounded subject layer for a workflow purpose.
 
-    The shared Grade summary is deliberately *not* injected.  The compiled
-    class profile is the sole effective Grade/branch guidance so teacher
-    adjustments cannot conflict with an independently injected base copy.
+    The effective profile is assembled in memory from the shared Grade summary
+    and the dedicated class adjustment page; no generated profile is persisted.
     """
     from app.teacher_agent.wiki import memory as _mem
 
@@ -388,7 +392,6 @@ def build_active_subject_expert_context_trace(store, class_id: str, *, purpose: 
     routing = _subject_routing_context_trace(store, class_id)
     class_config = store.get_class(class_id)
     subject_path = store.root / "wiki" / "subjects" / f"{class_config.subject}.md"
-    profile_path = store.framework_profile_path(class_id)
     sections = list(routing["sections"])
     parts = ["# Active subject expert", routing["text"]]
     full_pedagogy = normalized in {"plan", "differentiation"}
@@ -410,14 +413,23 @@ def build_active_subject_expert_context_trace(store, class_id: str, *, purpose: 
             parts.extend(["", f"## Subject guide: {class_config.subject}", subject_text])
 
     if full_pedagogy:
-        profile_text = store.read_text(profile_path).strip()
+        from app.teacher_agent.wiki.subject_frameworks import framework_for_class
+
+        framework = framework_for_class(store, class_id)
+        adjustments_path = store.memory_paths(class_id)["teaching_framework_adjustments"]
+        adjustments = store.read_text(adjustments_path).strip()
+        profile_text = "\n\n".join(
+            part for part in (framework.text.strip(), adjustments) if part
+        )
         if profile_text:
-            profile_text = _mem.clamp_memory_page("framework_profile", profile_text).rstrip()
+            profile_text = _mem.clamp_memory_page(
+                "effective_subject_framework", profile_text
+            ).rstrip()
             sections.append(
                 _trace_section(
                     name="Teaching framework profile",
                     function="build_active_subject_expert_context_trace",
-                    source=store.rel_wiki(profile_path),
+                    source=f"{framework.path} + {store.rel_wiki(adjustments_path)}",
                     text=profile_text,
                     authority="teacher_adjusted_class_profile",
                 )
@@ -428,7 +440,7 @@ def build_active_subject_expert_context_trace(store, class_id: str, *, purpose: 
                 _trace_section(
                     name="Teaching framework profile",
                     function="build_active_subject_expert_context_trace",
-                    source=store.rel_wiki(profile_path),
+                    source=f"{framework.path} + {store.rel_wiki(adjustments_path)}",
                     text="",
                     authority="teacher_adjusted_class_profile",
                     included=False,

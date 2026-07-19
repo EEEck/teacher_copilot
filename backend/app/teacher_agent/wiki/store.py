@@ -105,15 +105,6 @@ class WikiStore:
     def select_framework(self, subject, grade, branch):
         return subject_frameworks.select_framework(self, subject, grade, branch)
 
-    def framework_profile_path(self, class_id):
-        return subject_frameworks.framework_profile_path(self, class_id)
-
-    def read_framework_profile(self, class_id):
-        return self.read_text(self.framework_profile_path(class_id))
-
-    def regenerate_framework_profile(self, class_id):
-        return subject_frameworks.regenerate_class_framework_profile(self, class_id)
-
     def search_subject_guidance(self, class_id, query, max_results=8):
         return subject_frameworks.search_subject_guidance(
             self, class_id, query, max_results

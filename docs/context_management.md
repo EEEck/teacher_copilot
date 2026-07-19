@@ -111,15 +111,11 @@ It never injects the Grade 9 summary separately from the class profile.
 
 ### Inherited subject expert
 
-The class-level subject expert is derived, not copied into an independently
-editable memory page. At class setup, `subject=chemie`, `grade=9`, and
-`branch=NTG` select the shared framework; the compiler records `inherits`,
-`source_index`, base revision/hash, `authority=teacher_adjusted_class_profile`,
-and `generated_at` in
-`wiki/classes/chemie_9b_2026_27/memory/teaching_framework_profile.md`.
-Teacher-approved adjustments are reapplied when the shared Grade 9 library is
-updated. Prompts inject the compiled profile as the effective pedagogical
-contract; detailed framework pages remain progressive tool reads.
+The class-level subject expert is derived in memory, not copied into an
+editable profile. At class setup, `subject=chemie`, `grade=9`, and `branch=NTG`
+select the immutable shared framework; prompt assembly combines it with
+`memory/teaching_framework_adjustments.md`. Detailed framework pages remain
+progressive tool reads.
 
 The purpose-specific subject addition is:
 
@@ -127,7 +123,7 @@ The purpose-specific subject addition is:
 |---|---|---|
 | Plan chat | Teacher Layer + Active Class Core + runtime | `chemie.md` + compiled Grade 9 NTG profile + source TOC; detailed framework/source reads on demand |
 | Plan opening | Slim Teacher/Class routing | Subject/grade/branch routing and compact `chemie.md`; profile after planning begins |
-| Differentiation | Same as Plan chat | Same compiled profile; detailed differentiation/representation pages on demand |
+| Differentiation | Same as Plan chat | Shared Grade 9 framework + class adjustment page; detailed differentiation/representation pages on demand |
 | Discuss | Teacher Layer + Active Class Core + discussion state | Add `chemie.md` and profile when the question is pedagogical; otherwise keep class-focused |
 | Update Memory | Teacher Layer + Active Class Core + MemoryRuntime/task context | Subject identity/profile identity only by default; no detailed teaching framework |
 | Class brief | Teacher Layer + Active Class Core | No framework unless the requested brief requires subject interpretation |
@@ -297,18 +293,26 @@ PLAN_HISTORY_TURNS=10
 
 ## Debugging Context Behavior
 
-Use the plan trace endpoint to inspect what the backend actually injected and
-remembered:
+Use the gated workflow trace endpoints to inspect what the backend actually
+injected and remembered:
 
 ```text
 GET /api/classes/{class_id}/plan/sessions/{session_id}/trace
+GET /api/classes/{class_id}/discussion/sessions/{session_id}/trace
+GET /api/classes/{class_id}/ingest/sessions/{session_id}/trace
 ```
 
-The response includes the teacher layer, active class core, compatibility
+Plan traces include the teacher layer, active class core, compatibility
 `class_slice`, rendered `SessionState` / `LessonPlanningState`, current
 `lessonplan.md`, evidence briefs, streamed tool/final events, raw evidence refs,
 prompt assembly, and the latest runtime payload. Treat this as local developer
 diagnostics; it may contain teacher content and raw tool output.
+
+Discussion and Update Memory traces use the same gate and include their own
+runtime state, prompt assembly, events, tool evidence, and candidate/update
+state. Set `AGENT_TRACE_ENABLED=true` only for controlled development or beta
+diagnosis. Full prompt context belongs in these request-local trace bundles,
+never in general application logs or teacher-facing replies.
 
 `prompt_assembly` is the preferred debug view when asking "what exactly got fed
 to the model?" It breaks the prompt into:

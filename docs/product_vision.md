@@ -98,10 +98,10 @@ KlassenPilot uses a tiered memory model.
 
 - **Inherited subject expert**
   Shared reviewed subject/grade frameworks remain immutable library knowledge.
-  Class setup derives `teaching_framework_profile.md` from the selected
-  subject, grade, and branch, then reapplies only teacher-approved class
-  adjustments. The profile is regenerated when the shared base changes; it is
-  not an independently editable copy of the Grade 9 summary.
+  Prompt assembly selects the subject, grade, and branch base and combines it
+  in memory with `teaching_framework_adjustments.md`. Only the dedicated
+  adjustment page is teacher-editable through approval; no generated profile
+  file or mutable copy of the Grade 9 summary exists.
 
 - **Workflow context packs**
   Read-only packs for base class chat, lesson planning, memory update, review,

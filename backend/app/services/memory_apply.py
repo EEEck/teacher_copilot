@@ -11,7 +11,6 @@ import re
 from typing import Protocol
 
 from app.teacher_agent.memory_targets import (
-    TEACHING_FRAMEWORK_PROFILE_TARGET,
     canonical_memory_target,
     compact_key_for_target,
     is_student_page_target,
@@ -178,10 +177,6 @@ def _apply_add_item(wiki, class_id: str, item, subject_target: str):
             return wiki.add_user_profile_conclusion(section, content), "", ""
         if target == "copilot_profile.md":
             return wiki.add_profile_conclusion(class_id, section, content), "", ""
-        if target == TEACHING_FRAMEWORK_PROFILE_TARGET:
-            from app.teacher_agent.wiki.subject_frameworks import add_teacher_framework_adjustment
-
-            return add_teacher_framework_adjustment(wiki, class_id, content), "", ""
         if compact_key:
             return (
                 wiki.add_compact_memory_conclusion(

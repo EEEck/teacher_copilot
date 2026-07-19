@@ -44,11 +44,9 @@ like "next", "remember", or "for this lesson".
 - `memory/copilot_profile.md` / `copilot.md`: class-scoped copilot working
   agreement: how the agent should plan or behave for this class, including
   repeated teacher corrections and avoid-rules.
-- `memory/teaching_framework_profile.md`: derived class subject-expert profile
-  that inherits the selected subject guide and grade framework. It stores only
-  teacher-approved class adjustments plus inheritance/provenance metadata; it
-  is regenerated from the shared base and is not an independent copy of the
-  Grade 9 summary.
+- `memory/teaching_framework_adjustments.md`: bounded teacher-approved class
+  replacement/refinement rules. Prompt assembly combines it with the immutable
+  shared Grade 9 framework; it never copies the Grade 9 summary.
 - `memory/session_summaries.md`: sparse compact summaries of prior workflow
   sessions when they help continuity; not a transcript store.
 - `lessons/{date}/lesson_results.md`: canonical approved record of what
@@ -174,8 +172,9 @@ Loaded where today:
 - Memory compaction source packet may include the subject guide.
 
 Target loading keeps this page as the compact subject front door. Planning and
-differentiation add the derived `teaching_framework_profile.md` as the active
-subject expert; they do not inject the Grade 9 base summary separately.
+differentiation compose the active subject expert from the shared Grade 9 base
+and `teaching_framework_adjustments.md`; the adjustment page is not duplicated
+in Active Class Core.
 
 Design implication:
 
@@ -198,23 +197,18 @@ Do not update from:
 - normal class-specific lesson chats without teacher approval.
 - compact class-memory refresh (`/memory/refresh` or `class_memory_proposal`).
 
-### 3. Inherited Class Teaching Framework Profile
+### 3. Class Teaching Framework Adjustments
 
-Path: `backend/teacher_wiki/wiki/classes/{class_id}/memory/teaching_framework_profile.md`
+Path: `backend/teacher_wiki/wiki/classes/{class_id}/memory/teaching_framework_adjustments.md`
 
 Scope: one class's effective subject/grade/branch teaching contract.
 
-This is a derived profile, not a copied Grade 9 summary. Its frontmatter records
-the shared pages it inherits, the framework index, base revision/hash,
-`authority: teacher_adjusted_class_profile`, and generation time. Its body has
-effective principles, teacher-approved adjustments, and class-specific cautions.
+This ordinary bounded class-memory page contains only approved adjustments and
+cautions, not a copied framework.
 
-At class setup, the compiler selects the shared framework from the class
-curriculum profile and reapplies only approved adjustments. A shared framework
-revision can therefore regenerate the profile without erasing local teacher
-preferences. Direct writes to this profile or to shared framework pages are not
-allowed from planning chat; changes use the existing proposal and teacher
-approval flow.
+At prompt assembly, the system selects the shared framework from the class
+curriculum profile and combines it with this page in memory. Planning chat
+cannot write either page; changes use the existing proposal and approval flow.
 
 Loaded where:
 

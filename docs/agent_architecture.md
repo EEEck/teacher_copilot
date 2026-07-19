@@ -215,11 +215,9 @@ The product uses tiered class memory.
    - `teaching_patterns.md` (class + subject): how this class learns and which
      approaches work/fail (the class learning profile).
    - `copilot.md` (`copilot_profile.md`, class): copilot working agreement only.
-   - `teaching_framework_profile.md` (class + subject/grade, DERIVED): the
-     compiled effective Chemistry teaching contract for this class. It
-     inherits the shared subject guide and Grade 9 framework, and contains
-     only teacher-approved class adjustments; it is regenerated from the base
-     library rather than edited as an independent copy.
+   - `teaching_framework_adjustments.md` (class + subject/grade): bounded
+     teacher-approved replacement/refinement rules. Prompt assembly combines it
+     with the immutable shared Grade 9 framework in memory.
    Durable writes go through teacher-approved memory endpoints
    (refresh/propose/apply), never silently from chat.
    Lesson-plan save surfaces the current runtime state and accumulated memory

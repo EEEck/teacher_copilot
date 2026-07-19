@@ -31,5 +31,6 @@ Read the linked source section before making curriculum claims. Source text is e
 ## Teaching framework library
 - Shared framework index: `wiki/subjects/chemie/teaching_frameworks/index.md`
 - Active Grade 9 NTG summary: `wiki/subjects/chemie/teaching_frameworks/09/key_summary.md`
-- A class receives a derived `memory/teaching_framework_profile.md`; only that
-  profile may contain teacher-approved class adjustments.
+- The runtime expert combines the selected shared summary with the class's
+  `memory/teaching_framework_adjustments.md`. The adjustment page may contain
+  teacher-approved class changes; shared framework pages remain immutable.

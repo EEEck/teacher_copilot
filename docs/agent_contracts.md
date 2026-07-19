@@ -262,9 +262,9 @@ Reads:
   `wiki/classes/{class_id}/memory/*.md`.
 - Purpose-selected Active Subject Expert from
   `build_active_subject_expert_context_trace(class_id, purpose)` for planning:
-  compact `wiki/subjects/chemie.md`, the compiled inherited class profile, and
-  the bounded curriculum/source TOC. The Grade 9 base summary is not injected
-  separately from the compiled profile.
+  compact `wiki/subjects/chemie.md`, the shared Grade 9 framework combined in
+  memory with `teaching_framework_adjustments.md`, and the bounded
+  curriculum/source TOC. The adjustment page never copies the Grade 9 summary.
 - Bounded planning orientation: recent taught sequence, misconception
   priorities, open loops, and planning brief. The planner uses
   `list_lessons`, `read_lesson`, and `read_lesson_range` for deeper history;
@@ -874,10 +874,13 @@ Purpose:
 - Make agent behavior reviewable during development without guessing what was
   loaded or remembered.
 
-Plan trace endpoint:
+Workflow trace endpoints (enabled only by `AGENT_TRACE_ENABLED`):
 
 - `GET /classes/{id}/plan/sessions/{session_id}/trace` returns a read-only
   debug bundle for the active planning session.
+- `GET /classes/{id}/discussion/sessions/{session_id}/trace` and
+  `GET /classes/{id}/ingest/sessions/{session_id}/trace` provide equivalent
+  request-local diagnostics for Discuss and Update Memory.
 - The bundle includes prompt stack sections, current `lessonplan.md`, compact
   runtime state, recent messages, captured streamed events, evidence briefs, and
   raw evidence refs.
@@ -894,6 +897,8 @@ Plan trace endpoint:
   session summaries.
 - Trace output may contain teacher/session content and raw tool evidence; treat
   it as local developer data, not durable product memory.
+- Full prompt assembly is available only through these gated trace bundles. It
+  must not be copied to general logs or exposed in a teacher-facing response.
 
 ## Workflow Spec Contract
 

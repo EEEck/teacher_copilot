@@ -87,6 +87,25 @@ def rebuild_index(store, class_id: Optional[str] = None) -> None:
         lines.append(f"- **{cls.label}** (`{cls.id}`) — subject: {cls.subject}")
     lines.append("")
 
+    subject_root = store.root / "wiki" / "subjects"
+    framework_links = []
+    if subject_root.exists():
+        for guide_path in sorted(subject_root.glob("*.md")):
+            framework_index = (
+                subject_root / guide_path.stem / "teaching_frameworks" / "index.md"
+            )
+            if framework_index.exists():
+                label = (
+                    parsing.extract_title(store.read_text(framework_index))
+                    or f"{guide_path.stem.title()} teaching frameworks"
+                )
+                framework_links.append((label, framework_index))
+    if framework_links:
+        lines.extend(["## Shared subject frameworks", ""])
+        for label, framework_index in framework_links:
+            lines.append(f"- [{label}]({store.rel_wiki(framework_index)})")
+        lines.append("")
+
     for cls in classes:
         cid = cls.id
         timeline = store.get_timeline(cid)

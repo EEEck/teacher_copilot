@@ -70,7 +70,7 @@ def test_active_class_core_includes_class_memory_but_not_the_subject_layer(tmp_p
     expected_memory_sources = {
         wiki.rel_wiki(path)
         for path in (tmp_path / "wiki" / "classes" / CLASS_ID / "memory").glob("*.md")
-        if path.name != "teaching_framework_profile.md"
+        if path.name != "teaching_framework_adjustments.md"
     }
 
     assert expected_memory_sources <= included_sources

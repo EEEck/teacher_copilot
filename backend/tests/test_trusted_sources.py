@@ -57,3 +57,25 @@ def test_source_record_links_the_immutable_pdf_and_extracted_markdown(wiki):
     )
     assert (wiki.root / source.artifact_path).is_file()
     assert (wiki.root / source.extracted_markdown_path).is_file()
+
+
+def test_every_imported_pdf_source_has_stable_metadata_sections_and_artifacts(wiki):
+    sources = load_trusted_sources(wiki.root)
+    imported_pdf_sources = [
+        source for source in sources.values() if source.source_format == "pdf"
+    ]
+
+    assert {source.source_id for source in imported_pdf_sources} >= {
+        "by-lehrplanplus-chemie-8-ntg",
+        "by-lehrplanplus-chemie-9-ntg",
+        "kmk-ahr-chemie-2020",
+    }
+    for source in imported_pdf_sources:
+        assert source.ingestion_method == "manual_markdown"
+        assert source.review_status == "source_imported"
+        assert source.artifact_path.endswith(".pdf")
+        assert source.extracted_markdown_path.endswith(".extracted.md")
+        assert (wiki.root / source.artifact_path).is_file()
+        assert (wiki.root / source.extracted_markdown_path).is_file()
+        assert source.sections
+        assert all(section.id and section.title for section in source.sections)

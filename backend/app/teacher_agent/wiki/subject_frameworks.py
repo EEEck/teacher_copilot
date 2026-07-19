@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -95,79 +93,6 @@ def select_framework(store, subject: str, grade: int, branch: str | None) -> Fra
     )
 
 
-def _effective_principles(text: str) -> str:
-    marker = "## Effective principles"
-    if marker not in text:
-        return text.strip()
-    after = text.split(marker, 1)[1].lstrip("\n")
-    next_heading = after.find("\n## ")
-    return (after if next_heading < 0 else after[:next_heading]).strip()
-
-
-def compose_class_framework_profile(
-    store,
-    *,
-    class_id: str,
-    framework: FrameworkSummary,
-    teacher_adjustments: list[str],
-    class_cautions: list[str],
-) -> str:
-    """Compile inherited shared guidance and approved class adjustments."""
-    base_revision = hashlib.sha256(framework.text.encode("utf-8")).hexdigest()[:16]
-    generated_at = datetime.now(timezone.utc).isoformat()
-    adjustments = teacher_adjustments or ["- None approved yet."]
-    cautions = class_cautions or ["- None recorded yet."]
-
-    def render_list(values: list[str]) -> str:
-        return "\n".join(
-            item if item.startswith("-") else f"- {item}" for item in values
-        )
-
-    return "\n".join(
-        [
-            "---",
-            f"class_id: {class_id}",
-            "inherits:",
-            f"  - wiki/subjects/{framework.subject}.md",
-            f"  - {framework.path}",
-            f"source_index: wiki/subjects/{framework.subject}/teaching_frameworks/index.md",
-            f"base_revision: {base_revision}",
-            "authority: teacher_adjusted_class_profile",
-            f"generated_at: {generated_at}",
-            "---",
-            "",
-            f"# Teaching Framework Profile - {class_id}",
-            "",
-            "## Effective principles",
-            _effective_principles(framework.text),
-            "",
-            "## Teacher-approved adjustments",
-            render_list(adjustments),
-            "",
-            "## Class-specific cautions",
-            render_list(cautions),
-            "",
-        ]
-    )
-
-
-def framework_profile_path(store, class_id: str) -> Path:
-    """Return the class-scoped derived profile path (never a shared page)."""
-    return store.memory_dir(class_id) / "teaching_framework_profile.md"
-
-
-def _section_bullets(text: str, heading: str) -> list[str]:
-    pattern = rf"^##\s+{re.escape(heading)}\s*$\n(.*?)(?=^##\s+|\Z)"
-    match = re.search(pattern, text or "", flags=re.MULTILINE | re.DOTALL)
-    if not match:
-        return []
-    return [
-        line[2:].strip()
-        for line in match.group(1).splitlines()
-        if line.startswith("- ") and line[2:].strip()
-    ]
-
-
 def framework_for_class(store, class_id: str) -> FrameworkSummary:
     """Select one shared framework from the class's declared curriculum route."""
     class_config = store.get_class(class_id)
@@ -184,43 +109,6 @@ def framework_for_class(store, class_id: str) -> FrameworkSummary:
     except (TypeError, ValueError) as exc:
         raise ValueError(f"Class {class_id} has no usable curriculum grade.") from exc
     return select_framework(store, configured_subject, grade, curriculum.branch)
-
-
-def regenerate_class_framework_profile(store, class_id: str) -> str:
-    """Recompile shared guidance while retaining only the approved local blocks.
-
-    This is a class-setup / approved-apply operation. Planning itself remains
-    read-only and must only consume the already materialized profile.
-    """
-    path = framework_profile_path(store, class_id)
-    existing = store.read_text(path)
-    rendered = compose_class_framework_profile(
-        store,
-        class_id=class_id,
-        framework=framework_for_class(store, class_id),
-        teacher_adjustments=_section_bullets(existing, "Teacher-approved adjustments"),
-        class_cautions=_section_bullets(existing, "Class-specific cautions"),
-    )
-    store.write_text(path, rendered)
-    return rendered
-
-
-def add_teacher_framework_adjustment(store, class_id: str, content: str) -> str:
-    """Apply one teacher-approved class adjustment, then regenerate the profile."""
-    path = framework_profile_path(store, class_id)
-    existing = store.read_text(path)
-    adjustments = _section_bullets(existing, "Teacher-approved adjustments")
-    if content not in adjustments:
-        adjustments.append(content)
-    rendered = compose_class_framework_profile(
-        store,
-        class_id=class_id,
-        framework=framework_for_class(store, class_id),
-        teacher_adjustments=adjustments,
-        class_cautions=_section_bullets(existing, "Class-specific cautions"),
-    )
-    store.write_text(path, rendered)
-    return store.rel_wiki(path)
 
 
 def _active_framework_directory(store, class_id: str) -> tuple[Path, FrameworkSummary]:

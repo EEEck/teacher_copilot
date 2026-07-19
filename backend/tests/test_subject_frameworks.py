@@ -1,5 +1,5 @@
 from app.teacher_agent.wiki.subject_frameworks import (
-    compose_class_framework_profile,
+    framework_for_class,
     load_framework_index,
     read_subject_guidance,
     search_subject_guidance,
@@ -19,21 +19,11 @@ def test_selects_the_grade_9_ntg_framework_from_the_shared_library(wiki):
     assert "by-lehrplanplus-chemie-9-ntg" in framework.source_refs
 
 
-def test_compiled_class_profile_inherits_base_and_keeps_only_approved_adjustments(wiki):
-    framework = select_framework(wiki, "chemie", 9, "NTG")
-    profile = compose_class_framework_profile(
-        wiki,
-        class_id="chemie_9b_2026_27",
-        framework=framework,
-        teacher_adjustments=["Use more particle-model drawings before equations."],
-        class_cautions=["Contrast ion charge with oxidation number explicitly."],
-    )
+def test_class_route_selects_shared_framework_without_class_profile_generation(wiki):
+    framework = framework_for_class(wiki, "chemie_9b_2026_27")
 
-    assert "authority: teacher_adjusted_class_profile" in profile
-    assert "wiki/subjects/chemie.md" in profile
-    assert "teaching_frameworks/09/key_summary.md" in profile
-    assert "Use more particle-model drawings before equations." in profile
-    assert "Contrast ion charge with oxidation number explicitly." in profile
+    assert framework.path.endswith("teaching_frameworks/09/key_summary.md")
+    assert not hasattr(wiki, "regenerate_framework_profile")
 
 
 def test_subject_guidance_search_stays_in_active_grade_branch_and_keeps_source_refs(wiki):
@@ -68,3 +58,16 @@ def test_subject_guidance_read_rejects_other_grade_and_path_traversal(wiki):
             pass
         else:
             raise AssertionError(f"Expected {forbidden} to be rejected")
+
+
+def test_framework_index_is_navigation_only_and_source_refs_resolve(wiki):
+    index_path = (
+        wiki.root / "wiki" / "subjects" / "chemie" / "teaching_frameworks" / "index.md"
+    )
+    index = wiki.read_text(index_path)
+    source_ids = set(wiki.load_trusted_sources())
+
+    assert "Chemistry Grade 9 NTG - key summary" not in index
+    assert "by-lehrplanplus-chemie-9-ntg" in index
+    for framework in load_framework_index(wiki, "chemie").entries:
+        assert set(framework.source_refs) <= source_ids

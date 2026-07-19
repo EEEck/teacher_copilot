@@ -2,8 +2,12 @@ ID,Bucket,Criterion,What pass requires,Notes,Conditional
 P-DIFF-1,P,Shared core,All routes retain the same chemical question context and evidence task.,Access may vary but claim does not,
 P-DIFF-2,P,Scaffold quality,Supports access without revealing the answer.,Use vocabulary representation prompts or worked structure,
 P-DIFF-3,P,Scaffold release,Each substantial scaffold has a fade or release point.,Avoid permanent supports,when scaffolds are offered
+P-DIFF-4,P,Adjustment authority,Uses teacher-approved class adjustments as local guidance and keeps the immutable curriculum/framework separate.,Do not portray preferences as standards,
 R-DIFF-1,R,Maintained demand,Explains how supports preserve scientific reasoning.,Do not lower the target,
 R-DIFF-2,R,Flexible grouping,Groups are based on current evidence and can change.,No fixed ability labels,when groups are offered
-O-DIFF-1,O,Student-facing language,Student materials use neutral clear German and omit teacher diagnostics.,Separate teacher notes from student tasks,when student material is drafted
+R-DIFF-3,R,Common evidence task,All access routes lead to the same observable evidence product.,Do not substitute easier scientific claims,
+O-DIFF-1,O,Student-facing language,Student materials use neutral clear English and omit teacher diagnostics.,Separate teacher notes from student tasks; German source terms may remain when needed,when student material is drafted
 O-DIFF-2,O,Task alignment,Teacher actions student actions and checks align to the shared target.,Keep task runnable,
+O-DIFF-3,O,Representation access,Varies representation language grouping or prompt support while preserving the question and exit evidence.,Use fading scaffolds,
 M-DIFF-1,M,No false differentiation,Does not create superficially different worksheets with changed objectives.,Use same core evidence,
+M-DIFF-2,M,Grounding without dumping,Uses source-read provenance when curriculum claims require it and does not paste source bodies into differentiated materials.,Use trace/debug for full context,

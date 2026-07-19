@@ -561,7 +561,7 @@ def build_plan_chat_prompt_assembly(
             function="wiki.build_active_subject_expert_context_trace",
             source=(
                 f"wiki/subjects/{class_config.subject}.md + "
-                f"wiki/classes/{class_id}/memory/teaching_framework_profile.md + source TOC"
+                f"shared grade framework + teaching_framework_adjustments.md + source TOC"
             ),
             text=subject_trace["text"],
         ),

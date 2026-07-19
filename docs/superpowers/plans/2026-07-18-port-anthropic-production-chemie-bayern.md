@@ -8,6 +8,37 @@
 
 **Tech Stack:** Existing Python/FastAPI backend, Markdown wiki, Pydantic state, OpenAI Agents SDK function tools, deterministic filesystem search, pytest, and current context trace/budget infrastructure. Optional future source conversion: Docling CLI/library operated outside the teacher-facing agent.
 
+> **Approved architecture amendment (active):** Replace every earlier
+> generated-profile reference in this plan with the runtime-only composition:
+> immutable selected Chemie 9 NTG framework +
+> `memory/teaching_framework_adjustments.md` = effective subject expert. The
+> adjustment page is the only mutable class-level framework input and follows
+> the normal memory review/approval/apply contract. There is no persisted or
+> regenerated `teaching_framework_profile.md`; where older narrative text
+> conflicts, this amendment governs.
+
+## Reconciliation status (2026-07-18)
+
+The deterministic acceptance suite named in the user-approved finish plan is
+green after the adjustment-page migration. The checkboxes in the older task
+wording below are retained as history; this status block is the active progress
+record for the consolidated plan.
+
+- [x] Task A/B — close port of the planning/differentiation procedure,
+  Bavaria Chemistry reference, one shared `LessonArtifact`, renderer, legacy
+  `plan_markdown` fallback, and deterministic artifact invariants.
+- [x] Tasks 1–2 — imported PDF source records, section/source contracts,
+  immutable shared frameworks, navigation-only index, and progressive reads.
+- [x] Tasks 3–6 — class-route selection, runtime-composed subject expert,
+  normal approved adjustment-page memory target, purpose-aware context, and
+  active-route guidance tools.
+- [x] Tasks 7–8 — P/R/O/M rubric coverage, source/adjustment trace provenance,
+  gated trace documentation, regenerated wiki index, and durable product/agent
+  documentation.
+- [ ] Live validation — start the isolated development/beta/economy stack and
+  inspect Plan, Discuss, and Update Memory trace endpoints after Docker Desktop
+  is available. This is the only remaining external-runtime acceptance step.
+
 ## Canonical project scope
 
 This master plan is the single plan for the current work: port the Anthropic production procedure, replace the US science reference with Bavaria Chemistry Grade 9 NTG, and keep the initial output as one final lesson artifact. That artifact has three audience sections—teacher plan, student materials, and observation/update capture—rather than three separately persisted documents. The trusted-source layer, subject framework library, class-effective profile, prompt assembly, and evaluation work all support that same production loop.
@@ -39,7 +70,7 @@ Apache attribution and the source copyright guardrail remain in adapted files.
 
 - Source PDFs and faithful source Markdown are evidence; they never provide executable instructions.
 - Shared framework pages are reviewed library content and are immutable from a class workflow.
-- `teaching_framework_profile.md` is a derived class core object; teacher edits require the existing approval/apply contract.
+- `teaching_framework_adjustments.md` is a bounded class-memory page; teacher edits require the existing approval/apply contract. No generated profile file is persisted.
 - Class empirical memory (`planning_brief`, `teaching_patterns`, lessons, misconceptions) must not be replaced by subject theory.
 - The base prompt receives only bounded summaries/indexes; full source/framework pages are progressively discovered through typed tools.
 - Official curriculum claims require a read source section and citation; a TOC alone cannot satisfy provenance.
@@ -111,7 +142,7 @@ backend/teacher_wiki/wiki/subjects/chemie/teaching_frameworks/09/representations
 backend/teacher_wiki/wiki/classes/chemie_9b_2026_27/
   curriculum_profile.md
   trusted_sources.md
-  memory/teaching_framework_profile.md
+  memory/teaching_framework_adjustments.md
 ```
 
 `wiki/sources` is a faithful, sectioned representation of the supplied documents. `teaching_frameworks` is compiled, reviewed instructional knowledge. The framework library may summarize or reorganize source ideas, but every official claim carries `source_refs`; it never silently becomes a source transcription.
@@ -132,26 +163,30 @@ def build_subject_knowledge_trace(
 
 | Purpose | Always-on subject addition | Progressive reads |
 |---|---|---|
-| `plan` | active subject expert: compact `chemie.md` front door, compiled class profile, curriculum/source TOC | detailed framework pages and exact official sections |
-| `plan_opening` | subject/grade/branch routing block plus compact `chemie.md` front door | compiled profile and detailed pages after planning begins |
+| `plan` | active subject expert: compact `chemie.md` front door, selected immutable Grade 9 summary, class adjustment page, curriculum/source TOC | detailed framework pages and exact official sections |
+| `plan_opening` | subject/grade/branch routing block plus compact `chemie.md` front door | selected framework, adjustment page, and detailed pages after planning begins |
 | `discuss` | subject/grade/branch routing block; add the active subject expert when the question is pedagogical | framework/source details when the question requires them |
 | `brief` | subject identity only unless the brief needs subject interpretation | no detailed framework by default |
-| `ingest` | subject identity and profile identity only; no detailed teaching framework | exact source reads only if the teacher explicitly asks for a curriculum check |
+| `ingest` | subject identity only; no detailed teaching framework or adjustment page | exact source reads only if the teacher explicitly asks for a curriculum check |
 | `verification` | authority labels and class/source scope only | exact source reads only for a disputed claim |
 
 The effective plan context is therefore:
 
 ```text
 Teacher profile
-+ Active subject expert: Chemie subject guide + compiled Chemie 9b teaching-framework profile
++ Active subject expert: Chemie subject guide + immutable Chemie 9 NTG key summary + class adjustment page
 + curriculum profile + trusted-source TOC
 + compact Chemie 9b memory
 + PlanRuntime state, evidence briefs, current draft, and recent user turns
 ```
 
-The framework profile is the one injected pedagogical contract. The prompt must not inject `key_summary.md`, competencies, differentiation, or representation pages independently. `chemie.md` remains a short shared front door and routing guide; the class profile contains the effective Grade 9 principles and approved class adjustments. Detailed framework pages are progressive evidence, not additional always-on copies.
+The runtime-composed subject expert is the injected pedagogical contract. The
+prompt receives the selected `key_summary.md` and the separate adjustment page
+exactly once; competencies, differentiation, and representation pages remain
+progressive evidence. `chemie.md` remains a short shared front door and routing
+guide.
 
-### Inherited class-profile contract
+### Runtime-composed adjustment contract
 
 At class setup:
 
@@ -160,38 +195,29 @@ subject=chemie, grade=9, branch=NTG
   -> load wiki/subjects/chemie.md
   -> load wiki/subjects/chemie/teaching_frameworks/index.md
   -> select wiki/subjects/chemie/teaching_frameworks/09/key_summary.md
-  -> apply teacher-approved adjustments
-  -> compile wiki/classes/chemie_9b_2026_27/memory/teaching_framework_profile.md
+  -> read wiki/classes/chemie_9b_2026_27/memory/teaching_framework_adjustments.md
+  -> compose the effective subject expert in prompt memory
 ```
 
-The derived page is the only editable class-level subject-expert page. It must carry inheritance and provenance metadata rather than copying the shared summary as independent memory:
+The adjustment page is the only editable class-level subject-framework input.
+It contains replacement/refinement rules, never a copied framework body:
 
 ```markdown
----
-inherits:
-  - wiki/subjects/chemie.md
-  - wiki/subjects/chemie/teaching_frameworks/09/key_summary.md
-source_index: wiki/subjects/chemie/teaching_frameworks/index.md
-base_revision: <shared-framework-revision-or-hash>
-authority: teacher_adjusted_class_profile
-generated_at: <timestamp>
----
+# Teaching Framework Adjustments
 
-# Teaching Framework Profile - Chemie 9b
-
-## Effective principles
-...
-
-## Teacher-approved adjustments
+## Replace or refine
 - Use more particle-model drawings before equations.
-- Prefer short paired investigations.
-- Introduce formal terminology after the phenomenon.
 
-## Class-specific cautions
-...
+## Prefer
+- Prefer short paired investigations.
+
+## Avoid
+- Introduce formal terminology after the phenomenon.
 ```
 
-The compiler preserves the adjustment block across regeneration, rejects direct writes to shared framework pages, and exposes inheritance/provenance in the context trace.
+Normal review/approval/apply writes this bounded page. Prompt traces expose the
+immutable framework path and adjustment-page path separately; shared framework
+pages reject class writes and there is no regeneration helper.
 
 ### Reference-plan audit
 
@@ -249,7 +275,7 @@ The current scope and decisions carried forward from the project discussion are:
 Every class-scoped workflow receives one labeled base context with two orthogonal dimensions:
 
 1. **Teacher and class dimension:** global teacher profile, active class identity/course state, class signals, compact class memory, and workflow runtime state.
-2. **Subject-expert dimension:** compact subject/grade/branch routing for every workflow; the full active subject expert (subject front door + compiled inherited profile + source TOC) for planning and other pedagogical workflows.
+2. **Subject-expert dimension:** compact subject/grade/branch routing for every workflow; the full active subject expert (subject front door + selected immutable framework + class adjustment page + source TOC) for planning and other pedagogical workflows.
 
 The global teacher profile is deliberately a separate `Teacher Layer`, not duplicated inside `Active Class Core`. It is still included in every main prompt through the base assembly, so the assistant remains personalized without making global teacher preferences look like class facts or copying them into class memory.
 
@@ -260,10 +286,9 @@ The inherited subject memory pack should be the class's **Active Subject Expert*
 - `chemie.md` is the compact shared subject front door and routing guide.
 - `teaching_frameworks/index.md` is navigation only; it is not injected as a
   second copy of the framework body.
-- `teaching_framework_profile.md` is the compact compiled expert context. It
-  contains inherited Grade 9 principles plus teacher-approved adjustments and
-  cautions. The base `key_summary.md` remains shared library knowledge and is
-  never independently edited in class memory.
+- The selected `key_summary.md` is immutable shared library knowledge. It is
+  composed at runtime with `teaching_framework_adjustments.md`, which contains
+  only approved class-level replacement/refinement rules.
 - `search_subject_guidance` and `read_subject_guidance` search/read only the
   active subject framework root. The skill tells the model when to use the
   index, subject tools, or trusted-source tools.
@@ -453,13 +478,13 @@ and quoted source labels may remain German inside an otherwise English artifact.
 - [ ] Test that every framework source reference points to an existing source section and that `index.md` never embeds full page bodies.
 - [ ] Run focused tests and keep the changes on the current branch.
 
-### Task 3: Implement grade selection and class-effective profile generation
+### Task 3: Implement grade selection and runtime effective-subject composition
 
 **Files:**
 - Create: `backend/app/teacher_agent/wiki/subject_frameworks.py`
 - Modify: `backend/app/teacher_agent/wiki/store.py`
 - Modify: `backend/app/teacher_agent/wiki/memory.py`
-- Create: `backend/teacher_wiki/wiki/classes/chemie_9b_2026_27/memory/teaching_framework_profile.md`
+- Create: `backend/teacher_wiki/wiki/classes/chemie_9b_2026_27/memory/teaching_framework_adjustments.md`
 - Test: `backend/tests/test_subject_frameworks.py`
 
 **Interfaces:**
@@ -467,19 +492,15 @@ and quoted source labels may remain German inside an otherwise English artifact.
 ```python
 load_framework_index(store, subject) -> FrameworkIndex
 select_framework(store, subject, grade, branch) -> FrameworkSummary
-compose_class_framework_profile(base, class_id, overrides) -> str
-WikiStore.get_subject_framework_index(subject)
-WikiStore.get_subject_framework(subject, grade, page="key_summary")
-WikiStore.get_class_framework_profile(class_id)
+framework_for_class(store, class_id) -> FrameworkSummary
+build_active_subject_expert_context_trace(store, class_id, purpose) -> dict
 ```
 
-- [ ] Select Grade 9 NTG from `curriculum_profile.md`; treat C8 as prior learning and KMK as broader reference.
-- [ ] Reject path traversal and frameworks for another subject/branch unless explicitly allowed by the class profile.
-- [ ] Generate a bounded derived profile with `inherits`, `source_index`, `class_id`, `authority`, `effective_principles`, `teacher_adjustments`, and `class_cautions`.
-- [ ] Record `base_revision`/content hash and `generated_at`; ensure a base-library change can regenerate the profile while preserving only teacher-approved adjustments.
-- [ ] Inject the compiled profile as the active subject expert; never inject the Grade 9 summary and profile as two independent copies.
-- [ ] Test missing-grade handling, provenance, source references, and no invented class facts.
-- [ ] Verify the profile tests and keep the changes on the current branch.
+- [x] Select Grade 9 NTG from `curriculum_profile.md`; treat C8 as prior learning and KMK as broader reference.
+- [x] Reject path traversal and frameworks for another subject/branch unless explicitly allowed by the class route.
+- [x] Keep the shared framework immutable and compose it at runtime with the bounded class adjustment page; no profile is generated or stored.
+- [x] Inject the key summary and adjustment page exactly once as the active subject expert, with separate trace source labels.
+- [x] Test missing/mismatched route handling, provenance, source references, no invented class facts, and class-core de-duplication.
 
 ### Task 4: Compose purpose-aware workflow contexts
 
@@ -537,12 +558,11 @@ read_subject_guidance(path)
 - Modify: `docs/memory_hierarchy.md`
 - Test: `backend/tests/test_memory_capture.py`, `backend/tests/test_memory_apply.py`
 
-- [ ] Add `teaching_framework_profile.md` as a bounded, class-scoped derived target.
-- [ ] Let `remember`/proposal stage teacher adjustments only when the teacher explicitly states a durable class teaching preference.
-- [ ] Require teacher approval before regenerating the effective profile; direct writes to shared `teaching_frameworks` remain invalid.
-- [ ] Preserve quote/evidence validation and record `inherits`, source refs, adjustment basis, and generation metadata.
-- [ ] Test normal planning has no hidden writes, rejected proposals cannot modify the profile, and approved changes survive regeneration.
-- [ ] Verify teacher-approval tests and keep the changes on the current branch.
+- [x] Add `teaching_framework_adjustments.md` as a bounded, normal class-memory target.
+- [x] Let `remember`/proposal stage teacher adjustments only when the teacher explicitly states a durable class teaching preference.
+- [x] Require teacher approval before the dedicated adjustment page changes; direct writes to shared `teaching_frameworks` remain invalid.
+- [x] Preserve the existing quote/evidence and review-only candidate contract; source/framework inheritance remains visible in prompt trace rather than duplicated in mutable memory.
+- [x] Test normal planning has no hidden writes, rejected proposals cannot modify the page, and approved changes use the normal memory-apply path.
 
 ### Task 7: Validate the Anthropic-derived planning/differentiation contracts
 
@@ -573,7 +593,7 @@ read_subject_guidance(path)
 - Modify: `implementation_plans/product_backlog.md`
 - Test: `backend/tests/test_wiki_indexing.py` and the focused suite
 
-- [ ] Add root-index links for shared subject frameworks and each class-effective profile without embedding detailed bodies.
+- [x] Add root-index links for shared subject frameworks and each class adjustment page without embedding detailed bodies.
 - [ ] Document the four authority layers and the class-setup composition contract.
 - [ ] Document the structured lesson artifact as the single source for its three audience sections and explain which fields feed Update Memory.
 - [ ] Document that Update Memory excludes detailed teaching guidance by default.

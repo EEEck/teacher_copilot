@@ -1,48 +1,34 @@
-from app.teacher_agent.wiki.subject_frameworks import select_framework
+from app.teacher_agent.wiki.context_packs import build_active_subject_expert_context_trace
+from app.teacher_agent.wiki.subject_frameworks import framework_for_class
 
 
-def test_generating_profile_uses_the_class_route_and_writes_only_class_memory(wiki):
-    path = wiki.framework_profile_path("chemie_9b_2026_27")
-    path.unlink(missing_ok=True)
-
-    rendered = wiki.regenerate_framework_profile("chemie_9b_2026_27")
-
-    assert path.exists()
-    assert rendered == path.read_text(encoding="utf-8")
-    assert "teaching_frameworks/09/key_summary.md" in rendered
-    assert "authority: teacher_adjusted_class_profile" in rendered
+CLASS_ID = "chemie_9b_2026_27"
 
 
-def test_regenerating_profile_preserves_existing_approved_adjustments(wiki):
-    path = wiki.framework_profile_path("chemie_9b_2026_27")
-    framework = select_framework(wiki, "chemie", 9, "NTG")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        "---\n"
-        "authority: teacher_adjusted_class_profile\n"
-        "---\n\n"
-        "# Teaching Framework Profile - chemie_9b_2026_27\n\n"
-        "## Teacher-approved adjustments\n"
-        "- Use more particle-model drawings before equations.\n\n"
-        "## Class-specific cautions\n"
-        "- Contrast ion charge with oxidation number explicitly.\n",
-        encoding="utf-8",
+def test_runtime_subject_expert_uses_route_and_adjustment_page_without_profile_file(wiki):
+    old_profile = wiki.memory_dir(CLASS_ID) / "teaching_framework_profile.md"
+    adjustment_path = wiki.memory_paths(CLASS_ID)["teaching_framework_adjustments"]
+    adjustment = "Start formal terminology after a phenomenon-first observation."
+    wiki.write_text(
+        adjustment_path,
+        "# Teaching Framework Adjustments\n\n## Prefer\n- " + adjustment + "\n",
     )
 
-    rendered = wiki.regenerate_framework_profile("chemie_9b_2026_27")
+    trace = build_active_subject_expert_context_trace(wiki, CLASS_ID, purpose="plan")
 
-    assert framework.path in rendered
-    assert "Use more particle-model drawings before equations." in rendered
-    assert "Contrast ion charge with oxidation number explicitly." in rendered
+    assert not old_profile.exists()
+    assert "# Chemistry Grade 9 NTG - key summary" in trace["text"]
+    assert adjustment in trace["text"]
+    assert "teaching_framework_profile.md" not in trace["text"]
 
 
-def test_profile_generation_rejects_mismatched_curriculum_subject(wiki):
-    path = wiki.class_dir("chemie_9b_2026_27") / "curriculum_profile.md"
+def test_framework_route_rejects_mismatched_curriculum_subject(wiki):
+    path = wiki.class_dir(CLASS_ID) / "curriculum_profile.md"
     original = path.read_text(encoding="utf-8")
     path.write_text(original.replace("subject: chemie", "subject: physik"), encoding="utf-8")
 
     try:
-        wiki.regenerate_framework_profile("chemie_9b_2026_27")
+        framework_for_class(wiki, CLASS_ID)
     except ValueError as exc:
         assert "does not match" in str(exc)
     else:
