@@ -135,10 +135,21 @@ The product uses tiered class memory.
 
    Current live planning and Update Memory calls compose explicit layers through
    `prompt_assembly.py`: Teacher Layer, Active Class Core, and workflow-specific
-   runtime/task sections. The Active Class Core loads exactly one class, the
-   subject guide selected by `wiki.get_class(class_id).subject`, and all compact
-   `wiki/classes/{class_id}/memory/*.md` pages. Legacy stacked pack builders are
+   runtime/task sections. The Active Class Core loads exactly one class and all
+   compact `wiki/classes/{class_id}/memory/*.md` pages; the current compatibility
+   path also includes the subject guide selected by
+   `wiki.get_class(class_id).subject`. Legacy stacked pack builders are
    compatibility/debug views, not the model-facing contract.
+
+   The target subject-know-how design keeps the two dimensions explicit:
+   `build_base_assistant_context_trace()` always composes the global Teacher
+   Layer, class-only Active Class Core, and compact subject/grade/branch routing.
+   Planning and differentiation then add
+   `build_active_subject_expert_context_trace()`, which injects the compact
+   `chemie.md` front door, the inherited/compiled class profile, and the source
+   TOC. The Grade 9 summary is not injected separately. Update Memory receives
+   subject identity/profile identity only by default, preserving its focus on
+   what happened in class.
 
    Planning also receives a bounded trusted-source profile: class branch/grade
    plus an allow-listed source TOC. It does not receive curriculum bodies. The
@@ -197,13 +208,18 @@ The product uses tiered class memory.
    is not itself a candidate update. Durable-write fingerprint verification is
    a later boundary and remains separate from this proactive chat loop.
 
-6. **Profiles (three clearly-scoped files)**
+6. **Profiles (four clearly-scoped files)**
    - `user.md` (`wiki/teacher_profile.md`, GLOBAL): teacher communication style,
      stable preferences, default lesson structure, and only teacher-confirmed
      professional context that materially improves future assistance.
    - `teaching_patterns.md` (class + subject): how this class learns and which
      approaches work/fail (the class learning profile).
    - `copilot.md` (`copilot_profile.md`, class): copilot working agreement only.
+   - `teaching_framework_profile.md` (class + subject/grade, DERIVED): the
+     compiled effective Chemistry teaching contract for this class. It
+     inherits the shared subject guide and Grade 9 framework, and contains
+     only teacher-approved class adjustments; it is regenerated from the base
+     library rather than edited as an independent copy.
    Durable writes go through teacher-approved memory endpoints
    (refresh/propose/apply), never silently from chat.
    Lesson-plan save surfaces the current runtime state and accumulated memory

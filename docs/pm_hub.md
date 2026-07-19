@@ -190,6 +190,8 @@ Primary bets:
 - guided class setup and personalization
 - teacher preference setup
 - material upload and source library
+- inherited subject/grade setup: shared Chemistry framework plus a
+  teacher-adjustable compiled class profile
 - Docling/PDF ingestion spike
 - teacher-approved import from notes, worksheets, plans, and curriculum docs
 
@@ -203,6 +205,9 @@ Primary bets:
 - source cards and adaptation notes
 - resource suggestions for lessons
 - subject teaching-practice library, starting narrow with chemistry
+- port the Anthropic lesson-production procedure for Bavaria Chemistry 9 NTG:
+  mandatory subject routing, source grounding, differentiation, and one
+  structured lesson artifact with teacher/student/observation sections
 - no automatic writes from external sources
 - agent safety hardening before higher-risk tools: SDK guardrails where useful,
   teacher-visible output sanitization, OWASP ASI red-team discovery, and

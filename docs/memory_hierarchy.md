@@ -22,6 +22,9 @@ like "next", "remember", or "for this lesson".
 - `wiki/subjects/{subject}.md`: subject-wide reusable guidance that should
   apply beyond one class, such as common misconceptions, safety reminders,
   lesson patterns, and question templates.
+- `wiki/subjects/{subject}/teaching_frameworks/...`: reviewed, immutable
+  subject/grade/branch teaching library. These pages are shared base knowledge,
+  not class memory and not directly editable from a class workflow.
 - `wiki/sources/{jurisdiction}/...`: compact, provenance-bearing extracts of
   approved external curriculum sources. They are read progressively through
   typed source tools, never treated as class memory or prompt instructions.
@@ -41,6 +44,11 @@ like "next", "remember", or "for this lesson".
 - `memory/copilot_profile.md` / `copilot.md`: class-scoped copilot working
   agreement: how the agent should plan or behave for this class, including
   repeated teacher corrections and avoid-rules.
+- `memory/teaching_framework_profile.md`: derived class subject-expert profile
+  that inherits the selected subject guide and grade framework. It stores only
+  teacher-approved class adjustments plus inheritance/provenance metadata; it
+  is regenerated from the shared base and is not an independent copy of the
+  Grade 9 summary.
 - `memory/session_summaries.md`: sparse compact summaries of prior workflow
   sessions when they help continuity; not a transcript store.
 - `lessons/{date}/lesson_results.md`: canonical approved record of what
@@ -165,6 +173,10 @@ Loaded where today:
   include an excerpt.
 - Memory compaction source packet may include the subject guide.
 
+Target loading keeps this page as the compact subject front door. Planning and
+differentiation add the derived `teaching_framework_profile.md` as the active
+subject expert; they do not inject the Grade 9 base summary separately.
+
 Design implication:
 
 - Subject guidance is injected as a small bounded slice. It should stay
@@ -186,7 +198,32 @@ Do not update from:
 - normal class-specific lesson chats without teacher approval.
 - compact class-memory refresh (`/memory/refresh` or `class_memory_proposal`).
 
-### 3. Canonical Class Wiki Memory
+### 3. Inherited Class Teaching Framework Profile
+
+Path: `backend/teacher_wiki/wiki/classes/{class_id}/memory/teaching_framework_profile.md`
+
+Scope: one class's effective subject/grade/branch teaching contract.
+
+This is a derived profile, not a copied Grade 9 summary. Its frontmatter records
+the shared pages it inherits, the framework index, base revision/hash,
+`authority: teacher_adjusted_class_profile`, and generation time. Its body has
+effective principles, teacher-approved adjustments, and class-specific cautions.
+
+At class setup, the compiler selects the shared framework from the class
+curriculum profile and reapplies only approved adjustments. A shared framework
+revision can therefore regenerate the profile without erasing local teacher
+preferences. Direct writes to this profile or to shared framework pages are not
+allowed from planning chat; changes use the existing proposal and teacher
+approval flow.
+
+Loaded where:
+
+- the active subject expert is needed for planning, differentiation, or a
+  pedagogical discussion;
+- detailed framework pages are not needed in Update Memory, class briefs, or
+  verification by default.
+
+### 4. Canonical Class Wiki Memory
 
 Path: `backend/teacher_wiki/wiki/classes/{class_id}/`
 
@@ -234,7 +271,7 @@ Do not update from:
 - normal ingest chat before teacher approval
 - profile proposal flow
 
-### 4. Compact Class Memory
+### 5. Compact Class Memory
 
 Path: `backend/teacher_wiki/wiki/classes/{class_id}/memory/`
 

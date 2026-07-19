@@ -75,24 +75,99 @@ it.
 
 ## KlassenPilot strategy (by workflow)
 
+### Two-dimensional base context (current assembly and target refinement)
+
+The model should experience one personalized executive assistant, but the
+prompt must keep authority boundaries visible. We therefore assemble two
+orthogonal dimensions rather than mixing all wiki content into one class page:
+
+1. **Teacher and class dimension** - the global teacher profile, active class
+   identity/course state, class signals, compact class memory, and the
+   workflow's backend-owned runtime state.
+2. **Subject-expert dimension** - compact subject/grade/branch routing for every
+   class workflow, plus the full active subject expert for pedagogical work.
+
+The current code already injects `build_teacher_context_trace()` and
+`build_active_class_core_context_trace(class_id)` into the main prompts. The
+teacher profile is intentionally a separate **Teacher Layer**, not a field
+inside Active Class Core: it is global advisory context, while Active Class
+Core is class-scoped factual/empirical context. Keeping them separate prevents
+teacher preferences from being mistaken for class facts, while still placing
+the teacher profile in every main prompt.
+
+The subject-expert refinement adds two traceable builders:
+
+```python
+build_active_subject_expert_context_trace(store, class_id, purpose)
+build_base_assistant_context_trace(store, class_id, purpose)
+```
+
+`build_base_assistant_context_trace` is the canonical composition boundary. It
+always contains the Teacher Layer, Active Class Core, and a compact
+subject/grade/branch routing block. For planning and other pedagogical
+workflows it adds the active subject expert: the compact `chemie.md` front door,
+the compiled inherited class profile, and the bounded curriculum/source TOC.
+It never injects the Grade 9 summary separately from the class profile.
+
+### Inherited subject expert
+
+The class-level subject expert is derived, not copied into an independently
+editable memory page. At class setup, `subject=chemie`, `grade=9`, and
+`branch=NTG` select the shared framework; the compiler records `inherits`,
+`source_index`, base revision/hash, `authority=teacher_adjusted_class_profile`,
+and `generated_at` in
+`wiki/classes/chemie_9b_2026_27/memory/teaching_framework_profile.md`.
+Teacher-approved adjustments are reapplied when the shared Grade 9 library is
+updated. Prompts inject the compiled profile as the effective pedagogical
+contract; detailed framework pages remain progressive tool reads.
+
+The purpose-specific subject addition is:
+
+| Workflow | Base context | Subject-expert addition |
+|---|---|---|
+| Plan chat | Teacher Layer + Active Class Core + runtime | `chemie.md` + compiled Grade 9 NTG profile + source TOC; detailed framework/source reads on demand |
+| Plan opening | Slim Teacher/Class routing | Subject/grade/branch routing and compact `chemie.md`; profile after planning begins |
+| Differentiation | Same as Plan chat | Same compiled profile; detailed differentiation/representation pages on demand |
+| Discuss | Teacher Layer + Active Class Core + discussion state | Add `chemie.md` and profile when the question is pedagogical; otherwise keep class-focused |
+| Update Memory | Teacher Layer + Active Class Core + MemoryRuntime/task context | Subject identity/profile identity only by default; no detailed teaching framework |
+| Class brief | Teacher Layer + Active Class Core | No framework unless the requested brief requires subject interpretation |
+| Verification | Active Class Core + verification state | Authority labels/source scope only; read exact sources for disputed claims |
+
 ### Lesson planning chat (primary)
 
 1. **Structured state** — `SessionState`, `LessonPlanningState` persisted on
    backend-owned `PlanRuntime`; the model proposes `state_patch` updates and
    backend merge rules prevent empty fields from wiping accumulated state.
-2. **Teacher layer** — `build_teacher_context_trace()` loads only
+2. **Production skill** — the provisional `PLAN_SKILL` and short Chemistry
+   prompt are transitional. The target loads the Anthropic-derived planning
+   skill, Bavaria Chemistry subject reference, and differentiation skill as
+   one mandatory production procedure.
+3. **Teacher layer** — `build_teacher_context_trace()` loads only
    `wiki/teacher_profile.md`.
-3. **Active class core** — `build_active_class_core_context_trace(class_id)`
-   loads class identity, the subject guide selected from
-   `wiki.get_class(class_id).subject`, and all existing
+4. **Active class core** — `build_active_class_core_context_trace(class_id)`
+   loads class identity and all existing
    `wiki/classes/{class_id}/memory/*.md` pages, each clamped via
-   `MEMORY_PAGE_BUDGETS`.
-4. **Full lesson plan** — current `lessonplan.md` injected each turn (no char
+   `MEMORY_PAGE_BUDGETS`. The current implementation still includes the
+   selected subject guide here for compatibility; the subject-expert builder
+   described above will move that content into its own labeled layer. It also
+   includes up to three recent lesson summaries from the snapshot.
+5. **Active subject expert** — compiled Chemistry 9 NTG profile plus compact
+   subject front door and source TOC; detailed framework/source pages on demand.
+6. **Planning orientation** — bounded recent sequence, misconception priorities,
+   open loops, and planning brief without duplicate query-pack injection.
+7. **Full lesson plan** — current `lessonplan.md` injected each turn (no char
    cap by default).
-5. **Verbatim window** — last `plan_history_turns` teacher turns in the user
+8. **Verbatim window** — last `plan_history_turns` teacher turns in the user
    message (default 8).
-6. **Evidence briefs** — compact tool summaries; raw outputs behind `raw_ref`.
-7. **No blunt 14k clip** on composed instructions.
+9. **Evidence briefs** — compact tool summaries; raw outputs behind `raw_ref`.
+10. **No blunt 14k clip** on composed instructions.
+
+The planning-specific orientation should add only the compact recent taught
+sequence, misconception priorities, open loops, and planning brief. The existing
+`build_planning_query_pack()` contains those fields and a six-lesson sequence,
+but is not currently injected into the live Plan prompt; detailed history is
+available through `list_lessons`, `read_lesson`, and `read_lesson_range`. Do not
+inject both the full query pack and the same fields from Active Class Core.
 
 ### Ingest / memory update
 
@@ -108,8 +183,10 @@ end-truncation remains **disabled by default** (`ingest_context_backstop=0`).
 Update Memory now mirrors planning's runtime-state strategy:
 
 1. **Teacher layer** — global `teacher_profile.md`.
-2. **Active class core** — one active class, selected subject guide, and all
-   compact class `memory/*.md` pages.
+2. **Active class core** — one active class and all compact class `memory/*.md`
+   pages. The current compatibility path also carries the selected subject
+   guide; the target path supplies only subject identity/profile identity to
+   Update Memory unless interpretation requires more.
 3. **Task context** — bounded previous lesson, roster excerpt, and saved-plan
    continuity.
 4. **Split runtime state** — target state, session decisions/questions,

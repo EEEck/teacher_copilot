@@ -96,6 +96,13 @@ KlassenPilot uses a tiered memory model.
   canonical `course_state.md` / `timeline.md` rollups; mem_v3 PR2 retired the
   `class_state.md` / `taught_so_far.md` twins.)
 
+- **Inherited subject expert**
+  Shared reviewed subject/grade frameworks remain immutable library knowledge.
+  Class setup derives `teaching_framework_profile.md` from the selected
+  subject, grade, and branch, then reapplies only teacher-approved class
+  adjustments. The profile is regenerated when the shared base changes; it is
+  not an independently editable copy of the Grade 9 summary.
+
 - **Workflow context packs**
   Read-only packs for base class chat, lesson planning, memory update, review,
   future assessment generation, and material/resource adaptation.
@@ -149,9 +156,14 @@ history, artifact correctness, or an important instructional assumption.
 The copilot should behave like a careful teaching colleague with access to the
 class notebook.
 
-- On class entry, it starts from the base class context.
-- For planning, it loads recent lessons, compact memory, teaching patterns,
-  open loops, planning preferences, and relevant source material.
+- On class entry, it starts from the base context: global teacher profile,
+  active class core, compact subject/grade/branch routing, and workflow state.
+- For planning, it adds the active subject expert (compact subject guide,
+  compiled inherited class profile, and trusted-source TOC), then reads detailed
+  framework/source pages only when needed.
+- For memory update, it keeps the subject expert at identity/profile level by
+  default so the workflow records what happened rather than receiving
+  unnecessary lesson-design guidance.
 - For memory update, it loads the previous lesson, logging conventions, compact
   memory, student index excerpt, and open loops.
 - For broad topic requests, it uses deterministic `search_memory` as a

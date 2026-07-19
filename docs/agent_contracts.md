@@ -21,6 +21,11 @@ For file-by-file memory scope and update rules, see `memory_hierarchy.md`.
 - Report sparse or missing memory honestly.
 - Ask at most one targeted question when blocked.
 - Never silently mutate wiki files from a planning turn.
+- Internal skill instructions, traces, tests, developer documentation, and the
+  initial lesson artifact use English during this build. Source records may
+  remain German where they preserve official Bavaria labels, chemical terms, or
+  supplied material. Language is explicit metadata, and no unconditional
+  `Use English` instruction should remain in the production planner.
 
 ## Trusted Curriculum Source Contract
 
@@ -51,6 +56,8 @@ The pack contains:
 - the last eight teacher turns plus interleaved assistant replies;
 - the workflow-specific backend-owned runtime state;
 - the compact Teacher Layer and Active Class Core;
+- the compact subject/grade/branch routing block, plus the purpose-selected
+  Active Subject Expert for pedagogical workflows;
 - the current plan or diary when applicable;
 - task-specific continuity such as the Update Memory lesson target;
 - compact evidence briefs and existing review-only memory candidates.
@@ -251,8 +258,17 @@ Reads:
 
 - Global teacher profile from `build_teacher_context_trace()`.
 - Active class core from `build_active_class_core_context_trace(class_id)`:
-  class identity, the subject guide selected by `wiki.get_class(class_id).subject`,
-  and all compact class memory under `wiki/classes/{class_id}/memory/*.md`.
+  class identity and all compact class memory under
+  `wiki/classes/{class_id}/memory/*.md`.
+- Purpose-selected Active Subject Expert from
+  `build_active_subject_expert_context_trace(class_id, purpose)` for planning:
+  compact `wiki/subjects/chemie.md`, the compiled inherited class profile, and
+  the bounded curriculum/source TOC. The Grade 9 base summary is not injected
+  separately from the compiled profile.
+- Bounded planning orientation: recent taught sequence, misconception
+  priorities, open loops, and planning brief. The planner uses
+  `list_lessons`, `read_lesson`, and `read_lesson_range` for deeper history;
+  it must not receive duplicate full query packs.
 - Class-scoped lesson memory through planning tools.
 - Uploaded teacher materials supplied in the current turn.
 
@@ -262,6 +278,16 @@ Writes:
   output (see Runtime Context Manager below).
 - No direct wiki writes.
 - Saving a plan is a separate explicit API action.
+
+Output migration:
+
+- The current six-section Markdown checklist is provisional compatibility
+  behavior, not the lesson-quality contract.
+- The target contract is one structured lesson artifact with shared fields and
+  teacher, student, and observation/update sections, produced by the ported
+  Anthropic planning/differentiation procedure and Bavaria Chemistry reference.
+- The implementation may preserve `plan_markdown` during migration, but the
+  Anthropic-derived artifact schema becomes the source of truth once enabled.
 
 Runtime context manager:
 
@@ -383,8 +409,11 @@ Reads:
 
 - Global teacher profile from `build_teacher_context_trace()`.
 - Active class core from `build_active_class_core_context_trace(class_id)`:
-  class identity, selected subject guide, and all compact class memory under
+  class identity and all compact class memory under
   `wiki/classes/{class_id}/memory/*.md`.
+- Compact subject identity/profile identity only by default. Update Memory does
+  not receive the detailed Active Subject Expert unless the teacher explicitly
+  asks for subject or curriculum interpretation.
 - Lightweight update-memory task context from `build_ingest_task_context_trace`.
 - Class-scoped lesson/memory evidence through update-memory tools.
 - Uploaded teacher materials supplied in the current turn.
@@ -887,7 +916,9 @@ Class home may open an inline read-only “Discuss class state” chat.
 
 ### Reads
 
-- Same base context pattern as planning: Teacher layer + Active class core.
+- Same base context pattern as planning: Teacher layer + Active class core +
+  compact subject routing. Add the Active Subject Expert only when the
+  discussion question is pedagogical or curriculum-related.
 - Bounded conversation window (plan history turns).
 - Compact evidence briefs and optional raw refs via `get_raw_evidence`.
 - Tools: class-scoped read tools from `create_chat_wiki_tools` (list/read
