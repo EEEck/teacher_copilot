@@ -39,6 +39,7 @@ class ClassDiscussionRuntime:
 
     discussion_state: ClassDiscussionState = field(default_factory=ClassDiscussionState)
     evidence_briefs: list[EvidenceBrief] = field(default_factory=list)
+    consulted_sources: list[dict[str, str]] = field(default_factory=list)
     memory_candidates: list[MemoryCandidate] = field(default_factory=list)
     raw_store: dict[str, str] = field(default_factory=dict)
     counters: dict[str, int] = field(default_factory=dict)
@@ -58,6 +59,19 @@ class ClassDiscussionRuntime:
             for stale in list(self.raw_store)[:-cap]:
                 del self.raw_store[stale]
         return raw_ref
+
+    def record_source_read(self, source_id: str, section_id: str) -> None:
+        """Record trusted-source provenance for a discussion answer."""
+        item = {
+            "source_id": str(source_id).strip(),
+            "section_id": str(section_id).strip() or "summary",
+        }
+        if not item["source_id"] or item in self.consulted_sources:
+            return
+        self.consulted_sources.append(item)
+        cap = get_context_limits().briefs_store_cap
+        if len(self.consulted_sources) > cap:
+            self.consulted_sources = self.consulted_sources[-cap:]
 
 
 def _clean(value: str | None) -> str:
@@ -133,6 +147,7 @@ def discussion_api_payload(runtime: ClassDiscussionRuntime) -> dict:
     return {
         "discussion_state": runtime.discussion_state.model_dump(),
         "evidence_briefs": [brief.model_dump() for brief in runtime.evidence_briefs],
+        "consulted_sources": list(runtime.consulted_sources),
         "memory_candidates": [
             candidate.model_dump() for candidate in runtime.memory_candidates
         ],
