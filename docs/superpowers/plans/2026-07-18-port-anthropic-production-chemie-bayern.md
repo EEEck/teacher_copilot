@@ -12,6 +12,21 @@
 
 This master plan is the single plan for the current work: port the Anthropic production procedure, replace the US science reference with Bavaria Chemistry Grade 9 NTG, and keep the initial output as one final lesson artifact. That artifact has three audience sections—teacher plan, student materials, and observation/update capture—rather than three separately persisted documents. The trusted-source layer, subject framework library, class-effective profile, prompt assembly, and evaluation work all support that same production loop.
 
+### Reference-port fidelity rule
+
+The local reference repository currently contains two relevant skills:
+`k12-lesson-planning` and `k12-lesson-differentiation`. They are the canonical
+quality reference for this work. KlassenPilot must preserve their ordered
+control flow, hard gates, quality checks, shared-content/revision discipline,
+and teacher-facing completion behavior as closely as possible. A local change
+is permitted only when it is necessary to: (1) replace a missing integration
+dependency (Learning Commons KG or Word renderer); (2) replace US K–12
+curriculum/pedagogy with Bavaria Gymnasium Chemistry 9 NTG; or (3) preserve an
+existing KlassenPilot product contract (teacher-approved wiki writes, one
+structured `LessonArtifact`, traceable bounded context). Each material
+divergence is documented in the local skill/reference or `agent_contracts.md`.
+Apache attribution and the source copyright guardrail remain in adapted files.
+
 ### Merged work inventory
 
 - **Trusted source layer:** Bavaria LehrplanPLUS Chemistry Grades 8/9/10 and Fachprofil records plus the KMK AHR Chemistry 2020 reference, with stable IDs, section provenance, bounded TOC context, and progressive list/search/read tools.
@@ -289,7 +304,12 @@ load_subject_reference(subject: str, grade: int, branch: str | None) -> str
 compose_active_skill(subject: str, grade: int, branch: str | None, task: str) -> str
 ```
 
-- [ ] Port the structure and control flow of Anthropic `k12-lesson-planning/SKILL.md`: route subject/grade/curriculum/task, load mandatory subject guidance, ask zero to two high-value questions, ground standards before drafting, build with grade-band pedagogy, apply non-negotiables, create one package, render, and evaluate.
+- [x] Reimplemented the planning procedure with Anthropic's six visible steps:
+  **Step 0 Route**, **Step 1 Clarify**, **Step 2 Ground in trusted sources**,
+  **Step 3 Build**, **Step 4 Draft offer**, and **Step 5 Output and
+  completion**. Preserve their control flow and imperatives closely; translate
+  only Learning Commons KG → trusted-source tools, Word documents → one
+  `LessonArtifact`, and US K–12 science → Bavaria Chemistry 9 NTG.
 - [ ] Port the structure of `k12-lesson-differentiation/SKILL.md`, including a shared core question/evidence task, access and representation changes, language/grouping supports, fading scaffolds, and an accessibility check.
 - [ ] Replace US standards and Learning Commons assumptions with `curriculum_profile.md`, Bavaria trusted-source tools, the class-effective profile, and progressive wiki reads. Keep the source policy, copyright guardrails, and teacher-review boundaries.
 - [ ] Create `chemie_bayern_reference.md` as the direct functional equivalent of Anthropic `references/science.md`, limited to Bavaria Gymnasium Chemistry Grade 9 NTG: investigation before explanation, model revision, three-dimensional observable targets, anticipated misconceptions with what/why/teacher move, representations with rationale, safety, realistic timing, look-fors, and exit checks.

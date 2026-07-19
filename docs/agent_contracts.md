@@ -291,6 +291,26 @@ Output migration:
   valid structured package, the Anthropic-derived artifact schema is the source
   of truth and the backend renderer produces the compatible `plan_markdown`.
 
+Anthropic reference-port policy:
+
+- `ref_repo/k12-teacher-skills` currently contributes two applicable reference
+  skills: lesson planning and lesson differentiation. Treat both as the
+  production-quality reference, not as loose inspiration.
+- Preserve their ordered workflow, mandatory routing/grounding gates,
+  clarification discipline, shared-content anti-drift rule, artifact integrity
+  checks, revision sweep, and teacher-facing completion loop as closely as the
+  KlassenPilot integration permits. Review the source skill whenever changing a
+  corresponding local rule.
+- Change wording or structure only to replace a dependency that KlassenPilot
+  does not have (US standards, Learning Commons KG, Word renderer), to apply
+  Bavaria Gymnasium Chemistry 9 NTG scope, or to preserve existing contracts
+  (teacher-approved wiki writes, one `LessonArtifact`, and bounded context
+  packs). Record a concise reason beside a material divergence in the local
+  skill or this contract.
+- Do not import US standards, proprietary curriculum text, connector-specific
+  behavior, or document-renderer implementation. Keep the Apache attribution
+  and copyright guardrail in every adapted skill/reference file.
+
 Runtime context manager:
 
 - The chat is driven by backend-owned structured state, persisted on the

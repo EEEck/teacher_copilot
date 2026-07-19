@@ -138,6 +138,31 @@ def test_chemie_9_ntg_plan_loads_the_reviewable_production_procedure(wiki):
     assert "# Lesson Differentiation Procedure" in active_skill["text"]
 
 
+def test_chemie_9_ntg_planning_skill_preserves_the_six_step_production_flow(wiki):
+    assembly = build_plan_chat_prompt_assembly(
+        wiki,
+        "chemie_9b_2026_27",
+        messages=[ChatMessage(role="user", content="Plan the next chemistry lesson.")],
+        current_plan="",
+        runtime=PlanRuntime(),
+    )
+
+    active_skill = next(s for s in assembly["sections"] if s["name"] == "Active skill")
+    for heading in (
+        "## Step 0 — Route",
+        "## Step 1 — Clarify",
+        "## Step 2 — Ground in trusted sources",
+        "## Step 3 — Build the lesson",
+        "## Step 4 — The draft offer",
+        "## Step 5 — Output and completion",
+    ):
+        assert heading in active_skill["text"]
+
+    assert "mandatory before drafting" in active_skill["text"]
+    assert "shared LessonArtifact" in active_skill["text"]
+    assert "Consistency sweep" in active_skill["text"]
+
+
 def test_plan_chat_defers_artifact_shape_to_the_loaded_production_procedure():
     system = PLAN_CHAT_SYSTEM
 
