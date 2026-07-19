@@ -412,7 +412,10 @@ and quoted source labels may remain German inside an otherwise English artifact.
 - [ ] Render one Markdown artifact with exactly three top-level audience sections: teacher lesson plan, student materials, and observation/update capture. The observation section must map to existing memory-update fields (what was covered, participation/evidence, misconceptions, what worked, follow-up) and remain lightweight.
 - [ ] Enforce cross-section consistency: shared goals and the core evidence task appear identically where needed; student materials contain no teacher-only notes; safety statements are present for practical work; observation fields are actionable.
 - [ ] Require the quality dimensions currently absent from the provisional prompt: phenomenon/context before explanation, model revision, knowledge/practice/meaning goals, anticipated student ideas with why and teacher move, representation rationale, common evidence task across differentiation, formative look-fors, realistic timing, safety, and exit evidence.
-- [ ] Add deterministic validation for required sections, realistic duration, source refs, no invented official claims, and audience boundaries within the single artifact.
+- [x] Added deterministic validation for required audiences, duration, safety,
+  source references, Chemie 9 NTG representation/differentiation fields, and
+  student/teacher audience boundaries within the single artifact. Curriculum
+  provenance is constrained to linked trusted sources at plan finalization.
 - [ ] Run `cd backend; .venv\\Scripts\\python -m pytest tests/test_lesson_package.py tests/test_package_renderer.py tests/test_api_plan.py -q`; keep the changes on the current branch.
 
 ### Task 1: Register and validate the source/document layer

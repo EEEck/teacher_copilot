@@ -108,6 +108,23 @@ def test_artifact_rejects_missing_observation_audience_and_unknown_source():
     assert "Unknown trusted source: by-lehrplanplus-chemie-9-ntg." in errors
 
 
+def test_chemie_9_ntg_artifact_requires_ported_quality_contract_fields():
+    artifact = valid_artifact()
+    artifact.shared.learning_goals = [
+        LearningGoal(statement="Explain ion formation.", knowledge="Ion charge.")
+    ]
+    artifact.shared.representations = []
+    artifact.shared.differentiation_invariants = []
+    artifact.consulted_sources = []
+
+    errors = validate_lesson_artifact(artifact)
+
+    assert "Each learning goal requires knowledge, practice, and meaning." in errors
+    assert "Chemistry 9 NTG artifacts require at least one representation choice." in errors
+    assert "Artifact requires differentiation invariants." in errors
+    assert "Chemistry 9 NTG artifacts require a consulted trusted source." in errors
+
+
 def test_plan_turn_and_runtime_can_carry_the_structured_artifact():
     artifact = valid_artifact()
     turn = PlanTurnOutput(reply="Drafted.", plan_markdown="legacy", lesson_artifact=artifact)

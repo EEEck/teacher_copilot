@@ -97,12 +97,28 @@ def validate_lesson_artifact(
         errors.append("Lesson duration must be between 15 and 120 minutes.")
     if not shared.learning_goals:
         errors.append("Artifact requires at least one learning goal.")
+    elif any(
+        not (goal.knowledge and goal.practice and goal.meaning)
+        for goal in shared.learning_goals
+    ):
+        errors.append("Each learning goal requires knowledge, practice, and meaning.")
     if not shared.core_evidence_task.strip():
         errors.append("Artifact requires one shared core evidence task.")
+    if not shared.differentiation_invariants:
+        errors.append("Artifact requires differentiation invariants.")
     if not shared.exit_ticket:
         errors.append("Artifact requires an exit ticket.")
     if shared.is_practical and not shared.safety_notes:
         errors.append("Practical lessons require at least one safety note.")
+    is_chemie_9_ntg = (
+        shared.subject.strip().lower() in {"chemie", "chemistry"}
+        and shared.grade == 9
+        and (shared.branch or "").strip().upper() == "NTG"
+    )
+    if is_chemie_9_ntg and not shared.representations:
+        errors.append("Chemistry 9 NTG artifacts require at least one representation choice.")
+    if is_chemie_9_ntg and not artifact.consulted_sources:
+        errors.append("Chemistry 9 NTG artifacts require a consulted trusted source.")
     if allowed_source_ids is not None:
         for source in artifact.consulted_sources:
             if source.source_id not in allowed_source_ids:
