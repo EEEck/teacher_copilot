@@ -46,7 +46,6 @@ import {
   Loader2Icon,
   MoreHorizontalIcon,
   PencilIcon,
-  RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
 import { useEffect, useRef, type FC, type ReactNode } from "react";
@@ -418,11 +417,8 @@ const AssistantActionBar: FC = () => {
           </AuiIf>
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
-      <ActionBarPrimitive.Reload asChild>
-        <TooltipIconButton tooltip="Refresh">
-          <RefreshCwIcon />
-        </TooltipIconButton>
-      </ActionBarPrimitive.Reload>
+      {/* Reload needs an external-store onReload handler. KlassenPilot has no
+          server-side transcript rewrite contract, so do not expose a false retry. */}
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger asChild>
           <TooltipIconButton
