@@ -7,8 +7,8 @@ from pathlib import Path
 
 _SKILL_DIR = Path(__file__).parent
 _SKILL_FILES = {
-    "lesson_planning": "k12_lesson_planning_core.md",
-    "differentiation": "k12_differentiation_core.md",
+    "lesson_planning": "lesson_planning_procedure.md",
+    "differentiation": "lesson_differentiation_procedure.md",
 }
 
 

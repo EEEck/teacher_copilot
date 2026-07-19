@@ -1,10 +1,18 @@
 """Contracts for the reviewable lesson-production skill files."""
 
+from app.teacher_agent.skills import loader
 from app.teacher_agent.skills.loader import (
     compose_active_skill,
     load_skill,
     load_subject_reference,
 )
+
+
+def test_local_skill_filenames_are_product_neutral():
+    assert loader._SKILL_FILES == {
+        "lesson_planning": "lesson_planning_procedure.md",
+        "differentiation": "lesson_differentiation_procedure.md",
+    }
 
 
 def test_planning_core_is_reviewable_and_requires_subject_grounding():

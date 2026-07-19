@@ -288,8 +288,8 @@ teacher layer. It should not receive detailed subject pedagogy by default.
 ### Task A: Port the reusable Anthropic skill workflow and Bavaria Chemistry reference
 
 **Files:**
-- Create: `backend/app/teacher_agent/skills/k12_lesson_planning_core.md`
-- Create: `backend/app/teacher_agent/skills/k12_differentiation_core.md`
+- Create: `backend/app/teacher_agent/skills/lesson_planning_procedure.md`
+- Create: `backend/app/teacher_agent/skills/lesson_differentiation_procedure.md`
 - Create: `backend/app/teacher_agent/skills/chemie_bayern_reference.md`
 - Create: `backend/app/teacher_agent/skills/loader.py`
 - Modify: `backend/app/teacher_agent/skills/chemie_bayern.py`
