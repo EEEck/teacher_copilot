@@ -59,6 +59,13 @@ describe("workflow turn state", () => {
     expect(
       resolveClientStreamEnd({ gotFinal: false, hadStreamedContent: false }),
     ).toBe("failed");
+    expect(
+      resolveClientStreamEnd({
+        gotFinal: false,
+        hadStreamedContent: true,
+        terminalError: true,
+      }),
+    ).toBe("failed");
   });
 
   it("maps draft poll flags into phases", () => {

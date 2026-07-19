@@ -41,6 +41,13 @@ def test_profile_derives_from_app_env_when_unset():
     assert Settings(app_env="development", model_profile=None).resolved_model_profile() == "economy"
 
 
+def test_plan_turns_have_a_longer_timeout_than_other_agent_workflows():
+    settings = Settings(agent_timeout_seconds=240, **_MODELS)
+
+    assert settings.agent_timeout_seconds == 240
+    assert settings.plan_agent_timeout_seconds == 600
+
+
 def test_explicit_profile_overrides_app_env():
     s = Settings(app_env="production", model_profile="economy", **_MODELS)
     assert s.resolved_model_profile() == "economy"

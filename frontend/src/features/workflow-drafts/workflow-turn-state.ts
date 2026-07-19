@@ -60,8 +60,11 @@ export function flagsForPhase(phase: WorkflowTurnPhase): WorkflowTurnFlags {
 export function resolveClientStreamEnd(args: {
   gotFinal: boolean;
   hadStreamedContent: boolean;
+  /** The server sent an explicit SSE error, so it cannot still be working. */
+  terminalError?: boolean;
 }): WorkflowTurnPhase {
   if (args.gotFinal) return "complete";
+  if (args.terminalError) return "failed";
   if (args.hadStreamedContent) return "backend_running";
   return "failed";
 }

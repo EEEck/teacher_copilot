@@ -473,6 +473,7 @@ export function ArtifactSessionRuntimeProvider({
       // Successful turns leave the pending marker for PendingTurnNotifier.
       // Only clear it on a hard client failure with no usable streamed content.
       let turnFailed = false;
+      let terminalStreamError = false;
       let finalResult: ArtifactChatResult | null = null;
       let hadStreamedContent = false;
       const abort = new AbortController();
@@ -535,9 +536,15 @@ export function ArtifactSessionRuntimeProvider({
         }
       } catch (err) {
         turnFailed = true;
+        terminalStreamError = !(err instanceof DOMException && err.name === "AbortError");
         let keptPartial = false;
         updateThread((messages) => {
           const existing = lastAssistantContent(messages);
+          if (terminalStreamError) {
+            return replaceLastAssistantContent(messages, [
+              { type: "text", text: friendlyChatError(err) },
+            ]);
+          }
           if (existing && !isPlaceholderAssistantContent(existing)) {
             keptPartial = true;
             return messages;
@@ -554,6 +561,7 @@ export function ArtifactSessionRuntimeProvider({
         const phase = resolveClientStreamEnd({
           gotFinal: Boolean(finalResult),
           hadStreamedContent,
+          terminalError: terminalStreamError,
         });
         const flags = flagsForPhase(phase);
         // Hard client failure with nothing useful: drop pending so notifier

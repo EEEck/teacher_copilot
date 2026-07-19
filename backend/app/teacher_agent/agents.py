@@ -228,6 +228,7 @@ class AgentRunner:
         self.utility_model = settings.resolved_utility_model()
         self.utility_effort = settings.resolved_utility_effort()
         self.timeout = settings.agent_timeout_seconds
+        self.plan_timeout = settings.plan_agent_timeout_seconds
         self.max_turns = settings.agent_max_turns
         self.wiki = wiki
         self.plan_history_turns = settings.plan_history_turns
@@ -521,7 +522,9 @@ class AgentRunner:
         ready = ready and not executive_runtime.open_blocking_findings()
         return reply, plan_md, ready
 
-    async def _run_structured(self, agent, user_input: str):
+    async def _run_structured(
+        self, agent, user_input: str, *, timeout: float | None = None
+    ):
         """Run an agent to completion, async + bounded by a wall-clock timeout.
 
         Never use Runner.run_sync here: the FastAPI request handlers are async,
@@ -531,7 +534,7 @@ class AgentRunner:
         try:
             result = await asyncio.wait_for(
                 Runner.run(agent, user_input, max_turns=self.max_turns),
-                timeout=self.timeout,
+                timeout=timeout or self.timeout,
             )
         except AgentsException as exc:
             if _is_turn_limit_error(exc):
@@ -546,16 +549,22 @@ class AgentRunner:
         return result.final_output
 
     async def _yield_stream_events(
-        self, agent: Any, user_input: str, result_holder: dict[str, Any]
+        self,
+        agent: Any,
+        user_input: str,
+        result_holder: dict[str, Any],
+        *,
+        timeout: float | None = None,
     ) -> AsyncIterator[SseEvent]:
         """Drain one streamed run and store its result in a caller-owned holder."""
         self._require_client()
         result_holder["result"] = None
         result = Runner.run_streamed(agent, user_input, max_turns=self.max_turns)
         started = time.monotonic()
+        wall_clock_limit = timeout or self.timeout
         try:
             async for event in result.stream_events():
-                if time.monotonic() - started > self.timeout:
+                if time.monotonic() - started > wall_clock_limit:
                     yield SseError(message="The request timed out.", code="timeout")
                     return
                 for translated in translate_sdk_event(
@@ -643,7 +652,7 @@ class AgentRunner:
         )
         result_holder: dict[str, Any] = {}
         async for event in self._yield_stream_events(
-            turn.agent, turn.user_input, result_holder
+            turn.agent, turn.user_input, result_holder, timeout=self.plan_timeout
         ):
             if isinstance(event, SseError):
                 yield event
@@ -724,7 +733,9 @@ class AgentRunner:
         current_draft = turn.current_draft
         runtime = turn.runtime
         try:
-            parsed = await self._run_structured(turn.agent, turn.user_input)
+            parsed = await self._run_structured(
+                turn.agent, turn.user_input, timeout=self.plan_timeout
+            )
         except AgentTurnLimitError as exc:
             return str(exc), turn.current_draft, False
         if not isinstance(parsed, PlanTurnOutput):

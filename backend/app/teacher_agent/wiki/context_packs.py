@@ -976,9 +976,17 @@ def is_plan_ready(store, plan_md: str) -> bool:
         "core evidence task:",
         "### exit ticket",
     )
+    three_audience_fallback_required = (
+        "# lesson plan",
+        "## teacher plan",
+        "## student materials",
+        "## observation / update",
+        "### exit evidence",
+    )
     return (
         all(heading in text for heading in legacy_required)
         or all(heading in text for heading in package_required)
+        or all(heading in text for heading in three_audience_fallback_required)
     ) and len(plan_md.strip()) > 200
 
 

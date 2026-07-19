@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # Legacy alias for the chat effort (kept so existing .env files keep working).
     openai_reasoning_effort: ReasoningEffort | None = None
     agent_timeout_seconds: float = 240.0
+    # A full lesson package can legitimately need several source/history tool
+    # rounds plus synthesis; keep that budget separate from shorter workflows.
+    plan_agent_timeout_seconds: float = 600.0
     agent_max_turns: int = 16
 
     # --- Context limits (see app/context_limits.py + context_management.md) ---

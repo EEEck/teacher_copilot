@@ -151,6 +151,28 @@ def test_plan_finalization_renders_a_valid_structured_artifact(wiki):
     assert wiki.is_plan_ready(markdown) is True
 
 
+def test_plan_readiness_accepts_three_audience_markdown_fallback(wiki):
+    markdown = """# Lesson Plan — Organic Chemistry 1: Why carbon makes four bonds
+
+## Teacher plan
+
+### Learning goals and evidence
+- Students use a particle-model drawing to explain carbon bonding.
+
+## Student materials
+
+### Carbon bond ladder
+- Draw and compare single, double, and triple bonds.
+
+## Observation / update
+
+### Exit evidence
+- Explain one drawing using precise vocabulary.
+"""
+
+    assert wiki.is_plan_ready(markdown) is True
+
+
 def test_plan_finalization_keeps_legacy_draft_when_package_is_invalid(wiki):
     runner = AgentRunner.__new__(AgentRunner)
     runner.wiki = wiki
