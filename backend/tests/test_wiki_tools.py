@@ -28,6 +28,8 @@ def test_create_chat_wiki_tools_exposes_mvp_names():
         "list_trusted_sources",
         "search_trusted_sources",
         "read_trusted_source",
+        "search_subject_guidance",
+        "read_subject_guidance",
         "get_raw_evidence",
         "remember",
         "report_verification_finding",
@@ -47,6 +49,18 @@ def test_trusted_source_tools_have_bounded_planner_contracts():
         search.params_json_schema["properties"]
     )
     assert {"source_id", "section_id"} <= set(read.params_json_schema["properties"])
+
+
+def test_subject_guidance_tools_have_bounded_active_subject_contracts():
+    wiki = WikiStore(root=_WIKI_ROOT)
+    tools = create_chat_wiki_tools(
+        WikiToolContext(wiki=wiki, class_id=CLASS_ID, planning=PlanRuntime())
+    )
+    search = next(tool for tool in tools if tool.name == "search_subject_guidance")
+    read = next(tool for tool in tools if tool.name == "read_subject_guidance")
+
+    assert {"query", "max_results"} <= set(search.params_json_schema["properties"])
+    assert {"path"} <= set(read.params_json_schema["properties"])
 
 
 def test_memory_update_tools_include_shared_verification_tools():

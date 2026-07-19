@@ -203,3 +203,79 @@ def regenerate_class_framework_profile(store, class_id: str) -> str:
     )
     store.write_text(path, rendered)
     return rendered
+
+
+def _active_framework_directory(store, class_id: str) -> tuple[Path, FrameworkSummary]:
+    framework = framework_for_class(store, class_id)
+    return _framework_root(store, framework.subject) / f"{framework.grade:02d}", framework
+
+
+def _guidance_payload(store, path: Path) -> dict:
+    metadata, body = _frontmatter(path.read_text(encoding="utf-8"))
+    return {
+        "path": store.rel_wiki(path),
+        "grade": int(metadata.get("grade", "0") or 0),
+        "page": path.stem,
+        "section": "full_page",
+        "source_refs": list(_source_refs(metadata.get("source_refs", ""))),
+        "text": body.strip(),
+    }
+
+
+def search_subject_guidance(
+    store, class_id: str, query: str, max_results: int = 8
+) -> list[dict]:
+    """Search detailed guidance only within the active class's grade/branch."""
+    active_dir, framework = _active_framework_directory(store, class_id)
+    terms = sorted({term for term in re.findall(r"[a-z0-9-]{3,}", query.lower())})
+    if not terms:
+        return []
+    results: list[tuple[int, dict]] = []
+    for path in sorted(active_dir.rglob("*.md")):
+        payload = _guidance_payload(store, path)
+        haystack = (payload["text"] + " " + path.name).lower()
+        matched = [term for term in terms if term in haystack]
+        if not matched:
+            continue
+        score = sum(haystack.count(term) for term in matched)
+        lines = [line.strip() for line in payload["text"].splitlines() if line.strip()]
+        snippet = next(
+            (line for line in lines if any(term in line.lower() for term in matched)),
+            payload["text"],
+        )[:900]
+        results.append(
+            (
+                score,
+                {
+                    "path": payload["path"],
+                    "grade": framework.grade,
+                    "branch": framework.branch,
+                    "page": payload["page"],
+                    "section": "full_page",
+                    "source_refs": payload["source_refs"],
+                    "matched_terms": matched,
+                    "snippet": snippet,
+                },
+            )
+        )
+    results.sort(key=lambda item: (-item[0], item[1]["path"]))
+    return [item for _, item in results[: max(1, min(max_results or 8, 20))]]
+
+
+def read_subject_guidance(store, class_id: str, relative_path: str) -> dict:
+    """Read one allowlisted active-grade guidance page with provenance metadata."""
+    active_dir, framework = _active_framework_directory(store, class_id)
+    requested = Path(relative_path)
+    if requested.is_absolute() or requested.suffix.lower() != ".md":
+        raise ValueError("Subject guidance path is not allowed.")
+    candidate = (store.root / requested).resolve()
+    allowed_root = active_dir.resolve()
+    if candidate != allowed_root and allowed_root not in candidate.parents:
+        raise ValueError("Subject guidance path is outside the active framework.")
+    if not candidate.is_file():
+        raise ValueError("Subject guidance page was not found.")
+    payload = _guidance_payload(store, candidate)
+    payload["grade"] = framework.grade
+    payload["branch"] = framework.branch
+    payload["text"] = payload["text"][:5000]
+    return payload

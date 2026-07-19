@@ -671,6 +671,30 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
             return f"Error: {e}"
 
     @function_tool
+    def search_subject_guidance(query: str, max_results: int = 8) -> str:
+        """Search active-grade teaching guidance for deeper pedagogy, not curriculum claims."""
+        try:
+            hits = wiki.search_subject_guidance(
+                class_id, query, max_results=max(1, min(max_results or 8, 20))
+            )
+            return _capture(
+                ctx.planning, "subject_guidance_search", json.dumps(hits, indent=2)
+            )
+        except ValueError as e:
+            return f"Error: {e}"
+
+    @function_tool
+    def read_subject_guidance(path: str) -> str:
+        """Read one active-grade framework page with source-ref provenance."""
+        try:
+            payload = wiki.read_subject_guidance(class_id, path)
+            return _capture(
+                ctx.planning, "subject_guidance_read", json.dumps(payload, indent=2)
+            )
+        except ValueError as e:
+            return f"Error: {e}"
+
+    @function_tool
     def get_raw_evidence(raw_ref: str) -> str:
         """Fetch full raw output for a previously captured evidence raw_ref.
 
@@ -689,6 +713,8 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
         list_trusted_sources,
         search_trusted_sources,
         read_trusted_source,
+        search_subject_guidance,
+        read_subject_guidance,
         get_raw_evidence,
         *create_executive_verification_tools(ctx),
         *create_remember_tool(ctx),

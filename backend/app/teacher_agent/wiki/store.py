@@ -114,6 +114,14 @@ class WikiStore:
     def regenerate_framework_profile(self, class_id):
         return subject_frameworks.regenerate_class_framework_profile(self, class_id)
 
+    def search_subject_guidance(self, class_id, query, max_results=8):
+        return subject_frameworks.search_subject_guidance(
+            self, class_id, query, max_results
+        )
+
+    def read_subject_guidance(self, class_id, path):
+        return subject_frameworks.read_subject_guidance(self, class_id, path)
+
     def is_class_memory_path(self, class_id, relative_path):
         return search.is_class_memory_path(self, class_id, relative_path)
 
