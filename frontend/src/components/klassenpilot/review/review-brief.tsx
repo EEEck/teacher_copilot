@@ -94,7 +94,7 @@ function BriefItemRow({
               disabled={disabled || entry.required}
               title={
                 entry.required
-                  ? "The lesson results are required to save memory"
+                  ? "This change is required and can't be skipped"
                   : "Don't save this change"
               }
             >
