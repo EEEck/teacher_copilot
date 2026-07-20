@@ -90,6 +90,27 @@ labels, and confirmed-target date mismatches without rewriting the diary. The
 remaining quality-review item is the offline/batch DeepEval calibration over
 retained beta artifacts; the next workflow packs are Discuss and Class Brief.
 
+### Active beta follow-up queue (2026-07-20)
+
+These are the next bounded tasks from live beta testing. Keep each one as a
+separate implementation slice; they are intentionally not a reason to expand
+the product surface.
+
+| Priority | Task | Scope and acceptance |
+|---|---|---|
+| P0 | **Chat-turn resilience** | Close the remaining frontend notifier/hydration race: a backend-complete turn must always clear the local pending state and merge the final reply. Add focused notifier integration coverage. Use the [browser workflow runbook](../docs/superpowers/specs/2026-07-20-browser-workflow-runbook-design.md) for a fresh-sandbox Plan, Discuss, and Update Memory acceptance pass. |
+| P0 | **Input-to-wiki reconciliation** | Treat committed wiki identity facts as the baseline. When a diary changes or removes an unknown/mismatched student ID, retain the conflict for an explicit teacher correction rather than silently normalizing it away. Cover roster mismatch -> correction -> recovery, plus removal-on-revise/tombstone behavior. |
+| P0 | **Date awareness** | Add the current date and the planned-versus-taught rule to the compact teacher context used by Plan, Update Memory, and Sweep. Freeze time in prompt-assembly tests. |
+| P1 | **MemV4 capture admission/routing** | Turn the live-eval ledger's known gaps M4-LIVE-02 through M4-LIVE-05 into behavior: scoped Chemistry preferences, instruction/evidence decomposition, no accidental global preference leakage, and no uncertain durable candidates. Own this as one backend slice because the cases share capture/routing policy. |
+| P1 | **Offline plan-quality calibration** | Run an adapted Bavaria Chemie 9 NTG P/R/O/M rubric over retained beta plan artifacts using DeepEval/LLM-as-judge. Store operator-only results; do not add user latency, hidden rewriting, or a new live save gate. |
+| P1 | **Generic plan empty state** | Replace the legacy pre-filled `Lesson Plan — Next lesson` shell with a class-agnostic empty state that explains that a plan package appears after a teacher request. |
+| P2 | **Reopen saved plan** | Implement the already-scoped `lessonDate` session-start hint so a saved plan can be refined in chat instead of regenerated. |
+| P2 | **Documentation consolidation** | Execute the MemV4 consolidation specification and reconcile stale historical references, particularly generated class profiles and inactive structured lesson artifacts. |
+
+Explicitly deferred: Docling runtime ingestion, document/figure rendering,
+source-panel UI, broader Discuss/Class Brief verification packs, and class-home
+expansion. They do not block the beta memory -> plan loop.
+
 | Item | Engineering notes |
 |---|---|
 | **Evidence/source panel** | Surface source metadata for class memory used in plans and memory updates. Start with class wiki sources and raw refs already captured by runtime state. |
