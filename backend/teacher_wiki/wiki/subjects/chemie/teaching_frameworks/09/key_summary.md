@@ -29,7 +29,10 @@ version: 1
 
 ## Scope orientation
 
-Grade 9 NTG source orientation includes atomic structure and the shortened
-periodic table, ion formation/electron transfer, molecular structure, and
-structure-property reasoning. Read trusted source sections for exact official
-claims and use lesson history for what the class has actually covered.
+Grade 9 NTG source orientation covers all five Lernbereiche: chemical methods
+and models (`c9_methoden`), atomic structure and the shortened periodic table
+(`c9_atombau`), donor–acceptor / ions and redox (`c9_ionen_redox`), molecules
+and structure–property relations (`c9_molekuele`), and particle interactions /
+intermolecular forces (`c9_wechselwirkung`). Read trusted source sections for
+exact official claims and use lesson history for what the class has actually
+covered.

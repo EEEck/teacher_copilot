@@ -18,6 +18,18 @@ def test_source_frontmatter_and_sections_are_parsed(wiki):
     assert {section.id for section in source.sections} >= {"c9_atombau", "c9_molekuele"}
 
 
+def test_c9_ntg_source_lists_all_five_lernbereich_section_ids(wiki):
+    source = load_trusted_sources(wiki.root)["by-lehrplanplus-chemie-9-ntg"]
+    section_ids = {section.id for section in source.sections}
+    assert {
+        "c9_methoden",
+        "c9_atombau",
+        "c9_ionen_redox",
+        "c9_molekuele",
+        "c9_wechselwirkung",
+    } <= section_ids
+
+
 def test_class_profile_links_declared_sources(wiki):
     profile = load_curriculum_profile(wiki.root, "chemie_9b_2026_27")
     assert profile.branch == "NTG"
@@ -32,6 +44,45 @@ def test_search_returns_c9_source_for_atomic_structure_query(wiki):
     assert hits
     assert hits[0]["source_id"] == "by-lehrplanplus-chemie-9-ntg"
     assert hits[0]["section_id"] == "c9_atombau"
+
+
+def test_search_and_read_retrieve_ionen_redox_and_wechselwirkung_sections(wiki):
+    redox_hits = search_sources_for_class(
+        wiki.root,
+        "chemie_9b_2026_27",
+        "Donator-Akzeptor Redox Elektrolyse Ionen",
+        scope="active",
+    )
+    assert redox_hits
+    assert redox_hits[0]["source_id"] == "by-lehrplanplus-chemie-9-ntg"
+    assert redox_hits[0]["section_id"] == "c9_ionen_redox"
+
+    interaction_hits = search_sources_for_class(
+        wiki.root,
+        "chemie_9b_2026_27",
+        "Wechselwirkung Wasserstoffbrücken Lösemittel Polarität",
+        scope="active",
+    )
+    assert interaction_hits
+    assert interaction_hits[0]["source_id"] == "by-lehrplanplus-chemie-9-ntg"
+    assert interaction_hits[0]["section_id"] == "c9_wechselwirkung"
+
+    redox = read_source_for_class(
+        wiki.root,
+        "chemie_9b_2026_27",
+        "by-lehrplanplus-chemie-9-ntg",
+        section_id="c9_ionen_redox",
+    )
+    content = str(redox["content"]).lower()
+    assert "donor–acceptor" in content or "donor-acceptor" in content
+
+    interactions = read_source_for_class(
+        wiki.root,
+        "chemie_9b_2026_27",
+        "by-lehrplanplus-chemie-9-ntg",
+        section_id="c9_wechselwirkung",
+    )
+    assert "intermolecular" in str(interactions["content"]).lower()
 
 
 def test_read_rejects_unlinked_source(wiki):

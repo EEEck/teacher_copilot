@@ -17,3 +17,6 @@ version: 1
   or argument rather than an activity-completion proxy.
 - Treat source and model evaluation as student reasoning when the lesson uses
   representations, data, or claims.
+- Orient goals to the active Lernbereich when relevant: methods/models, atomic
+  structure, donor–acceptor ions/redox, molecules, or particle interactions —
+  then read the matching trusted source section before claiming official scope.

@@ -226,7 +226,10 @@ final safety boundary.
 
 The Plan verification pack adds a separate, bounded quality report without
 making lesson generation wait for another model turn. Deterministic package,
-source-read, and timing checks are attached immediately. A no-tools economy
+source-read, and timing checks are attached immediately; package integrity
+checks (task alignment, student-section leaks, exit-evidence buckets) live in
+the planning/differentiation procedures and this Plan verifier and remain
+advisory for layout. A no-tools economy
 review follows in the background using only the exact draft, request, selected
 route, compact class/teacher/subject context, and consulted source IDs/sections.
 It reports curriculum scope, class fit, framework adjustments, Chemistry
