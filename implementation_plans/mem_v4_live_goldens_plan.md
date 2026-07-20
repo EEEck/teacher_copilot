@@ -28,7 +28,7 @@
 - Consumes: `MemoryCaptureGolden` and the live runner in `test_klassenpilot_memory_capture_live.py`.
 - Produces: golden IDs that identify the beta-derived scope, target, and false-positive cases.
 
-- [ ] **Step 1: Write failing deterministic assertions**
+- [x] **Step 1: Write failing deterministic assertions**
 
 Add assertions requiring these fixture IDs and contracts:
 
@@ -40,7 +40,7 @@ assert "teacher_profile.md" in _by_id("five_minute_review_no_global_leakage").fo
 assert _by_id("light_orbital_preference_class_fast_lane").target == "copilot_profile.md"
 ```
 
-- [ ] **Step 2: Run the focused contract test and verify RED**
+- [x] **Step 2: Run the focused contract test and verify RED**
 
 Run:
 
@@ -51,7 +51,7 @@ cd backend
 
 Expected: failure because the three beta-derived golden IDs do not yet exist.
 
-- [ ] **Step 3: Add minimal fixture definitions**
+- [x] **Step 3: Add minimal fixture definitions**
 
 Add the following cases to `MEMORY_CAPTURE_GOLDENS`:
 
@@ -65,7 +65,7 @@ Add the following cases to `MEMORY_CAPTURE_GOLDENS`:
 
 Use exact expected targets/forbidden targets from the design and leave current known failures as live-eval findings, not production fixes.
 
-- [ ] **Step 4: Run deterministic memory-capture tests and verify GREEN**
+- [x] **Step 4: Run deterministic memory-capture tests and verify GREEN**
 
 Run:
 
@@ -88,19 +88,19 @@ Expected: all deterministic tests pass.
 - Consumes: `run_chat_scenario`, `Golden`, and `GEval` criteria from `GroundedChatGEval`.
 - Produces: an opt-in LLM judge that receives the active lesson task and a Dota detour.
 
-- [ ] **Step 1: Write a failing fixture-contract test**
+- [x] **Step 1: Write a failing fixture-contract test**
 
 Assert that the Discuss scenario has an active teacher task, a Dota/Legion Commander detour, and criteria requiring a concise natural answer plus a return to the lesson task.
 
-- [ ] **Step 2: Run it and verify RED**
+- [x] **Step 2: Run it and verify RED**
 
 Run the new focused test with pytest; expected failure is the absent Discuss golden.
 
-- [ ] **Step 3: Add fixture and reuse existing opt-in GEval runner**
+- [x] **Step 3: Add fixture and reuse existing opt-in GEval runner**
 
 Define a single Discuss live golden with `workflow="discussion"`. Its LLM criteria must assess teacher-visible reply only: answer the detour briefly, avoid invented game facts, and explicitly return to the active lesson-planning topic.
 
-- [ ] **Step 4: Run deterministic contract test and the existing live test in skipped mode**
+- [x] **Step 4: Run deterministic contract test and the existing live test in skipped mode**
 
 Run:
 
@@ -123,15 +123,15 @@ Expected: deterministic test passes; live test is skipped unless `RUN_LIVE_AGENT
 - Consumes: committed golden IDs and beta trace timestamps only.
 - Produces: a handoff ledger linking each observed case to its automated coverage and proposed owning branch.
 
-- [ ] **Step 1: Write a failing documentation-presence assertion**
+- [x] **Step 1: Write a failing documentation-presence assertion**
 
 Add a deterministic test that reads the ledger and requires every new golden ID and the schema-envelope issue ID to be present.
 
-- [ ] **Step 2: Run it and verify RED**
+- [x] **Step 2: Run it and verify RED**
 
 Run the focused test; expected failure is the missing ledger document.
 
-- [ ] **Step 3: Add the ledger and evals runbook link**
+- [x] **Step 3: Add the ledger and evals runbook link**
 
 Document observed outcome, desired behaviour, golden ID, test tier, likely code area, and follow-up branch for:
 
@@ -147,7 +147,7 @@ M4-LIVE-07 required nullable structured envelope
 
 Add a `MemV4 live-derived goldens` section to `backend/docs/evals.md` with deterministic and opt-in live commands.
 
-- [ ] **Step 4: Run all focused deterministic tests**
+- [x] **Step 4: Run all focused deterministic tests**
 
 Run:
 
@@ -158,7 +158,7 @@ cd backend
 
 Expected: all pass without OpenAI calls.
 
-- [ ] **Step 5: Update this plan’s checkboxes and commit**
+- [x] **Step 5: Update this plan’s checkboxes and commit**
 
 Commit the goldens, ledger, test, runbook, and completed plan together with:
 
