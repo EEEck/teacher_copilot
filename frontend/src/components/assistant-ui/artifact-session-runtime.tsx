@@ -13,30 +13,17 @@ import {
 import {
   AssistantRuntimeProvider,
   type AppendMessage,
+  type ThreadMessageLike,
 } from "@assistant-ui/react";
 import { isUnknownSessionError, type ChatMessage, type CompletenessChecklist } from "@/lib/api";
 import type { MemoryCandidate } from "@/lib/api";
 import type { ChatStreamChunk } from "@/components/assistant-ui/artifact-runtime-config";
 import type { ArtifactMode } from "@/components/assistant-ui/artifact-runtime-config";
 import { initialAssistantRunContent, lessonContextFromMemoryState } from "@/lib/chat-run-feedback";
-import {
-  clearPendingChatTurn,
-  markPendingChatTurn,
-} from "@/lib/pending-chat-turns";
 import { extractSessionAttachments, type SessionAttachment } from "@/lib/session-attachments";
-import { streamPartsToRunContent } from "@/lib/sse-chat";
+import { cancelTurn, runTurn } from "@/features/workflow-drafts/turn-runner";
 import { useWorkflowChatRuntime, type UpdateWorkflowThread } from "@/features/workflow-drafts/workflow-chat-runtime";
 import { workflowTurnActivity } from "@/features/workflow-drafts/workflow-turn-activity";
-import {
-  flagsForPhase,
-  resolveClientStreamEnd,
-} from "@/features/workflow-drafts/workflow-turn-state";
-import {
-  newThreadMessageId,
-  isPlaceholderAssistantContent,
-  lastAssistantContent,
-  replaceLastAssistantContent,
-} from "@/features/workflow-drafts/thread-messages";
 import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 
 export type ArtifactChatResult = {
@@ -74,18 +61,6 @@ export type ArtifactSessionConfig = {
     attachments?: SessionAttachment[];
     signal?: AbortSignal;
   }) => AsyncGenerator<ChatStreamChunk>;
-  /** Poll draft status while showing the resumed Still-working spinner. */
-  fetchDraft?: () => Promise<{
-    draftId: string;
-    artifactRevision: number;
-    artifactHash: string;
-    turnInProgress: boolean;
-    latestTurnComplete: boolean;
-    messages: ChatMessage[];
-    artifactMarkdown: string;
-    completeness?: CompletenessChecklist | null;
-    memoryState?: Record<string, unknown> | null;
-  }>;
   patchDraft?: (markdown: string) => Promise<{
     completeness?: CompletenessChecklist;
     readyToSave?: boolean;
@@ -97,20 +72,6 @@ export type ArtifactSessionConfig = {
   onSessionLost?: (preserveMarkdown: string) => Promise<void>;
   onCompletenessChange?: (checklist: CompletenessChecklist) => void;
 };
-
-const CHAT_ERROR_REPLY =
-  "I could not finish that turn. Your draft is unchanged — try a shorter message or one topic at a time.";
-
-function friendlyChatError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : "Something went wrong";
-  if (/max turns/i.test(raw) || /API 5\d\d/i.test(raw)) {
-    return CHAT_ERROR_REPLY;
-  }
-  if (raw.startsWith("API ")) {
-    return CHAT_ERROR_REPLY;
-  }
-  return raw;
-}
 
 type ArtifactSessionContextValue = {
   classId: string;
@@ -158,6 +119,15 @@ function extractText(message: AppendMessage): string {
 
 type EditorState = { history: string[]; index: number };
 
+/**
+ * Chat/session provider for artifact workflows (plan / ingest / discuss).
+ *
+ * Runner-lite (docs/beta_readiness_audit_2026-07-13.md §A.1): the SSE turn is
+ * owned by the module-level turn runner and the workflow draft store — this
+ * component only renders store state, dispatches user intent (send / stop /
+ * edit), and owns the page-local artifact editor. Navigation never touches a
+ * running turn; only the Stop button aborts the client stream.
+ */
 export function ArtifactSessionRuntimeProvider({
   config,
   children,
@@ -177,77 +147,38 @@ export function ArtifactSessionRuntimeProvider({
     lessonDate: configLessonDate = "",
     lessonTitle: configLessonTitle = "",
     initialMarkdown,
-    initialMessages,
     initialCompleteness = null,
     initialMemoryState = null,
     chatStream,
     patchDraft,
-    fetchDraft,
     getSessionId: configGetSessionId,
     onSessionLost,
     onCompletenessChange,
   } = config;
 
+  // Store key for this mount; the provider remounts (workflowDraftRuntimeKey)
+  // when the draft/session identity changes.
+  const draftKey = draftId || sessionId;
+
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = configGetSessionId?.() ?? sessionId;
-  const [activeSessionId, setActiveSessionId] = useState(sessionId);
-  const [activeDraftId, setActiveDraftId] = useState(draftId);
-  const [activeArtifactRevision, setActiveArtifactRevision] = useState(artifactRevision);
-  const [activeArtifactHash, setActiveArtifactHash] = useState(artifactHash);
-  const [activeTurnInProgress, setActiveTurnInProgress] = useState(turnInProgress);
-  const [activeLatestTurnComplete, setActiveLatestTurnComplete] =
-    useState(latestTurnComplete);
-  const activeDraftIdRef = useRef(draftId);
-  activeDraftIdRef.current = activeDraftId;
-  const storedDraft = useWorkflowDraftStore(
-    (state) => state.draftsById[activeDraftId || activeSessionId],
+  const [recoveredSessionId, setRecoveredSessionId] = useState(
+    configGetSessionId?.() ?? sessionId,
   );
 
-  useEffect(() => {
-    sessionIdRef.current = configGetSessionId?.() ?? sessionId;
-    setActiveSessionId(sessionIdRef.current);
-    setActiveDraftId(draftId);
-    setActiveArtifactRevision(artifactRevision);
-    setActiveArtifactHash(artifactHash);
-    setActiveTurnInProgress(turnInProgress);
-    setActiveLatestTurnComplete(latestTurnComplete);
-  }, [
-    sessionId,
-    configGetSessionId,
-    draftId,
-    artifactRevision,
-    artifactHash,
-    turnInProgress,
-    latestTurnComplete,
-  ]);
+  const storedDraft = useWorkflowDraftStore((state) => state.draftsById[draftKey]);
+  const turn = useWorkflowDraftStore((state) => state.turnByDraftId[draftKey]);
+
+  const configLessonDateRef = useRef(configLessonDate);
+  configLessonDateRef.current = configLessonDate;
+  const configLessonTitleRef = useRef(configLessonTitle);
+  configLessonTitleRef.current = configLessonTitle;
 
   const [editor, setEditor] = useState<EditorState>({
     history: [initialMarkdown],
     index: 0,
   });
-  const [completeness, setCompleteness] = useState<CompletenessChecklist | null>(initialCompleteness);
-  const [readyToSave, setReadyToSave] = useState(false);
-  const [lastChangeSummary, setLastChangeSummary] = useState<string | null>(null);
-  const [memoryState, setMemoryState] = useState<Record<string, unknown> | null>(
-    initialMemoryState,
-  );
-  const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidate[]>([]);
-  const memoryStateRef = useRef(memoryState);
-  memoryStateRef.current = memoryState;
-  const configLessonDateRef = useRef(configLessonDate);
-  configLessonDateRef.current = configLessonDate;
-  const configLessonTitleRef = useRef(configLessonTitle);
-  configLessonTitleRef.current = configLessonTitle;
-  const [isUpdating, setIsUpdating] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "error">("idle");
-  const streamAbortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    return () => {
-      streamAbortRef.current?.abort();
-      streamAbortRef.current = null;
-    };
-  }, []);
 
   const artifactMarkdown = editor.history[editor.index] ?? initialMarkdown;
   const editorRef = useRef(editor);
@@ -268,12 +199,28 @@ export function ArtifactSessionRuntimeProvider({
     });
   }, []);
 
-  // Backend draft refreshes (background turn completion) must update the editor
-  // without remounting the assistant-ui runtime.
+  // Re-bootstrap without remount (ArtifactSessionPage refresh path).
   useEffect(() => {
     if (initialMarkdown === lastSyncedRef.current) return;
     pushMarkdown(initialMarkdown, "agent");
   }, [artifactRevision, artifactHash, initialMarkdown, pushMarkdown]);
+
+  // Agent-side artifact updates (turn completion, notifier/recovery upserts)
+  // flow store → editor; teacher edits flow editor → PATCH → store.
+  useEffect(() => {
+    if (!storedDraft) return;
+    if (storedDraft.artifactMarkdown !== lastSyncedRef.current) {
+      pushMarkdown(storedDraft.artifactMarkdown, "agent");
+    }
+  }, [storedDraft, pushMarkdown]);
+
+  const lastNotifiedCompletenessRef = useRef<CompletenessChecklist | null>(null);
+  useEffect(() => {
+    const checklist = storedDraft?.completeness ?? null;
+    if (!checklist || checklist === lastNotifiedCompletenessRef.current) return;
+    lastNotifiedCompletenessRef.current = checklist;
+    onCompletenessChange?.(checklist);
+  }, [storedDraft?.completeness, onCompletenessChange]);
 
   const setArtifactMarkdown = useCallback(
     (value: string, source: "manual" | "agent" = "manual") => {
@@ -295,112 +242,15 @@ export function ArtifactSessionRuntimeProvider({
     }));
   }, []);
 
-  const applyMeta = useCallback(
-    (
-      checklist: CompletenessChecklist | null | undefined,
-      ready: boolean | undefined,
-      result?: Pick<
-        ArtifactChatResult,
-        "lastChangeSummary" | "memoryState" | "memoryCandidates"
-      >,
-    ) => {
-      if (checklist) {
-        setCompleteness(checklist);
-        onCompletenessChange?.(checklist);
-      }
-      if (ready !== undefined) setReadyToSave(ready);
-      if (result?.lastChangeSummary !== undefined) {
-        setLastChangeSummary(result.lastChangeSummary ?? null);
-      }
-      if (result?.memoryState !== undefined) {
-        setMemoryState(result.memoryState ?? null);
-      }
-      if (result?.memoryCandidates !== undefined) {
-        setMemoryCandidates(result.memoryCandidates ?? []);
-      }
-    },
-    [onCompletenessChange],
-  );
-
+  // Tell the app-wide notifier which chat is on screen, so it doesn't toast a
+  // completion the teacher is already watching.
   useEffect(() => {
-    if (!storedDraft) return;
-    setActiveSessionId(storedDraft.sessionId);
-    setActiveDraftId(storedDraft.draftId);
-    setActiveArtifactRevision(storedDraft.artifactRevision);
-    setActiveArtifactHash(storedDraft.artifactHash);
-    setActiveTurnInProgress(storedDraft.turnInProgress);
-    setActiveLatestTurnComplete(storedDraft.latestTurnComplete);
-    if (storedDraft.artifactMarkdown !== lastSyncedRef.current) {
-      pushMarkdown(storedDraft.artifactMarkdown, "agent");
-    }
-    if (storedDraft.completeness != null || storedDraft.memoryState !== undefined) {
-      applyMeta(storedDraft.completeness, undefined, {
-        memoryState: storedDraft.memoryState,
-      });
-    }
-  }, [storedDraft, pushMarkdown, applyMeta]);
-
-  // If the UI shows Still working but the browser SSE is gone, poll the draft
-  // directly. Covers leave/return when the pending marker was cleared too early.
-  useEffect(() => {
-    if (!fetchDraft) return;
-    if (!activeTurnInProgress || isUpdating) return;
-    let cancelled = false;
-    const refresh = async () => {
-      try {
-        const draft = await fetchDraft();
-        if (cancelled || draft.turnInProgress) return;
-        useWorkflowDraftStore.getState().upsert({
-          mode,
-          classId,
-          sessionId: sessionIdRef.current,
-          draftId: draft.draftId,
-          messages: draft.messages,
-          artifactMarkdown: draft.artifactMarkdown,
-          artifactRevision: draft.artifactRevision,
-          artifactHash: draft.artifactHash,
-          turnInProgress: draft.turnInProgress,
-          latestTurnComplete: draft.latestTurnComplete,
-          completeness: draft.completeness ?? null,
-          memoryState: draft.memoryState ?? null,
-        });
-      } catch {
-        // Keep spinner; a later poll or notifier can still recover.
-      }
-    };
-    void refresh();
-    const interval = window.setInterval(() => {
-      void refresh();
-    }, 2000);
+    useWorkflowDraftStore.getState().setMountedDraftId(draftKey);
     return () => {
-      cancelled = true;
-      window.clearInterval(interval);
+      const store = useWorkflowDraftStore.getState();
+      if (store.mountedDraftId === draftKey) store.setMountedDraftId(null);
     };
-  }, [activeTurnInProgress, isUpdating, fetchDraft, mode, classId]);
-
-  const applyDraftMetadata = useCallback(
-    (metadata?: {
-      draftId?: string;
-      artifactRevision?: number;
-      artifactHash?: string;
-      turnInProgress?: boolean;
-      latestTurnComplete?: boolean;
-    }) => {
-      if (!metadata) return;
-      if (metadata.draftId !== undefined) setActiveDraftId(metadata.draftId);
-      if (metadata.artifactRevision !== undefined) {
-        setActiveArtifactRevision(metadata.artifactRevision);
-      }
-      if (metadata.artifactHash !== undefined) setActiveArtifactHash(metadata.artifactHash);
-      if (metadata.turnInProgress !== undefined) {
-        setActiveTurnInProgress(metadata.turnInProgress);
-      }
-      if (metadata.latestTurnComplete !== undefined) {
-        setActiveLatestTurnComplete(metadata.latestTurnComplete);
-      }
-    },
-    [],
-  );
+  }, [draftKey]);
 
   const runWithSessionRecovery = useCallback(
     async <T,>(run: (sessionId: string) => Promise<T>, preserveMarkdown?: string): Promise<T> => {
@@ -414,219 +264,59 @@ export function ArtifactSessionRuntimeProvider({
         if (!onSessionLost || !isUnknownSessionError(err)) throw err;
         await onSessionLost(markdown);
         sessionIdRef.current = configGetSessionId?.() ?? sessionIdRef.current;
-        setActiveSessionId(sessionIdRef.current);
+        setRecoveredSessionId(sessionIdRef.current);
         return await run(sessionIdRef.current);
       }
     },
-    [initialMarkdown, onSessionLost, configGetSessionId, sessionId],
+    [initialMarkdown, onSessionLost, configGetSessionId],
   );
 
   const onNew = useCallback(
-    async (message: AppendMessage, updateThread: UpdateWorkflowThread) => {
+    async (message: AppendMessage, _updateThread: UpdateWorkflowThread) => {
       if (message.role !== "user") return;
+      const text = extractText(message);
+      const attachments = await extractSessionAttachments(
+        message as unknown as Parameters<typeof extractSessionAttachments>[0],
+      );
+      const currentMarkdown =
+        editorRef.current.history[editorRef.current.index] ?? initialMarkdown;
 
-      const userContent = message.content ?? [];
-      const startingContent = initialAssistantRunContent() ?? [];
-
-      updateThread((messages) => [
-        ...messages,
-        {
-          id: newThreadMessageId("user"),
-          role: "user",
-          content: userContent,
-        },
-        {
-          id: newThreadMessageId("assistant"),
-          role: "assistant",
-          content: startingContent,
-        },
-      ]);
-      setIsUpdating(true);
-      const threadKey = activeDraftIdRef.current || sessionIdRef.current;
-      const baselineMessageCount =
-        useWorkflowDraftStore.getState().draftsById[threadKey]?.messages.length ??
-        useWorkflowDraftStore.getState().draftsById[activeDraftIdRef.current]?.messages
-          .length ??
-        0;
-      const fromMemory = lessonContextFromMemoryState(memoryStateRef.current);
+      const snapshot = useWorkflowDraftStore.getState().draftsById[draftKey];
+      const fromMemory = lessonContextFromMemoryState(snapshot?.memoryState ?? null);
       const lessonDate =
-        fromMemory.lessonDate ||
-        configLessonDateRef.current.trim() ||
-        undefined;
+        fromMemory.lessonDate || configLessonDateRef.current.trim() || undefined;
       const lessonTitle =
-        fromMemory.lessonTitle ||
-        configLessonTitleRef.current.trim() ||
-        undefined;
-      const pendingKey =
-        typeof window !== "undefined"
-          ? markPendingChatTurn(window.sessionStorage, {
-              mode,
-              classId,
-              sessionId: sessionIdRef.current,
-              draftId: activeDraftIdRef.current || undefined,
-              lessonDate,
-              lessonTitle,
-              resumeHref: `${window.location.pathname}${window.location.search}`,
-              baselineMessageCount,
-            })
-          : "";
-      // Successful turns leave the pending marker for PendingTurnNotifier.
-      // Only clear it on a hard client failure with no usable streamed content.
-      let turnFailed = false;
-      let terminalStreamError = false;
-      let finalResult: ArtifactChatResult | null = null;
-      let hadStreamedContent = false;
-      const abort = new AbortController();
-      streamAbortRef.current?.abort();
-      streamAbortRef.current = abort;
-      try {
-        const text = extractText(message);
-        const attachments = await extractSessionAttachments(
-          message as unknown as Parameters<typeof extractSessionAttachments>[0],
-        );
-        const currentMd =
-          editorRef.current.history[editorRef.current.index] ?? initialMarkdown;
-        setActiveTurnInProgress(true);
-        for await (const chunk of chatStream({
-          message: text,
-          currentMarkdown: currentMd,
-          attachments: attachments.length ? attachments : undefined,
-          signal: abort.signal,
-        })) {
-          if (chunk.kind === "progress") {
-            if (chunk.content.length > 0) {
-              const runContent = streamPartsToRunContent(chunk.content) ?? [];
-              if (!isPlaceholderAssistantContent(runContent)) {
-                hadStreamedContent = true;
-              }
-              updateThread((messages) =>
-                replaceLastAssistantContent(messages, runContent),
-              );
-            }
-            continue;
-          }
-          finalResult = chunk.result;
-          hadStreamedContent = true;
-          pushMarkdown(chunk.result.artifactMarkdown, "agent");
-          lastSyncedRef.current = chunk.result.artifactMarkdown;
-          applyDraftMetadata(chunk.result);
-          applyMeta(chunk.result.completeness ?? null, chunk.result.readyToSave, chunk.result);
-          const content =
-            chunk.content.length > 0
-              ? streamPartsToRunContent(chunk.content)
-              : [{ type: "text" as const, text: chunk.result.reply }];
-          updateThread((messages) =>
-            replaceLastAssistantContent(messages, content ?? []),
-          );
-        }
-        if (!finalResult) {
-          turnFailed = true;
-          let keptPartial = false;
-          updateThread((messages) => {
-            const existing = lastAssistantContent(messages);
-            if (existing && !isPlaceholderAssistantContent(existing)) {
-              keptPartial = true;
-              return messages;
-            }
-            return replaceLastAssistantContent(messages, [
-              { type: "text", text: CHAT_ERROR_REPLY },
-            ]);
-          });
-          if (keptPartial) hadStreamedContent = true;
-        }
-      } catch (err) {
-        turnFailed = true;
-        terminalStreamError = !(err instanceof DOMException && err.name === "AbortError");
-        let keptPartial = false;
-        updateThread((messages) => {
-          const existing = lastAssistantContent(messages);
-          if (terminalStreamError) {
-            return replaceLastAssistantContent(messages, [
-              { type: "text", text: friendlyChatError(err) },
-            ]);
-          }
-          if (existing && !isPlaceholderAssistantContent(existing)) {
-            keptPartial = true;
-            return messages;
-          }
-          return replaceLastAssistantContent(messages, [
-            { type: "text", text: friendlyChatError(err) },
-          ]);
-        });
-        if (keptPartial) hadStreamedContent = true;
-      } finally {
-        if (streamAbortRef.current === abort) {
-          streamAbortRef.current = null;
-        }
-        const phase = resolveClientStreamEnd({
-          gotFinal: Boolean(finalResult),
-          hadStreamedContent,
-          terminalError: terminalStreamError,
-        });
-        const flags = flagsForPhase(phase);
-        // Hard client failure with nothing useful: drop pending so notifier
-        // does not toast a false completion. Keep pending when backend may
-        // still finish (backend_running).
-        if (
-          phase === "failed" &&
-          turnFailed &&
-          pendingKey &&
-          typeof window !== "undefined"
-        ) {
-          clearPendingChatTurn(window.sessionStorage, pendingKey);
-        }
-        setIsUpdating(flags.localStreamActive);
+        fromMemory.lessonTitle || configLessonTitleRef.current.trim() || undefined;
 
-        const draftKey = activeDraftIdRef.current;
-        const existing = useWorkflowDraftStore.getState().draftsById[draftKey];
-        // Abort/unmount can finish after PendingTurnNotifier already applied the
-        // completed draft. Never regress turnInProgress back to true or the UI
-        // sticks on "Still working…" with no final reply.
-        if (
-          phase === "backend_running" &&
-          existing &&
-          !existing.turnInProgress &&
-          existing.latestTurnComplete
-        ) {
-          setActiveTurnInProgress(false);
-          setActiveLatestTurnComplete(true);
-        } else {
-          setActiveTurnInProgress(flags.turnInProgress);
-          if (flags.latestTurnComplete) {
-            setActiveLatestTurnComplete(true);
-          }
-          if (existing) {
-            useWorkflowDraftStore.getState().upsert({
-              ...existing,
-              turnInProgress: flags.turnInProgress,
-              latestTurnComplete: flags.latestTurnComplete
-                ? true
-                : existing.latestTurnComplete,
-            });
-          }
-        }
-      }
+      await runTurn({
+        draftId: draftKey,
+        mode,
+        classId,
+        lessonDate,
+        lessonTitle,
+        userText: text,
+        userContent: (message.content ?? []) as ThreadMessageLike["content"],
+        placeholderContent: initialAssistantRunContent() ?? [],
+        attachments: attachments.length ? attachments : undefined,
+        currentMarkdown,
+        chatStream,
+      });
     },
-    [
-      applyDraftMetadata,
-      applyMeta,
-      chatStream,
-      classId,
-      initialMarkdown,
-      mode,
-      pushMarkdown,
-    ],
+    [chatStream, classId, draftId, draftKey, initialMarkdown, mode],
   );
 
-  const turnActivity = workflowTurnActivity({
-    localStreamActive: isUpdating,
-    backendTurnInProgress: activeTurnInProgress,
-  });
   const onCancel = useCallback(async () => {
-    streamAbortRef.current?.abort();
-  }, []);
+    cancelTurn(draftKey);
+  }, [draftKey]);
+
+  const turnActivity = workflowTurnActivity({
+    localStreamActive: turn?.phase === "streaming",
+    backendTurnInProgress:
+      turn?.phase === "awaiting_backend" ||
+      (turn == null && (storedDraft?.turnInProgress ?? turnInProgress) === true),
+  });
   const runtime = useWorkflowChatRuntime({
-    draftId: activeDraftId || activeSessionId,
+    draftId: draftKey,
     isRunning: turnActivity.runtimeIsRunning,
     onNew,
     onCancel,
@@ -646,8 +336,13 @@ export function ArtifactSessionRuntimeProvider({
       try {
         const draft = await patchDraft(artifactMarkdown);
         lastSyncedRef.current = artifactMarkdown;
-        applyDraftMetadata(draft);
-        applyMeta(draft.completeness, draft.readyToSave);
+        useWorkflowDraftStore.getState().applyDraftPatch(draftKey, {
+          artifactMarkdown,
+          artifactRevision: draft.artifactRevision,
+          artifactHash: draft.artifactHash,
+          completeness: draft.completeness,
+          readyToSave: draft.readyToSave,
+        });
         setSyncStatus("idle");
       } catch {
         setSyncStatus("error");
@@ -656,25 +351,27 @@ export function ArtifactSessionRuntimeProvider({
     return () => {
       if (patchTimerRef.current) clearTimeout(patchTimerRef.current);
     };
-  }, [artifactMarkdown, patchDraft, applyMeta, applyDraftMetadata]);
+  }, [artifactMarkdown, patchDraft, draftKey]);
+
+  const isUpdating = turn?.phase === "streaming";
 
   const ctx = useMemo<ArtifactSessionContextValue>(
     () => ({
       classId,
-      sessionId: activeSessionId,
-      draftId: activeDraftId,
-      artifactRevision: activeArtifactRevision,
-      artifactHash: activeArtifactHash,
-      turnInProgress: activeTurnInProgress,
-      latestTurnComplete: activeLatestTurnComplete,
+      sessionId: storedDraft?.sessionId ?? recoveredSessionId,
+      draftId: storedDraft?.draftId ?? draftId,
+      artifactRevision: storedDraft?.artifactRevision ?? artifactRevision,
+      artifactHash: storedDraft?.artifactHash ?? artifactHash,
+      turnInProgress: storedDraft?.turnInProgress ?? turnInProgress,
+      latestTurnComplete: storedDraft?.latestTurnComplete ?? latestTurnComplete,
       runWithSessionRecovery,
       artifactMarkdown,
       setArtifactMarkdown,
-      completeness,
-      readyToSave,
-      lastChangeSummary,
-      memoryState,
-      memoryCandidates,
+      completeness: storedDraft?.completeness ?? initialCompleteness,
+      readyToSave: storedDraft?.readyToSave ?? false,
+      lastChangeSummary: storedDraft?.lastChangeSummary ?? null,
+      memoryState: storedDraft?.memoryState ?? initialMemoryState,
+      memoryCandidates: storedDraft?.memoryCandidates ?? [],
       isUpdating,
       syncStatus,
       undo,
@@ -684,20 +381,18 @@ export function ArtifactSessionRuntimeProvider({
     }),
     [
       classId,
-      activeSessionId,
-      activeDraftId,
-      activeArtifactRevision,
-      activeArtifactHash,
-      activeTurnInProgress,
-      activeLatestTurnComplete,
+      storedDraft,
+      recoveredSessionId,
+      draftId,
+      artifactRevision,
+      artifactHash,
+      turnInProgress,
+      latestTurnComplete,
       runWithSessionRecovery,
       artifactMarkdown,
       setArtifactMarkdown,
-      completeness,
-      readyToSave,
-      lastChangeSummary,
-      memoryState,
-      memoryCandidates,
+      initialCompleteness,
+      initialMemoryState,
       isUpdating,
       syncStatus,
       undo,
