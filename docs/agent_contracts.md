@@ -237,6 +237,15 @@ pedagogical trade-offs are advisory. Only a completed, exact-draft
 the backend completes that short review then. The report never rewrites the
 teacher's Markdown or exposes raw source bodies/full prompts.
 
+The Update Memory verification pack is deterministic and authoritative for
+write integrity, not for pedagogical quality. On every diary edit and again
+before proposal or commit, it checks the confirmed target date against the
+diary date and checks labels in `## Student observations` against the active
+class roster. Canonical `S-###` IDs may proceed; malformed IDs, unknown IDs,
+and personal/name-style labels block only the write until the teacher corrects
+the Markdown or resolves the target. The pack never invents a replacement,
+never mutates the diary, and cannot be bypassed by a direct commit call.
+
 ## Agents SDK Integration Contract
 
 KlassenPilot uses the OpenAI Agents SDK as a code-first orchestration layer, but

@@ -55,6 +55,11 @@ from app.teacher_agent.executive_verification import (
     executive_runtime_dump,
     executive_runtime_load,
 )
+from app.teacher_agent.memory_update_state import MemoryRuntime
+from app.teacher_agent.memory_verification import (
+    apply_memory_verification_report,
+    build_memory_verification_report,
+)
 from app.teacher_agent.plan_verification import (
     build_plan_verification_report,
     merge_plan_verification_judgement,
@@ -358,6 +363,22 @@ class ArtifactSessionService:
         self, session: ArtifactSession, markdown: str
     ) -> None:
         """Run inexpensive deterministic verification before exposing a draft."""
+        if session.mode == "ingest" and isinstance(session.runtime, MemoryRuntime):
+            report = build_memory_verification_report(
+                self.wiki, session.class_id, markdown, session.runtime
+            )
+            apply_memory_verification_report(session.executive, report)
+            session.debug_events.append(
+                {
+                    "type": "verification_report",
+                    "pack_id": "update_memory",
+                    "overall_status": report.overall_status,
+                    "rows": [row.model_dump() for row in report.rows],
+                }
+            )
+            if len(session.debug_events) > _TRACE_EVENT_CAP:
+                session.debug_events = session.debug_events[-_TRACE_EVENT_CAP:]
+            return
         if session.mode != "plan" or not isinstance(session.runtime, PlanRuntime):
             return
         report = build_plan_verification_report(
@@ -921,6 +942,8 @@ class ArtifactSessionService:
         spec = self.specs[session.mode]
         session.partial_markdown = markdown
         self._mark_plan_review_stale(session, markdown)
+        if session.mode == "ingest":
+            self._apply_workflow_verification(session, markdown)
         completeness = spec.completeness_of(self.wiki, markdown)
         if completeness is not None:
             session.completeness = completeness
@@ -932,6 +955,12 @@ class ArtifactSessionService:
         )
         self.drafts[session_id] = draft
         return draft
+
+    def ensure_memory_verification(self, session_id: str, markdown: str) -> None:
+        """Refresh deterministic Update Memory integrity checks for an exact draft."""
+        session = self.get_session(session_id)
+        self._apply_workflow_verification(session, markdown)
+        self._persist_session(session)
 
     def get_draft(self, session_id: str) -> object:
         if session_id in self.drafts:

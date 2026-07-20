@@ -216,6 +216,17 @@ The product uses tiered class memory.
    trace-only. Advisory scope/pedagogy notes never block; only a completed
    severe-safety hold for the same Markdown fingerprint prevents saving.
 
+   The second pack is Update Memory integrity. It runs deterministically on
+   every diary edit and again immediately before proposal or commit. It compares
+   a confirmed target lesson date with the diary date and accepts student
+   observations only when they use known active-class `S-###` roster IDs. A
+   malformed ID (for example `S006`), an unknown ID, or a name-style student
+   label is a blocking correction request. The pack is deliberately not an LLM
+   quality review: it preserves the teacher's Markdown, names the exact
+   correction, and clears itself when the same draft is repaired. Its compact
+   report stays in `ExecutiveRuntime` and trace/debug output; the normal
+   teacher path sees the existing concise write-blocking recovery message.
+
 6. **Profiles (four clearly-scoped files)**
    - `user.md` (`wiki/teacher_profile.md`, GLOBAL): teacher communication style,
      stable preferences, default lesson structure, and only teacher-confirmed

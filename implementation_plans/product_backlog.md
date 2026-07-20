@@ -83,17 +83,19 @@ Primary items:
 Status update (2026-07-20): the lightweight runtime Plan verification pack is
 implemented: immediate deterministic package/source/timing checks plus a
 bounded no-tools economy-model report after draft generation. It is advisory
-except for a credible completed severe-safety hold. The remaining quality-review
-item is the offline/batch DeepEval calibration over retained beta artifacts; the
-next workflow packs are Update Memory roster/target integrity, Discuss, and
-Class Brief.
+except for a credible completed severe-safety hold. Update Memory now also has
+a deterministic roster/target integrity pack at every draft edit and final
+write boundary; it blocks malformed or unknown `S-###` IDs, name-style student
+labels, and confirmed-target date mismatches without rewriting the diary. The
+remaining quality-review item is the offline/batch DeepEval calibration over
+retained beta artifacts; the next workflow packs are Discuss and Class Brief.
 
 | Item | Engineering notes |
 |---|---|
 | **Evidence/source panel** | Surface source metadata for class memory used in plans and memory updates. Start with class wiki sources and raw refs already captured by runtime state. |
 | **Class-home briefing v1** | Add a compact class brief: recent lessons, open loops, sparse areas, and likely next move. Read-only; no suggested-task persistence yet. |
 | **Plan quality review** | Keep deterministic runtime sanity checks (duration, lesson phases, citations, open loops, misconceptions, and teacher constraints). Add a later **DeepEval / LLM-as-judge shadow framework** over retained beta lesson artifacts: score an adapted Anthropic-style P/R/O/M rubric, store criterion-level pass/fail evidence in operator telemetry, and use failures to improve prompts, source contracts, and deterministic guards. Start offline/batch only; do not add latency, hidden rewriting, or a teacher-facing runtime gate. Adapt US science criteria to Bavaria Chemie 9 NTG (LehrplanPLUS provenance and scope, observation → model → explanation, representation limits, shared evidence task, and no lowered scientific demand). Consider a transparent runtime “needs teacher decision” check only after beta calibration proves it useful. |
-| **Workflow-specific executive verification packs** | Keep one shared `ExecutiveRuntime`, then add bounded workflow packs. First: Plan scope/provenance review comparing the teacher request, selected route, sources actually read, effective subject expert, and canonical Markdown. `scope_unverified` must be advisory-only: generate and save the plan, but ask the teacher to confirm an intentional curriculum extension. Do not build topic-specific organic-chemistry/quantum rules or expose raw source/prompt bodies. |
+| **Workflow-specific executive verification packs** | Keep one shared `ExecutiveRuntime`. Shipped: Plan scope/provenance review and Update Memory target/roster integrity. Next: advisory Discuss grounding and operational Class Brief freshness packs. `scope_unverified` remains advisory-only: generate and save the plan, but ask the teacher to confirm an intentional curriculum extension. Do not build topic-specific organic-chemistry/quantum rules or expose raw source/prompt bodies. |
 | **Test / exam generation** | New artifact workflow using `ArtifactSpec`; ground in taught sequence, misconceptions, and assessment readiness. Include answer key/rubric where useful. |
 | **Visible memory/profile suggestions** | Productize the existing profile-proposal/apply flow so the teacher sees "copilot learned this" suggestions after save. |
 | **Input-vs-wiki reconciliation v1** | Treat the committed wiki as baseline. Start with deterministic roster/name mismatch detection, model-written clarification, explicit teacher confirmation for new/changed students, and removal-on-revise tombstone handling. |

@@ -4,7 +4,7 @@
 
 **Goal:** Make subject and grade knowledge a first-class part of class setup and port the useful Anthropic K–12 lesson-production workflow into KlassenPilot: preserve official source documents, compile reviewed Bavaria Chemistry teaching know-how into a shared library, derive a teacher-adjustable effective profile for each class, and produce a grounded lesson package containing a teacher plan, student materials, and a lightweight observation/update template.
 
-**Architecture:** The system has four authority layers plus one artifact layer. Immutable source artifacts and faithful Markdown live under `raw/sources` and `wiki/sources`; reviewed subject/grade teaching frameworks live under `wiki/subjects/chemie/teaching_frameworks`; each class receives a derived `memory/teaching_framework_profile.md` that inherits the selected subject/grade summary and contains only teacher-approved adjustments; class empirical memory remains separate. A reusable, reviewable Markdown skill core ports the Anthropic procedure, while a Bavaria Chemistry reference replaces the US science reference. The prompt assembler composes these layers by workflow purpose, tools progressively search/read deeper framework and source pages, and one structured final Markdown artifact is rendered with clearly separated teacher, student, and observation sections.
+**Architecture:** The system has four authority layers plus one artifact layer. Immutable source artifacts and faithful Markdown live under `raw/sources` and `wiki/sources`; reviewed subject/grade teaching frameworks live under `wiki/subjects/chemie/teaching_frameworks`; each class keeps only bounded teacher-approved replacement/refinement rules in `memory/teaching_framework_adjustments.md`, which are composed at runtime with the selected immutable subject/grade summary; class empirical memory remains separate. A reusable, reviewable Markdown skill core ports the Anthropic procedure, while a Bavaria Chemistry reference replaces the US science reference. The prompt assembler composes these layers by workflow purpose, tools progressively search/read deeper framework and source pages, and one structured final Markdown artifact is rendered with clearly separated teacher, student, and observation sections.
 
 **Tech Stack:** Existing Python/FastAPI backend, Markdown wiki, Pydantic state, OpenAI Agents SDK function tools, deterministic filesystem search, pytest, and current context trace/budget infrastructure. Optional future source conversion: Docling CLI/library operated outside the teacher-facing agent.
 
@@ -72,8 +72,18 @@ stored in `ExecutiveRuntime`, visible through the normal Plan draft API, and
 discarded when its artifact fingerprint is stale. Scope/pedagogy/preference and
 format observations remain advisory. A completed `safety_hold` for the exact
 Markdown revision is the only Plan-pack result that blocks a save; an explicit
-save waits for the short review only if it is still pending. Discuss, Update
-Memory, and Class Brief remain registry-only follow-on packs.
+save waits for the short review only if it is still pending. Discuss and Class
+Brief remain registry-only follow-on packs.
+
+**Implemented Update Memory integrity pack (2026-07-20):** the shared runtime
+now records a compact deterministic `update_memory` report on diary edits and
+repeats it immediately before proposal and commit. It blocks only confirmed
+target-date versus diary-date mismatches and student-observation labels that
+are malformed, unknown to the active roster, or name-style rather than
+canonical `S-###` IDs. It preserves teacher control: it never rewrites the
+diary and clears when the teacher repairs the same Markdown. The report is
+trace/debug-visible while the teacher sees the existing concise recovery
+message. Discuss and Class Brief remain skeleton-only follow-on packs.
 
 ## Reconciliation status (2026-07-18)
 

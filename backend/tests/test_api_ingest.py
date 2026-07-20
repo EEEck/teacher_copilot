@@ -135,6 +135,36 @@ def test_ingest_propose_manual_unknown_student_returns_409(client: TestClient):
     assert "S-999" in body["message"]
 
 
+def test_ingest_propose_blocks_malformed_or_named_student_labels(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/ingest"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+    chat = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={"message": "We covered Topic A today."},
+    )
+    edited = chat.json()["diary_markdown"].replace(
+        "## Student observations\n",
+        "## Student observations\n"
+        "- S006: Needed a model prompt.\n"
+        "- Matt: Explained the model clearly.\n",
+    )
+    update = client.patch(
+        f"{base}/sessions/{session_id}/draft",
+        json={"diary_markdown": edited},
+    )
+    assert update.status_code == 200, update.text
+
+    propose = client.post(f"{base}/sessions/{session_id}/propose")
+
+    assert propose.status_code == 409, propose.text
+    body = propose.json()
+    assert body["code"] == "write_verification_blocked"
+    findings = body["executive_state"]["open_findings"]
+    finding = next(item for item in findings if item["finding_id"] == "memory-student-references")
+    assert "S-006" in finding["summary"]
+    assert "Matt" in finding["summary"]
+
+
 def test_ingest_commit_rechecks_manual_unknown_student_before_write(client: TestClient):
     base = f"/api/classes/{CLASS_ID}/ingest"
     session_id = client.post(f"{base}/sessions").json()["session_id"]
@@ -158,6 +188,42 @@ def test_ingest_commit_rechecks_manual_unknown_student_before_write(client: Test
     assert body["code"] == "write_verification_blocked"
     assert body["action"] == "ingest_commit"
     assert "S-999" in body["message"]
+
+
+def test_ingest_commit_blocks_malformed_or_named_student_labels(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/ingest"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+    chat = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={"message": "We covered Topic A today."},
+    )
+    edited = chat.json()["diary_markdown"].replace(
+        "## Student observations\n",
+        "## Student observations\n"
+        "- S006: Needed a model prompt.\n"
+        "- Matt: Explained the model clearly.\n",
+    )
+
+    commit = client.post(
+        f"{base}/commit",
+        json={
+            "session_id": session_id,
+            "diary_markdown": edited,
+            "approved_updates": [],
+        },
+    )
+
+    assert commit.status_code == 409, commit.text
+    body = commit.json()
+    assert body["code"] == "write_verification_blocked"
+    assert body["action"] == "ingest_commit"
+    finding = next(
+        item
+        for item in body["executive_state"]["open_findings"]
+        if item["finding_id"] == "memory-student-references"
+    )
+    assert "S-006" in finding["summary"]
+    assert "Matt" in finding["summary"]
 
 
 def test_compact_memory_apply_rejects_non_compact_memory_pages(client: TestClient):
