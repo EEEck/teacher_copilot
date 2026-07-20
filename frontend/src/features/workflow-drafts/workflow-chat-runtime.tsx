@@ -29,9 +29,9 @@ export function useWorkflowChatRuntime({
   /** Abort the in-flight SSE turn (Composer stop button). */
   onCancel?: () => Promise<void>;
 }) {
-  const messages = useWorkflowDraftStore(
-    (state) => selectThreadMessages(state, draftId),
-  );
+  // Stable fallback reference — an inline `?? []` here allocates per render
+  // and loops useSyncExternalStore forever when the key is missing (Bug A).
+  const messages = useWorkflowDraftStore(selectThreadMessages(draftId));
   const setThreadMessages = useWorkflowDraftStore((state) => state.setThreadMessages);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
