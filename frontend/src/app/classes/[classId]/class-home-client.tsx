@@ -42,7 +42,6 @@ import {
   shortenUnitLabel,
 } from "@/lib/class-home-display";
 import { consumeClassHomeTimelineRefresh } from "@/lib/class-home-refresh";
-import { classHomeMockUpcoming } from "@/lib/class-home-mock-dates";
 import { classHomeWatchItems } from "@/lib/class-home-watch";
 import { shortWikiPath } from "@/lib/markdown-diff";
 import {
@@ -251,7 +250,9 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
     [snapshot.top_misconceptions, brief?.watch_items],
   );
   const briefReasons = (brief?.reasons ?? []).slice(0, 3);
-  const upcoming = classHomeMockUpcoming(classId);
+  // No wiki-backed source for key dates yet (assessment calendar is a later
+  // backlog item); render an honest empty state until one exists.
+  const upcoming: { label: string; date: string }[] = [];
   const lastTaught =
     snapshot.last_committed_date ||
     snapshot.last_lesson_date ||
@@ -386,24 +387,27 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
           <Card>
             <CardHeader className="pb-0">
               <CardTitle className="text-base">Upcoming</CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Mock dates, not from wiki.
-              </p>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2 text-sm">
-                {upcoming.map((item) => (
-                  <li
-                    key={`${item.label}-${item.date}`}
-                    className="flex items-baseline justify-between gap-3"
-                  >
-                    <span className="text-foreground">{item.label}</span>
-                    <span className="shrink-0 tabular-nums text-muted-foreground">
-                      {item.date}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              {upcoming.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No key dates yet.
+                </p>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {upcoming.map((item) => (
+                    <li
+                      key={`${item.label}-${item.date}`}
+                      className="flex items-baseline justify-between gap-3"
+                    >
+                      <span className="text-foreground">{item.label}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                        {item.date}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
 

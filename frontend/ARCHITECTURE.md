@@ -113,8 +113,9 @@ dashboard, not a second product surface. Layout is three titled sections
    Page title formats `chemie_9b_2026_27` → **Chemie 9b** with subtitle
    `2026/27 · STEM track` (or Language track). At a glance keeps 2×2 with a
    shortened unit label and larger metric type. Brief merges **Watch**
-   (misconceptions first, then brief watch items; max 3). Upcoming uses mock
-   dates (`class-home-mock-dates.ts`); notes are localStorage
+   (misconceptions first, then brief watch items; max 3). Upcoming shows an
+   honest empty state ("No key dates yet") until a real dates source exists
+   (assessment calendar is a later backlog item); notes are localStorage
    (`kp:class-notes:{classId}` via `class-home-notes.ts`) — browser-local only.
 2. **Actions** — dismissible `StickyNote` + compact equal-width row
    (`inline-grid` + `auto-cols-[1fr]`, sized to the widest label; `size="lg"`).
