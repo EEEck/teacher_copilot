@@ -18,6 +18,35 @@ def _row(report, row_id: str):
     return next(row for row in report.rows if row.row_id == row_id)
 
 
+_CONSULTED = [
+    {"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_atombau"}
+]
+
+
+def _clean_plan_markdown() -> str:
+    return """# Lesson Plan — Atomic structure
+
+> Duration: 45 min
+
+## Teacher Lesson Plan
+- Einstieg (10 min)
+- Erarbeitung (25 min)
+- Sicherung (10 min)
+
+- Core evidence task: Compare two atom models and explain one limit of each model.
+
+### Exit evidence
+Sort responses into secure / developing / needs revisit using whether students
+link an observation to a model limit.
+
+## Student Materials
+Compare two atom models and explain one limit of each model.
+
+## Observation and Update Capture
+Collect the exit explanation and note which sort bucket fits.
+"""
+
+
 def test_plan_report_flags_missing_source_provenance_and_bad_duration():
     report = build_plan_verification_report(
         """# Lesson Plan — Carbon Bonding
@@ -43,6 +72,96 @@ Collect one exit explanation.
     assert _row(report, "source_provenance").status == "note"
     assert _row(report, "duration").status == "note"
     assert _row(report, "markdown_package").status == "clear"
+
+
+def test_plan_report_clean_package_passes_integrity_rows():
+    report = build_plan_verification_report(
+        _clean_plan_markdown(),
+        consulted_sources=_CONSULTED,
+    )
+
+    assert report.overall_status == "clear"
+    assert _row(report, "task_alignment").status == "clear"
+    assert _row(report, "student_leak").status == "clear"
+    assert _row(report, "exit_buckets").status == "clear"
+    assert _row(report, "duration").status == "clear"
+
+
+def test_plan_report_notes_student_leak_of_teacher_diagnostics():
+    markdown = """# Lesson Plan
+
+> Duration: 45 min
+
+## Teacher Lesson Plan
+- Einstieg (10 min)
+- Erarbeitung (25 min)
+- Sicherung (10 min)
+- Core evidence task: Explain why sodium forms a positive ion.
+
+## Student Materials
+Explain why sodium forms a positive ion.
+Look-for: students name electron loss.
+Watch for the misconception that ions are molecules.
+
+## Observation and Update Capture
+Collect one exit explanation.
+"""
+    report = build_plan_verification_report(markdown, consulted_sources=_CONSULTED)
+
+    assert report.overall_status == "advisory"
+    assert _row(report, "student_leak").status == "note"
+    assert _row(report, "task_alignment").status == "clear"
+
+
+def test_plan_report_notes_missing_exit_buckets_when_exit_section_exists():
+    markdown = """# Lesson Plan
+
+> Duration: 45 min
+
+## Teacher Lesson Plan
+- Einstieg (10 min)
+- Erarbeitung (25 min)
+- Sicherung (10 min)
+- Core evidence task: Revise a particle drawing after the electrolysis clip.
+
+### Exit evidence
+Ask students to revise one particle drawing from the demonstration.
+
+## Student Materials
+Revise a particle drawing after the electrolysis clip.
+
+## Observation and Update Capture
+Collect the exit drawing.
+"""
+    report = build_plan_verification_report(markdown, consulted_sources=_CONSULTED)
+
+    assert report.overall_status == "advisory"
+    assert _row(report, "exit_buckets").status == "note"
+
+
+def test_plan_report_notes_teacher_student_task_mismatch():
+    markdown = """# Lesson Plan
+
+> Duration: 45 min
+
+## Teacher Lesson Plan
+- Einstieg (10 min)
+- Erarbeitung (25 min)
+- Sicherung (10 min)
+- Core evidence task: Compare flame colors and link them to electron energy levels.
+
+## Student Materials
+Copy the shortened periodic table into your notebook.
+
+## Observation and Update Capture
+Collect one exit explanation.
+"""
+    report = build_plan_verification_report(markdown, consulted_sources=_CONSULTED)
+
+    assert report.overall_status == "advisory"
+    assert _row(report, "task_alignment").status == "note"
+    # Advisory notes never raise overall to safety_hold.
+    assert report.overall_status != "safety_hold"
 
 
 def test_plan_review_packet_is_bounded_and_excludes_raw_source_bodies():
