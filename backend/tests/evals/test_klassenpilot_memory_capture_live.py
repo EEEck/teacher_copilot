@@ -21,7 +21,10 @@ from app.teacher_agent.memory_capture import (
     canonical_memory_target,
     discipline_memory_candidates,
 )
-from tests.evals.goldens.memory_capture import MEMORY_CAPTURE_GOLDENS
+from tests.evals.goldens.memory_capture import (
+    MEMORY_CAPTURE_GOLDENS,
+    expected_fast_lane_for_target,
+)
 from tests.evals.harness import run_chat_scenario, run_chat_turn, start_session
 
 pytestmark = pytest.mark.skipif(
@@ -149,6 +152,13 @@ def test_memory_capture_speech_act_live(live_eval_client, golden):
     forbidden_targets = tuple(canonical_memory_target(t) for t in golden.forbidden_targets)
     emitted_targets = _candidate_targets(emitted)
 
+    if golden.expect_no_durable_candidates:
+        assert not emitted, (
+            f"{golden.golden_id}: expected no durable capture for a one-off or "
+            f"unknown-scope request; emitted "
+            f"{'; '.join(_candidate_debug(candidate) for candidate in emitted)}"
+        )
+
     # Separate the two failure modes so the eval measures JUDGMENT cleanly:
     # - emission gap: the model emitted no candidate for a target it should
     #   have captured. Mem V3 PR4 targets this by making capture an explicit
@@ -208,9 +218,10 @@ def test_memory_capture_speech_act_live(live_eval_client, golden):
         )
         got_fast_lane = any(c.fast_lane for c in disciplined)
 
-        assert got_fast_lane is golden.expected_fast_lane, (
+        expected_fast_lane = expected_fast_lane_for_target(golden, target)
+        assert got_fast_lane is expected_fast_lane, (
             f"{golden.golden_id}: model emitted speech_act(s)={speech_acts} for "
-            f"{target}; fast_lane={got_fast_lane}, expected "
-            f"{golden.expected_fast_lane}. Emitted targets={emitted_targets}. "
+            f"{target}; fast_lane={got_fast_lane}, expected {expected_fast_lane}. "
+            f"Emitted targets={emitted_targets}. "
             f"Message: {golden.teacher_message!r}"
         )

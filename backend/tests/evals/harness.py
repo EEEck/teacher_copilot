@@ -55,6 +55,9 @@ def _workflow_paths(workflow: str, class_id: str) -> tuple[str, str, str]:
     if normalized in {"ingest", "memory", "update_memory"}:
         base = f"/api/classes/{class_id}/ingest/sessions"
         return "ingest", base, f"{base}/{{session_id}}/trace"
+    if normalized in {"discussion", "discuss"}:
+        base = f"/api/classes/{class_id}/discussion/sessions"
+        return "discussion", base, f"{base}/{{session_id}}/trace"
     raise ValueError(f"Unknown workflow: {workflow!r}")
 
 
