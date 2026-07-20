@@ -29,7 +29,7 @@ Rules:
   instead.
 - Background-turn completion toasts stay in
   `components/klassenpilot/pending-turn-notifier.tsx`, which claims a
-  `lib/pending-chat-turns.ts` marker once.
+  `lib/running-jobs.ts` marker once.
 
 Memory Sweep is **not** an assistant-ui draft. It uses the same pending-job
 lane (`mode: "memory_sweep"`) but resumes a backend-owned review session via

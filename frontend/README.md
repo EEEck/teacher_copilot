@@ -32,7 +32,7 @@ the browser.
   assistant-ui `useExternalStoreRuntime`). Navigating away does not cancel an
   accepted model turn; reopening resumes the same draft.
 - Durable background work (chat turns and Memory Sweep generation) is tracked
-  with session markers in `lib/pending-chat-turns.ts`. One app-level
+  with session markers in `lib/running-jobs.ts`. One app-level
   `PendingTurnNotifier` polls those jobs, shows the bottom-left Running box,
   and emits a single completion toast.
 - The memory page displays the backend `memory_state` target/phase summary
@@ -101,7 +101,7 @@ npm run test
 Focused suites for the draft/job work:
 
 ```powershell
-npx vitest run src/features/workflow-drafts src/lib/pending-chat-turns.test.ts src/lib/memory-sweep-review-status.test.ts
+npx vitest run src/features/workflow-drafts src/lib/running-jobs.test.ts src/lib/memory-sweep-review-status.test.ts
 ```
 
 For fresh beta-browser acceptance rather than a unit-test run, follow the

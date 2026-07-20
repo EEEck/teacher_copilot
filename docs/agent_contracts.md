@@ -98,8 +98,10 @@ revision/hash metadata during draft and review.
   (`frontend/src/features/workflow-drafts/`) and assistant-ui
   `useExternalStoreRuntime`; the backend `WorkflowDraft` remains authoritative.
   Background-turn completion toasts and the Running box are owned by one
-  app-level notifier that claims a locally initiated pending-turn marker
-  exactly once (`pending-chat-turns`, including `memory_sweep` generation).
+  app-level notifier that asks the backend what it is running
+  (`GET /api/workflow/active`, including `memory_sweep` generation) rather than
+  tracking client-side markers. It announces a finished turn exactly once and
+  never for a chat the teacher is currently watching.
 - Review and save actions must include the expected artifact revision/hash. If
   the artifact changed after review was prepared, the backend rejects the write
   with `draft_changed_since_review_created`.

@@ -64,7 +64,7 @@ identity.
 
 The frontend still keeps only convenience state locally: unsent composer text
 keyed by `draft_id`, non-authoritative review UI cache, and session markers for
-durable background jobs (`pending-chat-turns`, including Memory Sweep
+durable background jobs (`GET /api/workflow/active + PendingTurnNotifier`, including Memory Sweep
 generation). Plan/Update Memory chat mirrors drafts through
 `frontend/src/features/workflow-drafts/`. Teacher-approved commit/save routes
 validate the expected artifact revision/hash and use the backend-stored artifact

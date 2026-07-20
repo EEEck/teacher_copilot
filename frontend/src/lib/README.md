@@ -14,7 +14,7 @@ Small shared utilities and API helpers.
 - `diary-utils.ts` - diary artifact helpers.
 - `review-brief.ts` - teacher-first grouping for proposed wiki file changes.
 - `sweep-brief.ts` - teacher-first grouping for Memory Sweep candidates.
-- `pending-chat-turns.ts` - sessionStorage markers for durable background jobs
+- `running-jobs.ts` - Running-job union (poll ∪ local runners)
   (plan/ingest turns and `memory_sweep` generation). Claimed once by the
   global pending-turn notifier.
 - `chat-run-feedback.ts` - labels for the Running box and completion toasts.

@@ -62,7 +62,8 @@ It is an educational note, not a behavior contract.
   page-specific one-off.
 - Frontend primarily uses `assistant-ui`, with Plan/Update Memory drafts in
   `frontend/src/features/workflow-drafts/` and durable pending jobs coordinated
-  by `pending-chat-turns` + `PendingTurnNotifier`. Class home is documented in
+  by `PendingTurnNotifier` polling `GET /api/workflow/active` (plus local
+  runners via `running-jobs`). Class home is documented in
   `frontend/ARCHITECTURE.md` (three sections + Discuss dock + timeline status).
 - Keep the MVP simple. Do not add broad agent infrastructure unless it directly
   supports lesson planning or memory update.

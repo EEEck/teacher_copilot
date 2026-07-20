@@ -19,7 +19,7 @@ state, and composing domain components.
   `features/workflow-drafts/`.
 - `classes/[classId]/memory-sweep/page.tsx` - Memory Sweep saved-review UI.
   Opens/resumes `POST/GET /memory/sweep/review`, marks durable generation with
-  `pending-chat-turns`, and uses Simple / Detailed view modes.
+  `running-jobs`, and uses Simple / Detailed view modes.
 - `classes/[classId]/lessons/[lessonDate]/page.tsx` - lesson detail.
 - `classes/[classId]/plan/page.tsx` - lesson-planning artifact session
   (same workflow-draft path as Update Memory).
