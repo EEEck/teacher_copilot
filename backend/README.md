@@ -63,9 +63,10 @@ drafts; the start-session endpoints reopen the active draft for that workflow
 identity.
 
 The frontend still keeps only convenience state locally: unsent composer text
-keyed by `draft_id`, non-authoritative review UI cache, and session markers for
-durable background jobs (`GET /api/workflow/active + PendingTurnNotifier`, including Memory Sweep
-generation). Plan/Update Memory chat mirrors drafts through
+keyed by `draft_id` and a non-authoritative review UI cache. Durable background
+jobs (including Memory Sweep generation) are reported by
+`GET /api/workflow/active` and surfaced by `PendingTurnNotifier`. Plan/Update
+Memory chat mirrors drafts through
 `frontend/src/features/workflow-drafts/`. Teacher-approved commit/save routes
 validate the expected artifact revision/hash and use the backend-stored artifact
 for draft-aware clients.

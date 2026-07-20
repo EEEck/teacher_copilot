@@ -31,10 +31,10 @@ the browser.
   frontend mirrors them in `src/features/workflow-drafts/` (Zustand cache +
   assistant-ui `useExternalStoreRuntime`). Navigating away does not cancel an
   accepted model turn; reopening resumes the same draft.
-- Durable background work (chat turns and Memory Sweep generation) is tracked
-  with session markers in `lib/running-jobs.ts`. One app-level
-  `PendingTurnNotifier` polls those jobs, shows the bottom-left Running box,
-  and emits a single completion toast.
+- Durable background work (chat turns and Memory Sweep generation) is reported
+  by `GET /api/workflow/active` and mirrored via `lib/running-jobs.ts`. One
+  app-level `PendingTurnNotifier` polls those jobs, shows the bottom-left
+  Running box, and emits a single completion toast.
 - The memory page displays the backend `memory_state` target/phase summary
   above the shared artifact workspace.
 - The memory review surface starts with a teacher-first brief of what will be
