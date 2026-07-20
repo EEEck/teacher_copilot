@@ -9,7 +9,11 @@ from app.teacher_agent.memory_capture import (
     MemoryCandidate,
     discipline_memory_candidates,
 )
-from tests.evals.goldens.memory_capture import MEMORY_CAPTURE_GOLDENS
+from app.teacher_agent.memory_targets import is_global_teacher_target
+from tests.evals.goldens.memory_capture import (
+    MEMORY_CAPTURE_GOLDENS,
+    expected_fast_lane_for_target,
+)
 
 
 @pytest.mark.parametrize(
@@ -29,6 +33,11 @@ def test_memory_capture_speech_act_golden(golden):
             basis="explicit",
             confidence="high",
             speech_act=golden.speech_act,
+            scope=(
+                "global"
+                if is_global_teacher_target(target)
+                else "class"
+            ),
         )
         for target in targets
     ]
@@ -37,9 +46,10 @@ def test_memory_capture_speech_act_golden(golden):
 
     assert len(out) == len(targets)
     for candidate in out:
-        assert candidate.fast_lane is golden.expected_fast_lane
-        assert candidate.source == golden.expected_source
-        if golden.expected_fast_lane:
+        expected_fast_lane = expected_fast_lane_for_target(golden, candidate.target)
+        assert candidate.fast_lane is expected_fast_lane
+        if expected_fast_lane:
+            assert candidate.source == golden.expected_source
             assert candidate.evidence.startswith(DIRECT_TEACHER_QUOTE_PREFIX)
         else:
             assert DIRECT_TEACHER_QUOTE_PREFIX not in candidate.evidence

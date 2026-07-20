@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.teacher_agent.memory_capture import canonical_memory_target
+
 
 @dataclass(frozen=True)
 class MemoryCaptureGolden:
@@ -28,6 +30,25 @@ class MemoryCaptureGolden:
     expected_targets: tuple[str, ...] = ()
     forbidden_targets: tuple[str, ...] = ()
     expected_min_candidates: int = 0
+    # A live-only regression expectation. It remains opt-in because judging
+    # model tool calls requires an OpenAI run; deterministic tests pin its
+    # fixture contract and documentation.
+    expect_no_durable_candidates: bool = False
+    known_live_gap: bool = False
+    # Defaults to the primary fast-lane expectation for homogeneous cases.
+    # Mixed captures can explicitly name only the fast-lane targets.
+    fast_lane_targets: tuple[str, ...] = ()
+
+
+def expected_fast_lane_for_target(golden: MemoryCaptureGolden, target: str) -> bool:
+    """Return the expected priority for one target in a capture golden."""
+    if not golden.fast_lane_targets:
+        return golden.expected_fast_lane
+    canonical = canonical_memory_target(target)
+    return canonical in {
+        canonical_memory_target(candidate_target)
+        for candidate_target in golden.fast_lane_targets
+    }
 
 
 MEMORY_CAPTURE_GOLDENS: tuple[MemoryCaptureGolden, ...] = (
@@ -118,5 +139,104 @@ MEMORY_CAPTURE_GOLDENS: tuple[MemoryCaptureGolden, ...] = (
             "We finished the organic chemistry intro today; the class was "
             "engaged and covered carbon bonding."
         ),
+    ),
+    MemoryCaptureGolden(
+        golden_id="mbb_session_then_general_style_boundary",
+        teacher_message=(
+            "In general, use subtle humor and occasional short quotes in your "
+            "responses."
+        ),
+        target="teacher_profile.md",
+        speech_act="conduct_request",
+        evidence=(
+            "Direct teacher quote: In general, use subtle humor and occasional "
+            "short quotes in your responses."
+        ),
+        expected_fast_lane=True,
+        expected_source="teacher_explicit",
+        workflow="plan",
+        prior_message=(
+            "For this session only, use an MBB-style tone while we plan the next "
+            "Chemie 9b organic chemistry lesson."
+        ),
+        expected_targets=("teacher_profile.md",),
+    ),
+    MemoryCaptureGolden(
+        golden_id="light_orbital_preference_class_fast_lane",
+        teacher_message=(
+            "For this class, include a light intuitive orbital perspective when "
+            "helpful, but keep it middle-school accessible and non-derivational."
+        ),
+        target="copilot_profile.md",
+        speech_act="conduct_request",
+        evidence=(
+            "Direct teacher quote: For this class, include a light intuitive "
+            "orbital perspective when helpful, but keep it middle-school "
+            "accessible and non-derivational."
+        ),
+        expected_fast_lane=True,
+        expected_source="teacher_explicit",
+        workflow="plan",
+        prior_message="Plan the next Chemie 9b organic chemistry lesson.",
+        expected_targets=("copilot_profile.md",),
+        forbidden_targets=("teacher_profile.md",),
+        known_live_gap=True,
+    ),
+    MemoryCaptureGolden(
+        golden_id="phenomenon_first_instruction_and_evidence",
+        teacher_message=(
+            "For new organic chemistry concepts, I prefer a phenomenon-first "
+            "structure: start with an everyday example or mini-demo, then derive "
+            "the molecular explanation. This gave the class much better energy "
+            "than redox."
+        ),
+        target="copilot_profile.md",
+        speech_act="conduct_request",
+        evidence=(
+            "Direct teacher quote: For new organic chemistry concepts, I prefer "
+            "a phenomenon-first structure: start with an everyday example or "
+            "mini-demo, then derive the molecular explanation."
+        ),
+        expected_fast_lane=True,
+        expected_source="teacher_explicit",
+        workflow="ingest",
+        prior_message="Log today's alkanes and solubility lesson results.",
+        expected_targets=("copilot_profile.md", "teaching_patterns.md"),
+        expected_min_candidates=2,
+        known_live_gap=True,
+        fast_lane_targets=("copilot_profile.md",),
+    ),
+    MemoryCaptureGolden(
+        golden_id="five_minute_review_no_global_leakage",
+        teacher_message=(
+            "I like to have this as a general concept: start lessons with a "
+            "5-minute review of the last block."
+        ),
+        target="copilot_profile.md",
+        speech_act="conduct_request",
+        evidence=(
+            "Direct teacher quote: I like to have this as a general concept: "
+            "start lessons with a 5-minute review of the last block."
+        ),
+        expected_fast_lane=True,
+        expected_source="teacher_explicit",
+        workflow="plan",
+        prior_message="Plan the second Chemie 9b organic chemistry lesson.",
+        expected_targets=("copilot_profile.md",),
+        forbidden_targets=("teacher_profile.md",),
+        known_live_gap=True,
+    ),
+    MemoryCaptureGolden(
+        golden_id="unknown_scope_no_durable_capture",
+        teacher_message="Please make this worksheet shorter.",
+        target="copilot_profile.md",
+        speech_act="unknown",
+        evidence="Teacher asked to shorten the current worksheet.",
+        expected_fast_lane=False,
+        expected_source="inferred_from_session",
+        workflow="plan",
+        prior_message="Plan the next 45-minute Chemie 9b lesson on organic chemistry basics.",
+        expect_no_durable_candidates=True,
+        known_live_gap=True,
     ),
 )
