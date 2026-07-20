@@ -55,6 +55,36 @@ async def test_executive_findings_survive_workflow_draft_resume(wiki, agents):
 
 
 @pytest.mark.anyio
+async def test_plan_session_id_rehydrates_for_save_after_service_restart(wiki, agents):
+    store = WorkflowDraftStore(wiki.root / "workflow" / "workflow_drafts.sqlite")
+    store.initialize()
+    first = PlanService(wiki=wiki, agents=agents, workflow_drafts=store)
+
+    started = await first.start_session(CLASS_ID)
+    saved_draft = first.update_draft(started.session_id, READY_PLAN)
+
+    restarted = PlanService(wiki=wiki, agents=agents, workflow_drafts=store)
+    draft = restarted.get_draft(started.session_id)
+
+    assert draft.plan_markdown == READY_PLAN
+    assert restarted.get_session(started.session_id).draft_id == started.draft_id
+
+    response = await restarted.save(
+        CLASS_ID,
+        SavePlanRequest(
+            session_id=started.session_id,
+            lesson_date="2026-10-05",
+            plan_markdown=READY_PLAN,
+            draft_id=started.draft_id,
+            expected_artifact_revision=saved_draft.artifact_revision,
+            expected_artifact_hash=saved_draft.artifact_hash,
+        ),
+    )
+
+    assert response.lesson_date == "2026-10-05"
+
+
+@pytest.mark.anyio
 async def test_timeline_ingest_drafts_are_scoped_by_lesson_date(wiki, agents):
     store = WorkflowDraftStore(wiki.root / "workflow" / "workflow_drafts.sqlite")
     store.initialize()

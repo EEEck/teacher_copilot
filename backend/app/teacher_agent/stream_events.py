@@ -45,7 +45,6 @@ class SseFinal(BaseModel):
     last_change_summary: str | None = None
     session_state: dict | None = None
     lesson_planning_state: dict | None = None
-    lesson_artifact: dict | None = None
     memory_candidates: list[dict] | None = None
     # Ingest/update-memory mode only: target/date identification and
     # lesson-results collection state.

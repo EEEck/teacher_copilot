@@ -9,9 +9,6 @@ from app.teacher_agent.lesson_package import (
     SourceRef,
     validate_lesson_artifact,
 )
-from app.teacher_agent.models import PlanTurnOutput
-from app.teacher_agent.planning_state import PlanRuntime
-from app.teacher_agent.agents import AgentRunner
 
 
 def valid_artifact() -> LessonArtifact:
@@ -125,66 +122,23 @@ def test_chemie_9_ntg_artifact_requires_ported_quality_contract_fields():
     assert "Chemistry 9 NTG artifacts require a consulted trusted source." in errors
 
 
-def test_plan_turn_and_runtime_can_carry_the_structured_artifact():
-    artifact = valid_artifact()
-    turn = PlanTurnOutput(reply="Drafted.", plan_markdown="legacy", lesson_artifact=artifact)
-    runtime = PlanRuntime(lesson_artifact=artifact)
-
-    assert turn.lesson_artifact == artifact
-    assert runtime.lesson_artifact == artifact
-
-
-def test_plan_finalization_renders_a_valid_structured_artifact(wiki):
-    runner = AgentRunner.__new__(AgentRunner)
-    runner.wiki = wiki
-    artifact = valid_artifact()
-    runtime = PlanRuntime()
-
-    _, markdown, _ = runner._finalize_plan_turn(
-        PlanTurnOutput(reply="Drafted.", plan_markdown="legacy", lesson_artifact=artifact),
-        "legacy",
-        runtime,
-    )
-
-    assert markdown.startswith("# Lesson Package - Why do sodium and chlorine form ions?")
-    assert runtime.lesson_artifact == artifact
-    assert wiki.is_plan_ready(markdown) is True
-
-
-def test_plan_readiness_accepts_three_audience_markdown_fallback(wiki):
+def test_plan_readiness_accepts_markdown_only_three_audience_package(wiki):
     markdown = """# Lesson Plan — Organic Chemistry 1: Why carbon makes four bonds
 
-## Teacher plan
+## Teacher
 
 ### Learning goals and evidence
 - Students use a particle-model drawing to explain carbon bonding.
 
-## Student materials
+## Student
 
 ### Carbon bond ladder
 - Draw and compare single, double, and triple bonds.
 
-## Observation / update
+## Observation
 
 ### Exit evidence
 - Explain one drawing using precise vocabulary.
 """
 
     assert wiki.is_plan_ready(markdown) is True
-
-
-def test_plan_finalization_keeps_legacy_draft_when_package_is_invalid(wiki):
-    runner = AgentRunner.__new__(AgentRunner)
-    runner.wiki = wiki
-    artifact = valid_artifact()
-    artifact.shared.is_practical = True
-    runtime = PlanRuntime()
-
-    _, markdown, _ = runner._finalize_plan_turn(
-        PlanTurnOutput(reply="Drafted.", plan_markdown="legacy plan", lesson_artifact=artifact),
-        "existing draft",
-        runtime,
-    )
-
-    assert markdown == "legacy plan\n"
-    assert runtime.lesson_artifact is None

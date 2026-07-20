@@ -133,7 +133,6 @@ class PlanService:
             last_change_summary=planning.get("last_change_summary", ""),
             session_state=planning.get("session_state"),
             lesson_planning_state=planning.get("lesson_planning_state"),
-            lesson_artifact=planning.get("lesson_artifact"),
             memory_candidates=planning.get("memory_candidates", []),
             executive_state=result.executive,
         )
@@ -234,6 +233,8 @@ class PlanService:
                 except WorkflowDraftConflict as exc:
                     raise ValueError(str(exc)) from exc
                 plan_markdown = row.artifact_markdown
+        if not plan_markdown.strip():
+            raise ValueError("plan_markdown must not be empty")
         verification = await self.agents.verify_artifact_for_write(
             class_id, "lesson plan", plan_markdown, session.executive
         )
@@ -243,7 +244,9 @@ class PlanService:
                 artifact=plan_markdown,
                 verification=verification,
                 action="plan_save",
-                structurally_ready=self.wiki.is_plan_ready(plan_markdown),
+                # Markdown format is teacher-controlled. The write gate owns
+                # revision integrity and severe-safety findings, not headings.
+                structurally_ready=True,
             )
         except WriteVerificationBlocked:
             self.core._persist_session(session)

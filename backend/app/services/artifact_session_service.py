@@ -233,9 +233,16 @@ class ArtifactSessionService:
         return draft
 
     def get_session(self, session_id: str) -> ArtifactSession:
-        if session_id not in self.sessions:
-            raise KeyError(f"Unknown session: {session_id}")
-        return self.sessions[session_id]
+        session = self.sessions.get(session_id)
+        if session is not None:
+            return session
+        if self.workflow_drafts is not None:
+            row = self.workflow_drafts.find_active_by_backend_session_id(session_id)
+            if row is not None:
+                session = self._session_from_draft_row(row)
+                self.sessions[session.session_id] = session
+                return session
+        raise KeyError(f"Unknown session: {session_id}")
 
     def require_latest_turn_complete(self, session_id: str, action: str) -> None:
         session = self.get_session(session_id)

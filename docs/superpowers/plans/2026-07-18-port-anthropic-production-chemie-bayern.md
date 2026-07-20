@@ -17,6 +17,49 @@
 > regenerated `teaching_framework_profile.md`; where older narrative text
 > conflicts, this amendment governs.
 
+> **Approved Markdown artifact amendment (2026-07-19):** The live planning
+> contract is Markdown-first. `plan_markdown` is the only generated/saved
+> lesson artifact and uses the canonical `Teacher Lesson Plan`, `Student
+> Materials`, and `Observation and Update Capture` audience headings.
+> `lesson_artifact` is removed from model, runtime, API, and SSE contracts so
+> a successful Markdown plan cannot misleadingly expose a `null` parallel
+> artifact. The older structured package/renderer remains inactive reference
+> code for a later deliberately-scoped document-rendering project.
+
+## Planned extension: workflow-specific executive verification
+
+The shared `ExecutiveRuntime` remains the single owner of finding lifecycle,
+severity, trace state, and save semantics. Add a small verification pack per
+workflow rather than a separate verifier system. Implement the Plan pack first.
+
+**Plan-pack evidence input:** normalized teacher request and curriculum-scope
+claims; active subject/grade/branch route; trusted source sections actually
+read; effective subject expert provenance (immutable framework plus adjustment
+page); and the generated canonical Markdown package. It must not receive a
+full prompt dump or raw source bodies.
+
+**Plan-pack outputs:** structured executive findings with source/section
+provenance. Deterministic checks confirm route selection, actual source-read
+provenance, canonical Markdown shape, duration/constraint mechanics, and
+safety fields. A bounded critical-review pass compares teacher-request claims
+to retrieved curriculum evidence.
+
+`scope_unverified` is advisory-only: the agent completes the useful plan and
+asks for confirmation that an extension is intentional. It never blocks a
+save merely because a teacher intentionally goes beyond the selected source.
+Safety, invalid artifact shape, or a consequential class-identity conflict may
+remain blocking. The Plan pack will establish the shared interface later used
+by Discuss (grounded versus teacher-directed advice), Update Memory
+(unsupported inference or data conflict), and Class Brief (stale/incomplete
+operational evidence).
+
+**Acceptance cases:** organic chemistry and quantum-mechanics requests under
+Chemie 9 NTG receive a concise `Proceed with teacher confirmation` advisory
+when no directly-read official section establishes the requested scope;
+supported topics receive no false warning; missing source reads are visible in
+trace; advisory findings leave `ready_to_save=true`; and teacher-facing plans
+contain a short evidence note, never raw source text or hidden reasoning.
+
 ## Reconciliation status (2026-07-18)
 
 The deterministic acceptance suite named in the user-approved finish plan is

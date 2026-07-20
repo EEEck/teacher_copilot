@@ -46,7 +46,7 @@ def test_chemie_9_ntg_reference_has_the_subject_specific_production_map():
         "## Course branch",
         "## Section structure",
         "## Exit evidence guidance",
-        "## Writing the LessonArtifact",
+        "## Writing the canonical Markdown package",
     ):
         assert heading in reference
 

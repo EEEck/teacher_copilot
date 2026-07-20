@@ -3,8 +3,8 @@ SPDX-FileCopyrightText: 2026 Anthropic, PBC
 SPDX-License-Identifier: Apache-2.0
 
 Close semantic port of the reference-skill structure for Bavaria Gymnasium
-Chemistry. Bavaria curriculum sources replace US standards and the shared
-LessonArtifact replaces external document renderers.
+Chemistry. Bavaria curriculum sources replace US standards and one canonical
+Markdown package replaces external document renderers.
 -->
 
 # Bavaria Chemistry - Gymnasium Grade 9 NTG
@@ -181,9 +181,11 @@ relationship as the lesson. It may be short, but it must reveal a model,
 evidence-to-claim link, or symbolic interpretation rather than a memorized
 definition.
 
-## Writing the LessonArtifact — Chemistry mapping
+## Writing the canonical Markdown package — Chemistry mapping
 
-Use the shared fields as the single content registry:
+KlassenPilot's Markdown-first implementation has no typed `LessonArtifact`.
+Keep this content registry consistent across the three canonical audience
+headings instead:
 
 - `phenomenon_or_context` and `central_question` name the observable or
   data/model problem and the question students will explain;

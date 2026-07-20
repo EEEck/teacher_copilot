@@ -382,16 +382,24 @@ Each turn you must:
 3. Maintain working state — return state_patch only for what changed this turn (phase, goals, decisions, constraints, accepted/rejected elements, etc.) plus a one-line last_change_summary. Do not treat the LLM output as the source of truth: the backend validates and applies the patch to PlanRuntime. Add new_evidence_briefs for any tool/search/material results you used (each with its raw_ref), and memory_candidates for durable facts worth saving later (proposed only — never written now).
 
 The loaded production procedure defines the artifact shape and quality bar.
-`plan_markdown` is the current compatibility renderer for one English artifact
-with clearly separated teacher-plan, student-material, and observation/update
-sections. Do not reduce the artifact to a fixed six-heading template. Preserve
-the shared goals, evidence task, vocabulary, safety, and exit criteria across
-its sections.
-When the plan is sufficiently specified, also return `lesson_artifact`: one
-structured package with exactly teacher, student, and observation audiences.
-The backend validates and renders that package into `plan_markdown`. During an
-early clarification turn, keep the existing draft and leave `lesson_artifact`
-empty rather than inventing missing constraints.
+`plan_markdown` is the single saved artifact. Write it in English with this
+canonical package shape when the plan is sufficiently specified:
+
+# Lesson Package -- {{title}}
+
+## Teacher Lesson Plan
+...
+
+## Student Materials
+...
+
+## Observation and Update Capture
+...
+
+Use those three audience headings exactly. Preserve shared goals, the core
+evidence task, vocabulary, safety boundaries, and exit criteria across the
+sections. During an early clarification turn, keep the existing draft rather
+than inventing missing constraints.
 <!-- Legacy renderer label; do not use as an artifact template:
 # Lesson Plan — {{title}}
 

@@ -108,6 +108,10 @@ revision/hash metadata during draft and review.
   not the authoritative write source.
 - Lesson Plan save follows the same revision/hash guard and saves the
   backend-stored plan markdown for draft-aware clients.
+- Lesson Plan save accepts any non-empty teacher-authored Markdown format.
+  Heading conventions are planning-quality guidance and UI hints, never a
+  durable-write gate; only revision integrity and severe safety findings may
+  stop a save.
 - Streamed chat turns are backend-owned once accepted. The browser stream is a
   subscriber, so navigating away must not cancel an in-flight model turn; the
   final assistant message and artifact update are persisted to the draft when
@@ -274,22 +278,23 @@ Reads:
 
 Writes:
 
-- `plan_markdown` plus bounded runtime state. When supplied, a validated
-  `lesson_artifact` is stored in `PlanRuntime` and deterministically rendered
-  into `plan_markdown`; it contains no raw source bodies.
+- One canonical `plan_markdown` lesson package plus bounded runtime state. The
+  active saved artifact has exact `## Teacher Lesson Plan`, `## Student
+  Materials`, and `## Observation and Update Capture` audience headings; it
+  contains no raw source bodies.
 - No direct wiki writes.
 - Saving a plan is a separate explicit API action.
 
 Output migration:
 
-- The former six-section Markdown checklist is compatibility-only, not the
-  lesson-quality contract.
-- The active contract is one structured lesson artifact with shared fields and
-  teacher, student, and observation/update sections, produced by the ported
-  Anthropic planning/differentiation procedure and Bavaria Chemistry reference.
-- The backend accepts legacy Markdown-only turns while transitioning. For a
-  valid structured package, the Anthropic-derived artifact schema is the source
-  of truth and the backend renderer produces the compatible `plan_markdown`.
+- The former six-section Markdown checklist and earlier alternate three-audience
+  headings are compatibility-only, not the lesson-quality contract.
+- The active contract is one canonical Markdown lesson package with teacher,
+  student, and observation/update sections, produced by the ported Anthropic
+  planning/differentiation procedure and Bavaria Chemistry reference.
+- `lesson_artifact` is not a live model, runtime, API, or SSE contract while
+  KlassenPilot is Markdown-first. The retained structured package code is an
+  inactive future renderer experiment, not a second source of truth.
 
 Anthropic reference-port policy:
 
@@ -304,7 +309,7 @@ Anthropic reference-port policy:
 - Change wording or structure only to replace a dependency that KlassenPilot
   does not have (US standards, Learning Commons KG, Word renderer), to apply
   Bavaria Gymnasium Chemistry 9 NTG scope, or to preserve existing contracts
-  (teacher-approved wiki writes, one `LessonArtifact`, and bounded context
+  (teacher-approved wiki writes, one canonical Markdown artifact, and bounded context
   packs). Record a concise reason beside a material divergence in the local
   skill or this contract.
 - Do not import US standards, proprietary curriculum text, connector-specific
@@ -389,10 +394,10 @@ Output contract:
 
 - Return a conversational `reply`.
 - Return updated `plan_markdown`.
-- When the lesson is sufficiently specified, return `lesson_artifact` with
-  exactly one teacher, student, and observation audience section. The backend
-  validates it, renders the shared contract consistently, and exposes the
-  structured object in plan API/SSE runtime payloads.
+- When the lesson is sufficiently specified, make `plan_markdown` one canonical
+  package with exactly `## Teacher Lesson Plan`, `## Student Materials`, and
+  `## Observation and Update Capture` sections. Do not return a parallel typed
+  lesson artifact.
 - Preserve manual edits from the current draft when possible.
 - `ready_to_save` is deterministic backend saveability, currently based on the
   markdown artifact passing structural checks. It is not inferred from assistant

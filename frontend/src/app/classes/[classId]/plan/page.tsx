@@ -122,7 +122,7 @@ function PlanSaveFooter({
           {operation === "preparing" ? (
             <>
               <LoaderCircleIcon className="animate-spin" />
-              Preparing save…
+              Reviewing the latest draft…
             </>
           ) : (
             "Ready to save plan"

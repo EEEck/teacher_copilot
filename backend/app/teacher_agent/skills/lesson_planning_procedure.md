@@ -5,7 +5,8 @@ SPDX-License-Identifier: Apache-2.0
 Close semantic port for KlassenPilot. It preserves the workflow control flow,
 quality gates, and shared-content discipline of the Apache-2.0 reference
 skill. Material divergences are documented where Bavaria scope, trusted-source
-tools, the single LessonArtifact, or teacher-approved memory require them.
+tools, the single canonical Markdown package, or teacher-approved memory
+require them.
 -->
 
 # Lesson Planning Production Procedure
@@ -14,9 +15,9 @@ tools, the single LessonArtifact, or teacher-approved memory require them.
 
 Create one classroom-ready lesson package for the teacher: a teacher lesson
 plan, student materials, and an observation/update section. The teacher is the
-user you are talking with, never a third party. The package is one shared
-`LessonArtifact`; its repeated content is registered once so its sections do
-not drift apart on revision.
+user you are talking with, never a third party. The package is one canonical
+Markdown artifact; its repeated content is written consistently so its sections
+do not drift apart on revision.
 
 This procedure is mandatory for a new lesson, a sequence/review lesson, or a
 new lesson that includes differentiated student material. Use the separate
@@ -42,7 +43,7 @@ Run silently before drafting or asking content questions.
 2. **Mandatory reference.** Read the loaded Bavaria Chemistry 9 NTG reference
    now. Loading the subject reference is mandatory before drafting: it carries
    the course-specific pedagogy, section structure, non-negotiables, and
-   LessonArtifact mapping. Drafting without it is a critical failure.
+   canonical package mapping. Drafting without it is a critical failure.
 3. **Effective class framework.** Treat the compiled teaching-framework profile
    as the teacher-adjusted pedagogical contract. Use it together with the
    compact subject guide and source TOC; do not separately inject or treat the
@@ -90,7 +91,7 @@ their evidence references; do not dump source bodies into the artifact.
 ## Step 3 — Build the lesson
 
 Follow the loaded Bavaria Chemistry reference for course structure, section
-shape, non-negotiables, exit evidence, and the LessonArtifact mapping.
+shape, non-negotiables, exit evidence, and the canonical package mapping.
 
 Build original, practical content. A source may inform scope, terminology,
 phenomenon selection, misconceptions, task logic, and progression; never copy
@@ -134,17 +135,15 @@ write a partial package as if it were classroom-ready.
 ## Step 5 — Output and completion
 
 When the teacher chooses the full package, or approves a draft, return one
-complete shared LessonArtifact in the same turn. It has exactly three audiences:
-teacher, student, and observation. The backend renders it into the compatible
-`plan_markdown`; do not hand-author a competing fixed Markdown template.
+complete canonical `plan_markdown` package in the same turn. It has exactly
+three audience headings: `## Teacher Lesson Plan`, `## Student Materials`, and
+`## Observation and Update Capture`.
 
-**Shared LessonArtifact.** Register repeated identity, goals, core evidence
+**Shared Markdown package.** Keep repeated identity, goals, core evidence
 task, vocabulary, safety, representations, look-fors, exit evidence, and
-consulted-source references in shared fields. Teacher, student, and observation
-sections reference the same shared facts rather than independently rephrasing
-them. Student material contains only student-facing tasks and supports;
-diagnostic notes, facilitation moves, safety rationale, and adaptation logic
-remain teacher-facing.
+consulted-source references consistent across the three sections. Student
+material contains only student-facing tasks and supports; diagnostic notes,
+facilitation moves, safety rationale, and adaptation logic remain teacher-facing.
 
 **Density and integrity.** Write like a colleague's clear working note:
 
@@ -167,9 +166,9 @@ source references, every phase serves a goal, each repeated shared fact agrees
 across all three sections, safety is present for practical work, and the
 student task/teacher plan/observation evidence agree in both directions.
 
-**Revision and close.** When the teacher requests a change, edit the shared
-LessonArtifact first when the change affects shared content, then re-render all
-three sections. Run a **Consistency sweep** after every context, number, task,
+**Revision and close.** When the teacher requests a change, update every
+affected occurrence in the canonical Markdown package. Run a **Consistency
+sweep** after every context, number, task,
 vocabulary, safety, or exit-evidence change: no section may retain stale
 references. End a completed package with a concise satisfaction question and
 three or four specific, topic-relevant revision options. Never write the wiki

@@ -4,7 +4,7 @@ SPDX-License-Identifier: Apache-2.0
 
 Close semantic port for KlassenPilot. The source workflow's routing, eight
 rules, grounding, anti-drift, and completion loop are retained. The material
-divergence is one shared LessonArtifact with a student-material section and
+divergence is one shared canonical Markdown package with a student-material section and
 teacher-described access routes, rather than one teacher plan plus three Word
 worksheets; this preserves KlassenPilot's deliberately smaller MVP surface.
 -->
@@ -81,7 +81,7 @@ Apply all eight rules to every differentiated lesson.
 ### R1 — Output structure
 
 Produce one integrated teacher-facing differentiation plan within the shared
-LessonArtifact, plus one student-material section containing the common task
+canonical Markdown package, plus one student-material section containing the common task
 and the student-visible supports that are actually needed. Whole-class phases
 are written once. The teacher section identifies flexible access routes and
 conferring moves by phase; it does not create three disconnected lesson plans.
@@ -191,10 +191,10 @@ artifact.
 
 ## Step 5 — Output
 
-Return one complete shared LessonArtifact in the same turn. Keep repeated
+Return one complete canonical Markdown package in the same turn. Keep repeated
 identity, source references, central question, goals, evidence task,
-vocabulary, safety, representations, formative check, and exit evidence in
-shared fields. The teacher section contains flexible grouping, supports,
+vocabulary, safety, representations, formative check, and exit evidence
+consistent across the three audience sections. The teacher section contains flexible grouping, supports,
 misconception moves, and extension rationale. The student section contains the
 common task plus only student-visible supports. The observation section records
 whether the supports enabled the common evidence task and which support should
@@ -205,8 +205,8 @@ student/teacher task agreement, timing/material/safety realism, and that no
 student-facing text reveals diagnostic grouping. Keep prose skimmable; use a
 table for parallel access routes rather than repeated dense paragraphs.
 
-When a revision changes shared content, edit the shared LessonArtifact first
-and then re-render every section. Run a **Consistency sweep** after changes to
+When a revision changes shared content, update every affected Markdown section.
+Run a **Consistency sweep** after changes to
 the context, numbers, task, vocabulary, representation, safety, or exit
 evidence so no section retains stale content.
 

@@ -29,7 +29,7 @@ def test_plan_full_flow(client: TestClient):
     chat_body = chat.json()
     assert chat_body["reply"]
     assert chat_body["plan_markdown"]
-    assert "lesson_artifact" in chat_body
+    assert "lesson_artifact" not in chat_body
     assert chat_body["ready_to_save"] is True
 
     save = client.post(
@@ -164,6 +164,93 @@ def test_plan_save_manual_unknown_student_returns_409_without_write(client: Test
         },
     )
     assert saved.status_code == 404
+
+
+def test_plan_save_accepts_markdown_only_audience_sections_with_exit_ticket(
+    client: TestClient,
+):
+    """A valid Markdown-first package must not be rejected after a clear check."""
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+    markdown = """# Lesson Plan — Carbon Bonding
+
+## Teacher
+
+Use a particle-model drawing before introducing formal notation. Start with a
+short bridge from electron transfer to electron sharing, then model methane.
+
+## Student
+
+Draw methane, ethane, ethene, and ethyne. Count the bonds around each carbon
+and explain to a partner how sharing differs from transfer.
+
+## Observation
+
+Listen for students who confuse ion charge with bond order. Collect one shared
+piece of evidence during the molecule-drawing task before students leave.
+
+### Exit ticket
+
+In two sentences, explain why carbon can form four bonds and how electron
+sharing differs from redox electron transfer.
+"""
+
+    save = client.post(
+        f"{base}/save",
+        json={
+            "session_id": session_id,
+            "lesson_date": "2026-10-06",
+            "plan_markdown": markdown,
+        },
+    )
+
+    assert save.status_code == 200, save.text
+    assert save.json()["lesson_date"] == "2026-10-06"
+
+
+def test_plan_save_accepts_teacher_authored_markdown_without_heading_contract(
+    client: TestClient,
+):
+    """A teacher can save a deliberate format variation after a clear safety check."""
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+    markdown = """Carbon bonding lesson — teacher working format
+
+Begin with a five-minute redox recall, then have pairs sketch methane, ethane,
+ethene, and ethyne. Ask every pair to compare electron transfer in redox with
+electron sharing in covalent bonds. Keep hybridization as a brief geometry
+intuition only. Collect each student's written answer to decide whether the
+next lesson needs another visual model before structural-formula practice.
+"""
+
+    save = client.post(
+        f"{base}/save",
+        json={
+            "session_id": session_id,
+            "lesson_date": "2026-10-07",
+            "plan_markdown": markdown,
+        },
+    )
+
+    assert save.status_code == 200, save.text
+    assert save.json()["lesson_date"] == "2026-10-07"
+
+
+def test_plan_save_rejects_empty_markdown_before_verification(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+
+    save = client.post(
+        f"{base}/save",
+        json={
+            "session_id": session_id,
+            "lesson_date": "2026-10-08",
+            "plan_markdown": " \n\t ",
+        },
+    )
+
+    assert save.status_code == 422
+    assert "plan_markdown must not be empty" in save.text
 
 
 def test_profile_proposal_normalizes_human_label_targets(

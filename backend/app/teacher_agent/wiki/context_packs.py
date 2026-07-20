@@ -983,10 +983,29 @@ def is_plan_ready(store, plan_md: str) -> bool:
         "## observation / update",
         "### exit evidence",
     )
+    markdown_only_audience_required = (
+        "# lesson plan",
+        "## teacher",
+        "## student",
+        "## observation",
+        "### exit evidence",
+    )
+    markdown_only_audience_exit_ticket_required = (
+        "# lesson plan",
+        "## teacher",
+        "## student",
+        "## observation",
+        "### exit ticket",
+    )
     return (
         all(heading in text for heading in legacy_required)
         or all(heading in text for heading in package_required)
         or all(heading in text for heading in three_audience_fallback_required)
+        or all(heading in text for heading in markdown_only_audience_required)
+        or all(
+            heading in text
+            for heading in markdown_only_audience_exit_ticket_required
+        )
     ) and len(plan_md.strip()) > 200
 
 

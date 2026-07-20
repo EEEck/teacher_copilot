@@ -161,21 +161,23 @@ def test_chemie_9_ntg_planning_skill_preserves_the_six_step_production_flow(wiki
         assert heading in active_skill["text"]
 
     assert "mandatory before drafting" in active_skill["text"]
-    assert "shared LessonArtifact" in active_skill["text"]
+    assert "canonical Markdown package" in active_skill["text"]
     assert "Consistency sweep" in active_skill["text"]
 
 
-def test_plan_chat_defers_artifact_shape_to_the_loaded_production_procedure():
+def test_plan_chat_uses_canonical_markdown_wrapper_for_loaded_procedure():
     system = PLAN_CHAT_SYSTEM
 
-    assert "Use this markdown structure" not in system
     assert "loaded production procedure" in system
     assert "English artifact" in system
+    assert "canonical package shape" in system
 
 
-def test_plan_chat_uses_structured_package_when_the_plan_is_complete():
-    assert "lesson_artifact" in PLAN_CHAT_SYSTEM
-    assert "teacher, student, and observation" in PLAN_CHAT_SYSTEM
+def test_plan_chat_requires_canonical_markdown_package_when_the_plan_is_complete():
+    assert "## Teacher Lesson Plan" in PLAN_CHAT_SYSTEM
+    assert "## Student Materials" in PLAN_CHAT_SYSTEM
+    assert "## Observation and Update Capture" in PLAN_CHAT_SYSTEM
+    assert "lesson_artifact" not in PLAN_CHAT_SYSTEM
 
 
 def test_plan_assembly_injects_the_compiled_subject_expert_once(wiki):

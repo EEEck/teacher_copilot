@@ -250,6 +250,23 @@ class WorkflowDraftStore:
             ).fetchone()
         return WorkflowDraftRow.from_sqlite(rows) if rows is not None else None
 
+    def find_active_by_backend_session_id(
+        self, backend_session_id: str
+    ) -> WorkflowDraftRow | None:
+        """Find a resumable draft by the session ID held by an already-open UI."""
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM workflow_draft
+                WHERE backend_session_id = ?
+                  AND status NOT IN ('committed', 'saved', 'discarded')
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT 1
+                """,
+                (backend_session_id,),
+            ).fetchone()
+        return WorkflowDraftRow.from_sqlite(row) if row is not None else None
+
     def list_active_for_class(
         self, class_id: str, *, mode: str | None = None
     ) -> list[WorkflowDraftRow]:
