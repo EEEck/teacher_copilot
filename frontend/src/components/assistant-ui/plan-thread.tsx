@@ -2,6 +2,7 @@
 
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { Thread } from "@/components/assistant-ui/thread";
+import { PlanVerificationPanel } from "@/components/klassenpilot/plan-verification-card";
 import { StagedMemoryBanner } from "@/components/klassenpilot/staged-memory-banner";
 
 /**
@@ -11,8 +12,14 @@ import { StagedMemoryBanner } from "@/components/klassenpilot/staged-memory-bann
  * and showing it in the welcome made it vanish on the first send ("history
  * disappeared"). A plain static welcome avoids both and matches memory exactly.
  */
-export function PlanThread() {
-  const { draftId, turnInProgress, memoryCandidates } = useArtifactSession();
+export function PlanThread({ classId }: { classId: string }) {
+  const {
+    draftId,
+    sessionId,
+    artifactRevision,
+    turnInProgress,
+    memoryCandidates,
+  } = useArtifactSession();
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
       <StagedMemoryBanner candidateCount={memoryCandidates.length} />
@@ -20,6 +27,13 @@ export function PlanThread() {
         <Thread
           composerStorageKey={draftId ? `kp:composer:${draftId}` : undefined}
           backgroundTurnInProgress={turnInProgress}
+          activity={
+            <PlanVerificationPanel
+              classId={classId}
+              sessionId={sessionId}
+              artifactRevision={artifactRevision}
+            />
+          }
           showSuggestions={false}
           welcome={{
             title: "Plan your next lesson",

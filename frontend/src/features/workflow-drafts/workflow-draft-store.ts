@@ -32,6 +32,17 @@ type WorkflowDraftState = {
 
 type WorkflowDraftStore = StoreApi<WorkflowDraftState>;
 
+// React's external-store contract requires a missing value to preserve its
+// identity between reads. Do not inline `?? []` in Zustand selectors.
+const EMPTY_THREAD_MESSAGES: ThreadMessageLike[] = [];
+
+export function selectThreadMessages(
+  state: Pick<WorkflowDraftState, "threadMessagesByDraftId">,
+  draftId: string,
+): ThreadMessageLike[] {
+  return state.threadMessagesByDraftId[draftId] ?? EMPTY_THREAD_MESSAGES;
+}
+
 function threadHasRichParts(messages: ThreadMessageLike[]): boolean {
   return messages.some((message) => Array.isArray(message.content));
 }

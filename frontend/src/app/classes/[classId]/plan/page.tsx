@@ -36,7 +36,13 @@ function PlanSaveFooter({
   setLessonDate: (v: string) => void;
   setBeforePlan: (v: string) => void;
 }) {
-  const { artifactMarkdown, draftId, isUpdating, readyToSave, runWithSessionRecovery } =
+  const {
+    artifactMarkdown,
+    draftId,
+    isUpdating,
+    readyToSave,
+    runWithSessionRecovery,
+  } =
     useArtifactSession();
   const [operation, setOperation] = useState<"idle" | "preparing" | "discarding">("idle");
   const busy = operation !== "idle";
@@ -118,7 +124,11 @@ function PlanSaveFooter({
             className="w-[180px]"
           />
         </div>
-        <Button className="w-fit" onClick={handleReady} disabled={busy || isUpdating}>
+        <Button
+          className="w-fit"
+          onClick={handleReady}
+          disabled={busy || isUpdating || !artifactMarkdown.trim()}
+        >
           {operation === "preparing" ? (
             <>
               <LoaderCircleIcon className="animate-spin" />
@@ -238,10 +248,15 @@ function PlanWorkspace({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ArtifactSessionWorkspace
-        thread={<PlanThread />}
+        thread={<PlanThread classId={classId} />}
         draftPanel={
           <ArtifactDraftPanel
             title="Lesson plan"
+            emptyPreviewFallback={
+              "## Ready to build a lesson plan\n\n"
+              + "Describe the topic, starting point, and constraints in chat. "
+              + "I will create one shared package for the teacher, students, and lesson follow-up."
+            }
             placeholder="Your lesson plan will build here as you chat, or type directly…"
             updatingLabel="Updating plan from chat…"
           />

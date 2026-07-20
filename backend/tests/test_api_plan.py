@@ -12,6 +12,16 @@ from fastapi.testclient import TestClient
 from tests.conftest import CLASS_ID
 
 
+def test_new_plan_session_starts_with_an_empty_artifact(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+
+    draft = client.get(f"{base}/sessions/{session_id}/draft")
+
+    assert draft.status_code == 200, draft.text
+    assert draft.json()["plan_markdown"] == ""
+
+
 def test_plan_full_flow(client: TestClient):
     base = f"/api/classes/{CLASS_ID}/plan"
 
@@ -88,6 +98,28 @@ def test_advisory_executive_finding_does_not_block_plan(client: TestClient):
     assert chat.status_code == 200, chat.text
     assert chat.json()["ready_to_save"] is True
     assert chat.json()["executive_state"]["status"] == "advisory"
+
+
+def test_plan_chat_returns_deterministic_verification_report(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+
+    chat = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={"message": "Plan the next lesson."},
+    )
+
+    assert chat.status_code == 200, chat.text
+    report = chat.json()["executive_state"]["verification_reports"]["plan"]
+    assert report["pack_id"] == "plan"
+    assert {row["row_id"] for row in report["rows"]} == {
+        "markdown_package",
+        "source_provenance",
+        "duration",
+    }
+    draft = client.get(f"{base}/sessions/{session_id}/draft")
+    assert draft.status_code == 200
+    assert draft.json()["executive_state"]["verification_reports"]["plan"]["pack_id"] == "plan"
 
 
 def test_blocking_finding_keeps_ready_flag_false_without_status_downgrade(

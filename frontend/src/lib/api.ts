@@ -177,6 +177,7 @@ export type PlanDraft = {
   latest_turn_complete?: boolean;
   messages?: ChatMessage[];
   plan_markdown: string;
+  executive_state?: Record<string, unknown>;
 };
 export type PlanChatResponse = {
   reply: string;

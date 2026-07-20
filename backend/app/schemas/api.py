@@ -561,6 +561,7 @@ class PlanDraft(BaseModel):
     latest_turn_complete: bool = True
     messages: list[ChatMessage] = Field(default_factory=list)
     plan_markdown: str
+    executive_state: dict = Field(default_factory=dict)
 
 
 class PlanChatRequest(BaseModel):

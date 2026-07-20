@@ -31,6 +31,9 @@
 The shared `ExecutiveRuntime` remains the single owner of finding lifecycle,
 severity, trace state, and save semantics. Add a small verification pack per
 workflow rather than a separate verifier system. Implement the Plan pack first.
+The detailed Plan-pack product and runtime design is maintained in
+[`tmp-plan-verification-design.md`](../tmp-plan-verification-design.md); this
+master plan owns the integrated implementation order and acceptance coverage.
 
 **Plan-pack evidence input:** normalized teacher request and curriculum-scope
 claims; active subject/grade/branch route; trusted source sections actually
@@ -59,6 +62,18 @@ when no directly-read official section establishes the requested scope;
 supported topics receive no false warning; missing source reads are visible in
 trace; advisory findings leave `ready_to_save=true`; and teacher-facing plans
 contain a short evidence note, never raw source text or hidden reasoning.
+
+**Implemented Plan-pack baseline (2026-07-20):** Plan generation first records
+the deterministic package/provenance/timing report, then launches a short
+no-tools economy-model review in the background. Its bounded packet contains
+only the exact Markdown revision, teacher request, compact class/teacher/subject
+context, route, and trusted source IDs/sections actually read. The report is
+stored in `ExecutiveRuntime`, visible through the normal Plan draft API, and
+discarded when its artifact fingerprint is stale. Scope/pedagogy/preference and
+format observations remain advisory. A completed `safety_hold` for the exact
+Markdown revision is the only Plan-pack result that blocks a save; an explicit
+save waits for the short review only if it is still pending. Discuss, Update
+Memory, and Class Brief remain registry-only follow-on packs.
 
 ## Reconciliation status (2026-07-18)
 

@@ -224,6 +224,19 @@ with a concise teacher-visible recovery message and preserved draft; it never
 silently edits or discards teacher text. Prompt instructions alone are not the
 final safety boundary.
 
+The Plan verification pack adds a separate, bounded quality report without
+making lesson generation wait for another model turn. Deterministic package,
+source-read, and timing checks are attached immediately. A no-tools economy
+review follows in the background using only the exact draft, request, selected
+route, compact class/teacher/subject context, and consulted source IDs/sections.
+It reports curriculum scope, class fit, framework adjustments, Chemistry
+pedagogy, differentiation, and safety as `clear`, `note`, or
+`needs_teacher_decision`. Teacher-directed scope extensions and ordinary
+pedagogical trade-offs are advisory. Only a completed, exact-draft
+`safety_hold` blocks Plan save; if it is still pending when the teacher saves,
+the backend completes that short review then. The report never rewrites the
+teacher's Markdown or exposes raw source bodies/full prompts.
+
 ## Agents SDK Integration Contract
 
 KlassenPilot uses the OpenAI Agents SDK as a code-first orchestration layer, but

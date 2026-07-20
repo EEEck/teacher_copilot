@@ -29,6 +29,7 @@ from app.teacher_agent.agent import (
     build_ingest_agent,
     build_lint_agent,
     build_plan_chat_agent,
+    build_plan_verification_agent,
     build_plan_lesson_agent,
     build_plan_opening_agent,
     build_profile_proposal_agent,
@@ -80,6 +81,10 @@ from app.teacher_agent.planning_state import (
     PlanRuntime,
     merge_turn_into_runtime,
     planning_api_payload,
+)
+from app.teacher_agent.plan_verification import (
+    PlanVerificationJudgement,
+    build_plan_review_packet,
 )
 from app.teacher_agent.tools import WikiToolContext
 from app.teacher_agent.stream_events import (
@@ -1186,6 +1191,46 @@ class AgentRunner:
             patch=parsed.executive_patch,
             message=parsed.message.strip() or "Verification complete.",
         )
+
+    async def review_plan(
+        self,
+        class_id: str,
+        *,
+        teacher_request: str,
+        markdown: str,
+        planning: PlanRuntime,
+    ) -> PlanVerificationJudgement:
+        """Run the no-tools, bounded pedagogical review for one plan draft."""
+        class_config = self.wiki.get_class(class_id)
+        curriculum = self.wiki.get_curriculum_profile(class_id)
+        packet = build_plan_review_packet(
+            teacher_request=teacher_request,
+            markdown=markdown,
+            route={
+                "subject": class_config.subject,
+                "grade": str(curriculum.grade or ""),
+                "branch": str(curriculum.branch or ""),
+            },
+            class_context=self.wiki.build_active_class_core_context_trace(class_id)[
+                "text"
+            ],
+            teacher_context=self.wiki.build_teacher_context_trace()["text"],
+            subject_expert=self.wiki.build_active_subject_expert_context_trace(
+                class_id, purpose="plan"
+            )["text"],
+            consulted_sources=planning.consulted_sources,
+        )
+        agent = build_plan_verification_agent(
+            packet,
+            self.utility_model,
+            reasoning_effort=self.utility_effort,
+        )
+        parsed = await self._run_structured(
+            agent, "Review the supplied packet and return the report card."
+        )
+        if not isinstance(parsed, PlanVerificationJudgement):
+            raise RuntimeError("Failed to review lesson plan")
+        return parsed
 
     async def lint_wiki(self, class_id: str) -> str:
         context = self.wiki.read_wiki_index(class_id)

@@ -68,6 +68,10 @@ from app.teacher_agent.planning_state import (
     merge_turn_into_runtime,
     planning_api_payload,
 )
+from app.teacher_agent.plan_verification import (
+    PlanVerificationJudgement,
+    PlanVerificationJudgementRow,
+)
 from app.services.ingest_service import IngestService
 from app.services.class_brief_service import ClassBriefService
 from app.services.discussion_service import DiscussionService
@@ -210,6 +214,33 @@ class StubAgentRunner:
             artifact_fingerprint=artifact_fingerprint(markdown),
             patch=patch,
             message=message,
+        )
+
+    async def review_plan(
+        self,
+        class_id: str,
+        *,
+        teacher_request: str,
+        markdown: str,
+        planning: PlanRuntime,
+    ) -> PlanVerificationJudgement:
+        return PlanVerificationJudgement(
+            summary="Pedagogical review completed for this draft.",
+            rows=[
+                PlanVerificationJudgementRow(
+                    row_id=row_id,
+                    status="clear",
+                    summary="Stub review found no concern.",
+                )
+                for row_id in (
+                    "curriculum_scope",
+                    "class_context",
+                    "teacher_adjustments",
+                    "chemistry_pedagogy",
+                    "differentiation",
+                    "safety",
+                )
+            ],
         )
 
     def _emit_executive_state(

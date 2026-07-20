@@ -63,12 +63,15 @@ const DEFAULT_WELCOME: ThreadWelcomeConfig = {
 export const Thread: FC<{
   welcome?: ThreadWelcomeConfig;
   welcomeExtra?: ReactNode;
+  /** Runtime-owned workflow activity displayed after messages in the scrollable viewport. */
+  activity?: ReactNode;
   showSuggestions?: boolean;
   composerStorageKey?: string;
   backgroundTurnInProgress?: boolean;
 }> = ({
   welcome = DEFAULT_WELCOME,
   welcomeExtra,
+  activity,
   showSuggestions = true,
   composerStorageKey,
   backgroundTurnInProgress = false,
@@ -103,6 +106,7 @@ export const Thread: FC<{
             <ThreadRunningIndicator
               backgroundTurnInProgress={backgroundTurnInProgress}
             />
+            {activity}
           </div>
 
           <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 z-10 mt-auto flex shrink-0 flex-col gap-4 overflow-visible rounded-t-(--composer-radius) bg-background pb-4 md:pb-6">

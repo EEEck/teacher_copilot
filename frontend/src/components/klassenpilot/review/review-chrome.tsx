@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import React, { type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /** Matches assistant-ui ToolGroup muted panel so review feels part of the chat column. */

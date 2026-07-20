@@ -8,7 +8,10 @@ import {
 } from "@assistant-ui/react";
 
 import { truncateThreadBeforeEdit } from "./thread-messages";
-import { useWorkflowDraftStore } from "./workflow-draft-store";
+import {
+  selectThreadMessages,
+  useWorkflowDraftStore,
+} from "./workflow-draft-store";
 
 export type UpdateWorkflowThread = (
   update: (messages: ThreadMessageLike[]) => ThreadMessageLike[],
@@ -27,7 +30,7 @@ export function useWorkflowChatRuntime({
   onCancel?: () => Promise<void>;
 }) {
   const messages = useWorkflowDraftStore(
-    (state) => state.threadMessagesByDraftId[draftId] ?? [],
+    (state) => selectThreadMessages(state, draftId),
   );
   const setThreadMessages = useWorkflowDraftStore((state) => state.setThreadMessages);
   const messagesRef = useRef(messages);

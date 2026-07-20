@@ -49,10 +49,17 @@ from app.services.workflow_drafts import WorkflowDraftIdentity, WorkflowDraftSto
 from app.teacher_agent.agents import AgentRunner
 from app.teacher_agent.executive_verification import ExecutiveRuntime
 from app.teacher_agent.executive_verification import (
+    artifact_fingerprint,
+    apply_verification_report,
     executive_api_payload,
     executive_runtime_dump,
     executive_runtime_load,
 )
+from app.teacher_agent.plan_verification import (
+    build_plan_verification_report,
+    merge_plan_verification_judgement,
+)
+from app.teacher_agent.planning_state import PlanRuntime
 from app.teacher_agent.wiki_store import WikiStore
 
 _TRACE_EVENT_CAP = 200
@@ -100,6 +107,7 @@ class ArtifactSessionService:
         self.sessions: dict[str, ArtifactSession] = {}
         self.drafts: dict[str, object] = {}
         self._stream_tasks: dict[str, asyncio.Task[None]] = {}
+        self._verification_tasks: dict[str, asyncio.Task[None]] = {}
         self._stream_subscribers: dict[str, set[asyncio.Queue[str | None]]] = {}
 
     def spec_for(self, mode: str) -> ArtifactSpec:
@@ -225,9 +233,10 @@ class ArtifactSessionService:
             ("artifact_revision", session.artifact_revision),
             ("artifact_hash", session.artifact_hash),
             ("turn_in_progress", session.turn_in_progress),
-            ("latest_turn_complete", session.latest_turn_complete),
-            ("messages", session.messages),
-        ):
+              ("latest_turn_complete", session.latest_turn_complete),
+              ("messages", session.messages),
+              ("executive_state", executive_api_payload(session.executive)),
+          ):
             if hasattr(draft, field_name):
                 setattr(draft, field_name, value)
         return draft
@@ -344,6 +353,149 @@ class ArtifactSessionService:
         )
         if len(session.debug_events) > _TRACE_EVENT_CAP:
             session.debug_events = session.debug_events[-_TRACE_EVENT_CAP:]
+
+    def _apply_workflow_verification(
+        self, session: ArtifactSession, markdown: str
+    ) -> None:
+        """Run inexpensive deterministic verification before exposing a draft."""
+        if session.mode != "plan" or not isinstance(session.runtime, PlanRuntime):
+            return
+        report = build_plan_verification_report(
+            markdown,
+            consulted_sources=session.runtime.consulted_sources,
+        )
+        apply_verification_report(session.executive, report)
+        session.debug_events.append(
+            {
+                "type": "verification_report",
+                "pack_id": "plan",
+                "overall_status": report.overall_status,
+                "rows": [row.model_dump() for row in report.rows],
+            }
+        )
+        if len(session.debug_events) > _TRACE_EVENT_CAP:
+            session.debug_events = session.debug_events[-_TRACE_EVENT_CAP:]
+
+    def _schedule_plan_judgement(self, session: ArtifactSession, markdown: str) -> None:
+        """Review a finished Plan draft after returning it to the teacher."""
+        if session.mode != "plan" or not isinstance(session.runtime, PlanRuntime):
+            return
+        prior = self._verification_tasks.get(session.session_id)
+        if prior is not None and not prior.done():
+            prior.cancel()
+        submitted_fingerprint = artifact_fingerprint(markdown)
+        task = asyncio.create_task(
+            self._run_plan_judgement(
+                session.session_id,
+                markdown,
+                submitted_fingerprint,
+            )
+        )
+        self._verification_tasks[session.session_id] = task
+
+    def _mark_plan_review_stale(self, session: ArtifactSession, markdown: str) -> None:
+        if session.mode != "plan" or not isinstance(session.runtime, PlanRuntime):
+            return
+        report = build_plan_verification_report(
+            markdown,
+            consulted_sources=session.runtime.consulted_sources,
+        ).model_copy(
+            update={
+                "review_state": "stale",
+                "summary": "Draft was edited after its pedagogical review; it will be reviewed before saving.",
+            }
+        )
+        apply_verification_report(session.executive, report)
+        session.debug_events.append(
+            {"type": "verification_report_stale", "pack_id": "plan"}
+        )
+
+    async def _run_plan_judgement(
+        self,
+        session_id: str,
+        markdown: str,
+        submitted_fingerprint: str,
+    ) -> None:
+        """Persist a report only when its exact reviewed draft is still current."""
+        try:
+            session = self.get_session(session_id)
+            if not isinstance(session.runtime, PlanRuntime):
+                return
+            teacher_request = next(
+                (message.content for message in reversed(session.messages) if message.role == "user"),
+                "",
+            )
+            judgement = await self.agents.review_plan(
+                session.class_id,
+                teacher_request=teacher_request,
+                markdown=markdown,
+                planning=session.runtime,
+            )
+            if artifact_fingerprint(session.partial_markdown) != submitted_fingerprint:
+                session.debug_events.append(
+                    {
+                        "type": "verification_report_stale",
+                        "pack_id": "plan",
+                    }
+                )
+                return
+            deterministic = build_plan_verification_report(
+                markdown,
+                consulted_sources=session.runtime.consulted_sources,
+            )
+            report = merge_plan_verification_judgement(deterministic, judgement)
+            apply_verification_report(session.executive, report)
+            session.debug_events.append(
+                {
+                    "type": "verification_report",
+                    "pack_id": "plan",
+                    "review_state": report.review_state,
+                    "overall_status": report.overall_status,
+                    "rows": [row.model_dump() for row in report.rows],
+                }
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - advisory review may never break planning
+            session = self.sessions.get(session_id)
+            if session is not None:
+                current = session.executive.verification_reports.get("plan")
+                if isinstance(current, dict):
+                    current["review_state"] = "failed"
+                    current["summary"] = (
+                        "Plan is available; the optional pedagogical review could not finish."
+                    )
+                session.debug_events.append(
+                    {"type": "verification_report_failed", "pack_id": "plan"}
+                )
+        finally:
+            session = self.sessions.get(session_id)
+            if session is not None:
+                if len(session.debug_events) > _TRACE_EVENT_CAP:
+                    session.debug_events = session.debug_events[-_TRACE_EVENT_CAP:]
+                self._persist_session(session)
+            task = self._verification_tasks.get(session_id)
+            if task is asyncio.current_task():
+                self._verification_tasks.pop(session_id, None)
+
+    async def ensure_plan_judgement(self, session_id: str, markdown: str) -> None:
+        """Complete the short review before a durable Plan save when needed."""
+        session = self.get_session(session_id)
+        if session.mode != "plan" or not isinstance(session.runtime, PlanRuntime):
+            return
+        report = session.executive.verification_reports.get("plan")
+        fingerprint = artifact_fingerprint(markdown)
+        if (
+            isinstance(report, dict)
+            and report.get("review_state") == "complete"
+            and report.get("artifact_fingerprint") == fingerprint
+        ):
+            return
+        pending = self._verification_tasks.get(session_id)
+        if pending is not None and not pending.done():
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
+        await self._run_plan_judgement(session_id, markdown, fingerprint)
 
     def _safe_fallback_result(
         self,
@@ -517,13 +669,14 @@ class ArtifactSessionService:
                 session.runtime,
                 session.executive,
             )
+            result = self._guard_turn_result(session, result, previous_markdown)
+            self._apply_workflow_verification(session, result.markdown)
             result = replace(
                 result,
                 ready=result.ready
                 and not session.executive.open_blocking_findings(),
                 executive=executive_api_payload(session.executive),
             )
-            result = self._guard_turn_result(session, result, previous_markdown)
             session.messages.append(ChatMessage(role="assistant", content=result.reply))
             session.partial_markdown = result.markdown
             if result.completeness is not None:
@@ -537,6 +690,7 @@ class ArtifactSessionService:
                 spec.build_draft(self.wiki, session.class_id, result.markdown),
                 session,
             )
+            self._schedule_plan_judgement(session, result.markdown)
             return result
         finally:
             self._end_turn(session)
@@ -724,6 +878,10 @@ class ArtifactSessionService:
         try:
             async for event in stream:
                 if isinstance(event, SseFinal):
+                    event = self._guard_final_event(session, event, previous_markdown)
+                    self._apply_workflow_verification(
+                        session, event.artifact_markdown
+                    )
                     event.ready = (
                         event.ready
                         and not session.executive.open_blocking_findings()
@@ -731,7 +889,6 @@ class ArtifactSessionService:
                     event.executive_state = executive_api_payload(
                         session.executive
                     )
-                    event = self._guard_final_event(session, event, previous_markdown)
                 elif sanitize_stream:
                     safe_event = sanitize_teacher_visible_stream_event(
                         event, stream_safety_state
@@ -752,6 +909,7 @@ class ArtifactSessionService:
                             "artifact_hash": session.artifact_hash or None,
                         }
                     )
+                    self._schedule_plan_judgement(session, event.artifact_markdown)
                 yield sse_encode(event)
         finally:
             self._end_turn(session)
@@ -762,6 +920,7 @@ class ArtifactSessionService:
         session = self.get_session(session_id)
         spec = self.specs[session.mode]
         session.partial_markdown = markdown
+        self._mark_plan_review_stale(session, markdown)
         completeness = spec.completeness_of(self.wiki, markdown)
         if completeness is not None:
             session.completeness = completeness

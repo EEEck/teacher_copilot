@@ -9,6 +9,7 @@ from app.teacher_agent.executive_verification import (
     apply_write_verification,
     artifact_fingerprint,
     apply_executive_patch,
+    apply_verification_report,
     enforce_applied_write_verification,
     evaluate_write_gate,
     executive_api_payload,
@@ -16,6 +17,7 @@ from app.teacher_agent.executive_verification import (
     executive_runtime_load,
     render_executive_runtime,
 )
+from app.teacher_agent.plan_verification import build_plan_verification_report
 
 
 def test_blocking_finding_sets_needs_decision():
@@ -168,6 +170,38 @@ def test_executive_runtime_round_trips_through_dump_and_load():
 def test_artifact_fingerprint_normalizes_crlf_and_whitespace():
     assert artifact_fingerprint("a\r\nb\n") == artifact_fingerprint("a\nb")
     assert artifact_fingerprint("  draft  ") == artifact_fingerprint("draft")
+
+
+def test_plan_verification_report_persists_in_executive_runtime():
+    runtime = ExecutiveRuntime()
+    report = build_plan_verification_report(
+        "# Lesson Plan\n\n## Teacher Lesson Plan\n\n## Student Materials\n\n## Observation and Update Capture\n",
+        consulted_sources=[],
+    )
+
+    apply_verification_report(runtime, report)
+
+    payload = executive_api_payload(runtime)
+    assert payload["verification_reports"]["plan"]["overall_status"] == "advisory"
+    restored = executive_runtime_load(executive_runtime_dump(runtime))
+    assert restored.verification_reports["plan"]["overall_status"] == "advisory"
+
+
+def test_write_gate_blocks_a_completed_safety_hold_for_the_same_plan_revision():
+    runtime = ExecutiveRuntime()
+    markdown = "# Draft\n"
+    runtime.verification_reports["plan"] = {
+        "pack_id": "plan",
+        "overall_status": "safety_hold",
+        "review_state": "complete",
+        "artifact_fingerprint": artifact_fingerprint(markdown),
+    }
+    apply_write_verification(runtime, artifact=markdown, patch=ExecutivePatch())
+
+    gate = evaluate_write_gate(runtime, markdown, structurally_ready=True)
+
+    assert gate.allowed is False
+    assert gate.reason == "plan_safety_hold"
 
 
 def test_enforce_applied_write_verification_raises_when_blocked():

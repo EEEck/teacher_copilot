@@ -208,6 +208,14 @@ The product uses tiered class memory.
    is not itself a candidate update. Durable-write fingerprint verification is
    a later boundary and remains separate from this proactive chat loop.
 
+   The first workflow-specific pack is Plan verification: deterministic package,
+   source-read, and timing rows are immediate; a bounded no-tools economy-model
+   report follows after the draft is returned. Its report is revision-bound and
+   lives inside `ExecutiveRuntime`, not in the lesson artifact or durable wiki.
+   It is teacher-facing through the Plan draft channel, while full inputs stay
+   trace-only. Advisory scope/pedagogy notes never block; only a completed
+   severe-safety hold for the same Markdown fingerprint prevents saving.
+
 6. **Profiles (four clearly-scoped files)**
    - `user.md` (`wiki/teacher_profile.md`, GLOBAL): teacher communication style,
      stable preferences, default lesson structure, and only teacher-confirmed

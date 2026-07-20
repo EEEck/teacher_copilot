@@ -21,6 +21,7 @@ from app.teacher_agent.prompts import (
     MEMORY_SWEEP_CONSOLIDATION_SYSTEM,
     MEMORY_SKILL,
     PLAN_CHAT_SYSTEM,
+    PLAN_VERIFICATION_SYSTEM,
     PLAN_MEMORY_POLICY,
     PLAN_SKILL,
     PLAN_WIKI_TOOLS_POLICY,
@@ -29,6 +30,7 @@ from app.teacher_agent.prompts import (
     apply_prompt,
 )
 from app.teacher_agent.tools import create_remember_tool
+from app.teacher_agent.agent import build_plan_verification_agent
 from app.schemas.api import ChatAttachment, ChatMessage
 from app.teacher_agent.memory_update_state import MemoryRuntime
 from app.teacher_agent.planning_state import PlanRuntime
@@ -178,6 +180,26 @@ def test_plan_chat_requires_canonical_markdown_package_when_the_plan_is_complete
     assert "## Student Materials" in PLAN_CHAT_SYSTEM
     assert "## Observation and Update Capture" in PLAN_CHAT_SYSTEM
     assert "lesson_artifact" not in PLAN_CHAT_SYSTEM
+
+
+def test_plan_verification_prompt_is_advisory_except_for_severe_safety():
+    prompt = PLAN_VERIFICATION_SYSTEM.lower()
+
+    assert "no tools" in prompt
+    assert "teacher remains in control" in prompt
+    assert "never block" in prompt
+    assert "credible severe safety" in prompt
+    assert "do not rewrite" in prompt
+
+
+def test_plan_verification_agent_has_no_tools(wiki):
+    agent = build_plan_verification_agent(
+        "# Plan verification packet\nDraft only.",
+        "stub-model",
+    )
+
+    assert agent.name == "KlassenPilot Plan Verifier"
+    assert agent.tools == []
 
 
 def test_plan_assembly_injects_the_compiled_subject_expert_once(wiki):

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createWorkflowDraftStore,
+  selectThreadMessages,
   shouldKeepLiveThread,
   type WorkflowDraftSnapshot,
 } from "./workflow-draft-store";
@@ -88,6 +89,16 @@ describe("shouldKeepLiveThread", () => {
 });
 
 describe("workflow draft store", () => {
+  it("returns one stable empty thread snapshot before a draft has messages", () => {
+    const store = createWorkflowDraftStore();
+
+    const first = selectThreadMessages(store.getState(), "new-draft");
+    const second = selectThreadMessages(store.getState(), "new-draft");
+
+    expect(first).toBe(second);
+    expect(first).toEqual([]);
+  });
+
   it("merges the final reply into a rich thread that never got SSE text", () => {
     const store = createWorkflowDraftStore();
     const draftId = "draft-merge";

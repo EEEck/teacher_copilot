@@ -80,6 +80,14 @@ assessment generation.
 
 Primary items:
 
+Status update (2026-07-20): the lightweight runtime Plan verification pack is
+implemented: immediate deterministic package/source/timing checks plus a
+bounded no-tools economy-model report after draft generation. It is advisory
+except for a credible completed severe-safety hold. The remaining quality-review
+item is the offline/batch DeepEval calibration over retained beta artifacts; the
+next workflow packs are Update Memory roster/target integrity, Discuss, and
+Class Brief.
+
 | Item | Engineering notes |
 |---|---|
 | **Evidence/source panel** | Surface source metadata for class memory used in plans and memory updates. Start with class wiki sources and raw refs already captured by runtime state. |
@@ -96,6 +104,7 @@ Primary items:
 | **Operator beta runbook** | Daily report generation, wiki-diff review, tester feedback notes, backup/export, and retention cleanup. Keep this CLI/docs-first unless a dashboard becomes clearly necessary. |
 | **Multi-worker / session hydrate docs** | Document single-worker-per-wiki assumption for local/HITL stacks; note that durable drafts + executive JSON survive restart, while in-memory session caches in `deps.py` are not multi-worker safe without sticky routing or always-hydrate-from-draft-store. |
 | **Workflow-drafts page slim-down** | Finish the plan/memory page extraction onto the shared artifact-session shell: runtime adapter registry, shared discard/bootstrap helpers, thinner commit/review workspaces. Unblocks adding exam/status workflows without copying 400–800 LOC pages. |
+| **Generic plan empty state** | Replace the legacy pre-filled lesson-plan shell with a class-agnostic empty artifact state. It must explain that a plan package appears after a teacher request and never imply that generic phases/goals have been generated. |
 | **Memory Sweep stale-diff hardening** | See incident **MSW-001** below. Launch patched with `.get()`; v1.1 fingerprint-first stale gate. |
 
 Non-goals:

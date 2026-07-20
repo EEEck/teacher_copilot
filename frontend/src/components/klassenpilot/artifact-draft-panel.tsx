@@ -6,10 +6,12 @@ import { MarkdownEditorPanel } from "@/components/klassenpilot/markdown-editor-p
 export function ArtifactDraftPanel({
   title,
   placeholder,
+  emptyPreviewFallback,
   updatingLabel = "Updating draft from chat…",
 }: {
   title: string;
   placeholder: string;
+  emptyPreviewFallback?: string;
   updatingLabel?: string;
 }) {
   const {
@@ -29,6 +31,7 @@ export function ArtifactDraftPanel({
       markdown={artifactMarkdown}
       onChange={(value) => setArtifactMarkdown(value, "manual")}
       placeholder={placeholder}
+      emptyPreviewFallback={emptyPreviewFallback}
       isUpdating={isUpdating}
       updatingLabel={updatingLabel}
       syncStatus={syncStatus}

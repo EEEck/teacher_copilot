@@ -235,6 +235,7 @@ class PlanService:
                 plan_markdown = row.artifact_markdown
         if not plan_markdown.strip():
             raise ValueError("plan_markdown must not be empty")
+        await self.core.ensure_plan_judgement(req.session_id, plan_markdown)
         verification = await self.agents.verify_artifact_for_write(
             class_id, "lesson plan", plan_markdown, session.executive
         )

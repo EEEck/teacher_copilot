@@ -948,21 +948,8 @@ def build_ingest_context(store, class_id: str) -> str:
 
 
 def empty_plan_template(store, lesson_date: Optional[str] = None) -> str:
-    d = lesson_date or date.today().isoformat()
-    return (
-        f"# Lesson Plan — Next lesson\n\n"
-        f"> Duration: 45 min | Target date: {d}\n\n"
-        "## Learning goals\n\n\n"
-        "## Lesson flow\n\n"
-        "- **Opening** (5 min):\n\n"
-        "- **Main teaching** (25 min):\n\n"
-        "- **Practice** (10 min):\n\n"
-        "- **Close** (5 min):\n\n"
-        "## Warmup\n\n\n"
-        "## Practice tasks\n\n-\n\n"
-        "## Homework\n\n\n"
-        "## Teacher notes\n\n"
-    )
+    """New plan sessions have no artifact until a teacher or planner creates one."""
+    return ""
 
 
 def is_plan_ready(store, plan_md: str) -> bool:
