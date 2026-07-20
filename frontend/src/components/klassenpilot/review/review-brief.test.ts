@@ -27,7 +27,7 @@ describe("ReviewBrief", () => {
     );
 
     expect(html).toContain("disabled");
-    expect(html).toContain("Saving");
+    expect(html).toContain("Reviewing approved changes and saving");
     expect(html).toContain("animate-spin");
   });
 });

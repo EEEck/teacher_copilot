@@ -2,6 +2,7 @@
 
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { Thread } from "@/components/assistant-ui/thread";
+import { ThreadActivity } from "@/components/assistant-ui/thread-activity";
 import { PlanVerificationPanel } from "@/components/klassenpilot/plan-verification-card";
 import { StagedMemoryBanner } from "@/components/klassenpilot/staged-memory-banner";
 
@@ -28,11 +29,13 @@ export function PlanThread({ classId }: { classId: string }) {
           composerStorageKey={draftId ? `kp:composer:${draftId}` : undefined}
           backgroundTurnInProgress={turnInProgress}
           activity={
-            <PlanVerificationPanel
-              classId={classId}
-              sessionId={sessionId}
-              artifactRevision={artifactRevision}
-            />
+            <ThreadActivity>
+              <PlanVerificationPanel
+                classId={classId}
+                sessionId={sessionId}
+                artifactRevision={artifactRevision}
+              />
+            </ThreadActivity>
           }
           showSuggestions={false}
           welcome={{
