@@ -284,6 +284,31 @@ class WorkflowDraftStore:
             rows = conn.execute(query, params).fetchall()
         return [WorkflowDraftRow.from_sqlite(row) for row in rows]
 
+    def list_in_progress(
+        self, *, workspace_id: str | None = None
+    ) -> list[WorkflowDraftRow]:
+        """Draft turns the backend is running right now, across all classes.
+
+        Backs the active-work query the frontend polls instead of keeping its
+        own sessionStorage bookkeeping. Idle-but-active drafts are excluded:
+        they are resumable work, not running work.
+        """
+        terminal = tuple(sorted(TERMINAL_STATUSES))
+        placeholders = ",".join("?" for _ in terminal)
+        query = f"""
+            SELECT * FROM workflow_draft
+            WHERE turn_in_progress = 1
+              AND status NOT IN ({placeholders})
+        """
+        params: list[Any] = [*terminal]
+        if workspace_id is not None:
+            query += " AND workspace_id = ?"
+            params.append(workspace_id)
+        query += " ORDER BY updated_at DESC, created_at DESC"
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [WorkflowDraftRow.from_sqlite(row) for row in rows]
+
     def get(self, draft_id: str) -> WorkflowDraftRow:
         with self._connect() as conn:
             row = conn.execute(
