@@ -200,10 +200,26 @@ common task plus only student-visible supports. The observation section records
 whether the supports enabled the common evidence task and which support should
 be revised next time.
 
-Before returning, verify all eight rules, source grounding where required,
-student/teacher task agreement, timing/material/safety realism, and that no
-student-facing text reveals diagnostic grouping. Keep prose skimmable; use a
-table for parallel access routes rather than repeated dense paragraphs.
+Before returning, verify all eight rules and source grounding where required,
+then run this explicit integrity checklist on the Markdown package (not a JSON
+schema):
+
+1. **Materials ↔ phases agree both ways** — every listed material is used by a
+   named phase; every phase has the materials it needs.
+2. **Shared task wording matches** across teacher and student sections — teacher
+   routes and student supports describe the same shared evidence task.
+3. **Phase minutes include transitions** and sum to the stated duration.
+4. **Student section has no teacher diagnostic language** — no look-fors,
+   misconception notes, conferring moves, pedagogy jargon (scaffold, tier), or
+   diagnostic grouping labels on student pages.
+5. **Exit evidence has sort buckets** with distinguishing criteria (for
+   example secure / developing / needs revisit, or Got it / Almost / Needs).
+6. **Differentiation integrity** — same central question and core evidence task
+   across routes; scaffolds appear as task design and stay unlabeled on student
+   pages; supports fade within the lesson.
+
+Keep prose skimmable; use a table for parallel access routes rather than
+repeated dense paragraphs.
 
 When a revision changes shared content, update every affected Markdown section.
 Run a **Consistency sweep** after changes to

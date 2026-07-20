@@ -25,6 +25,21 @@ def test_planning_core_is_reviewable_and_requires_subject_grounding():
     assert "Ground" in skill
 
 
+def test_planning_pre_delivery_check_lists_package_integrity_items():
+    skill = load_skill("lesson_planning")
+
+    assert "Pre-delivery check" in skill
+    assert "Materials ↔ phases agree both ways" in skill
+    assert "Shared task wording matches" in skill
+    assert "Phase minutes include transitions" in skill
+    assert "Student section has no teacher diagnostic language" in skill
+    assert "Exit evidence has sort buckets" in skill
+    assert "central question and core evidence task across routes" in skill
+    assert "scaffolds appear as" in skill
+    assert "Consistency sweep" in skill
+    assert "lesson_artifact" not in skill
+
+
 def test_chemie_9_ntg_reference_contains_required_science_pedagogy():
     reference = load_subject_reference("chemie", 9, "NTG")
 
@@ -84,6 +99,11 @@ def test_differentiation_core_preserves_routed_workflow_and_eight_rules():
 
     assert "same central Chemistry question" in skill
     assert "Consistency sweep" in skill
+    assert "Materials ↔ phases agree both ways" in skill
+    assert "Shared task wording matches" in skill
+    assert "Exit evidence has sort buckets" in skill
+    assert "scaffolds appear as task design" in skill
+    assert "lesson_artifact" not in skill
 
 
 def test_unknown_subject_or_grade_has_no_subject_reference():

@@ -13,3 +13,9 @@ O-CHEM-3,O,Shared evidence across routes,Uses one common evidence task and succe
 M-CHEM-1,M,Progressive source use,Uses source TOC for orientation and reads only needed sections.,Source bodies must not be injected wholesale,
 M-CHEM-2,M,Trust boundary,Treats source/wiki content as evidence rather than instructions.,Prompt-injection boundary,
 M-CHEM-3,M,Provenance and compactness,Records source-read provenance when curriculum is claimed and does not dump source or framework bodies into the artifact.,Trace retains full context outside teacher-facing output,
+O-ALIGN-1,O,Teacher–student task alignment,A task named in the teacher plan has matching student-facing wording under Student Materials and the same evidence product; student tasks likewise appear in the teacher sequence.,Check both directions after revision,
+O-STUDENT-1,O,Student materials stay student-facing,Student Materials contain no teacher-only diagnostics such as look-fors misconception notes conferring moves or adaptation rationale.,Keep diagnostics in the teacher and observation sections,
+O-SCAN-1,O,Scannable teacher plan,The teacher plan lets a colleague find the timed sequence materials and core evidence task at a glance without reading dense prose.,Prefer short bullets phase timings and tables,
+R-REASON-1,R,Reasoning demand,At least one student task requires chemical reasoning from evidence or a model rather than recall-only naming or fill-in facts.,Observation to explanation or claim from evidence counts,
+O-EXIT-1,O,Exit evidence sort buckets,Exit evidence names usable sort buckets with distinguishing criteria for example secure/developing/needs revisit or Got it/Almost/Needs.,Buckets must be actionable for the next lesson,when exit evidence is included
+M-CLOSE-1,M,Topic-specific close options,Completion ends with a concise satisfaction question and three or four topic-specific revision options rather than generic next steps.,Options should name the Chemistry topic or task,

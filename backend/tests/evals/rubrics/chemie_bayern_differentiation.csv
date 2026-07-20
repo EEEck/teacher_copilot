@@ -11,3 +11,8 @@ O-DIFF-2,O,Task alignment,Teacher actions student actions and checks align to th
 O-DIFF-3,O,Representation access,Varies representation language grouping or prompt support while preserving the question and exit evidence.,Use fading scaffolds,
 M-DIFF-1,M,No false differentiation,Does not create superficially different worksheets with changed objectives.,Use same core evidence,
 M-DIFF-2,M,Grounding without dumping,Uses source-read provenance when curriculum claims require it and does not paste source bodies into differentiated materials.,Use trace/debug for full context,
+P-VOICE-1,P,Student pages avoid pedagogy jargon,Student Materials do not use teacher-pedagogy labels such as scaffold tier or misconception.,Everyday task language only on student pages,when student material is drafted
+P-FRAME-1,P,Supports as task design,Access supports appear as part of the shared task design not as a labeled easier version or ability track.,Do not announce removed scaffolds to students,when scaffolds are offered
+R-ENGAGE-1,R,Shared interesting evidence context,Below-route supports keep the same phenomenon data or evidence context that peers use; they do not substitute a simpler separate story.,Preserve the chemical situation while varying access,
+O-ALIGN-D1,O,Routes and student supports match,Teacher-described access routes and the student-visible supports describe the same shared evidence task and success check.,No route invents a different scientific claim,when differentiation is proposed
+P-FADE-1,P,Supports fade within the lesson,Substantial supports have a fade or release point later in the same lesson so independent reasoning appears before exit.,Avoid permanent crutches,when scaffolds are offered
