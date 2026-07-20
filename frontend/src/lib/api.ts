@@ -192,6 +192,24 @@ export type PlanChatResponse = {
   lesson_planning_state?: Record<string, unknown> | null;
   memory_candidates?: MemoryCandidate[];
 };
+/**
+ * One job the backend is running right now (GET /api/workflow/active).
+ * Fields not relevant to a kind come back as "" rather than absent.
+ */
+export type ActiveWorkItem = {
+  kind: "draft_turn" | "memory_sweep";
+  class_id: string;
+  /** draft_turn: "ingest" | "plan" | "discuss". */
+  mode: string;
+  draft_id: string;
+  session_id: string;
+  lesson_date: string;
+  lesson_title: string;
+  /** memory_sweep only. */
+  review_id: string;
+  updated_at: string;
+};
+export type ActiveWorkResponse = { items: ActiveWorkItem[] };
 export type MemoryCandidate = {
   candidate_id?: string;
   target: string;
@@ -775,6 +793,8 @@ export const client = {
     api<MemorySweepReviewResponse>(
       `/api/classes/${classId}/memory/sweep/review`,
     ),
+  /** Everything the backend is running right now, across all classes. */
+  getActiveWork: () => api<ActiveWorkResponse>(`/api/workflow/active`),
   openMemorySweepReview: (
     classId: string,
     options?: { refresh?: boolean; keepStale?: boolean },
