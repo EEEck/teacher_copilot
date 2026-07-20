@@ -37,6 +37,9 @@ wiki storage.
   memory apply paths.
 - `plan_service.py` - lesson-planning adapter around the artifact session core,
   plus plan save and trace response assembly.
+- `artifact_session_service.py` also coordinates the shared persisted
+  `ExecutiveRuntime` lifecycle and invokes the bounded Plan/Update Memory
+  verification adapters from `teacher_agent/`.
 - `memory_apply.py` - teacher-approved durable memory apply dispatcher,
   including exact `adjust` replacement support for Memory Sweep cards.
 
@@ -45,6 +48,9 @@ wiki storage.
 - `ArtifactSessionService` is the lifecycle core; `workflow_drafts` is the
   durable source of truth for active Plan/Update Memory drafts.
 - `ArtifactSpec` is the mode policy.
+- `ExecutiveRuntime` is the shared verification lifecycle; Plan and Update
+  Memory attach small packs through `ArtifactSessionService` rather than
+  creating separate verifier systems.
 - `memory_sweep_reviews` owns saved sweep review state the same way drafts own
   chat artifacts; the frontend never authorizes apply from a local-only cache.
 - Streaming dispatch and final-event normalization go through `ArtifactSpec`;
@@ -52,6 +58,9 @@ wiki storage.
   `plan` or `ingest`.
 - `IngestService` and `PlanService` are API-facing adapters.
 - Durable wiki mutations are explicit service methods, not side effects of chat.
+- Plan's report is revision-bound and advisory except for a completed exact-draft
+  severe-safety hold. Update Memory integrity is deterministic and blocks only
+  date/roster write conflicts; neither pack edits teacher Markdown.
 - Memory Sweep treats the candidate ledger as raw evidence. Folding and the
   promotion gate attach priority metadata; one high-reasoning second judge
   proposes `sweep_action` plus write mechanics; only teacher-approved decisions

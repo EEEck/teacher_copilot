@@ -71,7 +71,7 @@ Shipped teacher workflows:
 - **Memory Sweep**: review accumulated memory signals in a backend-owned saved
   review session, apply supported writes, dismiss or postpone suggestions, and
   resume later without regenerating unless sources drifted.
-- **Memory V3 capture and sweep**: chat can stage review-only durable-memory
+- **MemV4 memory capture and sweep**: chat can stage review-only durable-memory
   candidates through the explicit `remember(...)` tool; a ledger/folding/gate
   layer throttles noise; the teacher-triggered sweep runs one high-reasoning
   consolidation call and presents a teacher-first Simple/Detailed review brief.
@@ -190,8 +190,8 @@ Primary bets:
 - guided class setup and personalization
 - teacher preference setup
 - material upload and source library
-- inherited subject/grade setup: shared Chemistry framework plus a
-  teacher-adjustable compiled class profile
+- inherited subject/grade setup: shared Chemistry framework plus a bounded
+  teacher-adjustment page composed at runtime
 - Docling/PDF ingestion spike
 - teacher-approved import from notes, worksheets, plans, and curriculum docs
 

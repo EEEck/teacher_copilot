@@ -1,5 +1,11 @@
 # AI Agent Learning Guide
 
+> This is an educational reference, not a behavior contract. For current
+> memory behavior use [`mem_v4/README.md`](mem_v4/README.md); for executable
+> workflow rules use [`agent_contracts.md`](agent_contracts.md). Historical
+> MemV2/MemV3 examples below remain useful only as context for the decisions
+> captured in the MemV4 archive summaries.
+
 ## Purpose
 
 This document is for personal learning. It is not a product contract and not a

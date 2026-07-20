@@ -165,16 +165,18 @@ Purpose:
 
 Loaded where today:
 
-- Current live class-scoped chats through
-  `build_active_class_core_context_trace(class_id)`.
-- Legacy context builders (`build_base_class_context`, `build_plan_context`)
-  include an excerpt.
-- Memory compaction source packet may include the subject guide.
+- Plan receives it through the purpose-selected active subject expert, with the
+  Grade 9 key summary, class adjustment page, and trusted-source TOC.
+- Pedagogical Discuss receives the same subject expert; non-pedagogical Discuss
+  remains class-focused.
+- Update Memory receives subject identity/routing only by default.
+- Legacy context builders and compaction packets may include an excerpt for
+  compatibility or maintenance, but they are not the main chat contract.
 
-Target loading keeps this page as the compact subject front door. Planning and
-differentiation compose the active subject expert from the shared Grade 9 base
-and `teaching_framework_adjustments.md`; the adjustment page is not duplicated
-in Active Class Core.
+The page remains the compact subject front door. Planning and differentiation
+compose the active subject expert from the shared Grade 9 base and
+`teaching_framework_adjustments.md`; the adjustment page is not duplicated in
+Active Class Core.
 
 Design implication:
 
@@ -287,15 +289,14 @@ Update paths:
   conclusions to selected compact pages; it is not the full-page replacement
   path.
 
-#### `taught_so_far.md` — RETIRED (mem_v3 PR2)
+#### `taught_so_far.md` — RETIRED
 
 The taught sequence is a deterministic projection of the canonical lesson
 record, so it now lives in `timeline.md` (and the current unit in
 `course_state.md`) — not in a curated compact twin. Context builders derive the
 sequence from the timeline; the sweep reads the rollups rather than maintaining
-this page. See [`docs/mem_v3/next_implementation.md`](mem_v3/next_implementation.md)
-(the two-axis memory map) and Learning 10 in
-[`docs/mem_v3/learnings.md`](mem_v3/learnings.md).
+this page. See the active [MemV4 memory documentation](mem_v4/README.md) and
+the historical [MemV3 summary](mem_v4/archive/mem_v3_summary.md).
 
 #### `planning_brief.md`
 
@@ -383,15 +384,14 @@ Do not put here:
 - how the class learns (`teaching_patterns.md`)
 - raw session summaries
 
-#### `class_state.md` — RETIRED (mem_v3 PR2)
+#### `class_state.md` — RETIRED
 
 The "current unit / last lesson / next move / open loops" snapshot duplicated
 the canonical `course_state.md` rollup (diary-derived) — one fact, two homes,
 out of sync by design. It was retired so every such fact has exactly one home in
 the canonical rollups; the sweep and context builders read `course_state.md` /
-`timeline.md` directly. See the two-axis memory map in
-[`docs/mem_v3/next_implementation.md`](mem_v3/next_implementation.md) and
-Learning 10 in [`docs/mem_v3/learnings.md`](mem_v3/learnings.md).
+`timeline.md` directly. See the active [MemV4 memory documentation](mem_v4/README.md)
+and the historical [MemV3 summary](mem_v4/archive/mem_v3_summary.md).
 
 #### `session_summaries.md`
 
@@ -513,7 +513,7 @@ After a plan is saved, profile/memory proposal can suggest:
   an automatic write
 
 (Current unit / taught sequence is not a proposal target — it is derived from
-the canonical `course_state.md` / `timeline.md` rollups; mem_v3 PR2 retired the
+the canonical `course_state.md` / `timeline.md` rollups; the retired
 `class_state.md` / `taught_so_far.md` twins.)
 
 Examples:
@@ -534,7 +534,7 @@ Examples:
 - Class learning facts go to `teaching_patterns.md`.
 - Copilot behavior rules go to `copilot_profile.md`.
 - Current unit / taught sequence is NOT curated memory: it is derived from the
-  canonical `course_state.md` / `timeline.md` rollups (mem_v3 PR2).
+  canonical `course_state.md` / `timeline.md` rollups.
 - `remember(...)` capture carries an internal `routing_reason` for traces and
   eval diagnostics; it helps explain target choice but does not change the
   allowed target or fast-lane verdict.

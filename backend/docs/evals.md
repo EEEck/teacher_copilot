@@ -1,5 +1,11 @@
 # Agent evals (DeepEval + trace contracts)
 
+MemV4 is the active memory-evaluation home. Read
+[`../../docs/mem_v4/evaluation.md`](../../docs/mem_v4/evaluation.md) for the
+layered policy and
+[`../../docs/mem_v4/mem_v4_live_eval_ledger.md`](../../docs/mem_v4/mem_v4_live_eval_ledger.md)
+for beta-derived known gaps. This runbook contains the executable commands.
+
 How to run KlassenPilot agent evals, where they should execute, and how they
 relate to the running dev container vs a separate test environment.
 

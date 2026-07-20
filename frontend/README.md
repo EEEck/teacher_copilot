@@ -44,6 +44,16 @@ the browser.
   durable write, and draft revision/hash guards reject stale saves.
 - Memory save guards prevent double-commit behavior while chat/save work is in
   flight or after the review has already committed.
+- Plan verification is revision-bound: deterministic checks appear immediately
+  and a short background review may add advisory notes. Only a completed
+  severe-safety hold blocks a save; the frontend never rewrites the teacher's
+  Markdown from that report.
+- Update Memory's integrity pack is backend-owned. It can block a confirmed
+  date mismatch or malformed/unknown/name-style student label, but it does not
+  edit the diary for the teacher.
+- Plan verification and Save lesson memory review appear as shared in-thread
+  workflow activities. The selected review diff is pinned above the transcript;
+  it does not replace the chat viewport.
 - Memory Sweep opens a backend-owned saved review (`/memory/sweep/review`).
   Simple view is the default triage list; **Simple / Detailed** switches to the
   full card layout. Class-home shows “Stale draft” only when teacher edits are
@@ -93,6 +103,10 @@ Focused suites for the draft/job work:
 ```powershell
 npx vitest run src/features/workflow-drafts src/lib/pending-chat-turns.test.ts src/lib/memory-sweep-review-status.test.ts
 ```
+
+For fresh beta-browser acceptance rather than a unit-test run, follow the
+sanitized browser workflow manifests described in
+[`../docs/superpowers/specs/2026-07-20-browser-workflow-runbook-design.md`](../docs/superpowers/specs/2026-07-20-browser-workflow-runbook-design.md).
 
 ## Related Docs
 

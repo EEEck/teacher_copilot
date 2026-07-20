@@ -109,7 +109,7 @@ The product uses tiered class memory.
    `session_summaries.md`. Each page has a hard char budget in
    `MEMORY_PAGE_BUDGETS`, enforced at write AND inject time via
    `clamp_memory_page` (Hermes-style: small, high-signal, replace not append).
-   `class_state.md` and `taught_so_far.md` were **retired** (mem_v3 PR2):
+   `class_state.md` and `taught_so_far.md` were **retired**:
    "current unit" and "taught sequence" are deterministic projections of the
    canonical `course_state.md` / `timeline.md` rollups, so they live in exactly
    one home there and the sweep *reads* them rather than curating a second,
@@ -146,10 +146,11 @@ The product uses tiered class memory.
    Layer, class-only Active Class Core, and compact subject/grade/branch routing.
    Planning and differentiation then add
    `build_active_subject_expert_context_trace()`, which injects the compact
-   `chemie.md` front door, the inherited/compiled class profile, and the source
-   TOC. The Grade 9 summary is not injected separately. Update Memory receives
-   subject identity/profile identity only by default, preserving its focus on
-   what happened in class.
+   `chemie.md` front door, the selected immutable Grade 9 key summary, the
+   bounded class adjustment page, and the source TOC. These are composed once
+   at runtime; no generated profile is persisted. Update Memory receives subject
+   identity/routing only by default, preserving its focus on what happened in
+   class.
 
    Planning also receives a bounded trusted-source profile: class branch/grade
    plus an allow-listed source TOC. It does not receive curriculum bodies. The
@@ -260,8 +261,8 @@ The product uses tiered class memory.
    Planning and Update Memory chats capture review-only durable facts. The
    **primary path is an explicit
    `remember(target, content, speech_act, scope, quote, routing_reason)` tool** the
-   model calls the moment the teacher gives a standing instruction (mem_v3
-   PR4). This replaced a passive `memory_candidates` output field the
+   model calls the moment the teacher gives a standing instruction. This
+   replaced a passive `memory_candidates` output field the
    model reliably forgot to fill while doing planning/ingest work — the measured
    "emission gap" (durable requests understood but never routed, the original V2
    capture-bug shape). The shift matches the 2026 self-editing-memory pattern
@@ -378,7 +379,7 @@ Design rules:
   speech_act, quote, routing_reason)` is the one write-capable tool on both chat
   surfaces, and even it writes nothing durable: it stages a review-only
   candidate grounded in the teacher's verbatim words, with a deterministic guard
-  that returns a structured error for the model to retry (mem_v3 PR4). Making
+  that returns a structured error for the model to retry. Making
   the durable-memory decision an explicit, salient tool call is what closed the
   emission gap; `routing_reason` gives live evals and traces a compact rationale
   for wrong-target failures without exposing model reasoning to teachers.
@@ -491,7 +492,7 @@ should receive enough context to start well and use tools for the long tail.
 - Shared memory candidate capture + discipline + `remember(...)` validation (`validate_remember_call`): `backend/app/teacher_agent/memory_capture.py`
 - `remember(...)` capture tool wiring: `backend/app/teacher_agent/tools.py` (`create_remember_tool`)
 - Wiki/input reconciliation eval scaffold: `backend/tests/evals/test_klassenpilot_wiki_reconciliation.py`
-- Post-save `/memory/apply` ledger-close (mem_v3 PR1): `backend/app/api/routes.py` (`apply_memory`)
+- Post-save `/memory/apply` ledger-close: `backend/app/api/routes.py` (`apply_memory`)
 - Memory candidate ledger + insert-time folding: `backend/app/services/memory_candidate_ledger.py`
 - Promotion gate and silent decay: `backend/app/services/memory_gate.py`
 - Single-call Memory Sweep consolidation (Mem V4 second judge): `backend/app/services/memory_sweep.py`

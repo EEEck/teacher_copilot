@@ -743,7 +743,7 @@ enforced at write AND inject time via `clamp_memory_page`):
   only: planning patterns, avoid-rules, repeated corrections, agent behavior.
 - `session_summaries.md`
 
-`class_state.md` and `taught_so_far.md` were retired (mem_v3 PR2): current unit
+`class_state.md` and `taught_so_far.md` were retired: current unit
 and taught sequence are deterministic projections of the canonical
 `course_state.md` / `timeline.md` rollups, so they are not compact pages.
 
@@ -786,7 +786,7 @@ Shared memory-capture rules:
   dedupe, caps, evidence refs, ledger conversion, and ledger persistence.
 - The primary capture path is the explicit `remember(target, content,
   speech_act, scope, quote, routing_reason)` tool the model calls in the same turn
-  when the teacher gives a durable instruction (mem_v3 PR4). Its deterministic guard
+  when the teacher gives a durable instruction. Its deterministic guard
   (`validate_remember_call`) requires a supported preference target and verbatim
   quote provenance, returning a structured error the model retries on; the
   staged candidate flows into the shared candidate layer. The passive
@@ -828,7 +828,7 @@ Proposal (read-only, no writes):
 - `POST /classes/{id}/memory/refresh` proposes refreshed derived pages
   (`planning_brief`, `teaching_patterns`, `copilot_profile`,
   `session_summaries`) plus a `stale_report`. It does not write. (`class_state`
-  / `taught_so_far` were retired — mem_v3 PR2.)
+  / `taught_so_far` were retired.)
 - Ingest commit and plan save may still return `memory_candidates` /
   `class_memory_proposal` in the API payload for ledger / tooling, but the
   frontend does not mount post-save review cards for them. Staged candidates
@@ -850,7 +850,7 @@ Apply (the only durable-write path for these pages):
   plus `add_subject_guide_conclusion` for the active class subject guide).
   Unsupported targets such as `canonical_wiki` or a different subject guide are
   skipped, not written. It also closes the originating ledger rows for applied
-  fast-lane candidates so the sweep never re-proposes them (mem_v3 PR1).
+  fast-lane candidates so the sweep never re-proposes them.
   The apply API remains available for Memory Sweep and for future in-chat
   confirmation cards; it is not triggered by a post-save preference screen.
 - `POST /classes/{id}/memory/compact/apply` writes teacher-reviewed compact

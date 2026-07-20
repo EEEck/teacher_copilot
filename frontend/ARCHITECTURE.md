@@ -130,6 +130,22 @@ wiki-backed todos here without an explicit product decision.
 - Notifier: `PendingTurnNotifier` polls drafts and upserts the draft store.
 - Running box: `running-tasks-box.tsx` (bottom-left); discuss FAB is bottom-right.
 
+## In-thread workflow activity and review layout
+
+Non-message workflow activity belongs in the same transcript flow as the
+teacher conversation. `ThreadActivity` composes shared activity chrome around
+Plan verification and Update Memory's save-review brief; it is not a second
+chat window and must not introduce an independent scroll region.
+
+`ArtifactSessionWorkspace` keeps a selected review diff pinned above that
+transcript. The diff owns 70% of the left workspace and scrolls internally;
+the remaining 30% is the normal Thread/composer viewport. This applies to any
+selected review file, not only `lesson_results.md`.
+
+The backend `WorkflowDraft` remains the source of truth for artifact/review
+state. The frontend's activity card explains current work but never authorizes
+a write or substitutes for a final draft/revision refresh.
+
 ## Testing chat turns
 
 Deterministic Vitest (no OpenAI / browser). The matrix is **3 workflows × 2 cases**:
@@ -169,6 +185,10 @@ npx vitest run
 
 HITL against Docker is optional for real-model confidence; the Vitest matrix is the
 regression gate for the two cases.
+
+For a full fresh-sandbox beta acceptance pass, use the browser/trace/ledger
+scenario design in
+[`docs/superpowers/specs/2026-07-20-browser-workflow-runbook-design.md`](../docs/superpowers/specs/2026-07-20-browser-workflow-runbook-design.md).
 
 Incident write-up (races, stuck Still-working, fixes):  
 [`docs/chat_message_issue.md`](../docs/chat_message_issue.md).

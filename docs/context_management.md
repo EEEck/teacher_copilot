@@ -106,26 +106,28 @@ build_base_assistant_context_trace(store, class_id, purpose)
 always contains the Teacher Layer, Active Class Core, and a compact
 subject/grade/branch routing block. For planning and other pedagogical
 workflows it adds the active subject expert: the compact `chemie.md` front door,
-the compiled inherited class profile, and the bounded curriculum/source TOC.
-It never injects the Grade 9 summary separately from the class profile.
+the selected immutable Grade 9 NTG `key_summary.md`, the bounded
+`teaching_framework_adjustments.md` page, and the curriculum/source TOC. The
+two framework inputs are injected once and composed only at runtime; no
+generated class profile is persisted.
 
 ### Inherited subject expert
 
-The class-level subject expert is derived in memory, not copied into an
+The class-level subject expert is composed at runtime, not copied into an
 editable profile. At class setup, `subject=chemie`, `grade=9`, and `branch=NTG`
-select the immutable shared framework; prompt assembly combines it with
-`memory/teaching_framework_adjustments.md`. Detailed framework pages remain
-progressive tool reads.
+select the immutable shared framework; prompt assembly combines its
+`key_summary.md` with `memory/teaching_framework_adjustments.md`. Detailed
+framework pages remain progressive tool reads.
 
 The purpose-specific subject addition is:
 
 | Workflow | Base context | Subject-expert addition |
 |---|---|---|
-| Plan chat | Teacher Layer + Active Class Core + runtime | `chemie.md` + compiled Grade 9 NTG profile + source TOC; detailed framework/source reads on demand |
+| Plan chat | Teacher Layer + Active Class Core + runtime | `chemie.md` + Grade 9 NTG key summary + class adjustment page + source TOC; detailed framework/source reads on demand |
 | Plan opening | Slim Teacher/Class routing | Subject/grade/branch routing and compact `chemie.md`; profile after planning begins |
 | Differentiation | Same as Plan chat | Shared Grade 9 framework + class adjustment page; detailed differentiation/representation pages on demand |
-| Discuss | Teacher Layer + Active Class Core + discussion state | Add `chemie.md` and profile when the question is pedagogical; otherwise keep class-focused |
-| Update Memory | Teacher Layer + Active Class Core + MemoryRuntime/task context | Subject identity/profile identity only by default; no detailed teaching framework |
+| Discuss | Teacher Layer + Active Class Core + discussion state | Add the active subject expert when the question is pedagogical; otherwise keep class-focused |
+| Update Memory | Teacher Layer + Active Class Core + MemoryRuntime/task context | Subject identity/routing only by default; no detailed teaching framework or adjustments |
 | Class brief | Teacher Layer + Active Class Core | No framework unless the requested brief requires subject interpretation |
 | Verification | Active Class Core + verification state | Authority labels/source scope only; read exact sources for disputed claims |
 

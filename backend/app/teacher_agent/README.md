@@ -25,6 +25,11 @@ prompt trace diagnostics.
 - `prompt_assembly.py` - shared live-call and diagnostic prompt/context assembly.
 - `prompt_trace.py` - compatibility wrapper for plan-session prompt diagnostics.
 - `stream_events.py` - internal SSE event models and SDK event translation.
+- `plan_verification.py` - revision-bound Plan verification packet/report:
+  immediate deterministic provenance/timing checks plus a bounded background
+  review.
+- `memory_verification.py` - deterministic diary target/roster
+  integrity checks used at edit, proposal, and commit boundaries.
 - `wiki/` - markdown wiki implementation modules.
 - `wiki_store.py` - compatibility/facade import path for `WikiStore`.
 
@@ -57,6 +62,13 @@ prompt trace diagnostics.
 - Update Memory has one free-agent runtime. Timeline/detail entry points may
   seed it with a typed hint, but unknown dates remain unconfirmed until the
   teacher or agent resolves the target.
+- `ExecutiveRuntime` is shared workflow state, separate from `PlanRuntime` and
+  `MemoryRuntime`. It owns findings, severity, fingerprints, and readiness;
+  workflow packs add evidence without replacing the shared lifecycle.
+- Plan verification is advisory by default and never rewrites Markdown. Its
+  only save blocker is a completed severe-safety hold for the exact draft.
+  Update Memory integrity blocks only target-date or roster-label conflicts and
+  likewise never rewrites teacher text.
 - Prompt trace output is diagnostic and may contain sensitive local session
   data; keep it gated at the API boundary.
 - Artifact workflows should build prompt/context through shared assembly helpers
@@ -77,3 +89,4 @@ prompt trace diagnostics.
 - `../../../docs/memory_hierarchy.md`
 - `../../../docs/context_management.md`
 - `../../../docs/mem_v4/README.md`
+- `../../../docs/mem_v4/evaluation.md`
