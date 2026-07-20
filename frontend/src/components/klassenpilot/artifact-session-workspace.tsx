@@ -37,7 +37,7 @@ export function ArtifactSessionWorkspace({
           <Card className="min-h-0 flex-1 basis-0 overflow-hidden py-0">
             <CardContent className="flex h-full min-h-0 flex-col p-0">
               {reviewDiff ? (
-                <div className="max-h-[42%] shrink-0 overflow-y-auto border-b border-border p-3">
+                <div className="h-[70%] shrink-0 overflow-y-auto border-b border-border p-3">
                   {reviewDiff}
                 </div>
               ) : null}
