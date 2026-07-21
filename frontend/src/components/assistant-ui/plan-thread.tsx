@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { Thread } from "@/components/assistant-ui/thread";
 import { ThreadActivity } from "@/components/assistant-ui/thread-activity";
@@ -12,8 +14,18 @@ import { StagedMemoryBanner } from "@/components/klassenpilot/staged-memory-bann
  * imperative `aui.thread().append()` which caused a re-render loop ("blinking"),
  * and showing it in the welcome made it vanish on the first send ("history
  * disappeared"). A plain static welcome avoids both and matches memory exactly.
+ *
+ * Save review (`ReviewBrief`) and plan verification share the same in-chat
+ * `ThreadActivity` surface as Update Memory's save card.
  */
-export function PlanThread({ classId }: { classId: string }) {
+export function PlanThread({
+  classId,
+  activity,
+}: {
+  classId: string;
+  /** Extra in-chat activity (e.g. Save lesson plan ReviewBrief), stacked under verification. */
+  activity?: ReactNode;
+}) {
   const {
     draftId,
     sessionId,
@@ -21,20 +33,25 @@ export function PlanThread({ classId }: { classId: string }) {
     turnInProgress,
     memoryCandidates,
   } = useArtifactSession();
+
+  const hasActivity = Boolean(activity);
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <StagedMemoryBanner candidateCount={memoryCandidates.length} />
-      <div className="h-full min-h-0 flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <Thread
           composerStorageKey={draftId ? `kp:composer:${draftId}` : undefined}
           backgroundTurnInProgress={turnInProgress}
           activity={
             <ThreadActivity>
-              <PlanVerificationPanel
-                classId={classId}
-                sessionId={sessionId}
-                artifactRevision={artifactRevision}
-              />
+              <div className="flex flex-col gap-2">
+                <PlanVerificationPanel
+                  classId={classId}
+                  sessionId={sessionId}
+                  artifactRevision={artifactRevision}
+                />
+                {hasActivity ? activity : null}
+              </div>
             </ThreadActivity>
           }
           showSuggestions={false}

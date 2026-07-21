@@ -14,11 +14,13 @@ function IngestWelcomeChecklist() {
 export function IngestThread({ activity }: { activity?: ReactNode }) {
   const { draftId, turnInProgress } = useArtifactSession();
   return (
-    <Thread
-      welcomeExtra={<IngestWelcomeChecklist />}
-      composerStorageKey={draftId ? `kp:composer:${draftId}` : undefined}
-      backgroundTurnInProgress={turnInProgress}
-      activity={activity ? <ThreadActivity>{activity}</ThreadActivity> : null}
-    />
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      <Thread
+        welcomeExtra={<IngestWelcomeChecklist />}
+        composerStorageKey={draftId ? `kp:composer:${draftId}` : undefined}
+        backgroundTurnInProgress={turnInProgress}
+        activity={activity ? <ThreadActivity>{activity}</ThreadActivity> : null}
+      />
+    </div>
   );
 }

@@ -41,10 +41,15 @@ export function PlanVerificationReportCard({ report }: { report: PlanVerificatio
   const status = headline(report);
   if (report.review_state === "pending") {
     return (
-      <div role="status" className="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground">
-        <LoaderCircleIcon className="size-4 animate-spin" />
-        <span>Reviewing plan against curriculum, class context, and safety...</span>
-      </div>
+      <ReviewChrome>
+        <div
+          role="status"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground"
+        >
+          <LoaderCircleIcon className="size-4 animate-spin" />
+          <span>Reviewing plan against curriculum, class context, and safety...</span>
+        </div>
+      </ReviewChrome>
     );
   }
 

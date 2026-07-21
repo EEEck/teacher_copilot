@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 from pydantic import BaseModel, Field
 
 from app.teacher_agent.executive_verification import (
@@ -13,18 +11,9 @@ from app.teacher_agent.executive_verification import (
     artifact_fingerprint,
 )
 from app.teacher_agent.memory_update_state import MemoryRuntime
-from app.teacher_agent.wiki.constants import STUDENT_ID_RE
-from app.teacher_agent.wiki.parsing import extract_section_body
+from app.teacher_agent.roster_resolve import resolve_diary_student_references
 
 PACK_ID = "update_memory"
-_ROSTER_ROW_RE = re.compile(
-    r"^\|\s*(S-\d{3})\s*\|\s*([^|]+?)\s*\|", re.MULTILINE | re.IGNORECASE
-)
-_STUDENT_LABEL_RE = re.compile(r"^-\s*([^:]{1,80}):", re.MULTILINE)
-_STUDENT_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
-_MALFORMED_STUDENT_ID_RE = re.compile(
-    r"(?<![A-Za-z0-9-])S[-_ ]?(\d{3})(?!\d)", re.IGNORECASE
-)
 
 
 class MemoryVerificationRow(BaseModel):
@@ -41,60 +30,43 @@ class MemoryVerificationReport(BaseModel):
     rows: list[MemoryVerificationRow] = Field(default_factory=list)
 
 
-def _short(items: list[str], limit: int = 3) -> str:
+def _short(items: list[str], limit: int = 5) -> str:
     shown = items[:limit]
     suffix = "" if len(items) <= limit else f" and {len(items) - limit} more"
     return ", ".join(shown) + suffix
 
 
-def _roster(wiki, class_id: str) -> tuple[set[str], dict[str, str]]:
-    roster_md = wiki.read_text(wiki.roll_up_paths(class_id)["students"])
-    ids = {match.upper() for match in STUDENT_ID_RE.findall(roster_md)}
-    names: dict[str, str] = {}
-    for match in _ROSTER_ROW_RE.finditer(roster_md):
-        student_id = match.group(1).upper()
-        full_name = " ".join(match.group(2).split())
-        if full_name:
-            names[full_name.lower()] = student_id
-            first_name = full_name.split()[0]
-            if first_name:
-                names[first_name.lower()] = student_id
-    return ids, names
-
-
 def _student_reference_issues(
     wiki, class_id: str, diary_markdown: str
 ) -> tuple[list[str], list[str], list[str]]:
-    """Return malformed IDs, unknown IDs, and non-pseudonym labels."""
-    block = extract_section_body(diary_markdown, "Student observations")
-    if not block:
-        return [], [], []
-    known_ids, known_names = _roster(wiki, class_id)
-    referenced_ids = {match.upper() for match in STUDENT_ID_RE.findall(block)}
-    unknown_ids = sorted(referenced_ids - known_ids)
-    malformed = sorted(
-        {
-            f"S-{match.group(1)}"
-            for match in _MALFORMED_STUDENT_ID_RE.finditer(block)
-            if match.group(0).upper() != f"S-{match.group(1)}"
-        }
-    )
+    """Return block issues, suggest notes, and allowed recommended aliases.
 
-    labels = [
-        " ".join(match.group(1).split())
-        for match in [*_STUDENT_LABEL_RE.finditer(block), *_STUDENT_HEADING_RE.finditer(block)]
-    ]
-    non_pseudonym_labels: list[str] = []
-    for label in labels:
-        if STUDENT_ID_RE.fullmatch(label):
-            continue
-        if label.lower() in known_names:
-            non_pseudonym_labels.append(label)
-        elif re.fullmatch(r"S[-_ ]?\d{3}", label, re.IGNORECASE):
-            continue
-        elif label:
-            non_pseudonym_labels.append(label)
-    return malformed, unknown_ids, sorted(set(non_pseudonym_labels))
+    Scans the full diary. Teachers typically write names; S-### is the internal
+    key. Teacher-facing recommended form is the unique Firstname[+surname
+    prefix] alias from the roster resolver.
+    """
+    hits = resolve_diary_student_references(wiki, class_id, diary_markdown)
+    blocks: list[str] = []
+    suggests: list[str] = []
+    allowed_notes: list[str] = []
+    for hit in hits:
+        if hit.decision == "block":
+            blocks.append(f"{hit.raw} ({hit.reason})")
+        elif hit.decision == "suggest":
+            alias = hit.recommended_alias or hit.student_id or "?"
+            internal = f", internal {hit.student_id}" if hit.student_id else ""
+            suggests.append(f"{hit.raw} → use '{alias}'{internal}")
+        elif (
+            hit.decision == "allow"
+            and hit.recommended_alias
+            and hit.raw != hit.recommended_alias
+            and hit.raw.upper() != (hit.student_id or "")
+        ):
+            # Soft note only — does not block Ready.
+            allowed_notes.append(
+                f"{hit.raw} ok (key {hit.student_id}; preferred '{hit.recommended_alias}')"
+            )
+    return blocks, suggests, allowed_notes
 
 
 def build_memory_verification_report(
@@ -123,25 +95,28 @@ def build_memory_verification_report(
         ),
     )
 
-    malformed, unknown_ids, labels = _student_reference_issues(
+    blocks, suggests, _allowed_notes = _student_reference_issues(
         wiki, class_id, diary_markdown
     )
     student_issues: list[str] = []
-    if malformed:
-        student_issues.append(f"malformed ID(s): {_short(malformed)}")
-    if unknown_ids:
-        student_issues.append(f"unknown roster ID(s): {_short(unknown_ids)}")
-    if labels:
-        student_issues.append(f"non-pseudonym label(s): {_short(labels)}")
+    # Suggests still block Ready until the teacher edits the diary; report-only.
+    if blocks:
+        student_issues.append(f"unresolved: {_short(blocks)}")
+    if suggests:
+        student_issues.append(f"suggested fix: {_short(suggests)}")
     student_row = MemoryVerificationRow(
         row_id="student_references",
         label="Student references",
         status="needs_teacher_decision" if student_issues else "clear",
         summary=(
-            "Use only roster S-### IDs in Student observations; "
+            "Resolve student names against the class roster "
+            "(recommended form: Firstname + unique last-name prefix); "
             + "; ".join(student_issues)
             if student_issues
-            else "Student observation labels use known roster pseudonyms."
+            else (
+                "Student references uniquely match the class roster "
+                "(recommended Firstname[+last prefix] aliases)."
+            )
         ),
     )
     rows = [target_row, student_row]
@@ -201,6 +176,9 @@ def apply_memory_verification_report(
         finding_id="memory-student-references",
         category="identity",
         summary=student_references.summary,
-        question="Please replace each student reference with a known roster S-### ID.",
+        question=(
+            "Please use each student's recommended roster alias "
+            "(Firstname + unique last-name prefix), or a known S-### ID."
+        ),
         should_block=student_references.status == "needs_teacher_decision",
     )

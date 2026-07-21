@@ -12,6 +12,7 @@ dependencies = [
     "openai-agents>=0.0.14",
     "python-multipart>=0.0.12",
     "httpx>=0.28.0",
+    "rapidfuzz>=3.9.0",
 ]
 
 [project.optional-dependencies]

@@ -160,8 +160,11 @@ tab is visible and focused.
 
 Non-message workflow activity belongs in the same transcript flow as the
 teacher conversation. `ThreadActivity` composes shared activity chrome around
-Plan verification and Update Memory's save-review brief; it is not a second
-chat window and must not introduce an independent scroll region.
+Plan verification, Plan save (`ReviewBrief`), and Update Memory's save-review
+brief; it is not a second chat window and must not introduce an independent
+scroll region. Plan save must not use the workspace `reviewFileList` slot —
+that path is reserved for legacy layout only; Plan matches Memory by mounting
+`ReviewBrief` as in-chat activity.
 
 `ArtifactSessionWorkspace` keeps a selected review diff pinned above that
 transcript. The diff owns 70% of the left workspace and scrolls internally;

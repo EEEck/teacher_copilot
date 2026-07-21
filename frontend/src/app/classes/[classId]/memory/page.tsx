@@ -602,7 +602,7 @@ function MemoryWorkspace({
               path={selectedChange.path}
               before={selectedChange.before}
               after={selectedChange.after}
-              className="h-full min-h-[12rem]"
+              className="h-full min-h-0"
               onDismiss={() => setEditingWiki(false)}
             />
           ) : null

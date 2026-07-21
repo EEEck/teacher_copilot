@@ -91,6 +91,8 @@ function PlanSaveFooter({
   }, [classId, draftId, onError]);
 
   if (inReview) {
+    // Save actions live in the in-chat ReviewBrief (same as Update Memory).
+    // Keep only the lesson-date control here so the teacher can retarget.
     return (
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
@@ -104,9 +106,6 @@ function PlanSaveFooter({
             disabled={busy}
           />
         </div>
-        <Button variant="ghost" onClick={() => setInReview(false)} disabled={busy}>
-          Back
-        </Button>
       </div>
     );
   }
@@ -248,7 +247,29 @@ function PlanWorkspace({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ArtifactSessionWorkspace
-        thread={<PlanThread classId={classId} />}
+        thread={
+          <PlanThread
+            classId={classId}
+            activity={
+              inReview && fileItem ? (
+                <ReviewBrief
+                  items={[fileItem]}
+                  selectedPath={fileItem.path}
+                  title="Save lesson plan"
+                  onSetApproved={(_, v) => setApproved(v)}
+                  onUndoAll={() => setInReview(false)}
+                  onKeepAll={() => {
+                    setApproved(true);
+                    void savePlan();
+                  }}
+                  onSave={savePlan}
+                  saving={loading}
+                  saveDisabled={!approved}
+                />
+              ) : null
+            }
+          />
+        }
         draftPanel={
           <ArtifactDraftPanel
             title="Lesson plan"
@@ -271,24 +292,6 @@ function PlanWorkspace({
             setLessonDate={setLessonDate}
             setBeforePlan={setBeforePlan}
           />
-        }
-        reviewFileList={
-          inReview && fileItem ? (
-            <ReviewBrief
-              items={[fileItem]}
-              selectedPath={fileItem.path}
-              title="Save lesson plan"
-              onSetApproved={(_, v) => setApproved(v)}
-              onUndoAll={() => setInReview(false)}
-              onKeepAll={() => {
-                setApproved(true);
-                void savePlan();
-              }}
-              onSave={savePlan}
-              saving={loading}
-              saveDisabled={!approved}
-            />
-          ) : null
         }
       />
     </div>

@@ -119,7 +119,7 @@ function BriefItemRow({
             path={item.path}
             before={item.before}
             after={item.after}
-            className="max-h-56"
+            className="h-56"
           />
           {onEdit && (
             <Button

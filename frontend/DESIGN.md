@@ -75,9 +75,10 @@ Current helpers:
   (default Simple triage; `SegmentedToggle` Simple / Detailed for full cards).
 - `lib/review-brief.ts` and `lib/sweep-brief.ts` for grouping and labels.
 
-Plan verification and Save lesson memory are transcript activities, not
-assistant-authored messages and not standalone panels. Compose them with the
-shared `ThreadActivity` surface so they scroll with the conversation. A
+Plan verification, Plan save (`ReviewBrief`), and Save lesson memory are
+transcript activities, not assistant-authored messages and not standalone
+panels. Compose them with the shared `ThreadActivity` surface so they scroll
+with the conversation. A
 selected file diff remains the pinned review surface above the Thread; it must
 not collapse the transcript into a nested card or add a competing primary CTA.
 

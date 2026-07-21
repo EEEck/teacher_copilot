@@ -245,11 +245,19 @@ teacher's Markdown or exposes raw source bodies/full prompts.
 The Update Memory verification pack is deterministic and authoritative for
 write integrity, not for pedagogical quality. On every diary edit and again
 before proposal or commit, it checks the confirmed target date against the
-diary date and checks labels in `## Student observations` against the active
-class roster. Canonical `S-###` IDs may proceed; malformed IDs, unknown IDs,
-and personal/name-style labels block only the write until the teacher corrects
-the Markdown or resolves the target. The pack never invents a replacement,
-never mutates the diary, and cannot be bypassed by a direct commit call.
+diary date and scans the **full diary** for student references (not only
+`## Student observations`). Teachers typically write names rather than
+`S-###`; the pack resolves each reference against the active class roster
+using exact IDs, normalized German spelling variants, unique Firstname /
+Firstname+surname-prefix aliases, optional curated aliases, and conservative
+RapidFuzz matching with uniqueness margins. `S-###` is the internal roster
+key; the teacher-facing recommended form is Firstname plus the shortest
+unique last-name prefix (or Firstname alone when unique). Unique high-
+confidence matches may be noted with a recommended alias in the report;
+unknown, ambiguous, malformed, or typo-like references block the write until
+the teacher edits the diary. The pack never mutates the diary or
+`students.md`, never invents a roster entry, and cannot be bypassed by a
+direct commit call.
 
 ## Agents SDK Integration Contract
 
