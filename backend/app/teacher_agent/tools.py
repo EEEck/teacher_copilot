@@ -72,8 +72,11 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
             target: where it belongs — teacher_profile.md (how to communicate
                 with the teacher), copilot_profile.md (how to plan for this
                 class), teaching_patterns.md (how this class learns),
-                planning_brief.md (current planning priorities), or
-                wiki/subjects/<subject>.md (subject-wide guidance).
+                teaching_framework_adjustments.md (class overrides of shared
+                subject/grade frameworks), planning_brief.md (current planning
+                priorities), or wiki/subjects/<subject>.md (subject-wide
+                guidance). Shared wiki/subjects/.../teaching_frameworks/ pages
+                are immutable and not write targets.
             content: the durable fact/instruction, in your own concise words.
             speech_act: "conduct_request" if the teacher directed your behavior,
                 or "store_request" if they explicitly asked you to remember it.
@@ -98,6 +101,10 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
           learns and which teaching moves, materials, scaffolds, pacing, or
           activity formats work or fail. Temporal teaching preferences can live
           here when scoped to an upcoming block; keep that scope in content.
+        - teaching_framework_adjustments.md: class-scoped replacement/refinement
+          rules for the shared subject/grade teaching frameworks. Keep short;
+          do not copy the shared framework. Shared
+          wiki/subjects/.../teaching_frameworks/ pages are immutable.
         - planning_brief.md: near-term class planning priorities, open loops,
           misconception focus, assessment readiness, and immediate next steps.
         - wiki/subjects/<subject>.md: subject-wide reusable guidance only when
@@ -117,6 +124,9 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
         - "In physics generally, students mix up velocity and acceleration..."
           Save wiki/subjects/physik.md, not teaching_patterns.md, unless the
           teacher scopes it to this class.
+        - "For this class, replace the Grade 9 phenomenon-first opener with a
+          short worked example first." Save teaching_framework_adjustments.md,
+          not teaching_patterns.md and not the shared teaching_frameworks pages.
 
         Nothing is written to memory now — it goes to the teacher's review.
         """

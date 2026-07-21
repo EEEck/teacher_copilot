@@ -136,6 +136,7 @@ DURABLE_MEMORY_CANDIDATE_POLICY = """<durable_memory_candidate_policy>
 - Route global teacher communication/style preferences to target=teacher_profile.md.
 - Route class-scoped copilot working-agreement rules to target=copilot_profile.md.
 - Route class learning patterns to target=teaching_patterns.md.
+- Route class overrides of shared subject/grade pedagogy to target=teaching_framework_adjustments.md. Shared wiki/subjects/.../teaching_frameworks/ pages are immutable and are NOT write targets.
 - Do NOT capture current-unit / "what we've taught" / class-state facts as durable memory — those are derived from the lesson record (course state and timeline). Planning-oriented notes may go to planning_brief.md.
 - Route subject-wide reusable teaching guidance to wiki/subjects/{subject}.md only when the teacher frames it as subject-wide.
 - Routing detail: a memory target is chosen by the fact's durable purpose, not by surface wording like "next", "remember", or "for this lesson".
@@ -143,12 +144,14 @@ DURABLE_MEMORY_CANDIDATE_POLICY = """<durable_memory_candidate_policy>
   - target=teacher_profile.md: global teacher preferences that should follow the teacher across classes (communication style, default lesson structure, workflow preferences).
   - target=copilot_profile.md: class-specific instructions for how the copilot should plan, respond, or avoid behaving.
   - target=teaching_patterns.md: class-specific evidence about how this class learns and which teaching moves, materials, scaffolds, pacing, or activity formats work or fail. A temporal/scoped teaching preference may live here if it names an upcoming block; keep the scope in the content.
+  - target=teaching_framework_adjustments.md: class-scoped replacement/refinement rules for the shared subject/grade teaching frameworks. Keep adjustments short; do not copy the shared framework.
   - target=planning_brief.md: near-term class planning priorities, open loops, misconception focus, assessment readiness, and immediate next steps.
   - target=wiki/subjects/{subject}.md: subject-wide reusable guidance, only when the teacher frames it as applying across classes in that subject.
-  - NOT memory targets: course_state.md and timeline.md hold current unit / taught sequence derived from approved lessons; lesson facts go through the normal teacher-approved canonical wiki commit path.
+  - NOT memory targets: course_state.md and timeline.md hold current unit / taught sequence derived from approved lessons; lesson facts go through the normal teacher-approved canonical wiki commit path. Shared wiki/subjects/.../teaching_frameworks/ pages are immutable reference material — class overrides go to teaching_framework_adjustments.md instead.
 - Overlap rules:
   - If a fact is both a durable class learning pattern and an immediate planning priority, call remember twice with separate concise contents: once for teaching_patterns.md and once for planning_brief.md.
   - If the teacher gives an agent-behavior rule and also explains how the class learns, split them: copilot_profile.md for the behavior rule, teaching_patterns.md for the learning pattern.
+  - If the teacher overrides shared subject/grade pedagogy for this class, use teaching_framework_adjustments.md; if it is observed how this class learns (without changing the shared framework contract), use teaching_patterns.md.
   - If the teacher says the rule applies across the subject, use wiki/subjects/{subject}.md; if it applies to this class, use teaching_patterns.md; if it applies to the teacher's general style, use teacher_profile.md.
 - Ambiguous examples:
   - Teacher: "Remember for the next electricity block: start with real circuit kits before Ohm's law equations." Capture teaching_patterns.md: "This class benefits from hands-on circuit kits before formal electricity equations." Also capture planning_brief.md: "Upcoming electricity block should start with real circuit-kit work before Ohm's law equations."
@@ -189,11 +192,12 @@ MEMORY_SKILL = (
     "diary_markdown is the save artifact, while runtime lists are compact working memory "
     "for continuity after conversation trimming. "
     "Call the remember(...) tool for durable facts worth teacher review later: explicit teacher "
-    "preferences, repeated communication style requests, class learning patterns, copilot "
-    "behavior rules, or useful next-step summaries. These are proposed "
+    "preferences, repeated communication style requests, class learning patterns, class framework "
+    "adjustments, copilot behavior rules, or useful next-step summaries. These are proposed "
     "only and must never be written during chat. Use targets teacher_profile.md, copilot_profile.md, "
-    "teaching_patterns.md, planning_brief.md, or "
-    "canonical_wiki for review-only lesson facts. "
+    "teaching_patterns.md, teaching_framework_adjustments.md, planning_brief.md, "
+    "wiki/subjects/{subject}.md, or canonical_wiki for review-only lesson facts. "
+    "Shared wiki/subjects/.../teaching_frameworks/ pages are immutable and not write targets. "
     "Stay in collect_results while the teacher is still adding or revising details, even if the "
     "diary looks structurally complete. Move to review_draft only when the teacher's intent clearly "
     "indicates they are done revising and ready to save. Infer that intent from the whole message "

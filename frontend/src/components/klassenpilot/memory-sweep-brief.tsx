@@ -52,7 +52,8 @@ function BriefRow({
   renderDetail: (candidate: MemorySweepCandidate) => ReactNode;
 }) {
   const candidate = row.candidate;
-  const changed = row.section === "changed";
+  const showOldToNew =
+    row.section === "changed" || row.section === "student_summary";
   return (
     <li className="rounded-md border border-border/60 bg-background px-3 py-2">
       <div className="flex items-start gap-2">
@@ -75,10 +76,10 @@ function BriefRow({
               </span>
             )}
           </div>
-          {!changed && (
+          {!showOldToNew && (
             <p className="mt-0.5 text-sm text-muted-foreground">{row.summary}</p>
           )}
-          {changed && (
+          {showOldToNew && (
             <div className="mt-0.5 space-y-0.5 text-sm">
               <p className="text-muted-foreground line-through decoration-muted-foreground/60">
                 {candidate.replaces_content || "(no previous note)"}
@@ -188,10 +189,11 @@ function BriefRow({
 
 /**
  * Teacher-first Memory Sweep triage: explicit asks pinned first, then
- * new / changed (old → new) / retired rows with three uniform actions and a
- * sticky submit bar. The full detail cards stay available per row and via
- * the Simple / Detailed toggle — this is presentation only; all decision state
- * lives in the page (docs/mem_v3, M1b).
+ * new / changed (old → new) / retired rows, with student summary updates
+ * last. Three uniform actions and a sticky submit bar. The full detail
+ * cards stay available per row and via the Simple / Detailed toggle —
+ * this is presentation only; all decision state lives in the page
+ * (docs/mem_v3, M1b).
  */
 export function MemorySweepBulkToolbar({
   candidates,

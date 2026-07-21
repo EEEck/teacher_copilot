@@ -30,7 +30,7 @@ Not as a beta workflow. Future student-work support should remain teacher-review
 
 ### How do I know what it used?
 
-Plans should name relevant class memory — recent lessons, misconceptions, planning briefs. Richer source panels are part of the beta roadmap.
+Plans should name relevant class memory — recent lessons, misconceptions, planning briefs. Official curriculum claims should point to LehrplanPLUS/KMK sections the planner actually opened. Teaching frameworks are curated pedagogy for Chemie 9 NTG, not a substitute for those official sources. Richer source panels are part of the beta roadmap. See [How the Copilot Works](/docs/how-it-works#curriculum-grounding-chemie-9-ntg).
 
 ### What if the backend restarts?
 

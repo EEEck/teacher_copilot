@@ -35,6 +35,15 @@ branch, grade and source IDs. The planning prompt receives only that compact
 profile/TOC. It uses `list_trusted_sources` for orientation and
 `search_trusted_sources` then `read_trusted_source` for progressive discovery.
 
+For Chemie 9 NTG, the primary official curriculum provenance is LehrplanPLUS
+(and related KMK materials in the allow-listed source library). Shared
+`wiki/subjects/.../teaching_frameworks/` pages are curated pedagogy summaries —
+immutable library knowledge, not legal curriculum text and not a substitute for
+opening a trusted-source section. Class overrides live only in
+`memory/teaching_framework_adjustments.md` (compact budget; never copies the
+shared Grade 9 key summary; capture routing must not write adjustments into
+`teaching_patterns.md` or mutate shared framework pages).
+
 - Official sources support curriculum, competency and progression claims; they
   do not establish what the active class has actually been taught.
 - A source claim may be cited only after the cited section was read in the
@@ -331,10 +340,14 @@ Output migration:
   KlassenPilot is Markdown-first. The retained structured package code is an
   inactive future renderer experiment, not a second source of truth.
 
-Anthropic reference-port policy:
+Anthropic reference-port policy (shipped for Chemie 9 NTG):
 
-- `ref_repo/k12-teacher-skills` currently contributes two applicable reference
-  skills: lesson planning and lesson differentiation. Treat both as the
+- The adapted open K–12 lesson-planning and differentiation skills are the
+  production planning procedure today — not a transitional stub and not a live
+  Anthropic plug-in/runtime connector. Apache-2.0 attribution stays in every
+  adapted skill/reference file.
+- `ref_repo/k12-teacher-skills` contributes two applicable reference skills:
+  lesson planning and lesson differentiation. Treat both as the
   production-quality reference, not as loose inspiration.
 - Preserve their ordered workflow, mandatory routing/grounding gates,
   clarification discipline, shared-content anti-drift rule, artifact integrity
@@ -343,13 +356,13 @@ Anthropic reference-port policy:
   corresponding local rule.
 - Change wording or structure only to replace a dependency that KlassenPilot
   does not have (US standards, Learning Commons KG, Word renderer), to apply
-  Bavaria Gymnasium Chemistry 9 NTG scope, or to preserve existing contracts
-  (teacher-approved wiki writes, one canonical Markdown artifact, and bounded context
-  packs). Record a concise reason beside a material divergence in the local
-  skill or this contract.
+  Bavaria Gymnasium Chemistry 9 NTG scope (shared frameworks also cover Chemie
+  8/9 NTG), to ground official curriculum claims via LehrplanPLUS/KMK trusted
+  sources, or to preserve existing contracts (teacher-approved wiki writes, one
+  canonical Markdown artifact, and bounded context packs). Record a concise
+  reason beside a material divergence in the local skill or this contract.
 - Do not import US standards, proprietary curriculum text, connector-specific
-  behavior, or document-renderer implementation. Keep the Apache attribution
-  and copyright guardrail in every adapted skill/reference file.
+  behavior, or document-renderer implementation.
 
 Runtime context manager:
 
@@ -648,6 +661,10 @@ Proposal behavior:
   backend job tracked like other pending turns. Class-home badges show
   “Stale draft” only when teacher edits are at risk; unedited fingerprint drift
   keeps a quieter “Draft saved …” label while open/refresh can regenerate.
+- The teacher-facing Simple brief groups cards into: Explicitly requested, New
+  memory, Changed (old → new), Already covered / not worth keeping, and a
+  separate last category **Student summary updates** (auto-refreshed student
+  summary sentences must not be mixed into generic Changed / New memory).
 - The promotion gate supplies review priority rather than hiding all weak
   evidence: verified explicit asks receive high priority, inferred claims carry
   distinct-occasion metadata, stale unreinforced singletons expire silently,
@@ -752,6 +769,9 @@ enforced at write AND inject time via `clamp_memory_page`):
 - `planning_brief.md`
 - `teaching_patterns.md` — class + subject TEACHING STYLE: how this class learns
   and which approaches work/fail (holds the class learning profile).
+- `teaching_framework_adjustments.md` — class-scoped refinements to the
+  immutable shared subject/grade frameworks (budget 1200). Injected in Active
+  Subject Expert, not Active Class Core.
 - `copilot_profile.md` (`copilot.md`) — class-scoped COPILOT WORKING AGREEMENT
   only: planning patterns, avoid-rules, repeated corrections, agent behavior.
 - `session_summaries.md`
@@ -770,9 +790,13 @@ Scope discipline (no cross-contamination):
 
 - Global teacher preferences → `teacher_profile.md`. Class learning profile →
   `teaching_patterns.md`. Copilot working agreement → `copilot_profile.md`.
+  Class overrides of shared subject/grade pedagogy →
+  `teaching_framework_adjustments.md` (not `teaching_patterns.md`, and never
+  the shared `wiki/subjects/.../teaching_frameworks/` pages).
 - Durable-memory routing is by purpose, not surface wording: near-term planning
   pressure goes to `planning_brief.md`, class learning patterns go to
-  `teaching_patterns.md`, class-scoped copilot behavior goes to
+  `teaching_patterns.md`, class framework refinements go to
+  `teaching_framework_adjustments.md`, class-scoped copilot behavior goes to
   `copilot_profile.md`, global teacher preferences go to `teacher_profile.md`,
   and subject-wide guidance goes to the active subject guide. If one explicit
   teacher request is both a class learning pattern and an immediate planning
@@ -840,8 +864,10 @@ Proposal (read-only, no writes):
 
 - `POST /classes/{id}/memory/refresh` proposes refreshed derived pages
   (`planning_brief`, `teaching_patterns`, `copilot_profile`,
-  `session_summaries`) plus a `stale_report`. It does not write. (`class_state`
-  / `taught_so_far` were retired.)
+  `session_summaries`) plus a `stale_report`. It does not write, and it does
+  not rebuild `teaching_framework_adjustments` (that page is teacher-approved
+  apply-only, not a compaction rebuild target). (`class_state` /
+  `taught_so_far` were retired.)
 - Ingest commit and plan save may still return `memory_candidates` /
   `class_memory_proposal` in the API payload for ledger / tooling, but the
   frontend does not mount post-save review cards for them. Staged candidates
@@ -859,11 +885,12 @@ Apply (the only durable-write path for these pages):
 
 - `POST /classes/{id}/memory/apply` writes only the teacher-approved items via
   the bounded helpers (`add_user_profile_conclusion`, `add_profile_conclusion`,
-  `add_compact_memory_conclusion` for `planning_brief` and `teaching_patterns`,
-  plus `add_subject_guide_conclusion` for the active class subject guide).
-  Unsupported targets such as `canonical_wiki` or a different subject guide are
-  skipped, not written. It also closes the originating ledger rows for applied
-  fast-lane candidates so the sweep never re-proposes them.
+  `add_compact_memory_conclusion` for `planning_brief`, `teaching_patterns`,
+  and `teaching_framework_adjustments`, plus `add_subject_guide_conclusion` for
+  the active class subject guide). Unsupported targets such as `canonical_wiki`
+  or a different subject guide are skipped, not written. It also closes the
+  originating ledger rows for applied fast-lane candidates so the sweep never
+  re-proposes them.
   The apply API remains available for Memory Sweep and for future in-chat
   confirmation cards; it is not triggered by a post-save preference screen.
 - `POST /classes/{id}/memory/compact/apply` writes teacher-reviewed compact

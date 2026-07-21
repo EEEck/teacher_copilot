@@ -105,7 +105,8 @@ The product uses tiered class memory.
 
 2. **Compact class memory**
    Derived, size-budgeted pages under `wiki/classes/{class_id}/memory/`:
-   `planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and
+   `planning_brief.md`, `teaching_patterns.md`,
+   `teaching_framework_adjustments.md`, `copilot_profile.md`, and
    `session_summaries.md`. Each page has a hard char budget in
    `MEMORY_PAGE_BUDGETS`, enforced at write AND inject time via
    `clamp_memory_page` (Hermes-style: small, high-signal, replace not append).

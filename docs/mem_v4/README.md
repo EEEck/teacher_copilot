@@ -31,4 +31,6 @@ teacher remains the only durable-write authority.
 
 Related current contracts: [`../agent_contracts.md`](../agent_contracts.md),
 [`../agent_architecture.md`](../agent_architecture.md), and
-[`../memory_hierarchy.md`](../memory_hierarchy.md).
+[`../memory_hierarchy.md`](../memory_hierarchy.md)
+(including [§3 Class Teaching Framework Adjustments](../memory_hierarchy.md#3-class-teaching-framework-adjustments)
+for class overrides of immutable shared frameworks).

@@ -12,7 +12,7 @@ const WORKFLOWS = [
     title: "Create lesson plan",
     mark: <AgentMark boxSize={72} workflow="plan" title="EEEck · Plan" />,
     blurb:
-      "Start with rough ideas for the next lesson. Chat back and forth until the draft feels right (the assistant does most of the drafting). Then save it to a date.",
+      "Start with rough ideas for the next lesson. Chat back and forth until the draft feels right (the assistant does most of the drafting, using the adapted K–12 procedure plus LehrplanPLUS/KMK grounding). Then save it to a date.",
   },
   {
     key: "memory",
@@ -104,6 +104,12 @@ export default function DevHowToPage() {
                 <span className="font-medium">Plan & Discuss:</span> help you
                 think and draft; they don’t rewrite the notebook by themselves.
               </li>
+              <li>
+                <span className="font-medium">Curriculum grounding:</span>{" "}
+                Planning uses adapted open K–12 skills (Anthropic) and
+                LehrplanPLUS/KMK trusted sources. Frameworks are curated
+                pedagogy for Chemie 9 NTG (shared 8/9).
+              </li>
             </ul>
           </div>
         </CardContent>
@@ -112,7 +118,7 @@ export default function DevHowToPage() {
       {/* Class notebook vs what the assistant learns */}
       <Card>
         <CardHeader className="border-b border-border pb-4">
-          <CardTitle className="text-lg font-semibold tracking-tight">
+          <CardTitle className="text-xl font-semibold tracking-tight sm:text-2xl">
             Two kinds of notes
           </CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -172,7 +178,7 @@ export default function DevHowToPage() {
       {/* 2×2 workflows */}
       <Card>
         <CardHeader className="border-b border-border pb-4">
-          <CardTitle className="text-lg font-semibold tracking-tight">
+          <CardTitle className="text-xl font-semibold tracking-tight sm:text-2xl">
             The four workflows
           </CardTitle>
           <p className="text-sm text-muted-foreground">

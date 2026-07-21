@@ -74,7 +74,12 @@ The app has five product layers.
 
 4. **Trusted source layer**
    Uploaded teacher materials and allowlisted external sources can enrich plans
-   and resources, but they stay source-labeled and teacher-reviewable.
+   and resources, but they stay source-labeled and teacher-reviewable. For the
+   Chemie 9 NTG beta, planning also uses an adapted open K–12 lesson procedure
+   (Anthropic skills, Apache-2.0; not a live plug-in), LehrplanPLUS/KMK as
+   provenance-bearing curriculum sources, and immutable shared teaching
+   frameworks (class overrides only via `teaching_framework_adjustments.md`).
+   Frameworks are curated pedagogy, not legal curriculum text.
 
 5. **Low-friction capture**
    Longer term, voice memo and messaging capture should make it easy to log

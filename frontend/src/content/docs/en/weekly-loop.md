@@ -31,7 +31,7 @@ A strong memory update usually includes:
 
 Use **Create lesson plan** when preparing the next lesson.
 
-The planner reads class memory, recent lessons, open loops, misconceptions, and teaching patterns. It updates the plan draft only — **planning chat does not write class memory.**
+The planner reads class memory, recent lessons, open loops, misconceptions, and teaching patterns. For Chemie 9 NTG it also follows the adapted K–12 planning procedure and may ground official curriculum claims in LehrplanPLUS/KMK trusted sources (after opening the relevant section). It updates the plan draft only — **planning chat does not write class memory.**
 
 Good requests can be plain teacher language:
 

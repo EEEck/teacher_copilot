@@ -166,6 +166,10 @@ scroll region. Plan save must not use the workspace `reviewFileList` slot —
 that path is reserved for legacy layout only; Plan matches Memory by mounting
 `ReviewBrief` as in-chat activity.
 
+Memory Sweep’s Simple brief (`lib/sweep-brief.ts`) groups cards as: Explicitly
+requested, New memory, Changed (old → new), Already covered / not worth keeping,
+and a separate last bucket **Student summary updates** — not mixed into Changed.
+
 `ArtifactSessionWorkspace` keeps a selected review diff pinned above that
 transcript. The diff owns 70% of the left workspace and scrolls internally;
 the remaining 30% is the normal Thread/composer viewport. This applies to any

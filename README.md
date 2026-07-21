@@ -35,8 +35,12 @@ trace that checks the core backend memory-consolidation behavior.
 MemV4 is the active memory contract: chat stages review-only candidates through
 `remember(...)`, the ledger folds and gates them, Memory Sweep makes one bounded
 consolidation judgment, and the teacher-first review flow is the only durable
-write boundary. The next trust gaps are input-to-wiki reconciliation (including
-roster corrections), date awareness, and browser-visible chat-turn resilience.
+write boundary. Chemie 9 NTG planning uses an adapted Anthropic open K–12
+procedure (Apache-2.0; not a live plug-in), LehrplanPLUS/KMK trusted sources,
+and immutable shared teaching frameworks with class
+`teaching_framework_adjustments.md`. The next trust gaps are input-to-wiki
+reconciliation (including roster corrections), date awareness, and
+browser-visible chat-turn resilience.
 See [`docs/mem_v4/`](docs/mem_v4/) for the active design/evaluation ledger and
 [`implementation_plans/product_backlog.md`](implementation_plans/product_backlog.md)
 for the prioritized queue.

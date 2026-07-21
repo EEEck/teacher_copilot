@@ -160,6 +160,25 @@ def test_memory_sweep_student_excerpt_includes_summary_and_recent_observations(
     assert "Quick on the chloride" in excerpt
 
 
+def test_memory_sweep_excerpts_include_teaching_framework_adjustments(
+    tmp_path: Path,
+):
+    from app.services.memory_sweep import _budget_usage
+
+    wiki = _copy_wiki(tmp_path)
+    target = "teaching_framework_adjustments.md"
+
+    excerpts = memory_sweep_target_excerpts(wiki, CLASS_ID, {target})
+
+    assert target in excerpts
+    assert "Teaching Framework Adjustments" in excerpts[target]
+    assert "Replace or refine" in excerpts[target]
+    usage = _budget_usage([target], excerpts)
+    assert target in usage
+    assert "/" in usage[target]
+    assert "chars" in usage[target]
+
+
 def test_memory_sweep_builds_student_summary_proposals_from_dated_observations(
     tmp_path: Path,
 ):

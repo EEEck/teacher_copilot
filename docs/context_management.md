@@ -136,10 +136,14 @@ The purpose-specific subject addition is:
 1. **Structured state** — `SessionState`, `LessonPlanningState` persisted on
    backend-owned `PlanRuntime`; the model proposes `state_patch` updates and
    backend merge rules prevent empty fields from wiping accumulated state.
-2. **Production skill** — the provisional `PLAN_SKILL` and short Chemistry
-   prompt are transitional. The target loads the Anthropic-derived planning
-   skill, Bavaria Chemistry subject reference, and differentiation skill as
-   one mandatory production procedure.
+2. **Production skill** — planning loads the adapted Anthropic open K–12
+   lesson-planning and differentiation procedure (Apache-2.0; not a live
+   Anthropic plug-in), the Bavaria Chemistry 9 NTG subject reference, and the
+   immutable shared Grade 9 framework + class `teaching_framework_adjustments.md`
+   as one mandatory production path. Official curriculum/competency claims use
+   LehrplanPLUS/KMK trusted sources: the planner must `read_trusted_source` the
+   cited section in the current session before asserting them. Teaching
+   frameworks are curated pedagogy summaries, not legal curriculum text.
 3. **Teacher layer** — `build_teacher_context_trace()` loads only
    `wiki/teacher_profile.md`.
 4. **Active class core** — `build_active_class_core_context_trace(class_id)`

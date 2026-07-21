@@ -357,9 +357,16 @@ by purpose:
 - teacher-wide behavior -> `teacher_profile.md`;
 - class-specific copilot behavior -> `copilot_profile.md`;
 - how this class learns -> `teaching_patterns.md`;
+- class overrides of shared subject/grade pedagogy ->
+  `teaching_framework_adjustments.md`;
 - current bounded planning pressure -> `planning_brief.md`;
 - current unit/taught sequence -> canonical `course_state.md` and
   `timeline.md`, not profile memory.
+
+Shared `wiki/subjects/.../teaching_frameworks/` pages are immutable reference
+material and are **not** capture or apply targets. Class refinements go only to
+`teaching_framework_adjustments.md` (see
+[`memory_hierarchy.md` §3](../memory_hierarchy.md#3-class-teaching-framework-adjustments)).
 
 ## 4. Lesson blocks such as organic chemistry
 
@@ -534,6 +541,7 @@ def can_fast_lane(result: MemoryAdmissionResult, target: str) -> bool:
         and target in {
             "teacher_profile.md",
             "copilot_profile.md",
+            "teaching_framework_adjustments.md",
             "teaching_patterns.md",
             "planning_brief.md",
         }

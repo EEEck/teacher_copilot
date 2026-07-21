@@ -74,7 +74,14 @@ Shipped teacher workflows:
 - **MemV4 memory capture and sweep**: chat can stage review-only durable-memory
   candidates through the explicit `remember(...)` tool; a ledger/folding/gate
   layer throttles noise; the teacher-triggered sweep runs one high-reasoning
-  consolidation call and presents a teacher-first Simple/Detailed review brief.
+  consolidation call and presents a teacher-first Simple/Detailed review brief
+  (sections: Explicitly requested, New memory, Changed, Already covered /
+  not worth keeping, and a separate **Student summary updates** bucket).
+- **Chemie 9 NTG planning grounding (shipped)**: adapted Anthropic open K–12
+  lesson-planning + differentiation procedure (Apache-2.0; not a live plug-in);
+  LehrplanPLUS/KMK as provenance-bearing trusted sources (section must be read
+  before official curriculum claims); immutable shared teaching frameworks for
+  Chemie 8/9 NTG with class overrides in `teaching_framework_adjustments.md`.
 
 Core implementation shape:
 
@@ -204,10 +211,11 @@ Primary bets:
 - trusted search over allowlisted sources
 - source cards and adaptation notes
 - resource suggestions for lessons
-- subject teaching-practice library, starting narrow with chemistry
-- port the Anthropic lesson-production procedure for Bavaria Chemistry 9 NTG:
-  mandatory subject routing, source grounding, differentiation, and one
-  structured lesson artifact with teacher/student/observation sections
+- broaden the subject teaching-practice library beyond chemistry
+- extend curriculum grounding beyond Chemie 9 NTG (additional grades/subjects
+  and richer trusted-source coverage); the Anthropic-adapted planning/
+  differentiation procedure + LehrplanPLUS/KMK grounding for Chemie 9 NTG is
+  already shipped — see Current Product State
 - no automatic writes from external sources
 - agent safety hardening before higher-risk tools: SDK guardrails where useful,
   teacher-visible output sanitization, OWASP ASI red-team discovery, and

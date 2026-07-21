@@ -50,7 +50,8 @@ def apply_memory_items(
     Supported targets:
     - ``teacher_profile.md`` -> global teacher profile (bounded)
     - ``copilot_profile.md`` -> class copilot working agreement (bounded)
-    - ``planning_brief.md`` / ``teaching_patterns.md``
+    - ``planning_brief.md`` / ``teaching_patterns.md`` /
+      ``teaching_framework_adjustments.md``
       -> bounded compact class memory bullets
     - ``wiki/subjects/{active_subject}.md`` -> bounded subject-guide bullet
 

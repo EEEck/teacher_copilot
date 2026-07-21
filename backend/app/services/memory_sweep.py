@@ -613,6 +613,7 @@ def memory_sweep_target_excerpts(
         elif target in {
             "planning_brief.md",
             "teaching_patterns.md",
+            "teaching_framework_adjustments.md",
         }:
             key = target.removesuffix(".md")
             path = wiki.memory_paths(class_id).get(key)

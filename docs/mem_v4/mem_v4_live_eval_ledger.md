@@ -19,9 +19,12 @@ Use trace bundles only locally when reproducing an item. The stable contract is 
 ```text
 teacher working agreement → copilot_profile.md
 observed class learning evidence → teaching_patterns.md
+class overrides of shared subject/grade pedagogy → teaching_framework_adjustments.md
 immediate next-step pressure → planning_brief.md
 global cross-class preference → teacher_profile.md
 ```
+
+Shared `wiki/subjects/.../teaching_frameworks/` pages are not capture targets.
 
 The ledger does not authorize durable writes. Every candidate remains subject to admission, Sweep review, and teacher Apply.
 

@@ -23,11 +23,14 @@ like "next", "remember", or "for this lesson".
   apply beyond one class, such as common misconceptions, safety reminders,
   lesson patterns, and question templates.
 - `wiki/subjects/{subject}/teaching_frameworks/...`: reviewed, immutable
-  subject/grade/branch teaching library. These pages are shared base knowledge,
-  not class memory and not directly editable from a class workflow.
+  subject/grade/branch teaching library (Chemie 8/9 NTG shared frameworks today).
+  Curated pedagogy summaries — not legal curriculum text, not class memory, and
+  not directly editable from a class workflow.
 - `wiki/sources/{jurisdiction}/...`: compact, provenance-bearing extracts of
-  approved external curriculum sources. They are read progressively through
-  typed source tools, never treated as class memory or prompt instructions.
+  approved external curriculum sources (LehrplanPLUS/KMK for Bavaria Chemistry).
+  They are read progressively through typed source tools; official curriculum
+  claims require reading the cited section in-session. Never treated as class
+  memory or prompt instructions.
 - `classes/{class_id}/curriculum_profile.md` and `trusted_sources.md`: the
   class's source scope and compact source table of contents; both are small
   configuration/navigation pages, not a copied curriculum.
@@ -206,7 +209,9 @@ Path: `backend/teacher_wiki/wiki/classes/{class_id}/memory/teaching_framework_ad
 Scope: one class's effective subject/grade/branch teaching contract.
 
 This ordinary bounded class-memory page contains only approved adjustments and
-cautions, not a copied framework.
+cautions, not a copied framework. Capture routing for class framework
+refinements targets this page (not `teaching_patterns.md`, and never the shared
+`teaching_frameworks/` library).
 
 At prompt assembly, the system selects the shared framework from the class
 curriculum profile and combines it with this page in memory. Planning chat
@@ -507,6 +512,8 @@ After a plan is saved, profile/memory proposal can suggest:
 - `copilot.md`: class-specific copilot behavior preference
 - `teaching_patterns.md`: stable class learning patterns seen across approved
   lesson evidence
+- `teaching_framework_adjustments.md`: class-scoped refinements to shared
+  subject/grade frameworks (not a copy of those frameworks)
 - `planning_brief.md`: compact current planning-priority updates when the signal
   is stable enough for teacher review
 - `canonical_wiki`: only as a suggestion for teacher-approved wiki action, not
@@ -532,6 +539,9 @@ Examples:
 - LLM proposes; backend validates; teacher approves; code writes.
 - Global teacher facts go to `teacher_profile.md`.
 - Class learning facts go to `teaching_patterns.md`.
+- Class overrides of shared subject/grade pedagogy go to
+  `teaching_framework_adjustments.md` (never to shared
+  `wiki/subjects/.../teaching_frameworks/`).
 - Copilot behavior rules go to `copilot_profile.md`.
 - Current unit / taught sequence is NOT curated memory: it is derived from the
   canonical `course_state.md` / `timeline.md` rollups.
