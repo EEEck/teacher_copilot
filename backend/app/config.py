@@ -99,6 +99,9 @@ class Settings(BaseSettings):
     beta_cookie_name: str = "kp_beta_session"
     beta_session_days: int = 30
     beta_cookie_secure: bool = False
+    # Use "none" when the browser frontend is on a different site than the API
+    # (e.g. separate Railway *.up.railway.app hosts). Requires cookie_secure=true.
+    beta_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     beta_dev_workspace_id: str = ""
     # Local beta-only Memory V4 diagnostic capture. This is intentionally
     # disabled unless beta + development + this explicit flag are all set.

@@ -752,7 +752,7 @@ def beta_login(
         max_age=beta_auth.session_days * 24 * 60 * 60,
         httponly=True,
         secure=beta_auth.cookie_secure,
-        samesite="lax",
+        samesite=beta_auth.cookie_samesite,
         path="/",
     )
     identity = beta_auth.resolve_session_token(login.session_token)

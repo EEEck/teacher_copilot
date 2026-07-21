@@ -450,6 +450,7 @@ class BetaAuthService(BetaStorage):
         cookie_name: str,
         session_days: int,
         cookie_secure: bool,
+        cookie_samesite: str = "lax",
     ) -> None:
         super().__init__(db_path)
         self.data_root = Path(data_root)
@@ -457,6 +458,7 @@ class BetaAuthService(BetaStorage):
         self.cookie_name = cookie_name
         self.session_days = session_days
         self.cookie_secure = cookie_secure
+        self.cookie_samesite = cookie_samesite
 
     @property
     def telemetry(self) -> BetaTelemetry:

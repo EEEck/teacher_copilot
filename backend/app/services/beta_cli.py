@@ -118,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         data_root=Path(settings.beta_data_root),
         seed_wiki_root=_seed_wiki_root(),
         cookie_name=settings.beta_cookie_name,
+        cookie_samesite=settings.beta_cookie_samesite,
         session_days=settings.beta_session_days,
         cookie_secure=settings.beta_cookie_secure,
     )
