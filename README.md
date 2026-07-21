@@ -278,7 +278,7 @@ teacher_wiki/
 | Variable | Where | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | `backend/.env` | OpenAI API (required for chat & plan) |
-| `OPENAI_STRONG_MODEL` | `backend/.env` | The newest/best model. Default `gpt-5.5`. Runs IMPORTANT calls always + CHAT/UTILITY in the production profile |
+| `OPENAI_STRONG_MODEL` | `backend/.env` | Production strong model. Default `gpt-5.6-terra` (~½ GPT-5.5/Sol API rate). Use `gpt-5.6-sol` for flagship at GPT-5.5 pricing. Runs IMPORTANT always + CHAT/UTILITY in the production profile |
 | `OPENAI_CHEAP_MODEL` | `backend/.env` | The small model. Default `gpt-5.4-mini`. Runs CHAT/UTILITY in the economy profile |
 | `MODEL_PROFILE` | `backend/.env` | Routes three call classes — CHAT (plan+ingest), IMPORTANT (Memory Sweep only), UTILITY (one-shots). `production`: strong high / strong xhigh / strong minimal (one model, reasoning-tiered). `economy`: cheap medium / strong high / cheap minimal. Unset derives from `APP_ENV` (production→production, else economy) |
 | `OPENAI_CHAT_REASONING_EFFORT` / `OPENAI_IMPORTANT_REASONING_EFFORT` / `OPENAI_UTILITY_REASONING_EFFORT` | `backend/.env` | Per-call-class reasoning effort (`none`/`minimal`/`low`/`medium`/`high`/`xhigh`); unset = profile default (production: chat high / important xhigh / utility minimal; economy: chat medium / important high / utility minimal). `OPENAI_REASONING_EFFORT` is a legacy alias for the chat one |

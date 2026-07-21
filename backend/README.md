@@ -23,7 +23,7 @@ Scripts or REPL code that construct `AgentRunner` without importing `app.main` m
 
 ## Agent runtime settings
 
-Two model ids (`OPENAI_STRONG_MODEL=gpt-5.5`, `OPENAI_CHEAP_MODEL=gpt-5.4-mini`)
+Two model ids (`OPENAI_STRONG_MODEL=gpt-5.6-terra`, `OPENAI_CHEAP_MODEL=gpt-5.4-mini`)
 are routed to three **call classes** by `MODEL_PROFILE`:
 
 - **CHAT** (plan + ingest, high volume; `remember(...)` capture happens here) —
@@ -34,8 +34,8 @@ are routed to three **call classes** by `MODEL_PROFILE`:
 - **UTILITY** (compile, lint, plan-lesson, opening, compact, profile-propose) —
   the chat model at minimal reasoning.
 
-So **production is one model (`gpt-5.5`), reasoning-tiered**; **economy runs
-chat/utility on `gpt-5.4-mini` and only the sweep on `gpt-5.5`**. `MODEL_PROFILE`
+So **production is one model (`gpt-5.6-terra`), reasoning-tiered**; **economy runs
+chat/utility on `gpt-5.4-mini` and only the sweep on `gpt-5.6-terra`**. `MODEL_PROFILE`
 is unset by default and derives from `APP_ENV` (production→production, else
 economy). `OPENAI_REASONING_EFFORT` optionally overrides the CHAT effort only.
 

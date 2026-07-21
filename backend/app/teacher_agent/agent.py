@@ -60,15 +60,19 @@ def chat_model_settings(
     tokens. Non-reasoning models ignore this when unsupported. Call classes pass
     their profile-resolved effort (chat/important/utility — see config.py).
 
-    ``minimal`` is rejected by current gpt-5.4 / gpt-5.5 Responses models
-    (supported: none/low/medium/high/xhigh). Map it to ``low`` so utility
-    one-shots on the chat-tier model do not 400.
+    ``minimal`` is rejected by current gpt-5.4 / gpt-5.5 / gpt-5.6 Responses
+    models (supported: none/low/medium/high/xhigh). Map it to ``low`` so
+    utility one-shots on the chat-tier model do not 400.
     """
     normalized_effort = reasoning_effort
     if (
         reasoning_effort == "minimal"
         and model
-        and (model.startswith("gpt-5.4") or model.startswith("gpt-5.5"))
+        and (
+            model.startswith("gpt-5.4")
+            or model.startswith("gpt-5.5")
+            or model.startswith("gpt-5.6")
+        )
     ):
         normalized_effort = "low"
     if normalized_effort == "none":

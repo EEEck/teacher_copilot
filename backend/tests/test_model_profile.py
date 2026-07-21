@@ -101,3 +101,11 @@ def test_other_models_normalize_gpt_5_5_minimal_effort():
     assert settings is not None
     assert settings.reasoning is not None
     assert settings.reasoning.effort == "low"
+
+
+def test_gpt_5_6_models_normalize_unsupported_minimal_effort():
+    settings = chat_model_settings("minimal", model="gpt-5.6-terra")
+
+    assert settings is not None
+    assert settings.reasoning is not None
+    assert settings.reasoning.effort == "low"
