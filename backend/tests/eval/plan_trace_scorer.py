@@ -14,6 +14,7 @@ from typing import Any
 
 from tests.eval.fckw_contract import (
     LESSON_PLAN_QUALITY_CHECKS,
+    STARTUP_ACTIVE_SUBJECT_EXPERT_SECTIONS,
     STARTUP_CLASS_SLICE_SECTIONS,
     STARTUP_PROFILE_SECTIONS,
     STARTUP_PROMPT_SECTIONS,
@@ -100,9 +101,11 @@ def score_startup_context(trace: dict[str, Any]) -> ScoreResult:
     assembly = trace.get("prompt_assembly") or {}
     nested = assembly.get("nested") or {}
     class_trace = nested.get("active_class_core") or nested.get("class_slice") or {}
+    subject_trace = nested.get("active_subject_expert") or {}
     teacher_trace = nested.get("teacher_context") or {}
     old_profile_trace = nested.get("profiles") or {}
     class_sections = class_trace.get("sections") or []
+    subject_sections = subject_trace.get("sections") or []
     profile_sections = (teacher_trace.get("sections") or []) + (old_profile_trace.get("sections") or [])
     top_sections = assembly.get("sections") or []
 
@@ -110,13 +113,14 @@ def score_startup_context(trace: dict[str, Any]) -> ScoreResult:
     included_class_or_profile = _section_names(
         [*class_sections, *profile_sections], included_only=True
     )
+    included_subject = _section_names(subject_sections, included_only=True)
     included_top = _section_names(top_sections, included_only=False)
 
     for expected in STARTUP_PROMPT_SECTIONS:
         if not _has_top_section(expected, included_top):
             failures.append(f"prompt_assembly missing top-level section {expected!r}")
 
-    for singleton in ("Teacher layer", "Active class core"):
+    for singleton in ("Teacher layer", "Active class core", "Active subject expert"):
         count = sum(
             1
             for section in top_sections
@@ -140,6 +144,21 @@ def score_startup_context(trace: dict[str, Any]) -> ScoreResult:
         sec = _find_section(class_sections, expectation)
         if sec:
             _check_markers(str(sec.get("text", "")), expectation.content_markers, expectation.canonical_name, failures)
+
+    for expectation in STARTUP_ACTIVE_SUBJECT_EXPERT_SECTIONS:
+        if not _match_section(expectation, included_subject):
+            failures.append(
+                f"active subject expert missing required section {expectation.canonical_name!r}"
+            )
+            continue
+        sec = _find_section(subject_sections, expectation)
+        if sec:
+            _check_markers(
+                str(sec.get("text", "")),
+                expectation.content_markers,
+                expectation.canonical_name,
+                failures,
+            )
 
     for expectation in STARTUP_PROFILE_SECTIONS:
         if not _match_section(expectation, included_class_or_profile):

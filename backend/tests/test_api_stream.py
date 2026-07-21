@@ -212,6 +212,7 @@ def test_plan_trace_disabled_by_default_in_production(
     client: TestClient, monkeypatch
 ):
     monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("AGENT_TRACE_ENABLED", "false")
     monkeypatch.delenv("PLAN_TRACE_ENABLED", raising=False)
     get_settings.cache_clear()
     try:

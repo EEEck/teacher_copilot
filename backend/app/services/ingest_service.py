@@ -50,6 +50,7 @@ from app.teacher_agent.memory_update_state import (
 )
 from app.teacher_agent.executive_verification import (
     WriteVerificationBlocked,
+    evaluate_write_gate,
     enforce_applied_write_verification,
 )
 from app.teacher_agent.prompt_trace import build_ingest_chat_prompt_trace
@@ -371,6 +372,17 @@ class IngestService:
         except WriteVerificationBlocked:
             self.core._persist_session(session)
             raise
+        self.core.ensure_memory_verification(session_id, diary_md)
+        gate = evaluate_write_gate(
+            session.executive,
+            diary_md,
+            structurally_ready=self.wiki.is_diary_complete(diary_md),
+        )
+        if not gate.allowed:
+            self.core._persist_session(session)
+            raise WriteVerificationBlocked(
+                "ingest_propose", verification, gate, session.executive
+            )
         draft = self.core.update_draft(session_id, diary_md)
         session = self.core.get_session(session_id)
         if self.workflow_drafts is not None and session.draft_id:
@@ -495,6 +507,23 @@ class IngestService:
         except WriteVerificationBlocked:
             self.core._persist_session(session)
             raise
+        # The generic write verifier can clear previous executive findings. Reapply
+        # the deterministic Update Memory integrity pack immediately before the
+        # write gate so a direct commit cannot bypass roster or target checks.
+        self.core.ensure_memory_verification(req.session_id, diary_markdown)
+        gate = evaluate_write_gate(
+            session.executive,
+            artifact=diary_markdown,
+            structurally_ready=self.wiki.is_diary_complete(diary_markdown),
+        )
+        if not gate.allowed:
+            self.core._persist_session(session)
+            raise WriteVerificationBlocked(
+                "ingest_commit",
+                verification,
+                gate,
+                session.executive,
+            )
         lesson_date = (
             self.wiki.extract_date_from_diary(diary_markdown)
             or date.today().isoformat()

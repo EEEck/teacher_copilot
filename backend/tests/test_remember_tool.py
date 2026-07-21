@@ -61,6 +61,7 @@ def test_alias_targets_are_canonicalized():
         content="Draft early, then refine the markdown directly.",
         quote="always keep future lesson plans in English",
         speech_act="conduct_request",
+        scope="global",
         teacher_message=MESSAGE,
     )
     assert error == ""
@@ -138,6 +139,7 @@ def test_valid_call_fast_lanes_through_discipline():
         content="Keep future lesson plans in English.",
         quote="always keep future lesson plans in English",
         speech_act="conduct_request",
+        scope="global",
         teacher_message=MESSAGE,
     )
     assert error == ""

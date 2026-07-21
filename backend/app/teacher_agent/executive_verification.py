@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -67,6 +67,9 @@ class ExecutiveRuntime:
     checked_categories: set[str] = field(default_factory=set)
     assumptions: list[str] = field(default_factory=list)
     verification_summary: str = ""
+    # Workflow packs may add a bounded teacher-facing report card. Keep the
+    # payload generic here so the shared runtime does not import any workflow.
+    verification_reports: dict[str, dict[str, Any]] = field(default_factory=dict)
     write_verification_fingerprint: str = ""
     write_verification_message: str = ""
 
@@ -108,7 +111,14 @@ class WriteVerificationBlocked(RuntimeError):
         self.result = result
         self.gate = gate
         self.runtime = runtime
-        message = result.message or "I didn't save this yet; one detail needs your call."
+        if gate.reason == "plan_safety_hold":
+            message = (
+                "I didn't save this yet: the completed plan review identified a severe "
+                "safety issue in this exact draft. Revise the safety procedure or confirm "
+                "the local procedure before saving."
+            )
+        else:
+            message = result.message or "I didn't save this yet; one detail needs your call."
         super().__init__(message)
 
 
@@ -128,6 +138,7 @@ def executive_runtime_dump(runtime: ExecutiveRuntime) -> dict:
         "checked_categories": sorted(runtime.checked_categories),
         "assumptions": list(runtime.assumptions),
         "verification_summary": runtime.verification_summary,
+        "verification_reports": runtime.verification_reports,
         "write_verification_fingerprint": runtime.write_verification_fingerprint,
         "write_verification_message": runtime.write_verification_message,
     }
@@ -149,6 +160,11 @@ def executive_runtime_load(data: dict | None) -> ExecutiveRuntime:
         checked_categories={str(item) for item in categories},
         assumptions=[str(item) for item in assumptions],
         verification_summary=str(payload.get("verification_summary") or ""),
+        verification_reports={
+            str(pack_id): dict(report)
+            for pack_id, report in (payload.get("verification_reports") or {}).items()
+            if isinstance(report, dict)
+        },
         write_verification_fingerprint=str(
             payload.get("write_verification_fingerprint") or ""
         ),
@@ -209,6 +225,16 @@ def apply_executive_patch(
     return runtime
 
 
+def apply_verification_report(runtime: ExecutiveRuntime, report: Any) -> ExecutiveRuntime:
+    """Persist one bounded workflow report without coupling the shared runtime."""
+    payload = report.model_dump() if hasattr(report, "model_dump") else dict(report)
+    pack_id = _clean(str(payload.get("pack_id") or ""))
+    if not pack_id:
+        raise ValueError("verification report requires pack_id")
+    runtime.verification_reports[pack_id] = payload
+    return runtime
+
+
 def apply_write_verification(
     runtime: ExecutiveRuntime,
     *,
@@ -242,6 +268,14 @@ def evaluate_write_gate(
         return WriteGateResult(False, "artifact_not_ready")
     if runtime.write_verification_fingerprint != artifact_fingerprint(artifact):
         return WriteGateResult(False, "artifact_changed_since_verification")
+    plan_report = runtime.verification_reports.get("plan")
+    if (
+        isinstance(plan_report, dict)
+        and plan_report.get("overall_status") == "safety_hold"
+        and plan_report.get("review_state") == "complete"
+        and plan_report.get("artifact_fingerprint") == artifact_fingerprint(artifact)
+    ):
+        return WriteGateResult(False, "plan_safety_hold")
     if runtime.open_blocking_findings():
         return WriteGateResult(False, "unresolved_blocking_finding")
     return WriteGateResult(True)
@@ -261,6 +295,7 @@ def executive_api_payload(runtime: ExecutiveRuntime) -> dict:
         "assumptions": runtime.assumptions[-5:],
         "checked_categories": sorted(runtime.checked_categories),
         "verification_summary": runtime.verification_summary,
+        "verification_reports": runtime.verification_reports,
     }
 
 

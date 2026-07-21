@@ -1,5 +1,11 @@
 # Agent evals (DeepEval + trace contracts)
 
+MemV4 is the active memory-evaluation home. Read
+[`../../docs/mem_v4/evaluation.md`](../../docs/mem_v4/evaluation.md) for the
+layered policy and
+[`../../docs/mem_v4/mem_v4_live_eval_ledger.md`](../../docs/mem_v4/mem_v4_live_eval_ledger.md)
+for beta-derived known gaps. This runbook contains the executable commands.
+
 How to run KlassenPilot agent evals, where they should execute, and how they
 relate to the running dev container vs a separate test environment.
 
@@ -156,6 +162,27 @@ memory targets, forbid leakage into other targets, and set a minimum candidate
 count before checking the backend `fast_lane` verdict. This keeps overlap cases
 such as "durable class learning pattern + immediate planning priority" from
 collapsing into a single-target pass.
+
+### MemV4 live-derived goldens
+
+Sanitized beta observations and their owning follow-up branches are tracked in
+[`docs/mem_v4/mem_v4_live_eval_ledger.md`](../../docs/mem_v4/mem_v4_live_eval_ledger.md).
+The ledger deliberately keeps raw reasoning and beta trace payloads out of Git.
+
+Run deterministic contracts without an API key:
+
+```powershell
+cd backend
+.\.venv\Scripts\python -m pytest tests/evals/test_memory_capture_golden_contract.py tests/evals/test_klassenpilot_memory_capture_stub.py tests/evals/test_discussion_golden_contract.py -q
+```
+
+Run live memory-capture checks and the Discuss task-anchor `GEval` only with an API key:
+
+```powershell
+$env:RUN_LIVE_AGENT_EVALS="1"
+$env:RUN_LLM_CHAT_JUDGE="1"
+.\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_memory_capture_live.py tests/evals/test_klassenpilot_discussion_live.py -v
+```
 
 Wiki-vs-input reconciliation has both deterministic and optional live/LLM judge
 coverage:

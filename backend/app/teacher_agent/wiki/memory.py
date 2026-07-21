@@ -14,6 +14,7 @@ COMPACT_MEMORY_FILES: dict[str, str] = {
     "teaching_patterns": "teaching_patterns.md",
     "copilot_profile": "copilot_profile.md",
     "session_summaries": "session_summaries.md",
+    "teaching_framework_adjustments": "teaching_framework_adjustments.md",
 }
 
 PROFILE_SECTION_LIMIT = 12
@@ -35,6 +36,8 @@ MEMORY_PAGE_BUDGETS: dict[str, int] = {
     "planning_brief": 1200,
     "session_summaries": 1200,
     "subject_guide": 1400,
+    "effective_subject_framework": 2600,
+    "teaching_framework_adjustments": 1200,
 }
 _DEFAULT_PAGE_BUDGET = 1800
 
@@ -283,6 +286,7 @@ def add_compact_memory_conclusion(
     if key not in {
         "planning_brief",
         "teaching_patterns",
+        "teaching_framework_adjustments",
     }:
         raise ValueError(f"unsupported compact memory target: {key}")
     clean = " ".join(content.strip().split())
@@ -298,6 +302,7 @@ def add_compact_memory_conclusion(
     titles = {
         "planning_brief": "Planning Brief",
         "teaching_patterns": "Teaching Patterns",
+        "teaching_framework_adjustments": "Teaching Framework Adjustments",
     }
     path = memory_paths(store, class_id)[key]
     text = store.read_text(path)

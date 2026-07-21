@@ -19,10 +19,11 @@ follow the local README closest to the code you are changing.
 - `agent_learning_guide.md` - optional learning/reference notes.
 - `student_learning_copilot_v2.md` - researched V2 expansion note for a
   student-facing formative learning copilot with separate student memory.
-- `mem_v3/` - current memory-capture, ledger, sweep, testing, and
-  input-reconciliation design notes.
-- `mem_v2/` - historical Memory V2 design, backend/frontend maps, tests,
-  traces, and bug reports.
+- `mem_v4/` - **active** memory design, evaluation policy, and live-eval
+  ledger. Start at `mem_v4/README.md` for the current admission, Sweep, and
+  teacher-approval contracts.
+- `mem_v2/` and `mem_v3/` - historical reference material only. They retain
+  implementation evidence; active behavior must not depend on them.
 
 Use `../implementation_plans/` for the backlog and concrete implementation
 plans only.
@@ -64,7 +65,14 @@ plans only.
 - Memory scope or loading changes should update `memory_hierarchy.md` and/or
   `context_management.md`.
 - Current memory-capture, Memory Sweep, or wiki/input reconciliation changes
-  should update `mem_v3/`; `mem_v2/` is historical background.
+  should update `mem_v4/` and its live-eval ledger; MemV2/MemV3 are historical
+  background only.
+- Workflow-specific executive verification changes should update
+  `agent_contracts.md`, `agent_architecture.md`, and the relevant entry in
+  `../implementation_plans/product_backlog.md`.
+- Browser-visible beta acceptance work should use the sanitized fresh-sandbox
+  manifests described in
+  `superpowers/specs/2026-07-20-browser-workflow-runbook-design.md`.
 - Workflow draft persistence, background-turn, or frontend draft-store changes
   should update `agent_contracts.md` and the frontend READMEs under
   `../frontend/` (especially `src/features/README.md`).

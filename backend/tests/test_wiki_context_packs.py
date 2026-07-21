@@ -37,16 +37,20 @@ def test_plan_context_slim_trace_names_context_contributors():
     assert "Top misconceptions" in names
     assert "Recent lessons" in names
     assert "Subject guide: chemie" in names
+    assert "Curriculum profile" in names
+    assert "Trusted source index" in names
     assert "Class memory: planning_brief.md" in names
     assert "Class memory: teaching_patterns.md" in names
     assert "Class memory: copilot_profile.md" in names
     assert "Class memory: session_summaries.md" in names
     assert "Common lesson patterns" in trace["text"]
+    assert "by-lehrplanplus-chemie-9-ntg" in trace["text"]
+    assert "Atombau und Periodensystem" not in trace["text"]
     assert all("function" in section for section in trace["sections"])
     assert all("source" in section for section in trace["sections"])
 
 
-def test_active_class_core_includes_all_memory_md_files_and_only_active_subject(tmp_path):
+def test_active_class_core_includes_class_memory_but_not_the_subject_layer(tmp_path):
     shutil.copytree(SEED_WIKI, tmp_path, dirs_exist_ok=True)
     wiki = WikiStore(root=tmp_path)
     other_subject = tmp_path / "wiki" / "subjects" / "mathe.md"
@@ -66,10 +70,11 @@ def test_active_class_core_includes_all_memory_md_files_and_only_active_subject(
     expected_memory_sources = {
         wiki.rel_wiki(path)
         for path in (tmp_path / "wiki" / "classes" / CLASS_ID / "memory").glob("*.md")
+        if path.name != "teaching_framework_adjustments.md"
     }
 
     assert expected_memory_sources <= included_sources
-    assert "Subject guide: chemie" in [section["name"] for section in trace["sections"]]
+    assert "Subject guide: chemie" not in [section["name"] for section in trace["sections"]]
     assert "This subject guide must not be loaded for Chemie." not in trace["text"]
 
 
@@ -101,7 +106,7 @@ def test_teacher_and_active_class_core_are_separate_layers():
 
     assert "Teacher Profile" in teacher["text"]
     assert "Teacher Profile" not in core["text"]
-    assert "Subject guide: chemie" in core["text"]
+    assert "Subject guide: chemie" not in core["text"]
     assert "Class Copilot Profile" in core["text"]
     assert "Session Summaries" in core["text"]
 

@@ -51,8 +51,8 @@ export function MarkdownLineDiff({
   const lines = computeMarkdownDiff(before, after);
 
   return (
-    <div className={cn("flex min-h-0 flex-col", className)}>
-      <div className="mb-2 flex items-center gap-2">
+    <div className={cn("flex min-h-0 flex-col overflow-hidden", className)}>
+      <div className="mb-2 flex shrink-0 items-center gap-2">
         <p
           className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
           title={path}
@@ -72,8 +72,13 @@ export function MarkdownLineDiff({
           </Button>
         ) : null}
       </div>
-      <ScrollArea className="min-h-0 flex-1 rounded-md border border-border bg-card">
-        <div className="min-h-[8rem]">
+      {/*
+        Parent must supply a bounded height (e.g. h-56 / max-h-*). Without
+        overflow-hidden + a real height, flex-1 ScrollArea grows with content
+        and the in-chat review card blows past the thread viewport.
+      */}
+      <ScrollArea className="h-full min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-card">
+        <div>
           {lines.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">No changes.</p>
           ) : (

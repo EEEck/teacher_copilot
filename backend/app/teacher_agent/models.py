@@ -65,7 +65,12 @@ class IngestTurnOutput(BaseModel):
 
 class PlanTurnOutput(BaseModel):
     reply: str = Field(description="Conversational reply to the teacher")
-    plan_markdown: str = Field(description="Updated full lesson plan markdown")
+    plan_markdown: str = Field(
+        description=(
+            "Updated complete lesson package Markdown. Use the canonical Teacher Lesson "
+            "Plan, Student Materials, and Observation and Update Capture sections."
+        )
+    )
     last_change_summary: str = Field(
         default="", description="One-line summary of what changed in the plan this turn"
     )
@@ -242,6 +247,14 @@ class MemoryConsolidationOpOutput(BaseModel):
             "delete removes the referenced obsolete bullet (prefer update when a "
             "claim supersedes it); none records that current memory already covers "
             "the claim or it is not worth writing."
+        ),
+    )
+    sweep_action: str = Field(
+        default="",
+        description=(
+            "Second-judge recommendation: promote, merge, already_covered, "
+            "downgrade, reject, or needs_review. Leave blank only for backward "
+            "compatibility; the backend derives the safe default from operation."
         ),
     )
     target: str = Field(description="Memory file the operation applies to.")

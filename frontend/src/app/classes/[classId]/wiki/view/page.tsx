@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { MarkdownPreview } from "@/components/klassenpilot/markdown-preview";
@@ -85,6 +85,14 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
 }
 
 export default function WikiViewPage() {
+  return (
+    <Suspense fallback={<p className="p-6 text-muted-foreground">Loading wiki…</p>}>
+      <WikiViewPageContent />
+    </Suspense>
+  );
+}
+
+function WikiViewPageContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();

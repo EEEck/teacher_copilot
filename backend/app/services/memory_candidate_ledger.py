@@ -86,6 +86,17 @@ class MemoryCandidateRow:
     # not sessions — retries and bursts about the same lesson are one
     # occasion. Empty = no anchor; the gate falls back to 6h time buckets.
     occasion_key: str = ""
+    # Mem V4 semantic/provenance fields. Legacy rows receive safe defaults
+    # during migration and are treated as unverified by later review.
+    scope: str = "unknown"
+    scope_label: str = ""
+    origin_kind: str = ""
+    origin_turn_index: int = 0
+    origin_message_hash: str = ""
+    quote_fingerprint: str = ""
+    admission: str = ""
+    admission_reason_codes: list[str] = field(default_factory=list)
+    capture_batch_id: str = ""
 
     @classmethod
     def from_sqlite(cls, row: sqlite3.Row) -> "MemoryCandidateRow":
@@ -96,6 +107,13 @@ class MemoryCandidateRow:
             refs = []
         if not isinstance(refs, list):
             refs = []
+        reason_raw = row["admission_reason_codes_json"] if "admission_reason_codes_json" in row.keys() else "[]"
+        try:
+            reason_codes = json.loads(reason_raw or "[]")
+        except json.JSONDecodeError:
+            reason_codes = []
+        if not isinstance(reason_codes, list):
+            reason_codes = []
         return cls(
             id=row["id"],
             created_at=row["created_at"],
@@ -125,6 +143,15 @@ class MemoryCandidateRow:
                 row["occasion_key"] if "occasion_key" in row.keys() else ""
             )
             or "",
+            scope=(row["scope"] if "scope" in row.keys() else "unknown") or "unknown",
+            scope_label=(row["scope_label"] if "scope_label" in row.keys() else "") or "",
+            origin_kind=(row["origin_kind"] if "origin_kind" in row.keys() else "") or "",
+            origin_turn_index=int(row["origin_turn_index"] if "origin_turn_index" in row.keys() else 0) or 0,
+            origin_message_hash=(row["origin_message_hash"] if "origin_message_hash" in row.keys() else "") or "",
+            quote_fingerprint=(row["quote_fingerprint"] if "quote_fingerprint" in row.keys() else "") or "",
+            admission=(row["admission"] if "admission" in row.keys() else "") or "",
+            admission_reason_codes=[str(item) for item in reason_codes if str(item).strip()],
+            capture_batch_id=(row["capture_batch_id"] if "capture_batch_id" in row.keys() else "") or "",
         )
 
 
@@ -170,6 +197,15 @@ class MemoryCandidateLedger:
             self._ensure_column(conn, "snoozed_until", "TEXT")
             self._ensure_column(conn, "fast_lane", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(conn, "occasion_key", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "scope", "TEXT NOT NULL DEFAULT 'unknown'")
+            self._ensure_column(conn, "scope_label", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "origin_kind", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "origin_turn_index", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "origin_message_hash", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "quote_fingerprint", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "admission", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "admission_reason_codes_json", "TEXT NOT NULL DEFAULT '[]'")
+            self._ensure_column(conn, "capture_batch_id", "TEXT NOT NULL DEFAULT ''")
             self._backfill_snoozed_until(conn)
             conn.execute(
                 """
@@ -202,14 +238,19 @@ class MemoryCandidateLedger:
                   candidate_update, evidence_summary, evidence_refs_json,
                   source, basis, confidence, cluster_key, status, promoted_at,
                   review_batch_id, rejection_reason, snoozed_until, fast_lane,
-                  occasion_key
+                  occasion_key, scope, scope_label, origin_kind,
+                  origin_turn_index, origin_message_hash, quote_fingerprint,
+                  admission, admission_reason_codes_json, capture_batch_id
                 ) VALUES (
                   :id, :created_at, :updated_at, :class_id, :subject,
                   :workflow, :session_id, :turn_index, :channel, :target,
                   :section, :candidate_update, :evidence_summary,
                   :evidence_refs_json, :source, :basis, :confidence,
                   :cluster_key, :status, :promoted_at, :review_batch_id,
-                  :rejection_reason, :snoozed_until, :fast_lane, :occasion_key
+                  :rejection_reason, :snoozed_until, :fast_lane, :occasion_key,
+                  :scope, :scope_label, :origin_kind, :origin_turn_index,
+                  :origin_message_hash, :quote_fingerprint, :admission,
+                  :admission_reason_codes_json, :capture_batch_id
                 )
                 ON CONFLICT(id) DO NOTHING
                 """,
@@ -417,6 +458,15 @@ class MemoryCandidateLedger:
             "snoozed_until": candidate.snoozed_until,
             "fast_lane": int(candidate.fast_lane),
             "occasion_key": candidate.occasion_key or "",
+            "scope": candidate.scope or "unknown",
+            "scope_label": candidate.scope_label or "",
+            "origin_kind": candidate.origin_kind or "",
+            "origin_turn_index": int(candidate.origin_turn_index or 0),
+            "origin_message_hash": candidate.origin_message_hash or "",
+            "quote_fingerprint": candidate.quote_fingerprint or "",
+            "admission": candidate.admission or "",
+            "admission_reason_codes_json": json.dumps(candidate.admission_reason_codes),
+            "capture_batch_id": candidate.capture_batch_id or "",
         }
 
     @staticmethod
@@ -465,9 +515,17 @@ def rows_from_runtime_candidates(
         if not is_supported_runtime_target(raw_target):
             continue
         target = canonical_memory_target(raw_target)
+        # A turn-scoped item is useful as an in-turn signal but is explicitly
+        # not durable memory. Drop it at the ledger boundary rather than
+        # relying on a later Sweep decision to undo persistence.
+        scope = (_field(candidate, "scope") or "unknown").strip().lower()
+        if scope == "turn":
+            continue
         # Mem V3: normalize free-form LLM section names onto the fixed
         # per-target vocabulary before cluster keys are derived.
         section = normalize_section(target, _field(candidate, "section") or "General")
+        scope = (_field(candidate, "scope") or "unknown").strip().lower()
+        scope_label = " ".join(_field(candidate, "scope_label").split())
         source = _field(candidate, "source") or "inferred_from_session"
         basis = _field(candidate, "basis") or "inferred"
         confidence = _field(candidate, "confidence") or "low"
@@ -475,13 +533,18 @@ def rows_from_runtime_candidates(
         channel = memory_channel_for_target(target)
         row_class_id = None if is_global_teacher_target(target) else class_id
         row_subject = subject if channel == "subject_concept" else None
-        cluster_key = _cluster_key(row_class_id, subject, target, section, update)
+        cluster_key = _cluster_key(
+            row_class_id, subject, target, section, update, scope=scope, scope_label=scope_label
+        )
+        origin_message_hash = _field(candidate, "origin_message_hash")
+        capture_batch_id = _field(candidate, "capture_batch_id")
         row_id = _row_id(
             workflow=workflow,
             session_id=session_id,
             target=target,
             section=section,
             update=update,
+            origin_message_hash=origin_message_hash,
         )
         rows.append(
             MemoryCandidateRow(
@@ -506,6 +569,15 @@ def rows_from_runtime_candidates(
                 status="captured",
                 fast_lane=bool(getattr(candidate, "fast_lane", False)),
                 occasion_key=occasion_key,
+                scope=scope,
+                scope_label=scope_label,
+                origin_kind=_field(candidate, "origin_kind"),
+                origin_turn_index=int(getattr(candidate, "origin_turn_index", 0) or 0),
+                origin_message_hash=origin_message_hash,
+                quote_fingerprint=_field(candidate, "quote_fingerprint"),
+                admission=_field(candidate, "admission"),
+                admission_reason_codes=_list_field(candidate, "admission_reason_codes"),
+                capture_batch_id=capture_batch_id,
             )
         )
     return rows
@@ -549,16 +621,18 @@ def _row_id(
     target: str,
     section: str,
     update: str,
+    origin_message_hash: str = "",
 ) -> str:
-    raw = "|".join(
-        [
-            workflow.strip().lower(),
-            session_id.strip(),
-            target.strip().lower(),
-            section.strip().lower(),
-            update.strip().lower(),
-        ]
-    )
+    parts = [
+        workflow.strip().lower(),
+        session_id.strip(),
+        target.strip().lower(),
+        section.strip().lower(),
+        update.strip().lower(),
+    ]
+    if origin_message_hash.strip():
+        parts.append(origin_message_hash.strip().lower())
+    raw = "|".join(parts)
     return "cand_" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
@@ -568,6 +642,9 @@ def _cluster_key(
     target: str,
     section: str,
     update: str,
+    *,
+    scope: str = "unknown",
+    scope_label: str = "",
 ) -> str:
     scope = class_id or subject or "global"
     digest = hashlib.sha256(update.strip().lower().encode("utf-8")).hexdigest()[:12]
@@ -577,6 +654,8 @@ def _cluster_key(
             scope.strip().lower().replace("/", "_"),
             target.strip().lower().replace("/", "_"),
             section.strip().lower().replace(" ", "_"),
+            scope.strip().lower().replace(" ", "_"),
+            scope_label.strip().lower().replace(" ", "_") if scope_label.strip() else "",
             digest,
         )
         if part
@@ -642,6 +721,14 @@ def _content_similarity(a: frozenset[str], b: frozenset[str]) -> float:
 
 
 def _same_scope(a: MemoryCandidateRow, b: MemoryCandidateRow) -> bool:
+    if a.scope != b.scope and a.scope != "unknown" and b.scope != "unknown":
+        return False
+    if (
+        a.scope_label
+        and b.scope_label
+        and a.scope_label.casefold() != b.scope_label.casefold()
+    ):
+        return False
     if is_global_teacher_target(a.target):
         return True
     return (a.class_id or a.subject or "global") == (
@@ -722,11 +809,18 @@ def insert_with_folding(
         elif row.status == "rejected" and rejected_match is None:
             rejected_match = row
         elif row.status in OPEN_STATUSES:
-            same_session = (
-                candidate.session_id is not None
+            same_batch = bool(
+                candidate.capture_batch_id
+                and row.capture_batch_id
+                and candidate.capture_batch_id == row.capture_batch_id
+            )
+            legacy_same_session = (
+                not candidate.capture_batch_id
+                and not row.capture_batch_id
+                and candidate.session_id is not None
                 and row.session_id == candidate.session_id
             )
-            if exact and same_session and open_exact is None:
+            if exact and (same_batch or legacy_same_session) and open_exact is None:
                 open_exact = row
             elif open_near is None:
                 open_near = row

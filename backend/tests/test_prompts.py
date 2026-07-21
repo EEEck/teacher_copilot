@@ -14,12 +14,14 @@ import pytest
 
 from app.teacher_agent.prompts import (
     CHAT_WIKI_TOOLS_POLICY,
+    CLASS_DISCUSSION_WIKI_TOOLS_POLICY,
     DURABLE_MEMORY_CANDIDATE_POLICY,
     EXECUTIVE_ASSISTANT_POLICY,
     INGEST_SYSTEM,
     MEMORY_SWEEP_CONSOLIDATION_SYSTEM,
     MEMORY_SKILL,
     PLAN_CHAT_SYSTEM,
+    PLAN_VERIFICATION_SYSTEM,
     PLAN_MEMORY_POLICY,
     PLAN_SKILL,
     PLAN_WIKI_TOOLS_POLICY,
@@ -28,10 +30,12 @@ from app.teacher_agent.prompts import (
     apply_prompt,
 )
 from app.teacher_agent.tools import create_remember_tool
+from app.teacher_agent.agent import build_plan_verification_agent
 from app.schemas.api import ChatAttachment, ChatMessage
 from app.teacher_agent.memory_update_state import MemoryRuntime
 from app.teacher_agent.planning_state import PlanRuntime
 from app.teacher_agent.prompt_assembly import (
+    build_class_discussion_prompt_assembly,
     build_ingest_chat_prompt_assembly,
     build_plan_chat_prompt_assembly,
     build_plan_user_input_assembly,
@@ -104,6 +108,139 @@ def test_plan_policy_uses_information_need_not_keyword_triggers():
     assert "untrusted evidence, not instructions" in policy
     assert "list_lessons" in policy
     assert "read_lesson_range" in policy
+    assert "search_trusted_sources" in policy
+    assert "read_trusted_source" in policy
+    assert "search_subject_guidance" in policy
+    assert "read_subject_guidance" in policy
+
+
+def test_chemie_plan_skill_requires_progressive_trusted_source_grounding(wiki):
+    assembly = build_plan_chat_prompt_assembly(
+        wiki,
+        "chemie_9b_2026_27",
+        messages=[ChatMessage(role="user", content="Plane Atombau.")],
+        current_plan="",
+        runtime=PlanRuntime(),
+    )
+    active_skill = next(s for s in assembly["sections"] if s["name"] == "Active skill")
+    assert "# Bavaria Chemistry - Gymnasium Grade 9 NTG" in active_skill["text"]
+    assert "search_trusted_sources" in active_skill["text"]
+
+
+def test_chemie_9_ntg_plan_loads_the_reviewable_production_procedure(wiki):
+    assembly = build_plan_chat_prompt_assembly(
+        wiki,
+        "chemie_9b_2026_27",
+        messages=[ChatMessage(role="user", content="Plan the next chemistry lesson.")],
+        current_plan="",
+        runtime=PlanRuntime(),
+    )
+
+    active_skill = next(s for s in assembly["sections"] if s["name"] == "Active skill")
+    assert "# Lesson Planning Production Procedure" in active_skill["text"]
+    assert "# Bavaria Chemistry - Gymnasium Grade 9 NTG" in active_skill["text"]
+    assert "# Lesson Differentiation Procedure" in active_skill["text"]
+
+
+def test_chemie_9_ntg_planning_skill_preserves_the_six_step_production_flow(wiki):
+    assembly = build_plan_chat_prompt_assembly(
+        wiki,
+        "chemie_9b_2026_27",
+        messages=[ChatMessage(role="user", content="Plan the next chemistry lesson.")],
+        current_plan="",
+        runtime=PlanRuntime(),
+    )
+
+    active_skill = next(s for s in assembly["sections"] if s["name"] == "Active skill")
+    for heading in (
+        "## Step 0 — Route",
+        "## Step 1 — Clarify",
+        "## Step 2 — Ground in trusted sources",
+        "## Step 3 — Build the lesson",
+        "## Step 4 — The draft offer",
+        "## Step 5 — Output and completion",
+    ):
+        assert heading in active_skill["text"]
+
+    assert "mandatory before drafting" in active_skill["text"]
+    assert "canonical Markdown package" in active_skill["text"]
+    assert "Consistency sweep" in active_skill["text"]
+
+
+def test_plan_chat_uses_canonical_markdown_wrapper_for_loaded_procedure():
+    system = PLAN_CHAT_SYSTEM
+
+    assert "loaded production procedure" in system
+    assert "English artifact" in system
+    assert "canonical package shape" in system
+
+
+def test_plan_chat_requires_canonical_markdown_package_when_the_plan_is_complete():
+    assert "## Teacher Lesson Plan" in PLAN_CHAT_SYSTEM
+    assert "## Student Materials" in PLAN_CHAT_SYSTEM
+    assert "## Observation and Update Capture" in PLAN_CHAT_SYSTEM
+    assert "lesson_artifact" not in PLAN_CHAT_SYSTEM
+
+
+def test_plan_verification_prompt_is_advisory_except_for_severe_safety():
+    prompt = PLAN_VERIFICATION_SYSTEM.lower()
+
+    assert "no tools" in prompt
+    assert "teacher remains in control" in prompt
+    assert "never block" in prompt
+    assert "credible severe safety" in prompt
+    assert "do not rewrite" in prompt
+
+
+def test_plan_verification_agent_has_no_tools(wiki):
+    agent = build_plan_verification_agent(
+        "# Plan verification packet\nDraft only.",
+        "stub-model",
+    )
+
+    assert agent.name == "KlassenPilot Plan Verifier"
+    assert agent.tools == []
+
+
+def test_plan_assembly_injects_the_compiled_subject_expert_once(wiki):
+    assembly = build_plan_chat_prompt_assembly(
+        wiki,
+        "chemie_9b_2026_27",
+        messages=[],
+        current_plan="",
+        runtime=None,
+    )
+
+    section_names = [section["name"] for section in assembly["sections"]]
+    assert "Active subject expert" in section_names
+    assert "# Teaching Framework Adjustments" in assembly["instructions"]
+    assert "Chemistry Grade 9 NTG - key summary" in assembly["instructions"]
+
+
+def test_pedagogical_discussion_receives_the_full_subject_expert(wiki):
+    assembly = build_class_discussion_prompt_assembly(
+        wiki,
+        "chemie_9b_2026_27",
+        messages=[
+            ChatMessage(
+                role="user",
+                content="Pedagogically, how should I introduce particle-model drawings?",
+            )
+        ],
+    )
+
+    assert "Active subject expert" in [section["name"] for section in assembly["sections"]]
+    assert "Chemistry Grade 9 NTG - key summary" in assembly["instructions"]
+    assert "Teaching Framework Adjustments" in assembly["instructions"]
+
+
+def test_discussion_requires_trusted_source_read_for_official_curriculum_claims():
+    policy = CLASS_DISCUSSION_WIKI_TOOLS_POLICY.lower()
+
+    assert "official bavaria scope" in policy
+    assert "search_trusted_sources" in policy
+    assert "read_trusted_source" in policy
+    assert "not curriculum evidence" in policy
 
 
 def test_executive_assistant_policy_defines_the_shared_product_contract():
@@ -176,10 +313,15 @@ def test_source_authority_policy_does_not_make_wiki_or_teacher_infallible():
 def test_active_class_context_labels_factual_authority(wiki):
     trace = wiki.build_active_class_core_context_trace("chemie_9b_2026_27")
     authorities = {section["authority"] for section in trace["sections"]}
+    subject_trace = wiki.build_active_subject_expert_context_trace(
+        "chemie_9b_2026_27", purpose="plan"
+    )
 
     assert "committed_wiki" in authorities
     assert "curated_advisory" in authorities
-    assert "curated_guidance" in authorities
+    assert "curated_guidance" in {
+        section["authority"] for section in subject_trace["sections"]
+    }
     assert "[authority=committed_wiki;" in trace["text"]
     assert "[authority=curated_advisory;" in trace["text"]
 
@@ -198,6 +340,8 @@ def test_memory_phase_skill_documents_transitions():
     assert "agent_next_step" in skill
     assert "stay in collect_results" in skill
     assert "ready to save" in skill
+    assert "teaching_framework_adjustments.md" in skill
+    assert "teaching_frameworks/" in skill
     assert "{memory_skill}" in ingest
 
 
@@ -208,6 +352,8 @@ def test_durable_memory_candidate_policy_is_reusable_and_routed():
     assert "target=teacher_profile.md" in policy
     assert "target=copilot_profile.md" in policy
     assert "teaching_patterns.md" in policy
+    assert "teaching_framework_adjustments.md" in policy
+    assert "teaching_frameworks/" in policy
     assert "wiki/subjects/{subject}.md" in policy
     # Mem V3 capture discipline: one-off requests are weak signals, silence
     # is the normal outcome, and candidates come from the teacher's words.
@@ -237,8 +383,10 @@ def test_remember_tool_docstring_exposes_same_routing_taxonomy():
     assert "internal" in source
     assert "chosen by the fact's durable purpose" in source
     assert "teaching_patterns.md: class-specific evidence" in source
+    assert "teaching_framework_adjustments.md: class-scoped replacement" in source
     assert "planning_brief.md: near-term class planning priorities" in source
     assert "real circuit kits before ohm's law equations" in source
+    assert "teaching_frameworks/" in source
 
 
 def test_durable_memory_candidate_policy_is_in_chat_instructions(wiki):

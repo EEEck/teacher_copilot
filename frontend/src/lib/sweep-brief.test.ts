@@ -38,20 +38,52 @@ function candidate(
 }
 
 describe("sweepBriefRows", () => {
-  it("pins explicit asks first, then new, changed, removed", () => {
+  it("pins explicit asks first, then new, changed, removed, student summaries last", () => {
     const rows = sweepBriefRows([
       candidate({ card_id: "c_removed", operation: "already_covered", can_apply: false }),
       candidate({ card_id: "c_changed", operation: "adjust" }),
       candidate({ card_id: "c_new", operation: "add" }),
       candidate({ card_id: "c_explicit", operation: "add", group_label: "explicit_ask" }),
+      candidate({
+        card_id: "c_student_summary",
+        operation: "adjust",
+        section: "Student Summary",
+        target: "students/S-014.md",
+        candidate_id: "student_summary:chemie_9b:S-014",
+        candidate_ids: ["student_summary:chemie_9b:S-014"],
+      }),
     ]);
     expect(rows.map((r) => r.section)).toEqual([
       "explicit",
       "new",
       "changed",
       "removed",
+      "student_summary",
     ]);
     expect(rows[0].key).toBe("c_explicit");
+    expect(rows[4].key).toBe("c_student_summary");
+  });
+
+  it("keeps student summary adjusts out of the generic changed bucket", () => {
+    const rows = sweepBriefRows([
+      candidate({
+        card_id: "c_pattern",
+        operation: "adjust",
+        target: "teaching_patterns.md",
+        section: "Group learning",
+      }),
+      candidate({
+        card_id: "c_summary",
+        operation: "adjust",
+        target: "students/S-021.md",
+        section: "Student Summary",
+        candidate_id: "student_summary:chemie_9b:S-021",
+      }),
+    ]);
+    expect(rows.map((r) => ({ key: r.key, section: r.section }))).toEqual([
+      { key: "c_pattern", section: "changed" },
+      { key: "c_summary", section: "student_summary" },
+    ]);
   });
 
   it("routes needs_decision and reject_low_signal into the removed bucket", () => {

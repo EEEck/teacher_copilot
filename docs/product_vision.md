@@ -74,7 +74,12 @@ The app has five product layers.
 
 4. **Trusted source layer**
    Uploaded teacher materials and allowlisted external sources can enrich plans
-   and resources, but they stay source-labeled and teacher-reviewable.
+   and resources, but they stay source-labeled and teacher-reviewable. For the
+   Chemie 9 NTG beta, planning also uses an adapted open K–12 lesson procedure
+   (Anthropic skills, Apache-2.0; not a live plug-in), LehrplanPLUS/KMK as
+   provenance-bearing curriculum sources, and immutable shared teaching
+   frameworks (class overrides only via `teaching_framework_adjustments.md`).
+   Frameworks are curated pedagogy, not legal curriculum text.
 
 5. **Low-friction capture**
    Longer term, voice memo and messaging capture should make it easy to log
@@ -93,8 +98,15 @@ KlassenPilot uses a tiered memory model.
   Derived pages under `wiki/classes/{class_id}/memory/`:
   `planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and
   `session_summaries.md`. (Current unit / taught sequence is derived from the
-  canonical `course_state.md` / `timeline.md` rollups; mem_v3 PR2 retired the
+  canonical `course_state.md` / `timeline.md` rollups; the retired
   `class_state.md` / `taught_so_far.md` twins.)
+
+- **Inherited subject expert**
+  Shared reviewed subject/grade frameworks remain immutable library knowledge.
+  Prompt assembly selects the subject, grade, and branch base and combines it
+  in memory with `teaching_framework_adjustments.md`. Only the dedicated
+  adjustment page is teacher-editable through approval; no generated profile
+  file or mutable copy of the Grade 9 summary exists.
 
 - **Workflow context packs**
   Read-only packs for base class chat, lesson planning, memory update, review,
@@ -149,9 +161,14 @@ history, artifact correctness, or an important instructional assumption.
 The copilot should behave like a careful teaching colleague with access to the
 class notebook.
 
-- On class entry, it starts from the base class context.
-- For planning, it loads recent lessons, compact memory, teaching patterns,
-  open loops, planning preferences, and relevant source material.
+- On class entry, it starts from the base context: global teacher profile,
+  active class core, compact subject/grade/branch routing, and workflow state.
+- For planning, it adds the active subject expert (compact subject guide,
+  immutable grade/branch key summary, class adjustment page, and trusted-source
+  TOC), then reads detailed framework/source pages only when needed.
+- For memory update, it keeps only subject identity/routing by default so the
+  workflow records what happened rather than receiving unnecessary
+  lesson-design guidance.
 - For memory update, it loads the previous lesson, logging conventions, compact
   memory, student index excerpt, and open loops.
 - For broad topic requests, it uses deterministic `search_memory` as a
@@ -181,7 +198,7 @@ line between class memory and external sources.
   (Upcoming / Add results / Done) with matching CTAs.
 - Create lesson plan with read-only wiki access.
 - Compact memory compaction and profile proposal/apply endpoints.
-- Memory V3 candidate capture, ledger folding/gating, and teacher-reviewed
+- MemV4 candidate capture, ledger folding/gating, and teacher-reviewed
   Memory Sweep brief with backend-owned saved review sessions.
 - Deterministic source-bearing wiki retrieval.
 - Query packs for planning, ingest, and review.

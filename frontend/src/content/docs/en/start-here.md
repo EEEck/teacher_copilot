@@ -29,7 +29,16 @@ KlassenPilot is not a blank chatbot. It combines four pieces:
 >
 > Nothing becomes durable class memory until you review and approve it.
 
-For more detail, see [How the Copilot Works](/docs/how-it-works).
+### How lesson plans are grounded
+
+Planning for the beta Chemie class is not “generic AI lesson text.” It combines:
+
+1. **Your class notebook** — what this class has been taught, open loops, misconceptions, and preferences.
+2. **An adapted open K–12 planning procedure** — based on Anthropic’s open lesson-planning and differentiation skills (Apache-2.0). Adapted into KlassenPilot; **not** a live Anthropic plug-in.
+3. **LehrplanPLUS / KMK trusted sources** — official curriculum provenance. The planner should open the relevant section before making official curriculum claims.
+4. **Teaching frameworks** — curated pedagogy summaries for Chemie 9 NTG (shared frameworks also cover Chemie 8/9 NTG). These are **not** legal curriculum text. Class overrides go in a small teacher-approved adjustments page; the shared frameworks stay immutable.
+
+For the fuller breakdown (frameworks vs LehrplanPLUS vs class memory), see [How the Copilot Works](/docs/how-it-works#curriculum-grounding-chemie-9-ntg).
 
 ## What the beta tests
 
@@ -72,14 +81,14 @@ KlassenPilot helps with the work around teaching.
 In this beta, it has two main jobs:
 
 1. **Plan lessons from class context**
-   It uses the class notebook, recent lesson sequence, open loops, and teacher preferences to draft a practical next lesson.
+   It uses the class notebook, recent lesson sequence, open loops, and teacher preferences to draft a practical next lesson — grounded for Chemie 9 NTG via the adapted K–12 procedure, LehrplanPLUS/KMK sources, and curated teaching frameworks (see above).
 
 2. **Update class reality**
    It helps capture what actually happened: what was covered, what students struggled with, what needs follow-up, and what should shape the next plan.
 
 Over time, this should create a class record that becomes more useful every week.
 
-Coming later: assessment generation, material adaptation, trusted external resources, voice or message capture, report drafts, and broader teaching logistics.
+Coming later: assessment generation, material adaptation, broader trusted-source search beyond the Chemie 9 NTG allow-list, voice or message capture, report drafts, and broader teaching logistics.
 
 ## What it is not
 

@@ -17,6 +17,8 @@ from . import (
     registry,
     rollups,
     search,
+    subject_frameworks,
+    trusted_sources,
 )
 
 
@@ -77,6 +79,39 @@ class WikiStore:
 
     def search_wiki(self, class_id, query, max_results=15):
         return search.search_wiki(self, class_id, query, max_results)
+
+    def load_trusted_sources(self):
+        return trusted_sources.load_trusted_sources(self.root)
+
+    def get_curriculum_profile(self, class_id):
+        return trusted_sources.load_curriculum_profile(self.root, class_id)
+
+    def list_trusted_sources(self, class_id, scope="all"):
+        return trusted_sources.list_sources_for_class(self.root, class_id, scope)
+
+    def search_trusted_sources(self, class_id, query, scope="all", max_results=8):
+        return trusted_sources.search_sources_for_class(
+            self.root, class_id, query, scope, max_results
+        )
+
+    def read_trusted_source(self, class_id, source_id, section_id="", max_chars=12000):
+        return trusted_sources.read_source_for_class(
+            self.root, class_id, source_id, section_id, max_chars
+        )
+
+    def load_framework_index(self, subject):
+        return subject_frameworks.load_framework_index(self, subject)
+
+    def select_framework(self, subject, grade, branch):
+        return subject_frameworks.select_framework(self, subject, grade, branch)
+
+    def search_subject_guidance(self, class_id, query, max_results=8):
+        return subject_frameworks.search_subject_guidance(
+            self, class_id, query, max_results
+        )
+
+    def read_subject_guidance(self, class_id, path):
+        return subject_frameworks.read_subject_guidance(self, class_id, path)
 
     def is_class_memory_path(self, class_id, relative_path):
         return search.is_class_memory_path(self, class_id, relative_path)
@@ -181,6 +216,19 @@ class WikiStore:
     def build_active_class_core_context_trace(self, class_id):
         return context_packs.build_active_class_core_context_trace(self, class_id)
 
+    def build_subject_knowledge_trace(self, class_id, *, purpose):
+        return context_packs.build_subject_knowledge_trace(self, class_id, purpose=purpose)
+
+    def build_active_subject_expert_context_trace(self, class_id, *, purpose):
+        return context_packs.build_active_subject_expert_context_trace(
+            self, class_id, purpose=purpose
+        )
+
+    def build_base_assistant_context_trace(self, class_id, *, purpose):
+        return context_packs.build_base_assistant_context_trace(
+            self, class_id, purpose=purpose
+        )
+
     def build_ingest_task_context_trace(self, class_id):
         return context_packs.build_ingest_task_context_trace(self, class_id)
 
@@ -230,6 +278,9 @@ class WikiStore:
 
     def extract_title(self, text):
         return parsing.extract_title(text)
+
+    def normalize_plan_target_date(self, markdown, lesson_date):
+        return parsing.normalize_plan_target_date(markdown, lesson_date)
 
     def extract_date_from_diary(self, text):
         return parsing.extract_date_from_diary(text)

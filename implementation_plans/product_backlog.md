@@ -50,6 +50,18 @@ Shipped:
 Known PM gaps:
 
 - Class home is useful but not yet proactive.
+- **V1.0 Discuss task-anchor and response discipline:** Discuss may briefly
+  engage a teacher's personal aside when it helps rapport or reveals a
+  preference, but must answer it concisely and actively return to the current
+  class/lesson task. Avoid open-ended topic drift such as an extended game chat
+  that displaces the teacher's classroom goal. Add focused trace/eval cases for
+  personal-aside -> one-sentence response -> task-return behavior.
+- **V1.0 development reasoning trace hygiene:** Raw development reasoning can
+  expose the model debating optional structured-output fields (for example,
+  whether to omit an empty `state_patch`). Preserve the diagnostic signal, but
+  make the output contract unambiguous and avoid duplicate/noisy reasoning
+  events. Verify that an empty patch is valid when no class-discussion state
+  should change; production stream sanitization remains unchanged.
 - Evidence is mostly embedded in agent output, not first-class UI metadata.
 - Wiki viewer is functional but not a teacher-friendly memory explorer.
 - Memory compaction/profile learning exists but is only partly productized.
@@ -68,11 +80,43 @@ assessment generation.
 
 Primary items:
 
+Status update (2026-07-20): the lightweight runtime Plan verification pack is
+implemented: immediate deterministic package/source/timing checks plus a
+bounded no-tools economy-model report after draft generation. It is advisory
+except for a credible completed severe-safety hold. Update Memory now also has
+a deterministic roster/target integrity pack at every draft edit and final
+write boundary; it blocks malformed or unknown `S-###` IDs, name-style student
+labels, and confirmed-target date mismatches without rewriting the diary. The
+remaining quality-review item is the offline/batch DeepEval calibration over
+retained beta artifacts; the next workflow packs are Discuss and Class Brief.
+
+### Active beta follow-up queue (2026-07-20)
+
+These are the next bounded tasks from live beta testing. Keep each one as a
+separate implementation slice; they are intentionally not a reason to expand
+the product surface.
+
+| Priority | Task | Scope and acceptance |
+|---|---|---|
+| P0 | **Chat-turn resilience** | Close the remaining frontend notifier/hydration race: a backend-complete turn must always clear the local pending state and merge the final reply. Add focused notifier integration coverage. Use the [browser workflow runbook](../docs/superpowers/specs/2026-07-20-browser-workflow-runbook-design.md) for a fresh-sandbox Plan, Discuss, and Update Memory acceptance pass. |
+| P0 | **Input-to-wiki reconciliation** | Treat committed wiki identity facts as the baseline. When a diary changes or removes an unknown/mismatched student ID, retain the conflict for an explicit teacher correction rather than silently normalizing it away. Cover roster mismatch -> correction -> recovery, plus removal-on-revise/tombstone behavior. |
+| P0 | **Date awareness** | Add the current date and the planned-versus-taught rule to the compact teacher context used by Plan, Update Memory, and Sweep. Freeze time in prompt-assembly tests. |
+| P1 | **MemV4 capture admission/routing** | Turn the live-eval ledger's known gaps M4-LIVE-02 through M4-LIVE-05 into behavior: scoped Chemistry preferences, instruction/evidence decomposition, no accidental global preference leakage, and no uncertain durable candidates. Own this as one backend slice because the cases share capture/routing policy. |
+| P1 | **Offline plan-quality calibration** | Run an adapted Bavaria Chemie 9 NTG P/R/O/M rubric over retained beta plan artifacts using DeepEval/LLM-as-judge. Store operator-only results; do not add user latency, hidden rewriting, or a new live save gate. |
+| P1 | **Generic plan empty state** | Replace the legacy pre-filled `Lesson Plan — Next lesson` shell with a class-agnostic empty state that explains that a plan package appears after a teacher request. |
+| P2 | **Reopen saved plan** | Implement the already-scoped `lessonDate` session-start hint so a saved plan can be refined in chat instead of regenerated. |
+| P2 | **Documentation consolidation** | Execute the MemV4 consolidation specification and reconcile stale historical references, particularly generated class profiles and inactive structured lesson artifacts. |
+
+Explicitly deferred: Docling runtime ingestion, document/figure rendering,
+source-panel UI, broader Discuss/Class Brief verification packs, and class-home
+expansion. They do not block the beta memory -> plan loop.
+
 | Item | Engineering notes |
 |---|---|
 | **Evidence/source panel** | Surface source metadata for class memory used in plans and memory updates. Start with class wiki sources and raw refs already captured by runtime state. |
 | **Class-home briefing v1** | Add a compact class brief: recent lessons, open loops, sparse areas, and likely next move. Read-only; no suggested-task persistence yet. |
-| **Plan quality review** | Lightweight post-generation sanity pass: duration, lesson phases, citations, open loops, misconceptions, and teacher constraints. |
+| **Plan quality review** | Keep deterministic runtime sanity checks (duration, lesson phases, citations, open loops, misconceptions, and teacher constraints). Add a later **DeepEval / LLM-as-judge shadow framework** over retained beta lesson artifacts: score an adapted Anthropic-style P/R/O/M rubric, store criterion-level pass/fail evidence in operator telemetry, and use failures to improve prompts, source contracts, and deterministic guards. Start offline/batch only; do not add latency, hidden rewriting, or a teacher-facing runtime gate. Adapt US science criteria to Bavaria Chemie 9 NTG (LehrplanPLUS provenance and scope, observation → model → explanation, representation limits, shared evidence task, and no lowered scientific demand). Consider a transparent runtime “needs teacher decision” check only after beta calibration proves it useful. |
+| **Workflow-specific executive verification packs** | Keep one shared `ExecutiveRuntime`. Shipped: Plan scope/provenance review and Update Memory target/roster integrity. Next: advisory Discuss grounding and operational Class Brief freshness packs. `scope_unverified` remains advisory-only: generate and save the plan, but ask the teacher to confirm an intentional curriculum extension. Do not build topic-specific organic-chemistry/quantum rules or expose raw source/prompt bodies. |
 | **Test / exam generation** | New artifact workflow using `ArtifactSpec`; ground in taught sequence, misconceptions, and assessment readiness. Include answer key/rubric where useful. |
 | **Visible memory/profile suggestions** | Productize the existing profile-proposal/apply flow so the teacher sees "copilot learned this" suggestions after save. |
 | **Input-vs-wiki reconciliation v1** | Treat the committed wiki as baseline. Start with deterministic roster/name mismatch detection, model-written clarification, explicit teacher confirmation for new/changed students, and removal-on-revise tombstone handling. |
@@ -83,6 +127,7 @@ Primary items:
 | **Operator beta runbook** | Daily report generation, wiki-diff review, tester feedback notes, backup/export, and retention cleanup. Keep this CLI/docs-first unless a dashboard becomes clearly necessary. |
 | **Multi-worker / session hydrate docs** | Document single-worker-per-wiki assumption for local/HITL stacks; note that durable drafts + executive JSON survive restart, while in-memory session caches in `deps.py` are not multi-worker safe without sticky routing or always-hydrate-from-draft-store. |
 | **Workflow-drafts page slim-down** | Finish the plan/memory page extraction onto the shared artifact-session shell: runtime adapter registry, shared discard/bootstrap helpers, thinner commit/review workspaces. Unblocks adding exam/status workflows without copying 400–800 LOC pages. |
+| **Generic plan empty state** | Replace the legacy pre-filled lesson-plan shell with a class-agnostic empty artifact state. It must explain that a plan package appears after a teacher request and never imply that generic phases/goals have been generated. |
 | **Memory Sweep stale-diff hardening** | See incident **MSW-001** below. Launch patched with `.get()`; v1.1 fingerprint-first stale gate. |
 
 Non-goals:
@@ -192,7 +237,8 @@ Primary items:
 
 | Item | Engineering notes |
 |---|---|
-| **Trusted search tool** | Bounded search/read over allowlisted sources: PhET, Wikipedia, official curriculum pages, reputable education sites, and approved news/source categories. |
+| **Trusted source layer (Bavaria Chemistry pilot)** | Initial deterministic source library is done: class allow-list, compact source TOC/profile, progressive list/search/read tools, provenance capture, and seed extracts for LehrplanPLUS NTG 8/9, Fachprofil, and KMK AHR Chemistry. Broaden only after teacher validation; this is not open-web search. |
+| **Trusted search tool** | Future bounded search/read over allowlisted sources: PhET, Wikipedia, official curriculum pages, reputable education sites, and approved news/source categories. |
 | **Resource adaptation workflow** | Return adaptation notes, links, risks, and classroom fit; never auto-insert external facts into wiki memory. |
 | **Source cards** | Show external source, class memory, and uploaded-material provenance in one evidence UI. |
 | **Subject teaching-practice library v1** | Start narrow with chemistry: common misconceptions, diagnostic questions, safe experiments, activity formats, and assessment templates. |

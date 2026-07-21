@@ -43,12 +43,6 @@ STARTUP_CLASS_SLICE_SECTIONS: tuple[SectionExpectation, ...] = (
     SectionExpectation("Top misconceptions", content_markers=("ion charge", "oxidation number")),
     SectionExpectation("Recent lessons", content_markers=("2026-05-25", "Redox")),
     SectionExpectation(
-        "Subject guide",
-        aliases=("Subject guide: chemie",),
-        content_markers=("Confusing oxidation number with ionic charge",),
-        source_path="wiki/subjects/chemie.md",
-    ),
-    SectionExpectation(
         "Planning brief",
         aliases=("Class memory: planning_brief.md",),
         content_markers=("Distinguish ion charge from oxidation number",),
@@ -65,6 +59,42 @@ STARTUP_CLASS_SLICE_SECTIONS: tuple[SectionExpectation, ...] = (
         aliases=("Class memory: class_state.md",),
         required=False,
         source_path="memory/class_state.md",
+    ),
+)
+
+# Subject guidance is a first-class, purpose-aware layer.  It must not be
+# duplicated inside the Active Class Core, which is reserved for compact class
+# facts and class memory.  Plan chat receives this full layer; Update Memory
+# receives routing only and therefore intentionally does not use this tuple.
+STARTUP_ACTIVE_SUBJECT_EXPERT_SECTIONS: tuple[SectionExpectation, ...] = (
+    SectionExpectation(
+        "Subject route",
+        content_markers=("Subject route: chemie | Grade: 9 | Branch: NTG",),
+        source_path="wiki/classes/chemie_9b_2026_27/curriculum_profile.md",
+    ),
+    SectionExpectation(
+        "Subject guide",
+        aliases=("Subject guide: chemie",),
+        content_markers=("Oxidation number is not the same as ionic charge",),
+        source_path="wiki/subjects/chemie.md",
+    ),
+    SectionExpectation(
+        "Selected teaching framework",
+        content_markers=("Begin from an observable substance-level question",),
+        source_path="wiki/subjects/chemie/teaching_frameworks/09/key_summary.md",
+    ),
+    SectionExpectation(
+        "Class teaching framework adjustments",
+        content_markers=("Teacher-approved refinements",),
+        source_path=(
+            "wiki/classes/chemie_9b_2026_27/memory/"
+            "teaching_framework_adjustments.md"
+        ),
+    ),
+    SectionExpectation(
+        "Trusted source index",
+        content_markers=("by-lehrplanplus-chemie-9-ntg",),
+        source_path="wiki/sources/bayern/lehrplanplus/index.md",
     ),
 )
 
@@ -89,6 +119,7 @@ STARTUP_PROMPT_SECTIONS: tuple[str, ...] = (
     "Memory policy",
     "Teacher layer",
     "Active class core",
+    "Active subject expert",
     "Session state",
     "Lesson planning state",
     "Current lesson artifact",

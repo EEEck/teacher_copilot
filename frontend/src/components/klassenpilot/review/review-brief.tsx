@@ -94,7 +94,7 @@ function BriefItemRow({
               disabled={disabled || entry.required}
               title={
                 entry.required
-                  ? "The lesson results are required to save memory"
+                  ? "This change is required and can't be skipped"
                   : "Don't save this change"
               }
             >
@@ -119,7 +119,7 @@ function BriefItemRow({
             path={item.path}
             before={item.before}
             after={item.after}
-            className="max-h-56"
+            className="h-56"
           />
           {onEdit && (
             <Button
@@ -215,7 +215,7 @@ export function ReviewBrief({
             {saving ? (
               <>
                 <LoaderCircleIcon className="animate-spin" />
-                Saving…
+                Reviewing approved changes and saving…
               </>
             ) : (
               `Save ${approvedCount === entries.length ? "all" : "selected"} (${approvedCount})`

@@ -47,6 +47,16 @@ class LoginResult:
     expires_at: str
 
 
+@dataclass(frozen=True)
+class TesterProfileView:
+    display_name: str
+    profile_complete: bool
+    member_since: str
+    feedback_notes: int
+    workflow_sessions: int
+    wiki_commits: int
+
+
 class BetaStorage:
     def __init__(self, db_path: Path) -> None:
         self.db_path = Path(db_path)
@@ -62,6 +72,7 @@ class BetaStorage:
                     invite_hash text not null,
                     role text not null default 'tester',
                     disabled integer not null default 0,
+                    profile_completed_at text,
                     created_at text not null,
                     updated_at text not null
                 );
@@ -156,8 +167,28 @@ class BetaStorage:
                     diff_text text not null,
                     foreign key(commit_id) references wiki_commit(commit_id)
                 );
+
+                create table if not exists memory_v4_debug_trace (
+                    trace_id text primary key,
+                    timestamp text not null,
+                    tester_id text not null,
+                    workspace_id text not null,
+                    class_id text not null,
+                    session_id text,
+                    workflow text not null,
+                    turn_index integer,
+                    bundle_path text not null
+                );
                 """
             )
+            self._migrate_tester_schema(conn)
+
+    def _migrate_tester_schema(self, conn: sqlite3.Connection) -> None:
+        columns = {
+            row[1] for row in conn.execute("pragma table_info(tester)").fetchall()
+        }
+        if "profile_completed_at" not in columns:
+            conn.execute("alter table tester add column profile_completed_at text")
 
 
 class BetaTelemetry(BetaStorage):
@@ -562,3 +593,64 @@ class BetaAuthService(BetaStorage):
                 "update auth_session set revoked_at = ? where token_hash = ?",
                 (_utc_now(), _hash_secret(session_token)),
             )
+
+    def get_tester_profile(self, tester_id: str) -> TesterProfileView:
+        self.initialize()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                select display_label, profile_completed_at, created_at
+                from tester
+                where tester_id = ?
+                """,
+                (tester_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError("Unknown beta tester")
+            feedback_notes = conn.execute(
+                """
+                select count(*) from event
+                where tester_id = ? and type = 'teacher_feedback'
+                """,
+                (tester_id,),
+            ).fetchone()[0]
+            workflow_sessions = conn.execute(
+                "select count(*) from app_session where tester_id = ?",
+                (tester_id,),
+            ).fetchone()[0]
+            wiki_commits = conn.execute(
+                "select count(*) from wiki_commit where tester_id = ?",
+                (tester_id,),
+            ).fetchone()[0]
+        return TesterProfileView(
+            display_name=str(row["display_label"] or ""),
+            profile_complete=bool(row["profile_completed_at"]),
+            member_since=str(row["created_at"]),
+            feedback_notes=int(feedback_notes),
+            workflow_sessions=int(workflow_sessions),
+            wiki_commits=int(wiki_commits),
+        )
+
+    def update_tester_profile(
+        self, tester_id: str, display_name: str
+    ) -> TesterProfileView:
+        name = display_name.strip()
+        if not name:
+            raise ValueError("display_name is required")
+        if len(name) > 80:
+            raise ValueError("display_name too long")
+        self.initialize()
+        now = _utc_now()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                """
+                update tester
+                set display_label = ?, profile_completed_at = ?, updated_at = ?
+                where tester_id = ?
+                """,
+                (name, now, now, tester_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError("Unknown beta tester")
+        return self.get_tester_profile(tester_id)

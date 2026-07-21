@@ -18,10 +18,24 @@ class BetaLoginRequest(BaseModel):
     invite_code: str
 
 
+class BetaProfileStats(BaseModel):
+    feedback_notes: int = 0
+    workflow_sessions: int = 0
+    wiki_commits: int = 0
+
+
 class BetaIdentityResponse(BaseModel):
     tester_id: str
     workspace_id: str
     role: str
+    display_name: str = ""
+    profile_complete: bool = False
+    member_since: str | None = None
+    stats: BetaProfileStats | None = None
+
+
+class BetaProfileUpdateRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=80)
 
 
 class BetaFeedbackRequest(BaseModel):
@@ -154,7 +168,11 @@ class MemorySweepCandidate(BaseModel):
     replaces_content: str = ""
     status_recommendation: Literal[
         "promote",
+        "merge",
         "already_covered",
+        "downgrade",
+        "reject",
+        "needs_review",
         "needs_decision",
         "reject_low_signal",
     ] = "promote"
@@ -254,6 +272,29 @@ class MemorySweepReviewResponse(BaseModel):
     decisions: list[MemorySweepDecision] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     error: str = ""
+
+
+ActiveWorkKind = Literal["draft_turn", "memory_sweep"]
+
+
+class ActiveWorkItem(BaseModel):
+    """One job the backend is running right now, for any class."""
+
+    kind: ActiveWorkKind
+    class_id: str
+    # draft_turn only:
+    mode: str = ""  # "ingest" | "plan" | "discuss"
+    draft_id: str = ""
+    session_id: str = ""
+    lesson_date: str = ""
+    lesson_title: str = ""
+    # memory_sweep only:
+    review_id: str = ""
+    updated_at: str = ""
+
+
+class ActiveWorkResponse(BaseModel):
+    items: list[ActiveWorkItem] = Field(default_factory=list)
 
 
 class TimelineEntry(BaseModel):
@@ -557,6 +598,7 @@ class PlanDraft(BaseModel):
     latest_turn_complete: bool = True
     messages: list[ChatMessage] = Field(default_factory=list)
     plan_markdown: str
+    executive_state: dict = Field(default_factory=dict)
 
 
 class PlanChatRequest(BaseModel):

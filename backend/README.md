@@ -39,7 +39,7 @@ chat/utility on `gpt-5.4-mini` and only the sweep on `gpt-5.5`**. `MODEL_PROFILE
 is unset by default and derives from `APP_ENV` (production→production, else
 economy). `OPENAI_REASONING_EFFORT` optionally overrides the CHAT effort only.
 
-Note (mem_v3 PR4): durable capture is an explicit
+Durable capture is an explicit
 `remember(target, content, speech_act, quote, routing_reason)` tool call in the
 chat turn. The live judge eval showed the cheaper tier under-emits and calls
 tools unreliably, so live agent evals force the production profile by default;
@@ -63,9 +63,10 @@ drafts; the start-session endpoints reopen the active draft for that workflow
 identity.
 
 The frontend still keeps only convenience state locally: unsent composer text
-keyed by `draft_id`, non-authoritative review UI cache, and session markers for
-durable background jobs (`pending-chat-turns`, including Memory Sweep
-generation). Plan/Update Memory chat mirrors drafts through
+keyed by `draft_id` and a non-authoritative review UI cache. Durable background
+jobs (including Memory Sweep generation) are reported by
+`GET /api/workflow/active` and surfaced by `PendingTurnNotifier`. Plan/Update
+Memory chat mirrors drafts through
 `frontend/src/features/workflow-drafts/`. Teacher-approved commit/save routes
 validate the expected artifact revision/hash and use the backend-stored artifact
 for draft-aware clients.
@@ -92,6 +93,34 @@ workflow runtime object. Planning uses `PlanRuntime`; Update Memory uses
 runtime dump/load, prompt trace, stream, final-event, and trace-contract hooks
 instead of adding mode-specific branches or workflow-local stores to the session
 core.
+
+## Executive verification and subject grounding
+
+Every Plan and Update Memory artifact session carries a shared
+`ExecutiveRuntime`, separate from its planning or memory runtime. It stores
+revision-bound findings and readiness state; it never silently edits the
+teacher's Markdown.
+
+- **Plan:** deterministic route/source/timing/package checks are immediate. A
+  bounded no-tools review follows after the Markdown draft is returned. Scope,
+  pedagogy, and teacher-preference observations are advisory; only a completed
+  severe-safety hold for the exact draft blocks saving.
+- **Update Memory:** deterministic integrity checks run on diary edits and
+  immediately before proposal/commit. A confirmed target-date mismatch or a
+  malformed, unknown, or name-style student label blocks the write until the
+  teacher corrects it. The pack never invents a replacement ID or rewrites the
+  diary.
+- **Context:** Plan receives the active subject expert (`chemie.md`, immutable
+  Grade 9 NTG key summary, class adjustment page, and trusted-source TOC) and
+  discovers detailed framework/source pages with typed tools. Pedagogical
+  Discuss receives that layer only when relevant; Update Memory does not get
+  detailed framework text by default.
+
+Full prompt assembly, consulted-source provenance, and verification state are
+available only through trace/debug endpoints with `AGENT_TRACE_ENABLED=true`.
+They are not general application logs or teacher-facing output. See
+[`../docs/agent_contracts.md`](../docs/agent_contracts.md) and
+[`../docs/context_management.md`](../docs/context_management.md).
 
 ## Beta identity, telemetry, and workspace roots
 
@@ -339,7 +368,7 @@ that contract.
 
 The class wiki includes compact memory pages under `wiki/classes/{class_id}/memory/`:
 `planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and `session_summaries.md`.
-(`class_state.md` / `taught_so_far.md` were retired in mem_v3 PR2 — current unit
+(`class_state.md` / `taught_so_far.md` are retired — current unit
 and taught sequence are derived from the canonical `course_state.md` /
 `timeline.md` rollups, so every such fact has one home.)
 
@@ -348,7 +377,7 @@ artifact/runtime state. `search_memory` is the deterministic pathfinder; use
 `read_memory_page` or `read_lesson_range` when the snippet is not enough.
 
 Durable memory is captured through the explicit `remember(...)` tool the model
-calls when the teacher gives a standing instruction (mem_v3 PR4); every memory
+calls when the teacher gives a standing instruction; every memory
 write goes through one typed contract (`app/services/memory_skills.py`).
 
 The committed wiki is the baseline for factual continuity. If teacher input
@@ -386,7 +415,7 @@ $env:RUN_LIVE_AGENT_EVALS="1"
 .\.venv\Scripts\python -m pytest tests/evals/test_klassenpilot_chat_live.py -v
 ```
 
-Focused Memory V3 live capture and wiki-reconciliation checks:
+Focused MemV4 live capture and wiki-reconciliation checks:
 
 ```powershell
 $env:RUN_LIVE_AGENT_EVALS="1"

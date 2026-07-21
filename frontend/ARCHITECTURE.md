@@ -33,7 +33,7 @@ app/pages  →  klassenpilot shells  →  assistant-ui Thread
 | Domain UI | `src/components/klassenpilot/` | Timeline, dock, review, pending box | Raw Thread primitives |
 | Chat UI | `src/components/assistant-ui/` | Thread, markdown, reasoning (registry) | Mode-specific bootstrap |
 | Workflow feature | `src/features/workflow-drafts/` | Draft store, turn state, chat runtime adapter | Page layout |
-| Lib | `src/lib/` | API, SSE, pending-chat-turns, wiki links | React trees |
+| Lib | `src/lib/` | API, SSE, running-jobs, wiki links | React trees |
 | Primitives | `src/components/ui/` | Button, Card, Input (design system) | Product copy |
 
 ## Zustand vs assistant-ui
@@ -47,26 +47,40 @@ app/pages  →  klassenpilot shells  →  assistant-ui Thread
   reasoning/tool parts are **client-session** overlays (MVP hybrid). Hard
   refresh will not restore Reasoning UI; turn flags + plain reply still resume.
 
-## Chat turn lifecycle (shared)
+## Chat turn lifecycle (runner-lite)
 
-Module: [`workflow-turn-state.ts`](src/features/workflow-drafts/workflow-turn-state.ts)
+Design: `docs/beta_readiness_audit_2026-07-13.md` §A.1 (when present) and this
+port plan: `docs/superpowers/plans/2026-07-20-port-streaming-d1-d4.md`.
 
-Phases: `idle` → `streaming` → (`backend_running` | `complete` | `failed`)
+- SSE owner: [`turn-runner.ts`](src/features/workflow-drafts/turn-runner.ts) —
+  a module-level runner outside React. Navigation never touches a running
+  turn; only the composer Stop button aborts the client stream.
+- Turn phases live on the store (`turnByDraftId`):
+  `streaming` → (`settled` | `awaiting_backend` → `settled`).
+  `awaiting_backend` = Stop or a dropped connection while the backend may
+  still finish; the store's snapshot reducer (`upsert`) merges the final
+  reply when the completed draft arrives.
+- Every backend snapshot (bootstrap, notifier poll) goes through
+  `upsert`; thread handling is decided purely from (phase, snapshot) — see the
+  reducer table in `workflow-draft-store.ts`.
 
 Expected product behavior (all of plan / ingest / discuss):
 
 1. On page while streaming: show reasoning + tool calls.
-2. Leave and return in the same browser session while backend still running:
-   keep already-streamed rich parts; show **Still working on your response…**.
-3. When final arrives: spinner clears; reply visible.
+2. Leave and return in the same browser session: the runner keeps streaming —
+   rich parts continue advancing; if the client stream ended (Stop/drop), show
+   **Still working on your response…** until the reducer merges the reply.
+3. When the turn finishes: spinner clears; reply visible.
 
 UI mapping: [`workflow-turn-activity.ts`](src/features/workflow-drafts/workflow-turn-activity.ts)
-→ Thread `isRunning` vs resumed spinner.
+→ Thread `isRunning` vs resumed spinner, fed from the store phase.
 
-Runtime owner: [`artifact-session-runtime.tsx`](src/components/assistant-ui/artifact-session-runtime.tsx)
-(`onNew` + SSE). Shells must not clear `turnInProgress` ad hoc.
+Intent dispatcher: [`artifact-session-runtime.tsx`](src/components/assistant-ui/artifact-session-runtime.tsx)
+(`onNew` → `runTurn`, `onCancel` → `cancelTurn`; owns the page-local artifact
+editor). Shells must not clear `turnInProgress` ad hoc.
 
-**MVP non-goal:** backend persistence/replay of reasoning/tool traces.
+**MVP non-goal:** backend persistence/replay of reasoning/tool traces (hard
+refresh resumes with plain reply + turn flags).
 
 ## How to add a chat mode
 
@@ -76,8 +90,8 @@ Runtime owner: [`artifact-session-runtime.tsx`](src/components/assistant-ui/arti
    `discuss-thread.tsx`).
 4. Shell: either `ArtifactSessionPage` + workspace (artifact workflows) or a
    chrome-only dock (`discuss-dock.tsx`) with a fixed-height Thread parent.
-5. Ensure `pending-chat-turns` accepts the mode and `pendingTurnWorkflowHref`
-   returns the right resume URL.
+5. Ensure `running-jobs.ts` accepts the mode and `runningJobHref` returns the
+   right resume URL.
 6. **Never** fork Thread or invent a textarea chat.
 
 ## Shells
@@ -99,8 +113,9 @@ dashboard, not a second product surface. Layout is three titled sections
    Page title formats `chemie_9b_2026_27` → **Chemie 9b** with subtitle
    `2026/27 · STEM track` (or Language track). At a glance keeps 2×2 with a
    shortened unit label and larger metric type. Brief merges **Watch**
-   (misconceptions first, then brief watch items; max 3). Upcoming uses mock
-   dates (`class-home-mock-dates.ts`); notes are localStorage
+   (misconceptions first, then brief watch items; max 3). Upcoming shows an
+   honest empty state ("No key dates yet") until a real dates source exists
+   (assessment calendar is a later backlog item); notes are localStorage
    (`kp:class-notes:{classId}` via `class-home-notes.ts`) — browser-local only.
 2. **Actions** — dismissible `StickyNote` + compact equal-width row
    (`inline-grid` + `auto-cols-[1fr]`, sized to the widest label; `size="lg"`).
@@ -124,20 +139,58 @@ Discuss dock stays page chrome (FAB). App chrome: header hamburger opens Docs +
 Settings (`/settings` is a placeholder). Do not add a feature kanban or
 wiki-backed todos here without an explicit product decision.
 
-## Pending jobs
+## Running jobs
 
-- Markers: `src/lib/pending-chat-turns.ts` (includes `discuss`).
-- Notifier: `PendingTurnNotifier` polls drafts and upserts the draft store.
+The backend is the source of truth for what is running — the client keeps no
+sessionStorage turn markers. `PendingTurnNotifier` polls `GET /api/workflow/active`
+(draft turns across all classes + generating memory sweeps) every 3s while the
+tab is visible and focused.
+
+- Notifier: `pending-turn-notifier.tsx`. When a job leaves the active list it
+  fetches that draft once, `upsert`s it, and toasts — unless the draft is the
+  one on screen (`mountedDraftId`). `markTurnNotified(draftId, revision)` makes
+  the toast fire exactly once even if two polls race.
+- Union: `src/lib/running-jobs.ts` merges poll items with this tab's live
+  runners, so a turn shows the instant it is sent and a short turn that starts
+  and finishes between polls is still visible. Local labels win (they carry the
+  resolved lesson date/title).
 - Running box: `running-tasks-box.tsx` (bottom-left); discuss FAB is bottom-right.
+
+## In-thread workflow activity and review layout
+
+Non-message workflow activity belongs in the same transcript flow as the
+teacher conversation. `ThreadActivity` composes shared activity chrome around
+Plan verification, Plan save (`ReviewBrief`), and Update Memory's save-review
+brief; it is not a second chat window and must not introduce an independent
+scroll region. Plan save must not use the workspace `reviewFileList` slot —
+that path is reserved for legacy layout only; Plan matches Memory by mounting
+`ReviewBrief` as in-chat activity.
+
+Memory Sweep’s Simple brief (`lib/sweep-brief.ts`) groups cards as: Explicitly
+requested, New memory, Changed (old → new), Already covered / not worth keeping,
+and a separate last bucket **Student summary updates** — not mixed into Changed.
+
+`ArtifactSessionWorkspace` keeps a selected review diff pinned above that
+transcript. The diff owns 70% of the left workspace and scrolls internally;
+the remaining 30% is the normal Thread/composer viewport. This applies to any
+selected review file, not only `lesson_results.md`.
+
+The backend `WorkflowDraft` remains the source of truth for artifact/review
+state. The frontend's activity card explains current work but never authorizes
+a write or substitutes for a final draft/revision refresh.
 
 ## Testing chat turns
 
-Deterministic Vitest (no OpenAI / browser). The matrix is **3 workflows × 2 cases**:
+Deterministic Vitest (no OpenAI / browser). The scenarios drive the REAL
+runner + store with controllable fake SSE streams — **3 workflows × 8
+scenarios** (stay, leave-mid-turn, hard refresh, Stop, dropped stream,
+fail-before-content, duplicate send, discard-mid-turn). Key cases:
 
 | Case | Meaning | Expected observations |
 |---|---|---|
-| **1 — Stay on page** | Live SSE until final | Stop button while streaming; no “Still working…”; final reply visible; spinner off |
-| **2 — Leave mid-turn** | Abort/unmount SSE; backend finishes | Rich reasoning/tools kept; “Still working…”; notifier upsert merges final reply; spinner off |
+| **Stay on page** | Live SSE until final | Stop button while streaming; no “Still working…”; final reply visible; spinner off |
+| **Leave mid-turn** | Runner keeps streaming (no abort) | Thread keeps advancing after unmount; final lands without any upsert; later flat upserts can't flatten the settled thread |
+| **Stop / dropped stream** | Client stream ends; backend finishes | “Still working…”; reducer merges the reply into rich parts; spinner off |
 
 Workflows: `plan`, `ingest` (Update Memory), `discuss`.
 
@@ -152,11 +205,10 @@ Related unit coverage:
 
 | File | Covers |
 |---|---|
-| [`chat-turn-scenarios.test.ts`](src/features/workflow-drafts/chat-turn-scenarios.test.ts) | 6 scenario observations (matrix above) |
-| [`workflow-turn-state.test.ts`](src/features/workflow-drafts/workflow-turn-state.test.ts) | Phase → flags (streaming / backend_running / complete) |
+| [`chat-turn-scenarios.test.ts`](src/features/workflow-drafts/chat-turn-scenarios.test.ts) | Runner-driven scenario observations (matrix above) |
 | [`workflow-turn-activity.test.ts`](src/features/workflow-drafts/workflow-turn-activity.test.ts) | Stop vs Still-working mapping |
-| [`workflow-draft-store.test.ts`](src/features/workflow-drafts/workflow-draft-store.test.ts) | Keep rich thread; merge final reply after leave/return |
-| [`pending-chat-turns.test.ts`](src/lib/pending-chat-turns.test.ts) | Pending markers + discuss resume href |
+| [`workflow-draft-store.test.ts`](src/features/workflow-drafts/workflow-draft-store.test.ts) | Snapshot reducer rows, turn actions, meta preservation, selector stability |
+| [`running-jobs.test.ts`](src/lib/running-jobs.test.ts) | Running-box union (poll ∪ local turns) + resume hrefs |
 | [`thread-background-status.test.ts`](src/components/assistant-ui/thread-background-status.test.ts) | Still-working banner copy |
 
 Broader frontend check:
@@ -169,6 +221,10 @@ npx vitest run
 
 HITL against Docker is optional for real-model confidence; the Vitest matrix is the
 regression gate for the two cases.
+
+For a full fresh-sandbox beta acceptance pass, use the browser/trace/ledger
+scenario design in
+[`docs/superpowers/specs/2026-07-20-browser-workflow-runbook-design.md`](../docs/superpowers/specs/2026-07-20-browser-workflow-runbook-design.md).
 
 Incident write-up (races, stuck Still-working, fixes):  
 [`docs/chat_message_issue.md`](../docs/chat_message_issue.md).

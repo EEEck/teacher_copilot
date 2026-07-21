@@ -13,6 +13,7 @@ COPILOT_PROFILE_TARGETS = {"copilot.md", "copilot_profile.md"}
 COMPACT_TARGETS = {
     "planning_brief.md": "planning_brief",
     "teaching_patterns.md": "teaching_patterns",
+    "teaching_framework_adjustments.md": "teaching_framework_adjustments",
 }
 CANONICAL_REVIEW_TARGET = "canonical_wiki"
 TARGET_ALIASES = {

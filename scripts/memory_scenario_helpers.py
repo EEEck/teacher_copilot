@@ -125,6 +125,33 @@ def parse_sse_events(body: str) -> list[dict[str, Any]]:
     return events
 
 
+def reasoning_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return raw reasoning events from a local development SSE parse."""
+    return [
+        event
+        for event in events
+        if event.get("type") in {"reasoning_delta", "reasoning"}
+    ]
+
+
+def reasoning_text(events: list[dict[str, Any]]) -> str:
+    """Concatenate raw reasoning text for a developer-only trace artifact."""
+    return "".join(str(event.get("text") or "") for event in reasoning_events(events))
+
+
+def write_reasoning_artifacts(
+    run_dir: pathlib.Path,
+    prefix: str,
+    sse_body: str,
+) -> list[dict[str, Any]]:
+    """Write raw local reasoning artifacts extracted from one SSE response."""
+    events = parse_sse_events(sse_body)
+    raw_reasoning = reasoning_events(events)
+    write_json(run_dir / f"{prefix}-reasoning.json", raw_reasoning)
+    write_text(run_dir / f"{prefix}-reasoning.txt", reasoning_text(events))
+    return raw_reasoning
+
+
 def final_sse_event(body: str) -> dict[str, Any]:
     final: dict[str, Any] = {}
     for event in parse_sse_events(body):

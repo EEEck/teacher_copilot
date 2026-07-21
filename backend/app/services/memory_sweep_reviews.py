@@ -121,6 +121,25 @@ class MemorySweepReviewStore:
             ).fetchone()
         return MemorySweepReviewRecord.from_sqlite(row) if row is not None else None
 
+    def list_generating(
+        self, *, workspace_id: str = "local"
+    ) -> list[MemorySweepReviewRecord]:
+        """Sweep reviews currently generating, across all classes.
+
+        Backs the active-work query the frontend polls (a generating sweep is
+        running work, like an in-progress draft turn).
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM memory_sweep_review
+                WHERE workspace_id = ? AND status = 'generating'
+                ORDER BY updated_at DESC
+                """,
+                (workspace_id,),
+            ).fetchall()
+        return [MemorySweepReviewRecord.from_sqlite(row) for row in rows]
+
     def get(self, review_id: str) -> MemorySweepReviewRecord:
         with self._connect() as conn:
             row = conn.execute(

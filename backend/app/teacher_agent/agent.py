@@ -35,11 +35,13 @@ from app.teacher_agent.prompts import (
     MEMORY_SWEEP_CONSOLIDATION_SYSTEM,
     PROFILE_PROPOSAL_SYSTEM,
     PLAN_OPENING_SYSTEM,
+    PLAN_VERIFICATION_SYSTEM,
     PLAN_SYSTEM,
     WRITE_VERIFICATION_SYSTEM,
     apply_prompt,
     TEACHER_AGENT_SECURITY_POLICY,
 )
+from app.teacher_agent.plan_verification import PlanVerificationJudgement
 from app.context_limits import apply_char_limit, get_context_limits
 from app.teacher_agent.tools import (
     WikiToolContext,
@@ -191,6 +193,26 @@ def build_write_verification_agent(
         **_reasoning(reasoning_effort, model),
         tools=create_chat_wiki_tools(ctx),
         output_type=WriteVerificationOutput,
+    )
+
+
+def build_plan_verification_agent(
+    verification_packet: str,
+    model: str,
+    *,
+    reasoning_effort: str = "low",
+) -> Agent:
+    """Create the short no-tools pedagogical reviewer for one plan draft."""
+    return Agent(
+        name="KlassenPilot Plan Verifier",
+        instructions=apply_prompt(
+            PLAN_VERIFICATION_SYSTEM,
+            verification_packet=verification_packet,
+        ),
+        model=model,
+        **_reasoning(reasoning_effort, model),
+        tools=[],
+        output_type=PlanVerificationJudgement,
     )
 
 

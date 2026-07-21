@@ -34,6 +34,10 @@ Routes should be thin adapters over services and wiki facades.
   explicit commit/apply endpoints.
 - Memory Sweep UI state should go through the saved review endpoints. The
   backend review snapshot is authoritative; frontend caches are visual only.
+- Sweep cards expose the second judge's semantic recommendation separately
+  from the write operation: `promote`, `merge`, `already_covered`, `downgrade`,
+  `reject`, or `needs_review`. Only teacher decisions sent through the saved
+  review apply endpoint can change ledger status or wiki files.
 - Debug endpoints that expose prompts, raw tool output, or messages should be
   gated by settings.
 
@@ -42,4 +46,4 @@ Routes should be thin adapters over services and wiki facades.
 - `../services/README.md`
 - `../../README.md`
 - `../../../docs/agent_contracts.md`
-- `../../../docs/mem_v2/backend.md`
+- `../../../docs/mem_v4/README.md`

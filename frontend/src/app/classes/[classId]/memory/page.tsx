@@ -540,7 +540,30 @@ function MemoryWorkspace({
         <MemoryTargetStatus />
       </div>
       <ArtifactSessionWorkspace
-        thread={<IngestThread />}
+        thread={
+          <IngestThread
+            activity={
+              shouldShowReviewBrief({
+                inReview,
+                alreadyCommitted: !!commitResult,
+                itemCount: reviewItems.length,
+              }) ? (
+                <ReviewBrief
+                  items={reviewItems}
+                  selectedPath={selectedPath ?? reviewItems[0]?.path ?? null}
+                  onSelectPath={selectFile}
+                  onSetApproved={setApproved}
+                  onUndoAll={undoAll}
+                  onKeepAll={keepAll}
+                  onSave={commit}
+                  saving={reviewActionsDisabled}
+                  actionsDisabled={reviewActionsDisabled}
+                  saveDisabled={reviewSaveDisabled}
+                />
+              ) : null
+            }
+          />
+        }
         draftPanel={draftPanel}
         footer={
           !inReview ? (
@@ -579,28 +602,8 @@ function MemoryWorkspace({
               path={selectedChange.path}
               before={selectedChange.before}
               after={selectedChange.after}
-              className="h-full min-h-[12rem]"
+              className="h-full min-h-0"
               onDismiss={() => setEditingWiki(false)}
-            />
-          ) : null
-        }
-        reviewFileList={
-          shouldShowReviewBrief({
-            inReview,
-            alreadyCommitted: !!commitResult,
-            itemCount: reviewItems.length,
-          }) ? (
-            <ReviewBrief
-              items={reviewItems}
-              selectedPath={selectedPath ?? reviewItems[0]?.path ?? null}
-              onSelectPath={selectFile}
-              onSetApproved={setApproved}
-              onUndoAll={undoAll}
-              onKeepAll={keepAll}
-              onSave={commit}
-              saving={reviewActionsDisabled}
-              actionsDisabled={reviewActionsDisabled}
-              saveDisabled={reviewSaveDisabled}
             />
           ) : null
         }

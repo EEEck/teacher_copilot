@@ -16,6 +16,7 @@ from app.teacher_agent.executive_verification import (
     VerificationCategory,
 )
 from app.teacher_agent.memory_update_state import MemoryRuntime
+from app.teacher_agent.planning_state import PlanRuntime
 from app.teacher_agent.wiki.search import ReferenceQuery
 from app.teacher_agent.wiki_store import WikiStore
 
@@ -55,6 +56,7 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
         target: str,
         content: str,
         speech_act: str,
+        scope: str,
         quote: str,
         routing_reason: str,
     ) -> str:
@@ -70,11 +72,17 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
             target: where it belongs — teacher_profile.md (how to communicate
                 with the teacher), copilot_profile.md (how to plan for this
                 class), teaching_patterns.md (how this class learns),
-                planning_brief.md (current planning priorities), or
-                wiki/subjects/<subject>.md (subject-wide guidance).
+                teaching_framework_adjustments.md (class overrides of shared
+                subject/grade frameworks), planning_brief.md (current planning
+                priorities), or wiki/subjects/<subject>.md (subject-wide
+                guidance). Shared wiki/subjects/.../teaching_frameworks/ pages
+                are immutable and not write targets.
             content: the durable fact/instruction, in your own concise words.
             speech_act: "conduct_request" if the teacher directed your behavior,
                 or "store_request" if they explicitly asked you to remember it.
+            scope: how broadly it applies: "class" or "global" for standing
+                preferences, "block" for a bounded unit, or "unknown" when
+                the scope is unclear.
             quote: the teacher's exact sentence that asked for this, verbatim.
             routing_reason: one compact internal sentence explaining why this
                 target was chosen. Do not include hidden reasoning; just the
@@ -93,6 +101,10 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
           learns and which teaching moves, materials, scaffolds, pacing, or
           activity formats work or fail. Temporal teaching preferences can live
           here when scoped to an upcoming block; keep that scope in content.
+        - teaching_framework_adjustments.md: class-scoped replacement/refinement
+          rules for the shared subject/grade teaching frameworks. Keep short;
+          do not copy the shared framework. Shared
+          wiki/subjects/.../teaching_frameworks/ pages are immutable.
         - planning_brief.md: near-term class planning priorities, open loops,
           misconception focus, assessment readiness, and immediate next steps.
         - wiki/subjects/<subject>.md: subject-wide reusable guidance only when
@@ -112,6 +124,9 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
         - "In physics generally, students mix up velocity and acceleration..."
           Save wiki/subjects/physik.md, not teaching_patterns.md, unless the
           teacher scopes it to this class.
+        - "For this class, replace the Grade 9 phenomenon-first opener with a
+          short worked example first." Save teaching_framework_adjustments.md,
+          not teaching_patterns.md and not the shared teaching_frameworks pages.
 
         Nothing is written to memory now — it goes to the teacher's review.
         """
@@ -121,6 +136,7 @@ def create_remember_tool(ctx: WikiToolContext) -> list:
             content=content,
             quote=quote,
             speech_act=speech_act,
+            scope=scope,
             routing_reason=routing_reason,
             teacher_message=ctx.teacher_message,
         )
@@ -615,6 +631,80 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
             return f"Error: {e}"
 
     @function_tool
+    def list_trusted_sources(scope: str = "all") -> str:
+        """List trusted curriculum/source records linked to the active class."""
+        try:
+            records = [
+                {
+                    "source_id": source.source_id,
+                    "title": source.title,
+                    "authority": source.authority,
+                    "jurisdiction": source.jurisdiction,
+                    "branch": source.branch,
+                    "grade": source.grade,
+                    "canonical_url": source.canonical_url,
+                    "sections": [
+                        {"id": section.id, "title": section.title}
+                        for section in source.sections
+                    ],
+                }
+                for source in wiki.list_trusted_sources(class_id, scope)
+            ]
+            return _capture(ctx.planning, "trusted_source_list", json.dumps(records, indent=2))
+        except ValueError as e:
+            return f"Error: {e}"
+
+    @function_tool
+    def search_trusted_sources(
+        query: str, scope: str = "all", max_results: int = 8
+    ) -> str:
+        """Search linked trusted source sections for curriculum/competency evidence."""
+        try:
+            hits = wiki.search_trusted_sources(
+                class_id, query, scope, max_results=max(1, min(max_results or 8, 20))
+            )
+            return _capture(ctx.planning, "trusted_source_search", json.dumps(hits, indent=2))
+        except ValueError as e:
+            return f"Error: {e}"
+
+    @function_tool
+    def read_trusted_source(source_id: str, section_id: str = "") -> str:
+        """Read one linked trusted source section with citation metadata."""
+        try:
+            payload = wiki.read_trusted_source(class_id, source_id, section_id)
+            if ctx.planning is not None:
+                ctx.planning.record_source_read(
+                    source_id, str(payload.get("section_id", ""))
+                )
+            return _capture(ctx.planning, "trusted_source_read", json.dumps(payload, indent=2))
+        except ValueError as e:
+            return f"Error: {e}"
+
+    @function_tool
+    def search_subject_guidance(query: str, max_results: int = 8) -> str:
+        """Search active-grade teaching guidance for deeper pedagogy, not curriculum claims."""
+        try:
+            hits = wiki.search_subject_guidance(
+                class_id, query, max_results=max(1, min(max_results or 8, 20))
+            )
+            return _capture(
+                ctx.planning, "subject_guidance_search", json.dumps(hits, indent=2)
+            )
+        except ValueError as e:
+            return f"Error: {e}"
+
+    @function_tool
+    def read_subject_guidance(path: str) -> str:
+        """Read one active-grade framework page with source-ref provenance."""
+        try:
+            payload = wiki.read_subject_guidance(class_id, path)
+            return _capture(
+                ctx.planning, "subject_guidance_read", json.dumps(payload, indent=2)
+            )
+        except ValueError as e:
+            return f"Error: {e}"
+
+    @function_tool
     def get_raw_evidence(raw_ref: str) -> str:
         """Fetch full raw output for a previously captured evidence raw_ref.
 
@@ -630,6 +720,11 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
         read_lesson_range,
         search_memory,
         read_memory_page,
+        list_trusted_sources,
+        search_trusted_sources,
+        read_trusted_source,
+        search_subject_guidance,
+        read_subject_guidance,
         get_raw_evidence,
         *create_executive_verification_tools(ctx),
         *create_remember_tool(ctx),

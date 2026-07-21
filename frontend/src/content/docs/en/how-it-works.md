@@ -28,6 +28,38 @@ KlassenPilot does not paste the entire class database into every chat. Instead, 
 
 That is what creates the executive-assistant feeling: the copilot starts prepared, keeps track of the current task, and can fetch the right background without making the teacher repeat everything.
 
+## Curriculum grounding (Chemie 9 NTG)
+
+Lesson planning is grounded in three related layers. They are easy to confuse, so this section names each one clearly.
+
+### Adapted open K–12 planning skills
+
+KlassenPilot’s planning and differentiation procedure is **adapted** from Anthropic’s open K–12 teacher skills (lesson planning and differentiation), licensed Apache-2.0. That means the product follows a careful, ordered workflow — clarify the request, ground claims, differentiate when needed, and deliver one structured lesson package — rather than free-form chat alone.
+
+It is **not** a live Anthropic plug-in. There is no connection that pulls curriculum or skills from Anthropic at runtime. The adapted procedure lives in KlassenPilot and is tailored for this product’s teacher-approval and class-memory contracts.
+
+### LehrplanPLUS / KMK as trusted sources
+
+For official curriculum and competency claims, the planner uses **provenance-bearing trusted sources** (LehrplanPLUS and related KMK materials in the allow-listed source library). These are separate from your class notebook.
+
+Important trust rule: before the copilot makes an **official curriculum** claim, it should open the relevant source section in the current planning session. Class memory still answers “what this class has actually been taught”; LehrplanPLUS/KMK answer “what the official curriculum says.”
+
+### Teaching frameworks vs official curriculum
+
+**Teaching frameworks** are curated pedagogy summaries for the subject/grade/branch (today: Chemie 9 NTG, with shared frameworks for Chemie 8/9 NTG). They help with lesson structure, representation choices, and common teaching moves. They are an **immutable shared library** — not editable class notes, and **not** legal curriculum text.
+
+Class-specific overrides live in a small page: `teaching_framework_adjustments.md`. That page holds teacher-approved refinements for *this* class; it does not copy or replace the shared frameworks, and it does not stand in for LehrplanPLUS.
+
+| Layer | Role | Editable by the teacher? |
+|-------|------|--------------------------|
+| Adapted K–12 procedure | How the planner works through a lesson request | No (product behavior) |
+| LehrplanPLUS / KMK sources | Official curriculum / competency evidence | No (trusted library; cited when read) |
+| Shared teaching frameworks | Curated pedagogy for Chemie 8/9 NTG | No (immutable library) |
+| Class framework adjustments | Overrides that fit *this* class | Yes, through teacher-approved review |
+| Class notebook | What this class actually did / needs next | Yes, through Update memory / plan save |
+
+Scope today is intentionally narrow: **Chemie 9 NTG** for the seeded planning experience. Broader subjects and grades come later.
+
 ## Class memory first
 
 The copilot starts from approved class memory:

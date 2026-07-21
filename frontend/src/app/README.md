@@ -18,8 +18,8 @@ state, and composing domain components.
   and sends them as a typed backend start hint. Bootstraps a workflow draft via
   `features/workflow-drafts/`.
 - `classes/[classId]/memory-sweep/page.tsx` - Memory Sweep saved-review UI.
-  Opens/resumes `POST/GET /memory/sweep/review`, marks durable generation with
-  `pending-chat-turns`, and uses Simple / Detailed view modes.
+  Opens/resumes `POST/GET /memory/sweep/review`, appears in Running jobs while
+  generating (`GET /api/workflow/active`), and uses Simple / Detailed view modes.
 - `classes/[classId]/lessons/[lessonDate]/page.tsx` - lesson detail.
 - `classes/[classId]/plan/page.tsx` - lesson-planning artifact session
   (same workflow-draft path as Update Memory).

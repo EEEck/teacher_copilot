@@ -48,7 +48,11 @@ SWEEP_OPERATIONS = {
 }
 SWEEP_STATUS_RECOMMENDATIONS = {
     "promote",
+    "merge",
     "already_covered",
+    "downgrade",
+    "reject",
+    "needs_review",
     "reject_low_signal",
     "needs_decision",
 }
@@ -150,7 +154,18 @@ async def propose_memory_sweep_review(
     for row in candidates:
         clusters.setdefault(row.cluster_key or row.id, []).append(row)
     gate = gate_clusters(list(clusters.values()), now)
-    claims = claims_from_clusters(gate.eligible, now)
+    eligible_cluster_keys = {
+        row.cluster_key or row.id
+        for cluster in gate.eligible
+        for row in cluster
+    }
+    # Occasion counting remains a priority signal, not a visibility barrier.
+    # Sweep is the second semantic judge, so it must see held singletons too.
+    claims = claims_from_clusters(
+        gate.eligible + gate.held,
+        now,
+        eligible_cluster_keys=eligible_cluster_keys,
+    )
 
     if include_student_summaries and queue in (None, "Student Memory"):
         claims.extend(_student_summary_claims(wiki, class_id, start=len(claims)))
@@ -201,7 +216,15 @@ async def propose_memory_sweep_review(
                 today=now.date().isoformat(),
                 validation_error=validation_error,
             )
-            ops = validate_consolidation_ops(output.operations, flat_index, claim_ids)
+            ops = validate_consolidation_ops(
+                output.operations,
+                flat_index,
+                claim_ids,
+                claim_targets={
+                    claim["claim_id"]: canonical_memory_target(claim["target"])
+                    for claim in claims
+                },
+            )
             warnings.extend(output.warnings)
             break
         except Exception as exc:
@@ -373,14 +396,19 @@ def cards_from_consolidation_ops(
             "signal_count": signal_count,
             "occasion_count": occasion_count,
         }
+        sweep_action = op.sweep_action
         if op.operation == "add":
             cards.append(
                 MemorySweepReviewCard(
                     **base,
                     content=op.new_text,
                     operation="add",
-                    status_recommendation="promote",
-                    can_apply=True,
+                    status_recommendation=(
+                        sweep_action
+                        if sweep_action in SWEEP_STATUS_RECOMMENDATIONS
+                        else "promote"
+                    ),
+                    can_apply=sweep_action == "promote",
                 )
             )
         elif op.operation == "update":
@@ -390,8 +418,12 @@ def cards_from_consolidation_ops(
                     content=op.new_text,
                     operation="adjust",
                     replaces_content=memory_index.get(op.memory_id or "", ""),
-                    status_recommendation="promote",
-                    can_apply=True,
+                    status_recommendation=(
+                        sweep_action
+                        if sweep_action in SWEEP_STATUS_RECOMMENDATIONS
+                        else "promote"
+                    ),
+                    can_apply=sweep_action in {"promote", "merge"},
                 )
             )
         elif op.operation == "delete":
@@ -401,7 +433,11 @@ def cards_from_consolidation_ops(
                     **base,
                     content=primary["text"],
                     operation="needs_decision",
-                    status_recommendation="needs_decision",
+                    status_recommendation=(
+                        sweep_action
+                        if sweep_action in SWEEP_STATUS_RECOMMENDATIONS
+                        else "needs_review"
+                    ),
                     can_apply=False,
                     review_only_reason=(
                         "The sweep suggests removing an outdated note: "
@@ -416,6 +452,36 @@ def cards_from_consolidation_ops(
                 is_synthetic_student_summary_candidate_id(cid)
                 for cid in candidate_ids
             ):
+                continue
+            if sweep_action in {"downgrade", "reject"}:
+                cards.append(
+                    MemorySweepReviewCard(
+                        **base,
+                        content=primary["text"],
+                        operation="reject_low_signal",
+                        status_recommendation=sweep_action,
+                        can_apply=False,
+                        review_only_reason=(
+                            op.rationale
+                            or "Sweep recommends keeping this candidate out of durable memory."
+                        ),
+                    )
+                )
+                continue
+            if sweep_action == "needs_review":
+                cards.append(
+                    MemorySweepReviewCard(
+                        **base,
+                        content=primary["text"],
+                        operation="needs_decision",
+                        status_recommendation="needs_review",
+                        can_apply=False,
+                        review_only_reason=(
+                            op.rationale
+                            or "Sweep could not resolve this candidate confidently."
+                        ),
+                    )
+                )
                 continue
             cards.append(
                 MemorySweepReviewCard(
@@ -547,6 +613,7 @@ def memory_sweep_target_excerpts(
         elif target in {
             "planning_brief.md",
             "teaching_patterns.md",
+            "teaching_framework_adjustments.md",
         }:
             key = target.removesuffix(".md")
             path = wiki.memory_paths(class_id).get(key)
@@ -836,6 +903,7 @@ class ConsolidationOp:
     memory_id: str | None = None
     new_text: str = ""
     rationale: str = ""
+    sweep_action: str = "promote"
 
 
 @dataclass(frozen=True)
@@ -856,12 +924,15 @@ def validate_consolidation_ops(
     ops: Iterable[Any],
     memory_index: dict[str, str],
     claim_ids: set[str],
+    *,
+    claim_targets: dict[str, str] | None = None,
 ) -> list[ConsolidationOp]:
     """Structurally validate the single-call sweep output.
 
     Checks: known operations; update/delete reference an existing memory id
-    from the enumerated index; update/add carry new_text; every input claim
-    id is accounted for exactly once across operations. Raises ValueError
+    from the enumerated index; update/add carry new_text; operations do not
+    cross the deterministic target ownership of their claims; every input
+    claim id is accounted for exactly once across operations. Raises ValueError
     with an actionable message (fed back to the model for one retry).
     """
     validated: list[ConsolidationOp] = []
@@ -870,6 +941,36 @@ def validate_consolidation_ops(
         operation = str(_op_field(op, "operation", "") or "").strip().lower()
         if operation not in CONSOLIDATION_OPERATIONS:
             raise ValueError(f"unsupported consolidation operation: {operation!r}")
+        sweep_action = str(_op_field(op, "sweep_action", "") or "").strip().lower()
+        if not sweep_action:
+            sweep_action = {
+                "add": "promote",
+                "update": "promote",
+                "delete": "needs_review",
+                "none": "already_covered",
+            }[operation]
+        if sweep_action not in {
+            "promote",
+            "merge",
+            "already_covered",
+            "downgrade",
+            "reject",
+            "needs_review",
+        }:
+            raise ValueError(f"unsupported sweep action: {sweep_action!r}")
+        if sweep_action == "merge" and operation != "update":
+            raise ValueError("merge sweep action requires an update operation")
+        if sweep_action == "promote" and operation not in {"add", "update"}:
+            raise ValueError("promote sweep action requires add or update")
+        if sweep_action in {
+            "already_covered",
+            "downgrade",
+            "reject",
+            "needs_review",
+        } and operation not in {"none", "delete"}:
+            raise ValueError(
+                f"{sweep_action} sweep action requires none or delete operation"
+            )
         op_claims = [
             str(cid).strip()
             for cid in (_op_field(op, "claim_ids", []) or [])
@@ -877,6 +978,26 @@ def validate_consolidation_ops(
         ]
         if not op_claims:
             raise ValueError(f"{operation} operation lists no claim_ids")
+        target_raw = str(_op_field(op, "target", "") or "").strip()
+        target = canonical_memory_target(target_raw) if target_raw else ""
+        if claim_targets is not None:
+            missing_targets = [cid for cid in op_claims if cid not in claim_targets]
+            if missing_targets:
+                raise ValueError(
+                    "missing target provenance for claim ids: "
+                    + ", ".join(sorted(missing_targets))
+                )
+            expected_targets = {
+                canonical_memory_target(claim_targets[cid]) for cid in op_claims
+            }
+            if len(expected_targets) != 1:
+                raise ValueError("one operation cannot merge claims across targets")
+            expected_target = next(iter(expected_targets))
+            if target and target != expected_target:
+                raise ValueError(
+                    f"operation target {target_raw!r} does not match claim target "
+                    f"{expected_target!r}"
+                )
         memory_id_raw = _op_field(op, "memory_id")
         memory_id = str(memory_id_raw).strip() if memory_id_raw else None
         new_text = str(_op_field(op, "new_text", "") or "").strip()
@@ -900,17 +1021,19 @@ def validate_consolidation_ops(
                 operation = "none"
                 memory_id = None
                 new_text = ""
+                sweep_action = "already_covered"
 
         assigned.extend(op_claims)
         validated.append(
             ConsolidationOp(
                 claim_ids=op_claims,
                 operation=operation,
-                target=str(_op_field(op, "target", "") or "").strip(),
+                target=target_raw,
                 section=str(_op_field(op, "section", "") or "").strip(),
                 memory_id=memory_id,
                 new_text=new_text,
                 rationale=str(_op_field(op, "rationale", "") or "").strip(),
+                sweep_action=sweep_action,
             )
         )
 
@@ -979,25 +1102,39 @@ def _cluster_occasions(cluster: list[MemoryCandidateRow]) -> int:
 def claims_from_clusters(
     clusters: list[list[MemoryCandidateRow]],
     now: Any,
+    *,
+    start: int = 0,
+    eligible_cluster_keys: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Turn gate-passing ledger clusters into the sweep call's claim payload.
+    """Turn ledger clusters into the sweep call's claim payload.
 
     One claim per cluster: the most recent phrasing represents the claim,
     reinforcement metadata (signal/session counts, first/last seen) gives the
     model the evidence weight, and candidate ids keep apply/status updates
-    traceable back to ledger rows.
+    traceable back to ledger rows. Held singleton clusters are intentionally
+    representable: the second judge decides whether their lower priority still
+    warrants a review card.
     """
     from app.services.memory_gate import cluster_score
 
     claims: list[dict[str, Any]] = []
+    eligible_keys = eligible_cluster_keys or set()
     for position, cluster in enumerate(clusters, start=1):
         if not cluster:
             continue
         newest = max(cluster, key=lambda row: row.created_at)
+        cluster_key = newest.cluster_key or newest.id
+        occasion_count = _cluster_occasions(cluster)
+        explicit = any(
+            is_fast_lane_row(
+                row.target, row.source, row.evidence_summary, row.fast_lane
+            )
+            for row in cluster
+        )
         claims.append(
             {
-                "claim_id": f"C{position}",
-                "cluster_key": newest.cluster_key or newest.id,
+                "claim_id": f"C{start + position}",
+                "cluster_key": cluster_key,
                 "target": canonical_memory_target(newest.target),
                 "section": newest.section,
                 "text": newest.candidate_update,
@@ -1006,17 +1143,22 @@ def claims_from_clusters(
                 "session_count": len(
                     {row.session_id for row in cluster if row.session_id}
                 ),
-                "occasion_count": _cluster_occasions(cluster),
+                "occasion_count": occasion_count,
                 "first_seen": min(row.created_at for row in cluster),
                 "last_seen": newest.created_at,
-                "explicit": any(
-                    is_fast_lane_row(
-                        row.target, row.source, row.evidence_summary, row.fast_lane
-                    )
-                    for row in cluster
-                ),
+                "explicit": explicit,
                 "score": round(cluster_score(cluster, now), 3),
                 "candidate_ids": [row.id for row in cluster],
+                "sweep_gate": (
+                    "eligible" if cluster_key in eligible_keys else "held"
+                ),
+                "priority": (
+                    "fast_lane"
+                    if explicit
+                    else "reinforced"
+                    if occasion_count >= 2
+                    else "singleton"
+                ),
             }
         )
     return claims

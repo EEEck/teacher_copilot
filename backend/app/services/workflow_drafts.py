@@ -250,6 +250,23 @@ class WorkflowDraftStore:
             ).fetchone()
         return WorkflowDraftRow.from_sqlite(rows) if rows is not None else None
 
+    def find_active_by_backend_session_id(
+        self, backend_session_id: str
+    ) -> WorkflowDraftRow | None:
+        """Find a resumable draft by the session ID held by an already-open UI."""
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM workflow_draft
+                WHERE backend_session_id = ?
+                  AND status NOT IN ('committed', 'saved', 'discarded')
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT 1
+                """,
+                (backend_session_id,),
+            ).fetchone()
+        return WorkflowDraftRow.from_sqlite(row) if row is not None else None
+
     def list_active_for_class(
         self, class_id: str, *, mode: str | None = None
     ) -> list[WorkflowDraftRow]:
@@ -262,6 +279,31 @@ class WorkflowDraftStore:
         if mode is not None:
             query += " AND mode = ?"
             params.append(mode)
+        query += " ORDER BY updated_at DESC, created_at DESC"
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [WorkflowDraftRow.from_sqlite(row) for row in rows]
+
+    def list_in_progress(
+        self, *, workspace_id: str | None = None
+    ) -> list[WorkflowDraftRow]:
+        """Draft turns the backend is running right now, across all classes.
+
+        Backs the active-work query the frontend polls instead of keeping its
+        own sessionStorage bookkeeping. Idle-but-active drafts are excluded:
+        they are resumable work, not running work.
+        """
+        terminal = tuple(sorted(TERMINAL_STATUSES))
+        placeholders = ",".join("?" for _ in terminal)
+        query = f"""
+            SELECT * FROM workflow_draft
+            WHERE turn_in_progress = 1
+              AND status NOT IN ({placeholders})
+        """
+        params: list[Any] = [*terminal]
+        if workspace_id is not None:
+            query += " AND workspace_id = ?"
+            params.append(workspace_id)
         query += " ORDER BY updated_at DESC, created_at DESC"
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()

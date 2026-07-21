@@ -25,6 +25,11 @@ prompt trace diagnostics.
 - `prompt_assembly.py` - shared live-call and diagnostic prompt/context assembly.
 - `prompt_trace.py` - compatibility wrapper for plan-session prompt diagnostics.
 - `stream_events.py` - internal SSE event models and SDK event translation.
+- `plan_verification.py` - revision-bound Plan verification packet/report:
+  immediate deterministic provenance/timing checks plus a bounded background
+  review.
+- `memory_verification.py` - deterministic diary target/roster
+  integrity checks used at edit, proposal, and commit boundaries.
 - `wiki/` - markdown wiki implementation modules.
 - `wiki_store.py` - compatibility/facade import path for `WikiStore`.
 
@@ -36,13 +41,19 @@ prompt trace diagnostics.
   wiki/profile writes happen through separate save/apply flows.
 - Memory compaction/profile proposal agents propose bounded updates; backend
   code validates scope and persistence.
-- Memory Sweep uses the V3 path: candidate capture flows through
-  `remember(...)`, ledger folding and the promotion gate reduce noise, and one
-  high-reasoning consolidation call returns teacher-reviewable operations.
+- Memory Sweep uses the V3/V4 path: candidate capture flows through
+  `remember(...)`, ledger folding and the promotion gate provide priority
+  metadata, and one high-reasoning consolidation call reviews both reinforced
+  claims and held singleton evidence before returning teacher-reviewable
+  operations. The model's `sweep_action` is a semantic recommendation; the
+  backend keeps target ownership, write mechanics, and teacher approval
+  deterministic.
 
 ## Boundaries
 
-- Tools are read-only during chat.
+- Wiki tools are read-only during chat. The `remember(...)` tool only stages a
+  review-only runtime candidate; it does not write a ledger row or wiki file
+  directly.
 - Memory Sweep never writes memory during proposal. It returns structured
   operations; backend validators own claim coverage, target consistency,
   operation mapping, and exact replacement checks.
@@ -51,6 +62,13 @@ prompt trace diagnostics.
 - Update Memory has one free-agent runtime. Timeline/detail entry points may
   seed it with a typed hint, but unknown dates remain unconfirmed until the
   teacher or agent resolves the target.
+- `ExecutiveRuntime` is shared workflow state, separate from `PlanRuntime` and
+  `MemoryRuntime`. It owns findings, severity, fingerprints, and readiness;
+  workflow packs add evidence without replacing the shared lifecycle.
+- Plan verification is advisory by default and never rewrites Markdown. Its
+  only save blocker is a completed severe-safety hold for the exact draft.
+  Update Memory integrity blocks only target-date or roster-label conflicts and
+  likewise never rewrites teacher text.
 - Prompt trace output is diagnostic and may contain sensitive local session
   data; keep it gated at the API boundary.
 - Artifact workflows should build prompt/context through shared assembly helpers
@@ -70,4 +88,5 @@ prompt trace diagnostics.
 - `../../../docs/agent_architecture.md`
 - `../../../docs/memory_hierarchy.md`
 - `../../../docs/context_management.md`
-- `../../../docs/mem_v3/README.md`
+- `../../../docs/mem_v4/README.md`
+- `../../../docs/mem_v4/evaluation.md`

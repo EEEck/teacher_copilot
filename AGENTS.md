@@ -62,7 +62,8 @@ It is an educational note, not a behavior contract.
   page-specific one-off.
 - Frontend primarily uses `assistant-ui`, with Plan/Update Memory drafts in
   `frontend/src/features/workflow-drafts/` and durable pending jobs coordinated
-  by `pending-chat-turns` + `PendingTurnNotifier`. Class home is documented in
+  by `PendingTurnNotifier` polling `GET /api/workflow/active` (plus local
+  runners via `running-jobs`). Class home is documented in
   `frontend/ARCHITECTURE.md` (three sections + Discuss dock + timeline status).
 - Keep the MVP simple. Do not add broad agent infrastructure unless it directly
   supports lesson planning or memory update.
@@ -118,13 +119,13 @@ Important current contracts:
  `/memory/profile/propose`).
 - Durable capture during chat is an explicit `remember(target, content,
  speech_act, quote)` tool the model calls when the teacher gives a standing
- instruction (mem_v3 PR4). It stages a review-only candidate grounded in the
+ instruction. It stages a review-only candidate grounded in the
  teacher's verbatim words and writes nothing durable. Every memory write goes
  through one typed contract (`backend/app/services/memory_skills.py`) that
  declares whether it closes ledger rows — post-save `/memory/apply` closes them
- so the sweep never re-proposes an applied fact (mem_v3 PR1).
+ so the sweep never re-proposes an applied fact.
 - Current unit / taught sequence is derived from the canonical `course_state.md`
- / `timeline.md` rollups, not curated memory (mem_v3 PR2 retired the
+ / `timeline.md` rollups, not curated memory (the retired
  `class_state.md` / `taught_so_far.md` twins — one home per fact).
 - Memory scope is split: global `user.md` (teacher), class `teaching_patterns.md`
  (how the class learns), class `copilot.md` (copilot working agreement); each

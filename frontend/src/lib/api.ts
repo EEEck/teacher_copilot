@@ -10,11 +10,32 @@ function getApiBase(): string {
   return process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
 }
 
+export function betaLoginHref(pathname: string, search = ""): string {
+  return `/beta/login?next=${encodeURIComponent(`${pathname}${search}`)}`;
+}
+
+function redirectToBetaLoginIfNeeded(status: number): void {
+  if (status !== 401 || typeof window === "undefined") return;
+  if (window.location.pathname === "/beta/login") return;
+  window.location.assign(
+    betaLoginHref(window.location.pathname, window.location.search),
+  );
+}
+
 export type ClassSummary = { id: string; label: string; subject: string };
+export type BetaProfileStats = {
+  feedback_notes: number;
+  workflow_sessions: number;
+  wiki_commits: number;
+};
 export type BetaIdentity = {
   tester_id: string;
   workspace_id: string;
   role: string;
+  display_name: string;
+  profile_complete: boolean;
+  member_since: string | null;
+  stats: BetaProfileStats | null;
 };
 export type TimelineEntry = {
   date: string;
@@ -165,6 +186,7 @@ export type PlanDraft = {
   latest_turn_complete?: boolean;
   messages?: ChatMessage[];
   plan_markdown: string;
+  executive_state?: Record<string, unknown>;
 };
 export type PlanChatResponse = {
   reply: string;
@@ -179,6 +201,24 @@ export type PlanChatResponse = {
   lesson_planning_state?: Record<string, unknown> | null;
   memory_candidates?: MemoryCandidate[];
 };
+/**
+ * One job the backend is running right now (GET /api/workflow/active).
+ * Fields not relevant to a kind come back as "" rather than absent.
+ */
+export type ActiveWorkItem = {
+  kind: "draft_turn" | "memory_sweep";
+  class_id: string;
+  /** draft_turn: "ingest" | "plan" | "discuss". */
+  mode: string;
+  draft_id: string;
+  session_id: string;
+  lesson_date: string;
+  lesson_title: string;
+  /** memory_sweep only. */
+  review_id: string;
+  updated_at: string;
+};
+export type ActiveWorkResponse = { items: ActiveWorkItem[] };
 export type MemoryCandidate = {
   candidate_id?: string;
   target: string;
@@ -481,6 +521,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
   if (!res.ok) {
+    redirectToBetaLoginIfNeeded(res.status);
     const text = await res.text();
     let message = text || res.statusText;
     try {
@@ -532,6 +573,7 @@ async function apiStreamPost(path: string, body: object, signal?: AbortSignal): 
     );
   }
   if (!res.ok) {
+    redirectToBetaLoginIfNeeded(res.status);
     const text = await res.text();
     let message = text || res.statusText;
     try {
@@ -556,6 +598,11 @@ export const client = {
     }),
   betaLogout: () => api<{ status: string }>("/api/beta/logout", { method: "POST" }),
   betaMe: () => api<BetaIdentity>("/api/beta/me"),
+  betaUpdateProfile: (displayName: string) =>
+    api<BetaIdentity>("/api/beta/profile", {
+      method: "PATCH",
+      body: JSON.stringify({ display_name: displayName }),
+    }),
   betaFeedback: (message: string, page?: string) =>
     api<{ status: string }>("/api/beta/feedback", {
       method: "POST",
@@ -760,6 +807,8 @@ export const client = {
     api<MemorySweepReviewResponse>(
       `/api/classes/${classId}/memory/sweep/review`,
     ),
+  /** Everything the backend is running right now, across all classes. */
+  getActiveWork: () => api<ActiveWorkResponse>(`/api/workflow/active`),
   openMemorySweepReview: (
     classId: string,
     options?: { refresh?: boolean; keepStale?: boolean },

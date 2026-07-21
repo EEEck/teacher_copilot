@@ -5,6 +5,10 @@
 ## Classes
 - **Chemie 9b — 2026/27** (`chemie_9b_2026_27`) — subject: chemie
 
+## Shared subject frameworks
+
+- [Chemistry teaching frameworks](wiki/subjects/chemie/teaching_frameworks/index.md)
+
 ## Class: chemie_9b_2026_27 — Chemie 9b — 2026/27
 
 ### Roll-ups
@@ -15,10 +19,15 @@
 - [Lesson timeline](wiki/classes/chemie_9b_2026_27/timeline.md)
 
 ### Compact memory
-- [Planning Brief](wiki/classes/chemie_9b_2026_27/memory/planning_brief.md) â€” near-term priorities, open loops, misconception focus, assessment readiness, and next-step pressure.
-- [Teaching Patterns](wiki/classes/chemie_9b_2026_27/memory/teaching_patterns.md) â€” durable class learning profile: what scaffolds, materials, pacing, and activities work or fail for this class.
-- [Class Copilot Profile](wiki/classes/chemie_9b_2026_27/memory/copilot_profile.md) â€” class-scoped copilot working agreement: planning behavior, avoid-rules, and repeated corrections.
-- [Session Summaries](wiki/classes/chemie_9b_2026_27/memory/session_summaries.md) â€” sparse workflow continuity summaries; not a transcript store.
+- [Planning Brief](wiki/classes/chemie_9b_2026_27/memory/planning_brief.md)
+- [Teaching Patterns](wiki/classes/chemie_9b_2026_27/memory/teaching_patterns.md)
+- [Class Copilot Profile](wiki/classes/chemie_9b_2026_27/memory/copilot_profile.md)
+- [Session Summaries](wiki/classes/chemie_9b_2026_27/memory/session_summaries.md)
+- [Teaching Framework Adjustments](wiki/classes/chemie_9b_2026_27/memory/teaching_framework_adjustments.md)
+
+### Curriculum & trusted sources
+- [Curriculum profile](wiki/classes/chemie_9b_2026_27/curriculum_profile.md)
+- [Trusted source index](wiki/classes/chemie_9b_2026_27/trusted_sources.md)
 
 ### Lessons
 

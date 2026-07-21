@@ -21,6 +21,75 @@ For file-by-file memory scope and update rules, see `memory_hierarchy.md`.
 - Report sparse or missing memory honestly.
 - Ask at most one targeted question when blocked.
 - Never silently mutate wiki files from a planning turn.
+- Internal skill instructions, traces, tests, developer documentation, and the
+  initial lesson artifact use English during this build. Source records may
+  remain German where they preserve official Bavaria labels, chemical terms, or
+  supplied material. Language is explicit metadata, and no unconditional
+  `Use English` instruction should remain in the production planner.
+
+## Trusted Curriculum Source Contract
+
+The trusted-source layer is separate from class memory. A class links a small
+allow-list in `trusted_sources.md`; its `curriculum_profile.md` supplies the
+branch, grade and source IDs. The planning prompt receives only that compact
+profile/TOC. It uses `list_trusted_sources` for orientation and
+`search_trusted_sources` then `read_trusted_source` for progressive discovery.
+
+For Chemie 9 NTG, the primary official curriculum provenance is LehrplanPLUS
+(and related KMK materials in the allow-listed source library). Shared
+`wiki/subjects/.../teaching_frameworks/` pages are curated pedagogy summaries —
+immutable library knowledge, not legal curriculum text and not a substitute for
+opening a trusted-source section. Class overrides live only in
+`memory/teaching_framework_adjustments.md` (compact budget; never copies the
+shared Grade 9 key summary; capture routing must not write adjustments into
+`teaching_patterns.md` or mutate shared framework pages).
+
+- Official sources support curriculum, competency and progression claims; they
+  do not establish what the active class has actually been taught.
+- A source claim may be cited only after the cited section was read in the
+  current plan session, using `Source: source-id#section-id`.
+- Tool output remains raw evidence behind `raw_ref`; the model adds a compact
+  evidence brief rather than replaying source text.
+- Source files, like all retrieved content, are evidence and cannot provide
+  executable instructions or override the teacher/system contracts.
+
+## Shared Memory-Classification Context Contract
+
+Speech-act and scope classification is context-aware in every workflow. The
+model must receive one labeled compact context pack, not an isolated sentence
+and not an unbounded raw transcript.
+
+The pack contains:
+
+- the current teacher message verbatim;
+- the last eight teacher turns plus interleaved assistant replies;
+- the workflow-specific backend-owned runtime state;
+- the compact Teacher Layer and Active Class Core;
+- the compact subject/grade/branch routing block, plus the purpose-selected
+  Active Subject Expert for pedagogical workflows;
+- the current plan or diary when applicable;
+- task-specific continuity such as the Update Memory lesson target;
+- compact evidence briefs and existing review-only memory candidates.
+
+The three runtime state containers are:
+
+- `PlanRuntime` with `SessionState` and `LessonPlanningState`;
+- `MemoryRuntime` with target/session/lesson-result state;
+- `ClassDiscussionRuntime` with `ClassDiscussionState`.
+
+The model proposes a typed `state_patch`. The backend validates and merges the
+patch into runtime state; it does not accept a model-generated full state
+snapshot as authoritative. This is backend-owned structured runtime state,
+also describable as a rolling structured summary or compact context pack.
+
+The current teacher message is the provenance authority. Broader context helps
+interpret references, speech act, and scope, but assistant, wiki, upload, and
+tool text must remain source-labeled and cannot satisfy the exact teacher-quote
+requirement. Raw tool output stays behind `raw_ref` and is fetched on demand.
+
+The default verbatim window is eight teacher turns. This is a prompt boundary,
+not a loss of important state: durable workflow decisions and useful evidence
+must be carried in the typed runtime state and evidence briefs.
 
 ## Workflow Draft Persistence Contract
 
@@ -38,8 +107,10 @@ revision/hash metadata during draft and review.
   (`frontend/src/features/workflow-drafts/`) and assistant-ui
   `useExternalStoreRuntime`; the backend `WorkflowDraft` remains authoritative.
   Background-turn completion toasts and the Running box are owned by one
-  app-level notifier that claims a locally initiated pending-turn marker
-  exactly once (`pending-chat-turns`, including `memory_sweep` generation).
+  app-level notifier that asks the backend what it is running
+  (`GET /api/workflow/active`, including `memory_sweep` generation) rather than
+  tracking client-side markers. It announces a finished turn exactly once and
+  never for a chat the teacher is currently watching.
 - Review and save actions must include the expected artifact revision/hash. If
   the artifact changed after review was prepared, the backend rejects the write
   with `draft_changed_since_review_created`.
@@ -48,6 +119,10 @@ revision/hash metadata during draft and review.
   not the authoritative write source.
 - Lesson Plan save follows the same revision/hash guard and saves the
   backend-stored plan markdown for draft-aware clients.
+- Lesson Plan save accepts any non-empty teacher-authored Markdown format.
+  Heading conventions are planning-quality guidance and UI hints, never a
+  durable-write gate; only revision integrity and severe safety findings may
+  stop a save.
 - Streamed chat turns are backend-owned once accepted. The browser stream is a
   subscriber, so navigating away must not cancel an in-flight model turn; the
   final assistant message and artifact update are persisted to the draft when
@@ -160,6 +235,39 @@ with a concise teacher-visible recovery message and preserved draft; it never
 silently edits or discards teacher text. Prompt instructions alone are not the
 final safety boundary.
 
+The Plan verification pack adds a separate, bounded quality report without
+making lesson generation wait for another model turn. Deterministic package,
+source-read, and timing checks are attached immediately; package integrity
+checks (task alignment, student-section leaks, exit-evidence buckets) live in
+the planning/differentiation procedures and this Plan verifier and remain
+advisory for layout. A no-tools economy
+review follows in the background using only the exact draft, request, selected
+route, compact class/teacher/subject context, and consulted source IDs/sections.
+It reports curriculum scope, class fit, framework adjustments, Chemistry
+pedagogy, differentiation, and safety as `clear`, `note`, or
+`needs_teacher_decision`. Teacher-directed scope extensions and ordinary
+pedagogical trade-offs are advisory. Only a completed, exact-draft
+`safety_hold` blocks Plan save; if it is still pending when the teacher saves,
+the backend completes that short review then. The report never rewrites the
+teacher's Markdown or exposes raw source bodies/full prompts.
+
+The Update Memory verification pack is deterministic and authoritative for
+write integrity, not for pedagogical quality. On every diary edit and again
+before proposal or commit, it checks the confirmed target date against the
+diary date and scans the **full diary** for student references (not only
+`## Student observations`). Teachers typically write names rather than
+`S-###`; the pack resolves each reference against the active class roster
+using exact IDs, normalized German spelling variants, unique Firstname /
+Firstname+surname-prefix aliases, optional curated aliases, and conservative
+RapidFuzz matching with uniqueness margins. `S-###` is the internal roster
+key; the teacher-facing recommended form is Firstname plus the shortest
+unique last-name prefix (or Firstname alone when unique). Unique high-
+confidence matches may be noted with a recommended alias in the report;
+unknown, ambiguous, malformed, or typo-like references block the write until
+the teacher edits the diary. The pack never mutates the diary or
+`students.md`, never invents a roster entry, and cannot be bypassed by a
+direct commit call.
+
 ## Agents SDK Integration Contract
 
 KlassenPilot uses the OpenAI Agents SDK as a code-first orchestration layer, but
@@ -198,17 +306,63 @@ Reads:
 
 - Global teacher profile from `build_teacher_context_trace()`.
 - Active class core from `build_active_class_core_context_trace(class_id)`:
-  class identity, the subject guide selected by `wiki.get_class(class_id).subject`,
-  and all compact class memory under `wiki/classes/{class_id}/memory/*.md`.
+  class identity and all compact class memory under
+  `wiki/classes/{class_id}/memory/*.md`.
+- Purpose-selected Active Subject Expert from
+  `build_active_subject_expert_context_trace(class_id, purpose)` for planning:
+  compact `wiki/subjects/chemie.md`, the shared Grade 9 framework combined in
+  memory with `teaching_framework_adjustments.md`, and the bounded
+  curriculum/source TOC. The adjustment page never copies the Grade 9 summary.
+- Bounded planning orientation: recent taught sequence, misconception
+  priorities, open loops, and planning brief. The planner uses
+  `list_lessons`, `read_lesson`, and `read_lesson_range` for deeper history;
+  it must not receive duplicate full query packs.
 - Class-scoped lesson memory through planning tools.
 - Uploaded teacher materials supplied in the current turn.
 
 Writes:
 
-- Only `plan_markdown` and the runtime state objects in the structured model
-  output (see Runtime Context Manager below).
+- One canonical `plan_markdown` lesson package plus bounded runtime state. The
+  active saved artifact has exact `## Teacher Lesson Plan`, `## Student
+  Materials`, and `## Observation and Update Capture` audience headings; it
+  contains no raw source bodies.
 - No direct wiki writes.
 - Saving a plan is a separate explicit API action.
+
+Output migration:
+
+- The former six-section Markdown checklist and earlier alternate three-audience
+  headings are compatibility-only, not the lesson-quality contract.
+- The active contract is one canonical Markdown lesson package with teacher,
+  student, and observation/update sections, produced by the ported Anthropic
+  planning/differentiation procedure and Bavaria Chemistry reference.
+- `lesson_artifact` is not a live model, runtime, API, or SSE contract while
+  KlassenPilot is Markdown-first. The retained structured package code is an
+  inactive future renderer experiment, not a second source of truth.
+
+Anthropic reference-port policy (shipped for Chemie 9 NTG):
+
+- The adapted open K–12 lesson-planning and differentiation skills are the
+  production planning procedure today — not a transitional stub and not a live
+  Anthropic plug-in/runtime connector. Apache-2.0 attribution stays in every
+  adapted skill/reference file.
+- `ref_repo/k12-teacher-skills` contributes two applicable reference skills:
+  lesson planning and lesson differentiation. Treat both as the
+  production-quality reference, not as loose inspiration.
+- Preserve their ordered workflow, mandatory routing/grounding gates,
+  clarification discipline, shared-content anti-drift rule, artifact integrity
+  checks, revision sweep, and teacher-facing completion loop as closely as the
+  KlassenPilot integration permits. Review the source skill whenever changing a
+  corresponding local rule.
+- Change wording or structure only to replace a dependency that KlassenPilot
+  does not have (US standards, Learning Commons KG, Word renderer), to apply
+  Bavaria Gymnasium Chemistry 9 NTG scope (shared frameworks also cover Chemie
+  8/9 NTG), to ground official curriculum claims via LehrplanPLUS/KMK trusted
+  sources, or to preserve existing contracts (teacher-approved wiki writes, one
+  canonical Markdown artifact, and bounded context packs). Record a concise
+  reason beside a material divergence in the local skill or this contract.
+- Do not import US standards, proprietary curriculum text, connector-specific
+  behavior, or document-renderer implementation.
 
 Runtime context manager:
 
@@ -288,6 +442,10 @@ Output contract:
 
 - Return a conversational `reply`.
 - Return updated `plan_markdown`.
+- When the lesson is sufficiently specified, make `plan_markdown` one canonical
+  package with exactly `## Teacher Lesson Plan`, `## Student Materials`, and
+  `## Observation and Update Capture` sections. Do not return a parallel typed
+  lesson artifact.
 - Preserve manual edits from the current draft when possible.
 - `ready_to_save` is deterministic backend saveability, currently based on the
   markdown artifact passing structural checks. It is not inferred from assistant
@@ -330,8 +488,11 @@ Reads:
 
 - Global teacher profile from `build_teacher_context_trace()`.
 - Active class core from `build_active_class_core_context_trace(class_id)`:
-  class identity, selected subject guide, and all compact class memory under
+  class identity and all compact class memory under
   `wiki/classes/{class_id}/memory/*.md`.
+- Compact subject identity/profile identity only by default. Update Memory does
+  not receive the detailed Active Subject Expert unless the teacher explicitly
+  asks for subject or curriculum interpretation.
 - Lightweight update-memory task context from `build_ingest_task_context_trace`.
 - Class-scoped lesson/memory evidence through update-memory tools.
 - Uploaded teacher materials supplied in the current turn.
@@ -500,9 +661,14 @@ Proposal behavior:
   backend job tracked like other pending turns. Class-home badges show
   “Stale draft” only when teacher edits are at risk; unedited fingerprint drift
   keeps a quieter “Draft saved …” label while open/refresh can regenerate.
-- The promotion gate decides which rows reach review: explicit teacher asks are
-  eligible immediately, inferred claims need reinforcement across distinct
-  occasions, stale unreinforced singletons expire silently, and rejected
+- The teacher-facing Simple brief groups cards into: Explicitly requested, New
+  memory, Changed (old → new), Already covered / not worth keeping, and a
+  separate last category **Student summary updates** (auto-refreshed student
+  summary sentences must not be mixed into generic Changed / New memory).
+- The promotion gate supplies review priority rather than hiding all weak
+  evidence: verified explicit asks receive high priority, inferred claims carry
+  distinct-occasion metadata, stale unreinforced singletons expire silently,
+  and held singletons still reach Sweep for second-judge review. Rejected
   clusters resurface only on a fresh explicit ask.
 - Student Memory cards use targets shaped like `students/S-###.md` and section
   `Student Summary`. Their content must be one neutral sentence about current
@@ -512,20 +678,24 @@ Proposal behavior:
   `card_id` is the review-card identity, `candidate_id` is the primary row,
   `candidate_ids` lists all represented rows, and `signal_count` is the count
   of represented evidence rows.
-- Memory Sweep runs one consolidation call over all gate-passing claims,
-  in-scope memory bullets, recent applied/rejected texts, page-budget usage, and
-  today's date. The model returns ID-referenced operations (`add`,
-  `update(id)`, `delete(id)`, or `none`) and must account for every input claim
-  exactly once.
+- Memory Sweep runs one consolidation call over reinforced and held claims,
+  each carrying `sweep_gate` and `priority`, plus in-scope memory bullets,
+  recent applied/rejected texts, page-budget usage, and today's date. The model
+  returns ID-referenced write operations (`add`, `update(id)`, `delete(id)`, or
+  `none`) plus `sweep_action` (`promote`, `merge`, `already_covered`,
+  `downgrade`, `reject`, or `needs_review`) and must account for every input
+  claim exactly once.
 - Backend validation is structural only: every claim is covered once,
-  referenced memory ids exist, updates quote the existing bullet they replace,
-  targets/sections are allowed, and candidate ownership is preserved. Semantic
-  judgments such as "already covered" or "broaden existing memory" belong to the
-  strong model plus teacher review, not lexical backend validators.
+  referenced memory ids exist, operations cannot cross deterministic claim
+  targets, updates quote the existing bullet they replace, and candidate
+  ownership is preserved. Semantic judgments such as "already covered" or
+  "broaden existing memory" belong to the strong model plus teacher review, not
+  lexical backend validators.
 - Card operations are `add`, `adjust`, `already_covered`, `needs_decision`, or
   `reject_low_signal`. `update(id)` maps to `adjust` with
-  `replaces_content`; `none` maps to `already_covered`; low-signal or invalid
-  cases surface as teacher-visible review decisions rather than hidden writes.
+  `replaces_content`; `none` maps to `already_covered` unless its explicit
+  `sweep_action` is `downgrade`, `reject`, or `needs_review`; those remain
+  teacher-visible review decisions rather than hidden writes.
 - For `adjust`, `replaces_content` must exactly match an existing bullet in the
   current memory excerpt. If validation fails after retry, the run degrades to
   one plain-language notice rather than multiplying unresolved cards.
@@ -599,11 +769,14 @@ enforced at write AND inject time via `clamp_memory_page`):
 - `planning_brief.md`
 - `teaching_patterns.md` — class + subject TEACHING STYLE: how this class learns
   and which approaches work/fail (holds the class learning profile).
+- `teaching_framework_adjustments.md` — class-scoped refinements to the
+  immutable shared subject/grade frameworks (budget 1200). Injected in Active
+  Subject Expert, not Active Class Core.
 - `copilot_profile.md` (`copilot.md`) — class-scoped COPILOT WORKING AGREEMENT
   only: planning patterns, avoid-rules, repeated corrections, agent behavior.
 - `session_summaries.md`
 
-`class_state.md` and `taught_so_far.md` were retired (mem_v3 PR2): current unit
+`class_state.md` and `taught_so_far.md` were retired: current unit
 and taught sequence are deterministic projections of the canonical
 `course_state.md` / `timeline.md` rollups, so they are not compact pages.
 
@@ -617,9 +790,13 @@ Scope discipline (no cross-contamination):
 
 - Global teacher preferences → `teacher_profile.md`. Class learning profile →
   `teaching_patterns.md`. Copilot working agreement → `copilot_profile.md`.
+  Class overrides of shared subject/grade pedagogy →
+  `teaching_framework_adjustments.md` (not `teaching_patterns.md`, and never
+  the shared `wiki/subjects/.../teaching_frameworks/` pages).
 - Durable-memory routing is by purpose, not surface wording: near-term planning
   pressure goes to `planning_brief.md`, class learning patterns go to
-  `teaching_patterns.md`, class-scoped copilot behavior goes to
+  `teaching_patterns.md`, class framework refinements go to
+  `teaching_framework_adjustments.md`, class-scoped copilot behavior goes to
   `copilot_profile.md`, global teacher preferences go to `teacher_profile.md`,
   and subject-wide guidance goes to the active subject guide. If one explicit
   teacher request is both a class learning pattern and an immediate planning
@@ -645,8 +822,8 @@ Shared memory-capture rules:
 - Candidate capture mechanics are shared: validation, target allowlisting,
   dedupe, caps, evidence refs, ledger conversion, and ledger persistence.
 - The primary capture path is the explicit `remember(target, content,
-  speech_act, quote, routing_reason)` tool the model calls in the same turn
-  when the teacher gives a durable instruction (mem_v3 PR4). Its deterministic guard
+  speech_act, scope, quote, routing_reason)` tool the model calls in the same turn
+  when the teacher gives a durable instruction. Its deterministic guard
   (`validate_remember_call`) requires a supported preference target and verbatim
   quote provenance, returning a structured error the model retries on; the
   staged candidate flows into the shared candidate layer. The passive
@@ -687,8 +864,10 @@ Proposal (read-only, no writes):
 
 - `POST /classes/{id}/memory/refresh` proposes refreshed derived pages
   (`planning_brief`, `teaching_patterns`, `copilot_profile`,
-  `session_summaries`) plus a `stale_report`. It does not write. (`class_state`
-  / `taught_so_far` were retired — mem_v3 PR2.)
+  `session_summaries`) plus a `stale_report`. It does not write, and it does
+  not rebuild `teaching_framework_adjustments` (that page is teacher-approved
+  apply-only, not a compaction rebuild target). (`class_state` /
+  `taught_so_far` were retired.)
 - Ingest commit and plan save may still return `memory_candidates` /
   `class_memory_proposal` in the API payload for ledger / tooling, but the
   frontend does not mount post-save review cards for them. Staged candidates
@@ -706,11 +885,12 @@ Apply (the only durable-write path for these pages):
 
 - `POST /classes/{id}/memory/apply` writes only the teacher-approved items via
   the bounded helpers (`add_user_profile_conclusion`, `add_profile_conclusion`,
-  `add_compact_memory_conclusion` for `planning_brief` and `teaching_patterns`,
-  plus `add_subject_guide_conclusion` for the active class subject guide).
-  Unsupported targets such as `canonical_wiki` or a different subject guide are
-  skipped, not written. It also closes the originating ledger rows for applied
-  fast-lane candidates so the sweep never re-proposes them (mem_v3 PR1).
+  `add_compact_memory_conclusion` for `planning_brief`, `teaching_patterns`,
+  and `teaching_framework_adjustments`, plus `add_subject_guide_conclusion` for
+  the active class subject guide). Unsupported targets such as `canonical_wiki`
+  or a different subject guide are skipped, not written. It also closes the
+  originating ledger rows for applied fast-lane candidates so the sweep never
+  re-proposes them.
   The apply API remains available for Memory Sweep and for future in-chat
   confirmation cards; it is not triggered by a post-save preference screen.
 - `POST /classes/{id}/memory/compact/apply` writes teacher-reviewed compact
@@ -761,10 +941,13 @@ Purpose:
 - Make agent behavior reviewable during development without guessing what was
   loaded or remembered.
 
-Plan trace endpoint:
+Workflow trace endpoints (enabled only by `AGENT_TRACE_ENABLED`):
 
 - `GET /classes/{id}/plan/sessions/{session_id}/trace` returns a read-only
   debug bundle for the active planning session.
+- `GET /classes/{id}/discussion/sessions/{session_id}/trace` and
+  `GET /classes/{id}/ingest/sessions/{session_id}/trace` provide equivalent
+  request-local diagnostics for Discuss and Update Memory.
 - The bundle includes prompt stack sections, current `lessonplan.md`, compact
   runtime state, recent messages, captured streamed events, evidence briefs, and
   raw evidence refs.
@@ -781,6 +964,8 @@ Plan trace endpoint:
   session summaries.
 - Trace output may contain teacher/session content and raw tool evidence; treat
   it as local developer data, not durable product memory.
+- Full prompt assembly is available only through these gated trace bundles. It
+  must not be copied to general logs or exposed in a teacher-facing response.
 
 ## Workflow Spec Contract
 
@@ -829,12 +1014,23 @@ Class home may open an inline read-only “Discuss class state” chat.
 
 ### Reads
 
-- Same base context pattern as planning: Teacher layer + Active class core.
+- Same base context pattern as planning: Teacher layer + Active class core +
+  compact subject routing. Add the Active Subject Expert only when the
+  discussion question is pedagogical or curriculum-related.
 - Bounded conversation window (plan history turns).
 - Compact evidence briefs and optional raw refs via `get_raw_evidence`.
 - Tools: class-scoped read tools from `create_chat_wiki_tools` (list/read
   lessons, search memory, read memory page, raw evidence), plus `remember(...)`
   and executive verification tools.
+- When a trusted-source section is read, `ClassDiscussionRuntime` records its
+  `source_id` and `section_id`. The model may use the English wiki material only
+  as a **KlassenPilot reviewed English summary**, never as a verbatim official
+  German quotation. The backend resolves recorded provenance into the official
+  title, section, and canonical German-source link. Model-written `Source:` /
+  `Quelle:` lines and URLs are rejected once and corrected; a second invalid
+  response has those lines removed before the backend footer is added. The
+  recorded source list persists with a resumed Discuss draft so its trace and
+  later turns retain the same provenance.
 
 ### Writes / side effects
 

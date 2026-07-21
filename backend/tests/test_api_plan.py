@@ -12,6 +12,16 @@ from fastapi.testclient import TestClient
 from tests.conftest import CLASS_ID
 
 
+def test_new_plan_session_starts_with_an_empty_artifact(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+
+    draft = client.get(f"{base}/sessions/{session_id}/draft")
+
+    assert draft.status_code == 200, draft.text
+    assert draft.json()["plan_markdown"] == ""
+
+
 def test_plan_full_flow(client: TestClient):
     base = f"/api/classes/{CLASS_ID}/plan"
 
@@ -29,6 +39,7 @@ def test_plan_full_flow(client: TestClient):
     chat_body = chat.json()
     assert chat_body["reply"]
     assert chat_body["plan_markdown"]
+    assert "lesson_artifact" not in chat_body
     assert chat_body["ready_to_save"] is True
 
     save = client.post(
@@ -87,6 +98,28 @@ def test_advisory_executive_finding_does_not_block_plan(client: TestClient):
     assert chat.status_code == 200, chat.text
     assert chat.json()["ready_to_save"] is True
     assert chat.json()["executive_state"]["status"] == "advisory"
+
+
+def test_plan_chat_returns_deterministic_verification_report(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+
+    chat = client.post(
+        f"{base}/sessions/{session_id}/chat",
+        json={"message": "Plan the next lesson."},
+    )
+
+    assert chat.status_code == 200, chat.text
+    report = chat.json()["executive_state"]["verification_reports"]["plan"]
+    assert report["pack_id"] == "plan"
+    assert {row["row_id"] for row in report["rows"]} == {
+        "markdown_package",
+        "source_provenance",
+        "duration",
+    }
+    draft = client.get(f"{base}/sessions/{session_id}/draft")
+    assert draft.status_code == 200
+    assert draft.json()["executive_state"]["verification_reports"]["plan"]["pack_id"] == "plan"
 
 
 def test_blocking_finding_keeps_ready_flag_false_without_status_downgrade(
@@ -163,6 +196,93 @@ def test_plan_save_manual_unknown_student_returns_409_without_write(client: Test
         },
     )
     assert saved.status_code == 404
+
+
+def test_plan_save_accepts_markdown_only_audience_sections_with_exit_ticket(
+    client: TestClient,
+):
+    """A valid Markdown-first package must not be rejected after a clear check."""
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+    markdown = """# Lesson Plan — Carbon Bonding
+
+## Teacher
+
+Use a particle-model drawing before introducing formal notation. Start with a
+short bridge from electron transfer to electron sharing, then model methane.
+
+## Student
+
+Draw methane, ethane, ethene, and ethyne. Count the bonds around each carbon
+and explain to a partner how sharing differs from transfer.
+
+## Observation
+
+Listen for students who confuse ion charge with bond order. Collect one shared
+piece of evidence during the molecule-drawing task before students leave.
+
+### Exit ticket
+
+In two sentences, explain why carbon can form four bonds and how electron
+sharing differs from redox electron transfer.
+"""
+
+    save = client.post(
+        f"{base}/save",
+        json={
+            "session_id": session_id,
+            "lesson_date": "2026-10-06",
+            "plan_markdown": markdown,
+        },
+    )
+
+    assert save.status_code == 200, save.text
+    assert save.json()["lesson_date"] == "2026-10-06"
+
+
+def test_plan_save_accepts_teacher_authored_markdown_without_heading_contract(
+    client: TestClient,
+):
+    """A teacher can save a deliberate format variation after a clear safety check."""
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+    markdown = """Carbon bonding lesson — teacher working format
+
+Begin with a five-minute redox recall, then have pairs sketch methane, ethane,
+ethene, and ethyne. Ask every pair to compare electron transfer in redox with
+electron sharing in covalent bonds. Keep hybridization as a brief geometry
+intuition only. Collect each student's written answer to decide whether the
+next lesson needs another visual model before structural-formula practice.
+"""
+
+    save = client.post(
+        f"{base}/save",
+        json={
+            "session_id": session_id,
+            "lesson_date": "2026-10-07",
+            "plan_markdown": markdown,
+        },
+    )
+
+    assert save.status_code == 200, save.text
+    assert save.json()["lesson_date"] == "2026-10-07"
+
+
+def test_plan_save_rejects_empty_markdown_before_verification(client: TestClient):
+    base = f"/api/classes/{CLASS_ID}/plan"
+    session_id = client.post(f"{base}/sessions").json()["session_id"]
+
+    save = client.post(
+        f"{base}/save",
+        json={
+            "session_id": session_id,
+            "lesson_date": "2026-10-08",
+            "plan_markdown": " \n\t ",
+        },
+    )
+
+    assert save.status_code == 422
+    assert "plan_markdown must not be empty" in save.text
 
 
 def test_profile_proposal_normalizes_human_label_targets(

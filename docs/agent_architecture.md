@@ -105,11 +105,12 @@ The product uses tiered class memory.
 
 2. **Compact class memory**
    Derived, size-budgeted pages under `wiki/classes/{class_id}/memory/`:
-   `planning_brief.md`, `teaching_patterns.md`, `copilot_profile.md`, and
+   `planning_brief.md`, `teaching_patterns.md`,
+   `teaching_framework_adjustments.md`, `copilot_profile.md`, and
    `session_summaries.md`. Each page has a hard char budget in
    `MEMORY_PAGE_BUDGETS`, enforced at write AND inject time via
    `clamp_memory_page` (Hermes-style: small, high-signal, replace not append).
-   `class_state.md` and `taught_so_far.md` were **retired** (mem_v3 PR2):
+   `class_state.md` and `taught_so_far.md` were **retired**:
    "current unit" and "taught sequence" are deterministic projections of the
    canonical `course_state.md` / `timeline.md` rollups, so they live in exactly
    one home there and the sweep *reads* them rather than curating a second,
@@ -135,15 +136,34 @@ The product uses tiered class memory.
 
    Current live planning and Update Memory calls compose explicit layers through
    `prompt_assembly.py`: Teacher Layer, Active Class Core, and workflow-specific
-   runtime/task sections. The Active Class Core loads exactly one class, the
-   subject guide selected by `wiki.get_class(class_id).subject`, and all compact
-   `wiki/classes/{class_id}/memory/*.md` pages. Legacy stacked pack builders are
+   runtime/task sections. The Active Class Core loads exactly one class and all
+   compact `wiki/classes/{class_id}/memory/*.md` pages; the current compatibility
+   path also includes the subject guide selected by
+   `wiki.get_class(class_id).subject`. Legacy stacked pack builders are
    compatibility/debug views, not the model-facing contract.
+
+   The target subject-know-how design keeps the two dimensions explicit:
+   `build_base_assistant_context_trace()` always composes the global Teacher
+   Layer, class-only Active Class Core, and compact subject/grade/branch routing.
+   Planning and differentiation then add
+   `build_active_subject_expert_context_trace()`, which injects the compact
+   `chemie.md` front door, the selected immutable Grade 9 key summary, the
+   bounded class adjustment page, and the source TOC. These are composed once
+   at runtime; no generated profile is persisted. Update Memory receives subject
+   identity/routing only by default, preserving its focus on what happened in
+   class.
+
+   Planning also receives a bounded trusted-source profile: class branch/grade
+   plus an allow-listed source TOC. It does not receive curriculum bodies. The
+   planner progressively calls typed list/search/read source tools when making
+   an official curriculum claim; section reads are captured as raw evidence and
+   their provenance is retained in `PlanRuntime.consulted_sources`.
 
 4. **Runtime session memory (lesson planning and update memory)**
    `PlanRuntime` (in `planning_state.py`): backend-owned `SessionState`,
    `LessonPlanningState`, compact `EvidenceBrief`s with a raw-output store
-   behind `raw_ref` (progressive exposure via `get_raw_evidence`), and
+   behind `raw_ref` (progressive exposure via `get_raw_evidence`), consulted
+   trusted-source sections, and
    accumulated `MemoryCandidate`s. The model proposes `state_patch` updates;
    backend code validates and applies them. Runtime state is persisted on the
    session and re-injected compactly each turn so the verbatim window can be
@@ -190,13 +210,35 @@ The product uses tiered class memory.
    is not itself a candidate update. Durable-write fingerprint verification is
    a later boundary and remains separate from this proactive chat loop.
 
-6. **Profiles (three clearly-scoped files)**
+   The first workflow-specific pack is Plan verification: deterministic package,
+   source-read, and timing rows are immediate; a bounded no-tools economy-model
+   report follows after the draft is returned. Its report is revision-bound and
+   lives inside `ExecutiveRuntime`, not in the lesson artifact or durable wiki.
+   It is teacher-facing through the Plan draft channel, while full inputs stay
+   trace-only. Advisory scope/pedagogy notes never block; only a completed
+   severe-safety hold for the same Markdown fingerprint prevents saving.
+
+   The second pack is Update Memory integrity. It runs deterministically on
+   every diary edit and again immediately before proposal or commit. It compares
+   a confirmed target lesson date with the diary date and accepts student
+   observations only when they use known active-class `S-###` roster IDs. A
+   malformed ID (for example `S006`), an unknown ID, or a name-style student
+   label is a blocking correction request. The pack is deliberately not an LLM
+   quality review: it preserves the teacher's Markdown, names the exact
+   correction, and clears itself when the same draft is repaired. Its compact
+   report stays in `ExecutiveRuntime` and trace/debug output; the normal
+   teacher path sees the existing concise write-blocking recovery message.
+
+6. **Profiles (four clearly-scoped files)**
    - `user.md` (`wiki/teacher_profile.md`, GLOBAL): teacher communication style,
      stable preferences, default lesson structure, and only teacher-confirmed
      professional context that materially improves future assistance.
    - `teaching_patterns.md` (class + subject): how this class learns and which
      approaches work/fail (the class learning profile).
    - `copilot.md` (`copilot_profile.md`, class): copilot working agreement only.
+   - `teaching_framework_adjustments.md` (class + subject/grade): bounded
+     teacher-approved replacement/refinement rules. Prompt assembly combines it
+     with the immutable shared Grade 9 framework in memory.
    Durable writes go through teacher-approved memory endpoints
    (refresh/propose/apply), never silently from chat.
    Lesson-plan save surfaces the current runtime state and accumulated memory
@@ -216,12 +258,12 @@ The product uses tiered class memory.
    context, not durable memory. Profile context is advisory; it never expands
    the active class, available tools, or durable-write authority.
 
-7. **Candidate ledger and Memory Sweep (Memory V3)**
+7. **Candidate ledger and Memory Sweep (Memory V4)**
    Planning and Update Memory chats capture review-only durable facts. The
    **primary path is an explicit
-   `remember(target, content, speech_act, quote, routing_reason)` tool** the
-   model calls the moment the teacher gives a standing instruction (mem_v3
-   PR4). This replaced a passive `memory_candidates` output field the
+   `remember(target, content, speech_act, scope, quote, routing_reason)` tool** the
+   model calls the moment the teacher gives a standing instruction. This
+   replaced a passive `memory_candidates` output field the
    model reliably forgot to fill while doing planning/ingest work — the measured
    "emission gap" (durable requests understood but never routed, the original V2
    capture-bug shape). The shift matches the 2026 self-editing-memory pattern
@@ -249,28 +291,31 @@ The product uses tiered class memory.
    on arrival. The ledger stays episodic working memory, not prompt-facing
    truth and not durable wiki memory.
 
-   Between the ledger and the sweep sits a promotion gate
-   (`memory_gate.py`, OpenClaw-inspired): explicit teacher asks are always
-   sweep-eligible, inferred claims need captures in at least two distinct
-   sessions, and stale unreinforced singletons expire silently. Teacher
-   rejections have teeth — a rejected cluster resurfaces only on a fresh
-   explicit ask.
+   Between the ledger and the sweep sits a deterministic priority gate
+   (`memory_gate.py`, OpenClaw-inspired): explicit teacher asks receive the
+   highest priority when provenance is verified, inferred claims receive
+   reinforcement/occasion metadata, and stale unreinforced singletons expire
+   silently. Held singletons still reach the second judge with lower priority;
+   they are not silently hidden. Teacher rejections have teeth — a rejected
+   cluster resurfaces only on a fresh explicit ask.
 
    Memory Sweep itself is teacher-triggered and runs ONE consolidation call on
    the strongest reasoning model (`OPENAI_SWEEP_MODEL`; mini models fail the
    add-vs-adjust judgment — verified live). The call sees everything at once:
-   all gate-passing claims with reinforcement metadata, every in-scope memory
-   file with its bullets enumerated by ephemeral ids, recently applied and
-   rejected texts, page-budget usage, and today's date. It returns mem0-style
-   ID-referenced operations (`add` / `update(id)` / `delete(id)` / `none`).
-   Backend validation is STRUCTURAL ONLY: every claim accounted for exactly
-   once, referenced ids must exist, updates quote their bullet — no lexical
-   token-overlap second-guessing of the model's semantics; teacher review is
-   the safety net. A failed run degrades to one plain-language notice, never
-   per-candidate fallback cards. Operations map onto review cards (update →
-   adjust with the referenced bullet as `replaces_content`; `none` →
-   already-covered, which retires ledger rows on approval), and the sweep
-   brief UI pins explicitly requested changes first. The MBB/executive
+   reinforced and held singleton claims with priority metadata, every
+   in-scope memory file with its bullets enumerated by ephemeral ids, recently
+   applied and rejected texts, page-budget usage, and today's date. It returns
+   mem0-style ID-referenced write operations (`add` / `update(id)` /
+   `delete(id)` / `none`) plus a semantic `sweep_action` (`promote`, `merge`,
+   `already_covered`, `downgrade`, `reject`, or `needs_review`). Backend
+   validation is structural: every claim is accounted for exactly once,
+   referenced ids must exist, operations cannot cross their claim targets, and
+   updates quote their bullet — no lexical token-overlap second-guessing of the
+   model's semantics; teacher review is the safety net. A failed run degrades
+   to one plain-language notice, never per-candidate fallback cards. Semantic
+   actions map onto review cards (update → adjust with the referenced bullet as
+   `replaces_content`; downgrade/reject/needs_review stay review-only), and the
+   sweep brief UI pins explicitly requested changes first. The MBB/executive
    communication scenario remains a live trace and regression test, not a
    hardcoded system-prompt alias or backend synonym rule.
 
@@ -335,7 +380,7 @@ Design rules:
   speech_act, quote, routing_reason)` is the one write-capable tool on both chat
   surfaces, and even it writes nothing durable: it stages a review-only
   candidate grounded in the teacher's verbatim words, with a deterministic guard
-  that returns a structured error for the model to retry (mem_v3 PR4). Making
+  that returns a structured error for the model to retry. Making
   the durable-memory decision an explicit, salient tool call is what closed the
   emission gap; `routing_reason` gives live evals and traces a compact rationale
   for wrong-target failures without exposing model reasoning to teachers.
@@ -448,11 +493,11 @@ should receive enough context to start well and use tools for the long tail.
 - Shared memory candidate capture + discipline + `remember(...)` validation (`validate_remember_call`): `backend/app/teacher_agent/memory_capture.py`
 - `remember(...)` capture tool wiring: `backend/app/teacher_agent/tools.py` (`create_remember_tool`)
 - Wiki/input reconciliation eval scaffold: `backend/tests/evals/test_klassenpilot_wiki_reconciliation.py`
-- Post-save `/memory/apply` ledger-close (mem_v3 PR1): `backend/app/api/routes.py` (`apply_memory`)
+- Post-save `/memory/apply` ledger-close: `backend/app/api/routes.py` (`apply_memory`)
 - Memory candidate ledger + insert-time folding: `backend/app/services/memory_candidate_ledger.py`
 - Promotion gate and silent decay: `backend/app/services/memory_gate.py`
-- Single-call Memory Sweep consolidation (Mem V3): `backend/app/services/memory_sweep.py`
-- Memory V3 design, learnings, and test strategy: `docs/mem_v3/`
+- Single-call Memory Sweep consolidation (Mem V4 second judge): `backend/app/services/memory_sweep.py`
+- Memory V4 design, learnings, and test strategy: `docs/mem_v4/`
 - Memory refresh/propose/apply endpoints: `backend/app/api/routes.py`
 - Wiki schema rules: `backend/teacher_wiki/AGENTS.md`
 

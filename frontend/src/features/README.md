@@ -28,10 +28,10 @@ Rules:
 - Do not remount the chat runtime to force sync; refresh from backend revision
   instead.
 - Background-turn completion toasts stay in
-  `components/klassenpilot/pending-turn-notifier.tsx`, which claims a
-  `lib/pending-chat-turns.ts` marker once.
+  `components/klassenpilot/pending-turn-notifier.tsx`, which polls
+  `GET /api/workflow/active` and unions with `lib/running-jobs.ts`.
 
-Memory Sweep is **not** an assistant-ui draft. It uses the same pending-job
+Memory Sweep is **not** an assistant-ui draft. It uses the same running-job
 lane (`mode: "memory_sweep"`) but resumes a backend-owned review session via
 `/memory/sweep/review`.
 

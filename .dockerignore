@@ -1,0 +1,29 @@
+# Railway Docker builds use repository root as context (see deploy/railway/README.md).
+
+.git
+.cursor
+**/__pycache__
+**/.pytest_cache
+**/*.pyc
+
+# Secrets and local env — never send to the daemon
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/credentials*
+
+# Rebuilt inside images — do not send to daemon
+frontend/node_modules
+frontend/.next
+backend/.venv
+
+# Local mutable data (not part of hosted images)
+backend/beta_data
+backend/teacher_wiki_sandbox
+
+# Docs / deploy configs not needed in image layers (shrinks build context)
+docs/
+deploy/
+ref_repos/
+implementation_plans/

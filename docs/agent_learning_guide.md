@@ -1,5 +1,11 @@
 # AI Agent Learning Guide
 
+> This is an educational reference, not a behavior contract. For current
+> memory behavior use [`mem_v4/README.md`](mem_v4/README.md); for executable
+> workflow rules use [`agent_contracts.md`](agent_contracts.md). Historical
+> MemV2/MemV3 examples below remain useful only as context for the decisions
+> captured in the MemV4 archive summaries.
+
 ## Purpose
 
 This document is for personal learning. It is not a product contract and not a
@@ -240,9 +246,11 @@ The useful pattern is a candidate ledger:
    moment the teacher gives a durable instruction (mem_v3 PR4 — capture is a
    tool the model *decides* to invoke, not a passive field it forgets while
    working; a `memory_candidates` output field remains as a fallback). The tool
-   includes an internal `routing_reason` so traces can explain why a target was
-   chosen without exposing model reasoning to the teacher. Either path stages a
-   candidate alongside the artifact and runtime `state_patch`.
+   supplies `speech_act`, `scope`, and a verbatim `quote`; backend Admission
+   verifies provenance and computes Priority. It also includes an internal
+   `routing_reason` so traces can explain why a target was chosen without
+   exposing model reasoning to the teacher. Either path stages a candidate
+   alongside the artifact and runtime `state_patch`.
 2. The backend stores them in session runtime, dedupes them, caps the list, and
    returns them to the UI.
 3. After the teacher saves a plan or commits lesson memory, the UI presents
@@ -562,6 +570,37 @@ memory" pattern and the Hermes-style discipline of bounded curated memory. The
 ledger stays raw and never rewrites "MBB" into "executive." Consolidation only
 proposes a reviewed durable claim that points back to the raw evidence ids.
 
+## Memory V4: Sweep Is The Second Judge
+
+V4 keeps the V3 single-call consolidation design but changes what reaches that
+call. The occasion/reinforcement gate is now a priority signal: reinforced
+claims and verified fast-lane requests are easier to promote, while a held
+singleton is still sent to Sweep with `sweep_gate=held` and
+`priority=singleton`. This gives the model a chance to reject, downgrade, or
+mark an ambiguous first signal for review instead of making the backend decide
+that it is invisible.
+
+The model returns two separate decisions:
+
+- structural write mechanics: `add`, `update(id)`, `delete(id)`, or `none`;
+- semantic Sweep action: `promote`, `merge`, `already_covered`, `downgrade`,
+  `reject`, or `needs_review`.
+
+That separation is important. A downgrade is not a wiki write, and an
+`already_covered` result is not permission to mutate a page. The backend checks
+claim coverage, memory-id references, and deterministic target ownership, maps
+the result to a review card, and waits for a teacher decision before Apply can
+write Markdown. This is the preferred integration pattern for model judgment:
+give the model enough bounded evidence to judge meaning, then keep structure,
+scope, provenance, and persistence in deterministic code.
+
+One planned follow-up remains explicit: the three workflows currently assemble
+their bounded conversation/runtime/memory context through workflow-specific
+prompt builders. The documented `MemoryClassificationContext` is the desired
+shared contract, not a second classifier service and not a full transcript
+store. Extracting it should be a small compatibility-preserving refactor after
+the deterministic V4 gates are stable.
+
 ## Current KlassenPilot Implementation
 
 The current implementation follows the tiered model.
@@ -581,8 +620,9 @@ Key files:
   `remember(...)` capture-tool guard (`validate_remember_call`).
 - `backend/app/services/memory_candidate_ledger.py`: raw candidate evidence
   ledger for cross-session review with deterministic insert-time folding.
-- `backend/app/services/memory_sweep.py`: single-call (Mem V3) mem0-style
-  ID-referenced consolidation with structural-only validation.
+- `backend/app/services/memory_sweep.py`: single-call Mem V4 second-judge
+  consolidation with priority metadata, semantic actions, and structural
+  target/ID validation.
 - `backend/app/teacher_agent/tools.py`: model-visible read tools plus the
   `remember(...)` capture tool (the one write-capable chat tool; stages
   review-only candidates, writes nothing durable).

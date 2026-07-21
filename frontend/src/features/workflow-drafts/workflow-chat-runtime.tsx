@@ -8,7 +8,10 @@ import {
 } from "@assistant-ui/react";
 
 import { truncateThreadBeforeEdit } from "./thread-messages";
-import { useWorkflowDraftStore } from "./workflow-draft-store";
+import {
+  selectThreadMessages,
+  useWorkflowDraftStore,
+} from "./workflow-draft-store";
 
 export type UpdateWorkflowThread = (
   update: (messages: ThreadMessageLike[]) => ThreadMessageLike[],
@@ -26,9 +29,9 @@ export function useWorkflowChatRuntime({
   /** Abort the in-flight SSE turn (Composer stop button). */
   onCancel?: () => Promise<void>;
 }) {
-  const messages = useWorkflowDraftStore(
-    (state) => state.threadMessagesByDraftId[draftId] ?? [],
-  );
+  // Stable fallback reference — an inline `?? []` here allocates per render
+  // and loops useSyncExternalStore forever when the key is missing (Bug A).
+  const messages = useWorkflowDraftStore(selectThreadMessages(draftId));
   const setThreadMessages = useWorkflowDraftStore((state) => state.setThreadMessages);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;

@@ -46,7 +46,7 @@ This folder contains the Next.js app and shared UI code.
   teacher-first save brief.
 - `lib/sweep-brief.ts` - groups Memory Sweep candidates into New / Changed /
   Already-covered brief rows.
-- `lib/pending-chat-turns.ts` - session markers for durable background jobs
+- `lib/running-jobs.ts` - poll ∪ local runners for durable background jobs
   (plan/ingest chat turns and Memory Sweep generation).
 - `lib/chat-run-feedback.ts` - running-task and completion toast labels.
 - `lib/memory-sweep-review-status.ts` - class-home badge + sweep loading copy.

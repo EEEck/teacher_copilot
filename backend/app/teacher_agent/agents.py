@@ -29,6 +29,7 @@ from app.teacher_agent.agent import (
     build_ingest_agent,
     build_lint_agent,
     build_plan_chat_agent,
+    build_plan_verification_agent,
     build_plan_lesson_agent,
     build_plan_opening_agent,
     build_profile_proposal_agent,
@@ -39,6 +40,7 @@ from app.teacher_agent.models import (
     ClassDiscussionTurnOutput,
     CompileOutput,
     IngestTurnOutput,
+    MemoryConsolidationOutput,
     MemoryCompactOutput,
     PlanOutput,
     PlanTurnOutput,
@@ -58,6 +60,11 @@ from app.teacher_agent.class_discussion_state import (
     discussion_api_payload,
     merge_class_discussion_turn,
 )
+from app.teacher_agent.citation_presentation import (
+    render_reviewed_source_footer,
+    strip_model_source_presentation,
+    validate_discussion_source_presentation,
+)
 from app.teacher_agent.memory_update_state import (
     MemoryRuntime,
     memory_api_payload,
@@ -74,6 +81,10 @@ from app.teacher_agent.planning_state import (
     PlanRuntime,
     merge_turn_into_runtime,
     planning_api_payload,
+)
+from app.teacher_agent.plan_verification import (
+    PlanVerificationJudgement,
+    build_plan_review_packet,
 )
 from app.teacher_agent.tools import WikiToolContext
 from app.teacher_agent.stream_events import (
@@ -220,6 +231,7 @@ class AgentRunner:
         self.utility_model = settings.resolved_utility_model()
         self.utility_effort = settings.resolved_utility_effort()
         self.timeout = settings.agent_timeout_seconds
+        self.plan_timeout = settings.plan_agent_timeout_seconds
         self.max_turns = settings.agent_max_turns
         self.wiki = wiki
         self.plan_history_turns = settings.plan_history_turns
@@ -496,7 +508,9 @@ class AgentRunner:
         ready = ready and not executive_runtime.open_blocking_findings()
         return reply, plan_md, ready
 
-    async def _run_structured(self, agent, user_input: str):
+    async def _run_structured(
+        self, agent, user_input: str, *, timeout: float | None = None
+    ):
         """Run an agent to completion, async + bounded by a wall-clock timeout.
 
         Never use Runner.run_sync here: the FastAPI request handlers are async,
@@ -506,7 +520,7 @@ class AgentRunner:
         try:
             result = await asyncio.wait_for(
                 Runner.run(agent, user_input, max_turns=self.max_turns),
-                timeout=self.timeout,
+                timeout=timeout or self.timeout,
             )
         except AgentsException as exc:
             if _is_turn_limit_error(exc):
@@ -521,16 +535,22 @@ class AgentRunner:
         return result.final_output
 
     async def _yield_stream_events(
-        self, agent: Any, user_input: str, result_holder: dict[str, Any]
+        self,
+        agent: Any,
+        user_input: str,
+        result_holder: dict[str, Any],
+        *,
+        timeout: float | None = None,
     ) -> AsyncIterator[SseEvent]:
         """Drain one streamed run and store its result in a caller-owned holder."""
         self._require_client()
         result_holder["result"] = None
         result = Runner.run_streamed(agent, user_input, max_turns=self.max_turns)
         started = time.monotonic()
+        wall_clock_limit = timeout or self.timeout
         try:
             async for event in result.stream_events():
-                if time.monotonic() - started > self.timeout:
+                if time.monotonic() - started > wall_clock_limit:
                     yield SseError(message="The request timed out.", code="timeout")
                     return
                 for translated in translate_sdk_event(
@@ -618,7 +638,7 @@ class AgentRunner:
         )
         result_holder: dict[str, Any] = {}
         async for event in self._yield_stream_events(
-            turn.agent, turn.user_input, result_holder
+            turn.agent, turn.user_input, result_holder, timeout=self.plan_timeout
         ):
             if isinstance(event, SseError):
                 yield event
@@ -699,7 +719,9 @@ class AgentRunner:
         current_draft = turn.current_draft
         runtime = turn.runtime
         try:
-            parsed = await self._run_structured(turn.agent, turn.user_input)
+            parsed = await self._run_structured(
+                turn.agent, turn.user_input, timeout=self.plan_timeout
+            )
         except AgentTurnLimitError as exc:
             return str(exc), turn.current_draft, False
         if not isinstance(parsed, PlanTurnOutput):
@@ -858,6 +880,7 @@ class AgentRunner:
 
     def _finalize_discuss_turn(
         self,
+        class_id: str,
         parsed: Any,
         runtime: ClassDiscussionRuntime,
         *,
@@ -875,7 +898,61 @@ class AgentRunner:
         )
         executive_runtime = executive or ExecutiveRuntime()
         apply_executive_patch(executive_runtime, parsed.executive_patch)
-        return parsed.reply
+        footer = render_reviewed_source_footer(
+            self.wiki, class_id, runtime.consulted_sources
+        )
+        return f"{parsed.reply.rstrip()}{footer}"
+
+    @staticmethod
+    def _discussion_citation_correction_input(
+        original_user_input: str, draft: str, errors: list[str]
+    ) -> str:
+        """Tell the model exactly how to repair a rejected source presentation."""
+        rendered_errors = "\n".join(f"- {error}" for error in errors)
+        return (
+            f"{original_user_input}\n\n"
+            "Citation presentation correction:\n"
+            "Return a complete corrected answer to the teacher. English content from "
+            "the wiki is a KlassenPilot reviewed English summary, not a verbatim "
+            "official German quotation. Do not include `Source:`/`Quelle:` lines or "
+            "source URLs; the backend will add the official German source link.\n\n"
+            f"Rejected draft:\n{draft}\n\nValidation errors:\n{rendered_errors}"
+        )
+
+    async def _correct_discussion_source_presentation(
+        self,
+        agent: Any,
+        original_user_input: str,
+        parsed: Any,
+        runtime: ClassDiscussionRuntime,
+    ) -> Any:
+        """Run at most one correction turn, then fall back to backend provenance."""
+        if not isinstance(parsed, ClassDiscussionTurnOutput):
+            return parsed
+        errors = validate_discussion_source_presentation(
+            parsed.reply, runtime.consulted_sources
+        )
+        if not errors:
+            return parsed
+        try:
+            corrected = await self._run_structured(
+                agent,
+                self._discussion_citation_correction_input(
+                    original_user_input, parsed.reply, errors
+                ),
+            )
+        except Exception:
+            logger.warning("Discussion citation correction failed; using backend footer.")
+            corrected = parsed
+        if isinstance(corrected, ClassDiscussionTurnOutput):
+            parsed = corrected
+        if validate_discussion_source_presentation(
+            parsed.reply, runtime.consulted_sources
+        ):
+            return parsed.model_copy(
+                update={"reply": strip_model_source_presentation(parsed.reply)}
+            )
+        return parsed
 
     def _discuss_final_event(
         self,
@@ -934,8 +1011,11 @@ class AgentRunner:
                 suggested_actions=out.suggested_actions,
             )
             return out.reply
+        parsed = await self._correct_discussion_source_presentation(
+            turn.agent, turn.user_input, parsed, turn.runtime
+        )
         finalized = self._finalize_discuss_turn(
-            parsed, turn.runtime, executive=executive
+            class_id, parsed, turn.runtime, executive=executive
         )
         if finalized is None:
             return "I had trouble processing that — could you try again?"
@@ -978,8 +1058,11 @@ class AgentRunner:
         out = result_holder.get("result")
         if out is None:
             return
+        parsed = await self._correct_discussion_source_presentation(
+            turn.agent, turn.user_input, out.final_output, turn.runtime
+        )
         finalized = self._finalize_discuss_turn(
-            out.final_output, turn.runtime, executive=executive
+            class_id, parsed, turn.runtime, executive=executive
         )
         if finalized is None:
             yield SseError(
@@ -1109,6 +1192,46 @@ class AgentRunner:
             message=parsed.message.strip() or "Verification complete.",
         )
 
+    async def review_plan(
+        self,
+        class_id: str,
+        *,
+        teacher_request: str,
+        markdown: str,
+        planning: PlanRuntime,
+    ) -> PlanVerificationJudgement:
+        """Run the no-tools, bounded pedagogical review for one plan draft."""
+        class_config = self.wiki.get_class(class_id)
+        curriculum = self.wiki.get_curriculum_profile(class_id)
+        packet = build_plan_review_packet(
+            teacher_request=teacher_request,
+            markdown=markdown,
+            route={
+                "subject": class_config.subject,
+                "grade": str(curriculum.grade or ""),
+                "branch": str(curriculum.branch or ""),
+            },
+            class_context=self.wiki.build_active_class_core_context_trace(class_id)[
+                "text"
+            ],
+            teacher_context=self.wiki.build_teacher_context_trace()["text"],
+            subject_expert=self.wiki.build_active_subject_expert_context_trace(
+                class_id, purpose="plan"
+            )["text"],
+            consulted_sources=planning.consulted_sources,
+        )
+        agent = build_plan_verification_agent(
+            packet,
+            self.utility_model,
+            reasoning_effort=self.utility_effort,
+        )
+        parsed = await self._run_structured(
+            agent, "Review the supplied packet and return the report card."
+        )
+        if not isinstance(parsed, PlanVerificationJudgement):
+            raise RuntimeError("Failed to review lesson plan")
+        return parsed
+
     async def lint_wiki(self, class_id: str) -> str:
         context = self.wiki.read_wiki_index(class_id)
         agent = build_lint_agent(
@@ -1196,7 +1319,7 @@ class AgentRunner:
         today: str = "",
         validation_error: str = "",
     ) -> "MemoryConsolidationOutput":
-        """Mem V3 single-call sweep: claims + enumerated memory -> operations."""
+        """Mem V4 second-judge sweep: claims + memory -> review operations."""
         import json
 
         from app.teacher_agent.agent import build_memory_sweep_consolidation_agent
@@ -1214,7 +1337,7 @@ class AgentRunner:
             f"Subject: {subject}\n"
             f"Today: {today}\n\n"
             f"{retry_block}"
-            "Claims (gate-passing durable-memory candidates):\n"
+            "Claims (reinforced and held durable-memory candidates, with priority metadata):\n"
             f"{apply_char_limit(json.dumps(claims, indent=2), field_cap * 4)}\n\n"
             "Current memory, bullets enumerated with ids:\n"
             f"{apply_char_limit(json.dumps(memory_indexes, indent=2), field_cap * 4)}\n\n"

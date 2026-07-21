@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # Legacy alias for the chat effort (kept so existing .env files keep working).
     openai_reasoning_effort: ReasoningEffort | None = None
     agent_timeout_seconds: float = 240.0
+    # A full lesson package can legitimately need several source/history tool
+    # rounds plus synthesis; keep that budget separate from shorter workflows.
+    plan_agent_timeout_seconds: float = 600.0
     agent_max_turns: int = 16
 
     # --- Context limits (see app/context_limits.py + context_management.md) ---
@@ -75,6 +78,8 @@ class Settings(BaseSettings):
     ingest_saved_plan_chars: int = 0
     ingest_draft_chars: int = 0
     upload_attachment_chars: int = 0
+    # Compact trusted-source metadata/TOC injected into active class context.
+    trusted_source_index_chars: int = 1200
     # Runtime session memory (PlanRuntime) — see context_limits.py
     plan_state_list_limit: int = 24
     plan_state_bullet_max_chars: int = 160
@@ -83,6 +88,9 @@ class Settings(BaseSettings):
     plan_briefs_store_cap: int = 40
     plan_raw_store_cap: int = 60
     plan_candidates_cap: int = 50
+    # Operational guard for one teacher-turn capture batch. This is not a
+    # semantic limit; overflow is preserved as one review bundle.
+    memory_capture_batch_max_candidates: int = 8
     wiki_root: Path = Path(__file__).resolve().parent.parent / "teacher_wiki"
     cors_origins: list[str] = ["http://localhost:3000"]
     app_env: Literal["development", "production"] = "development"
@@ -92,6 +100,9 @@ class Settings(BaseSettings):
     beta_session_days: int = 30
     beta_cookie_secure: bool = False
     beta_dev_workspace_id: str = ""
+    # Local beta-only Memory V4 diagnostic capture. This is intentionally
+    # disabled unless beta + development + this explicit flag are all set.
+    memory_v4_debug_capture: bool = False
     # Debug endpoints exposing prompt assemblies, session messages, and raw tool
     # evidence. Default: enabled outside production, disabled in production.
     agent_trace_enabled: bool | None = None
@@ -110,6 +121,13 @@ class Settings(BaseSettings):
 
     def is_plan_trace_enabled(self) -> bool:
         return self.is_agent_trace_enabled()
+
+    def is_memory_v4_debug_capture_enabled(self) -> bool:
+        return (
+            self.beta_enabled
+            and self.app_env == "development"
+            and self.memory_v4_debug_capture
+        )
 
     def resolved_model_profile(self) -> str:
         if self.model_profile is not None:

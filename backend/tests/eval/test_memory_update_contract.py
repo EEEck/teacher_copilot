@@ -85,7 +85,10 @@ def test_update_memory_trace_disabled_by_default_in_production(
     from app.config import get_settings
 
     monkeypatch.setenv("APP_ENV", "production")
-    monkeypatch.delenv("AGENT_TRACE_ENABLED", raising=False)
+    # The development worktree intentionally enables traces in backend/.env.
+    # Set an explicit production override so this test verifies the production
+    # gate rather than inheriting local developer diagnostics.
+    monkeypatch.setenv("AGENT_TRACE_ENABLED", "false")
     monkeypatch.delenv("PLAN_TRACE_ENABLED", raising=False)
     get_settings.cache_clear()
     try:

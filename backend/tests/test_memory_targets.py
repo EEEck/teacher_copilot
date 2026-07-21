@@ -14,6 +14,11 @@ from app.teacher_agent.memory_targets import (
 def test_memory_target_policy_covers_doc_44_targets():
     assert memory_channel_for_target("teaching_patterns.md") == "class_learning_pattern"
     assert compact_key_for_target("teaching_patterns.md") == "teaching_patterns"
+    assert (
+        compact_key_for_target("teaching_framework_adjustments.md")
+        == "teaching_framework_adjustments"
+    )
+    assert is_supported_runtime_target("teaching_framework_adjustments.md")
 
     assert memory_channel_for_target("wiki/subjects/chemie.md") == "subject_concept"
     assert is_supported_runtime_target("wiki/subjects/chemie.md")

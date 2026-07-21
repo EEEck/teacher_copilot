@@ -5,8 +5,87 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+
+@dataclass(frozen=True)
+class BetaTesterRef:
+    tester_id: str
+    workspace_id: str
+    display_label: str
+    disabled: bool
+
+
+def list_beta_testers(
+    db_path: Path,
+    *,
+    include_disabled: bool = False,
+) -> list[BetaTesterRef]:
+    """Return provisioned testers from beta SQLite, ordered by tester_id."""
+
+    db_path = Path(db_path)
+    if not db_path.exists():
+        raise FileNotFoundError(f"Beta telemetry database not found: {db_path}")
+
+    clauses = "" if include_disabled else "where t.disabled = 0"
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            f"""
+            select t.tester_id, t.display_label, t.disabled, w.workspace_id
+            from tester t
+            join workspace w on w.tester_id = t.tester_id
+            {clauses}
+            order by t.tester_id asc, w.workspace_id asc
+            """,
+        ).fetchall()
+
+    seen: set[str] = set()
+    testers: list[BetaTesterRef] = []
+    for row in rows:
+        tester_id = str(row["tester_id"])
+        if tester_id in seen:
+            continue
+        seen.add(tester_id)
+        testers.append(
+            BetaTesterRef(
+                tester_id=tester_id,
+                workspace_id=str(row["workspace_id"]),
+                display_label=str(row["display_label"] or ""),
+                disabled=bool(row["disabled"]),
+            )
+        )
+    return testers
+
+
+def write_all_beta_reports(
+    db_path: Path,
+    reports_dir: Path,
+    *,
+    limit_sessions: int = 10,
+    include_disabled: bool = False,
+) -> list[Path]:
+    """Render one Markdown report per provisioned tester."""
+
+    reports_dir = Path(reports_dir)
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for tester in list_beta_testers(
+        db_path,
+        include_disabled=include_disabled,
+    ):
+        out_path = reports_dir / f"{tester.tester_id}.md"
+        markdown = render_beta_report(
+            db_path,
+            tester_id=tester.tester_id,
+            workspace_id=tester.workspace_id,
+            limit_sessions=limit_sessions,
+        )
+        out_path.write_text(markdown, encoding="utf-8")
+        written.append(out_path)
+    return written
 
 
 def render_beta_report(

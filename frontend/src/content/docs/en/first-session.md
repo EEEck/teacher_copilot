@@ -2,7 +2,7 @@
 
 **So what:** One guided pass through the mock class proves the core loop — plan from memory, teach, log results, review what saves.
 
-The beta uses a seeded mock class: **Chemie 9b**. Every tester starts from the same realistic notebook so you can focus on the workflow, not on building memory from scratch.
+The beta uses a seeded mock class: **Chemie 9b** (Chemie 9 NTG). Every tester starts from the same realistic notebook so you can focus on the workflow, not on building memory from scratch. Plans are grounded in that class memory plus adapted open K–12 planning skills and LehrplanPLUS/KMK trusted sources — see [How the Copilot Works](/docs/how-it-works#curriculum-grounding-chemie-9-ntg).
 
 ## Why a mock class
 

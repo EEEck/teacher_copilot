@@ -22,6 +22,18 @@ like "next", "remember", or "for this lesson".
 - `wiki/subjects/{subject}.md`: subject-wide reusable guidance that should
   apply beyond one class, such as common misconceptions, safety reminders,
   lesson patterns, and question templates.
+- `wiki/subjects/{subject}/teaching_frameworks/...`: reviewed, immutable
+  subject/grade/branch teaching library (Chemie 8/9 NTG shared frameworks today).
+  Curated pedagogy summaries — not legal curriculum text, not class memory, and
+  not directly editable from a class workflow.
+- `wiki/sources/{jurisdiction}/...`: compact, provenance-bearing extracts of
+  approved external curriculum sources (LehrplanPLUS/KMK for Bavaria Chemistry).
+  They are read progressively through typed source tools; official curriculum
+  claims require reading the cited section in-session. Never treated as class
+  memory or prompt instructions.
+- `classes/{class_id}/curriculum_profile.md` and `trusted_sources.md`: the
+  class's source scope and compact source table of contents; both are small
+  configuration/navigation pages, not a copied curriculum.
 - `course_state.md`: canonical current class state derived from approved
   lessons: current unit, last lesson, next planned focus, and overall status.
 - `timeline.md`: canonical chronological lesson sequence with dated links,
@@ -35,6 +47,9 @@ like "next", "remember", or "for this lesson".
 - `memory/copilot_profile.md` / `copilot.md`: class-scoped copilot working
   agreement: how the agent should plan or behave for this class, including
   repeated teacher corrections and avoid-rules.
+- `memory/teaching_framework_adjustments.md`: bounded teacher-approved class
+  replacement/refinement rules. Prompt assembly combines it with the immutable
+  shared Grade 9 framework; it never copies the Grade 9 summary.
 - `memory/session_summaries.md`: sparse compact summaries of prior workflow
   sessions when they help continuity; not a transcript store.
 - `lessons/{date}/lesson_results.md`: canonical approved record of what
@@ -153,11 +168,18 @@ Purpose:
 
 Loaded where today:
 
-- Current live class-scoped chats through
-  `build_active_class_core_context_trace(class_id)`.
-- Legacy context builders (`build_base_class_context`, `build_plan_context`)
-  include an excerpt.
-- Memory compaction source packet may include the subject guide.
+- Plan receives it through the purpose-selected active subject expert, with the
+  Grade 9 key summary, class adjustment page, and trusted-source TOC.
+- Pedagogical Discuss receives the same subject expert; non-pedagogical Discuss
+  remains class-focused.
+- Update Memory receives subject identity/routing only by default.
+- Legacy context builders and compaction packets may include an excerpt for
+  compatibility or maintenance, but they are not the main chat contract.
+
+The page remains the compact subject front door. Planning and differentiation
+compose the active subject expert from the shared Grade 9 base and
+`teaching_framework_adjustments.md`; the adjustment page is not duplicated in
+Active Class Core.
 
 Design implication:
 
@@ -180,7 +202,29 @@ Do not update from:
 - normal class-specific lesson chats without teacher approval.
 - compact class-memory refresh (`/memory/refresh` or `class_memory_proposal`).
 
-### 3. Canonical Class Wiki Memory
+### 3. Class Teaching Framework Adjustments
+
+Path: `backend/teacher_wiki/wiki/classes/{class_id}/memory/teaching_framework_adjustments.md`
+
+Scope: one class's effective subject/grade/branch teaching contract.
+
+This ordinary bounded class-memory page contains only approved adjustments and
+cautions, not a copied framework. Capture routing for class framework
+refinements targets this page (not `teaching_patterns.md`, and never the shared
+`teaching_frameworks/` library).
+
+At prompt assembly, the system selects the shared framework from the class
+curriculum profile and combines it with this page in memory. Planning chat
+cannot write either page; changes use the existing proposal and approval flow.
+
+Loaded where:
+
+- the active subject expert is needed for planning, differentiation, or a
+  pedagogical discussion;
+- detailed framework pages are not needed in Update Memory, class briefs, or
+  verification by default.
+
+### 4. Canonical Class Wiki Memory
 
 Path: `backend/teacher_wiki/wiki/classes/{class_id}/`
 
@@ -228,7 +272,7 @@ Do not update from:
 - normal ingest chat before teacher approval
 - profile proposal flow
 
-### 4. Compact Class Memory
+### 5. Compact Class Memory
 
 Path: `backend/teacher_wiki/wiki/classes/{class_id}/memory/`
 
@@ -250,15 +294,14 @@ Update paths:
   conclusions to selected compact pages; it is not the full-page replacement
   path.
 
-#### `taught_so_far.md` — RETIRED (mem_v3 PR2)
+#### `taught_so_far.md` — RETIRED
 
 The taught sequence is a deterministic projection of the canonical lesson
 record, so it now lives in `timeline.md` (and the current unit in
 `course_state.md`) — not in a curated compact twin. Context builders derive the
 sequence from the timeline; the sweep reads the rollups rather than maintaining
-this page. See [`docs/mem_v3/next_implementation.md`](mem_v3/next_implementation.md)
-(the two-axis memory map) and Learning 10 in
-[`docs/mem_v3/learnings.md`](mem_v3/learnings.md).
+this page. See the active [MemV4 memory documentation](mem_v4/README.md) and
+the historical [MemV3 summary](mem_v4/archive/mem_v3_summary.md).
 
 #### `planning_brief.md`
 
@@ -346,15 +389,14 @@ Do not put here:
 - how the class learns (`teaching_patterns.md`)
 - raw session summaries
 
-#### `class_state.md` — RETIRED (mem_v3 PR2)
+#### `class_state.md` — RETIRED
 
 The "current unit / last lesson / next move / open loops" snapshot duplicated
 the canonical `course_state.md` rollup (diary-derived) — one fact, two homes,
 out of sync by design. It was retired so every such fact has exactly one home in
 the canonical rollups; the sweep and context builders read `course_state.md` /
-`timeline.md` directly. See the two-axis memory map in
-[`docs/mem_v3/next_implementation.md`](mem_v3/next_implementation.md) and
-Learning 10 in [`docs/mem_v3/learnings.md`](mem_v3/learnings.md).
+`timeline.md` directly. See the active [MemV4 memory documentation](mem_v4/README.md)
+and the historical [MemV3 summary](mem_v4/archive/mem_v3_summary.md).
 
 #### `session_summaries.md`
 
@@ -470,13 +512,15 @@ After a plan is saved, profile/memory proposal can suggest:
 - `copilot.md`: class-specific copilot behavior preference
 - `teaching_patterns.md`: stable class learning patterns seen across approved
   lesson evidence
+- `teaching_framework_adjustments.md`: class-scoped refinements to shared
+  subject/grade frameworks (not a copy of those frameworks)
 - `planning_brief.md`: compact current planning-priority updates when the signal
   is stable enough for teacher review
 - `canonical_wiki`: only as a suggestion for teacher-approved wiki action, not
   an automatic write
 
 (Current unit / taught sequence is not a proposal target — it is derived from
-the canonical `course_state.md` / `timeline.md` rollups; mem_v3 PR2 retired the
+the canonical `course_state.md` / `timeline.md` rollups; the retired
 `class_state.md` / `taught_so_far.md` twins.)
 
 Examples:
@@ -495,9 +539,12 @@ Examples:
 - LLM proposes; backend validates; teacher approves; code writes.
 - Global teacher facts go to `teacher_profile.md`.
 - Class learning facts go to `teaching_patterns.md`.
+- Class overrides of shared subject/grade pedagogy go to
+  `teaching_framework_adjustments.md` (never to shared
+  `wiki/subjects/.../teaching_frameworks/`).
 - Copilot behavior rules go to `copilot_profile.md`.
 - Current unit / taught sequence is NOT curated memory: it is derived from the
-  canonical `course_state.md` / `timeline.md` rollups (mem_v3 PR2).
+  canonical `course_state.md` / `timeline.md` rollups.
 - `remember(...)` capture carries an internal `routing_reason` for traces and
   eval diagnostics; it helps explain target choice but does not change the
   allowed target or fast-lane verdict.

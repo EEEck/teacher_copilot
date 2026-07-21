@@ -18,16 +18,22 @@ from app.api.deps import (
     get_memory_candidate_ledger,
     get_memory_sweep_review_store,
     get_plan_service,
+    get_request_identity,
     get_workflow_draft_store,
     get_wiki,
 )
 from app.config import get_settings
 from app.openai_bootstrap import is_openai_configured
+from app.services.memory_v4_debug_capture import MemoryV4DebugRecorder
 from app.schemas.api import (
+    ActiveWorkItem,
+    ActiveWorkResponse,
     BetaFeedbackRequest,
     BetaFeedbackResponse,
     BetaIdentityResponse,
     BetaLoginRequest,
+    BetaProfileStats,
+    BetaProfileUpdateRequest,
     ChatRequest,
     ChatResponse,
     ClassesResponse,
@@ -83,7 +89,7 @@ from app.schemas.api import (
     WikiPageSummary,
     WikiPagesResponse,
 )
-from app.services.beta import BetaAuthService
+from app.services.beta import BetaAuthService, RequestIdentity
 from app.services.class_brief_service import ClassBriefService
 from app.services.discussion_service import DiscussionService
 from app.services.ingest_service import IngestService
@@ -477,6 +483,46 @@ def _record_beta_message(
     )
 
 
+def _start_memory_v4_debug_capture(
+    request: Request,
+    beta_auth: BetaAuthService,
+    *,
+    class_id: str,
+    session_id: str,
+    workflow: str,
+    turn_index: int,
+    teacher_message: str,
+    attachment_count: int,
+) -> tuple[MemoryV4DebugRecorder | None, str | None]:
+    settings = get_settings()
+    identity = getattr(request.state, "identity", None)
+    if (
+        not settings.is_memory_v4_debug_capture_enabled()
+        or identity is None
+        or getattr(identity, "workspace_id", "local") == "local"
+    ):
+        return None, None
+    recorder = MemoryV4DebugRecorder(
+        db_path=beta_auth.db_path,
+        beta_data_root=settings.beta_data_root,
+    )
+    trace_id = recorder.capture_turn(
+        identity,
+        class_id=class_id,
+        session_id=session_id,
+        workflow=workflow,
+        turn_index=turn_index,
+        payload={
+            "teacher_message": teacher_message,
+            "attachment_count": attachment_count,
+            "model_profile": settings.resolved_model_profile(),
+            "chat_model": settings.resolved_chat_model(),
+            "chat_reasoning_effort": settings.resolved_chat_effort(),
+        },
+    )
+    return recorder, trace_id
+
+
 def _sse_payload_of_type(line: str, event_type: str) -> dict | None:
     if not line.startswith("data:"):
         return None
@@ -509,6 +555,9 @@ async def _stream_chat_with_beta_telemetry(
     mode: str,
     artifact_kind: str,
     completed_payload: Callable[[dict], dict],
+    debug_recorder: MemoryV4DebugRecorder | None = None,
+    debug_trace_id: str | None = None,
+    workflow_trace: Callable[[], dict] | None = None,
 ) -> AsyncIterator[str]:
     """Pass SSE lines through while recording beta chat-turn telemetry.
 
@@ -531,8 +580,31 @@ async def _stream_chat_with_beta_telemetry(
         )
 
     terminal_seen = False
+    workflow_trace_recorded = False
+
+    def _record_debug_stream_event(line: str) -> None:
+        if debug_recorder is None:
+            return
+        if not line.startswith("data:"):
+            return
+        try:
+            payload = json.loads(line.removeprefix("data:").strip())
+        except json.JSONDecodeError:
+            payload = {"type": "unparsed_sse", "line": line}
+        debug_recorder.append(debug_trace_id, "stream_event", payload)
+
+    def _record_workflow_trace() -> None:
+        nonlocal workflow_trace_recorded
+        if workflow_trace_recorded or debug_recorder is None or workflow_trace is None:
+            return
+        workflow_trace_recorded = True
+        try:
+            debug_recorder.append(debug_trace_id, "workflow_trace", workflow_trace())
+        except Exception:  # noqa: BLE001 - capture must not fail the stream
+            logger.exception("Memory V4 workflow trace capture failed")
     try:
         async for line in stream:
+            _record_debug_stream_event(line)
             final = _sse_final_payload(line)
             if final is not None:
                 terminal_seen = True
@@ -563,6 +635,7 @@ async def _stream_chat_with_beta_telemetry(
                     mode=mode,
                     payload=completed_payload(final),
                 )
+                _record_workflow_trace()
             else:
                 error = _sse_payload_of_type(line, "error")
                 if error is not None:
@@ -574,10 +647,12 @@ async def _stream_chat_with_beta_telemetry(
                             "message": (error.get("message") or "")[:300],
                         }
                     )
+                    _record_workflow_trace()
             yield line
     except Exception as e:  # noqa: BLE001 — turn any stream crash into a client-visible error
         logger.exception("Chat stream failed (mode=%s, session=%s)", mode, session_id)
         _record_failed({"reason": "exception", "error": str(e)[:300]})
+        _record_workflow_trace()
         yield sse_encode(
             SseError(
                 message="Something went wrong while generating the reply. Please send your message again.",
@@ -629,6 +704,39 @@ def health() -> HealthResponse:
     )
 
 
+def _beta_identity_response(
+    identity: RequestIdentity,
+    beta_auth: BetaAuthService,
+) -> BetaIdentityResponse:
+    profile = beta_auth.get_tester_profile(identity.tester_id)
+    return BetaIdentityResponse(
+        tester_id=identity.tester_id,
+        workspace_id=identity.workspace_id,
+        role=identity.role,
+        display_name=profile.display_name,
+        profile_complete=profile.profile_complete,
+        member_since=profile.member_since,
+        stats=BetaProfileStats(
+            feedback_notes=profile.feedback_notes,
+            workflow_sessions=profile.workflow_sessions,
+            wiki_commits=profile.wiki_commits,
+        ),
+    )
+
+
+def _resolve_beta_identity(
+    request: Request,
+    beta_auth: BetaAuthService,
+) -> RequestIdentity:
+    token = request.cookies.get(beta_auth.cookie_name)
+    if not token:
+        raise HTTPException(status_code=401, detail="Beta login required")
+    try:
+        return beta_auth.resolve_session_token(token)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+
+
 @router.post("/beta/login", response_model=BetaIdentityResponse)
 def beta_login(
     body: BetaLoginRequest,
@@ -647,11 +755,8 @@ def beta_login(
         samesite="lax",
         path="/",
     )
-    return BetaIdentityResponse(
-        tester_id=login.tester_id,
-        workspace_id=login.workspace_id,
-        role=login.role,
-    )
+    identity = beta_auth.resolve_session_token(login.session_token)
+    return _beta_identity_response(identity, beta_auth)
 
 
 @router.post("/beta/logout")
@@ -672,18 +777,22 @@ def beta_me(
     request: Request,
     beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> BetaIdentityResponse:
-    token = request.cookies.get(beta_auth.cookie_name)
-    if not token:
-        raise HTTPException(status_code=401, detail="Beta login required")
+    identity = _resolve_beta_identity(request, beta_auth)
+    return _beta_identity_response(identity, beta_auth)
+
+
+@router.patch("/beta/profile", response_model=BetaIdentityResponse)
+def beta_update_profile(
+    body: BetaProfileUpdateRequest,
+    request: Request,
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> BetaIdentityResponse:
+    identity = _resolve_beta_identity(request, beta_auth)
     try:
-        identity = beta_auth.resolve_session_token(token)
+        beta_auth.update_tester_profile(identity.tester_id, body.display_name)
     except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e)) from e
-    return BetaIdentityResponse(
-        tester_id=identity.tester_id,
-        workspace_id=identity.workspace_id,
-        role=identity.role,
-    )
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return _beta_identity_response(identity, beta_auth)
 
 
 @router.post("/beta/feedback", response_model=BetaFeedbackResponse)
@@ -717,6 +826,49 @@ def beta_feedback(
 @router.get("/classes", response_model=ClassesResponse)
 def list_classes(wiki: WikiStore = Depends(get_wiki)) -> ClassesResponse:
     return ClassesResponse(classes=wiki.list_classes())
+
+
+@router.get("/workflow/active", response_model=ActiveWorkResponse)
+def list_active_work(
+    identity: RequestIdentity = Depends(get_request_identity),
+    workflow_drafts: WorkflowDraftStore = Depends(get_workflow_draft_store),
+    memory_sweep_reviews: MemorySweepReviewStore = Depends(
+        get_memory_sweep_review_store
+    ),
+) -> ActiveWorkResponse:
+    """Jobs running right now for this workspace, across every class.
+
+    The single source of truth for the Running-tasks box and completion
+    toasts: the frontend asks what is running instead of keeping its own
+    sessionStorage markers.
+    """
+    items: list[ActiveWorkItem] = [
+        ActiveWorkItem(
+            kind="draft_turn",
+            class_id=draft.class_id,
+            mode=draft.mode,
+            draft_id=draft.draft_id,
+            session_id=draft.backend_session_id,
+            lesson_date=draft.lesson_date,
+            lesson_title=draft.lesson_title,
+            updated_at=draft.updated_at,
+        )
+        for draft in workflow_drafts.list_in_progress(
+            workspace_id=identity.workspace_id
+        )
+    ]
+    items.extend(
+        ActiveWorkItem(
+            kind="memory_sweep",
+            class_id=review.class_id,
+            review_id=review.review_id,
+            updated_at=review.updated_at,
+        )
+        for review in memory_sweep_reviews.list_generating(
+            workspace_id=identity.workspace_id
+        )
+    )
+    return ActiveWorkResponse(items=items)
 
 
 @router.get("/classes/{class_id}/timeline", response_model=ClassTimeline)
@@ -1036,6 +1188,16 @@ async def discussion_chat_stream(
         role="user",
         content=body.message,
     )
+    debug_recorder, debug_trace_id = _start_memory_v4_debug_capture(
+        request,
+        beta_auth,
+        class_id=class_id,
+        session_id=session_id,
+        workflow="discuss",
+        turn_index=len(session.messages) + 1,
+        teacher_message=body.message,
+        attachment_count=len(body.attachments),
+    )
     return StreamingResponse(
         _stream_chat_with_beta_telemetry(
             discussion_svc.chat_stream(
@@ -1054,6 +1216,11 @@ async def discussion_chat_stream(
                 "memory_candidates": len(final.get("memory_candidates") or []),
                 "stream": True,
             },
+            debug_recorder=debug_recorder,
+            debug_trace_id=debug_trace_id,
+            workflow_trace=lambda: discussion_svc.trace(class_id, session_id).model_dump(
+                mode="json"
+            ),
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -1868,6 +2035,16 @@ async def ingest_chat_stream(
             role="user",
             content=body.message,
         )
+        debug_recorder, debug_trace_id = _start_memory_v4_debug_capture(
+            request,
+            beta_auth,
+            class_id=class_id,
+            session_id=session_id,
+            workflow="ingest",
+            turn_index=len(session.messages) + 1,
+            teacher_message=body.message,
+            attachment_count=len(body.attachments),
+        )
 
         return StreamingResponse(
             _stream_chat_with_beta_telemetry(
@@ -1887,6 +2064,11 @@ async def ingest_chat_stream(
                     "ready": final.get("ready"),
                     "stream": True,
                 },
+                debug_recorder=debug_recorder,
+                debug_trace_id=debug_trace_id,
+                workflow_trace=lambda: ingest.trace(class_id, session_id).model_dump(
+                    mode="json"
+                ),
             ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -2246,6 +2428,16 @@ async def plan_chat_stream(
             role="user",
             content=body.message,
         )
+        debug_recorder, debug_trace_id = _start_memory_v4_debug_capture(
+            request,
+            beta_auth,
+            class_id=class_id,
+            session_id=session_id,
+            workflow="plan",
+            turn_index=len(session.messages) + 1,
+            teacher_message=body.message,
+            attachment_count=len(body.attachments),
+        )
 
         return StreamingResponse(
             _stream_chat_with_beta_telemetry(
@@ -2266,6 +2458,11 @@ async def plan_chat_stream(
                     "phase": final.get("phase"),
                     "stream": True,
                 },
+                debug_recorder=debug_recorder,
+                debug_trace_id=debug_trace_id,
+                workflow_trace=lambda: plan_svc.trace(class_id, session_id).model_dump(
+                    mode="json"
+                ),
             ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},

@@ -1,7 +1,12 @@
 import type { MemorySweepCandidate } from "@/lib/api";
 
 /** Teacher-facing grouping of sweep cards (docs/mem_v3, M1b brief). */
-export type SweepBriefSection = "explicit" | "new" | "changed" | "removed";
+export type SweepBriefSection =
+  | "explicit"
+  | "new"
+  | "changed"
+  | "removed"
+  | "student_summary";
 
 export type SweepBriefRow = {
   key: string;
@@ -19,6 +24,7 @@ export const SWEEP_SECTION_TITLES: Record<SweepBriefSection, string> = {
   new: "New memory",
   changed: "Changed (old → new)",
   removed: "Already covered / not worth keeping",
+  student_summary: "Student summary updates",
 };
 
 export const SWEEP_SECTION_ORDER: SweepBriefSection[] = [
@@ -26,6 +32,7 @@ export const SWEEP_SECTION_ORDER: SweepBriefSection[] = [
   "new",
   "changed",
   "removed",
+  "student_summary",
 ];
 
 const STUDENT_TARGET_RE = /^students\/(s-\d{3})\.md$/i;
@@ -56,9 +63,28 @@ export function sweepCardKey(candidate: MemorySweepCandidate): string {
   return candidate.card_id || candidate.candidate_id;
 }
 
+function isStudentSummaryCandidate(candidate: MemorySweepCandidate): boolean {
+  if ((candidate.section || "").trim().toLowerCase() === "student summary") {
+    return true;
+  }
+  const ids = [
+    candidate.candidate_id,
+    ...(candidate.candidate_ids ?? []),
+  ];
+  return ids.some((id) => (id || "").startsWith("student_summary:"));
+}
+
 function sectionFor(candidate: MemorySweepCandidate): SweepBriefSection {
   if (candidate.group_label === "explicit_ask") return "explicit";
   const operation = candidate.operation ?? "add";
+  // Auto-refreshed student summary sentences belong in their own bucket,
+  // not mixed into generic "Changed" / "New memory" rows.
+  if (
+    isStudentSummaryCandidate(candidate) &&
+    (operation === "add" || operation === "adjust")
+  ) {
+    return "student_summary";
+  }
   if (operation === "add") return "new";
   if (operation === "adjust") return "changed";
   return "removed"; // already_covered, needs_decision, reject_low_signal
@@ -71,7 +97,8 @@ function oneLine(text: string, maxLen = 130): string {
 
 /**
  * Order sweep cards into the teacher brief: explicit asks pinned first, then
- * new / changed / retired, one row per (already backend-consolidated) claim.
+ * new / changed / retired, with student summary updates last — one row per
+ * (already backend-consolidated) claim.
  */
 export function sweepBriefRows(
   candidates: MemorySweepCandidate[],
