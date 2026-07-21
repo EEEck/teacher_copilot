@@ -1,0 +1,12 @@
+# Railway config-as-code for the frontend service.
+# In the Railway project, set Root Directory to the repo root (.).
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "deploy/railway/frontend/Dockerfile"
+
+[deploy]
+restartPolicyType = "ON_FAILURE"
+numReplicas = 1
+
+# Pass at build time (Railway → Service → Variables → mark as available during build):
+# NEXT_PUBLIC_API_BASE_URL=https://api.klassenpilot.ai

@@ -202,11 +202,13 @@ def test_beta_login_endpoint_sets_cookie_and_me_resolves_identity(tmp_path: Path
 
             me = client.get("/api/beta/me")
             assert me.status_code == 200
-            assert me.json() == {
-                "tester_id": "t_anna",
-                "workspace_id": "w_anna_chem9b",
-                "role": "tester",
-            }
+            payload = me.json()
+            assert payload["tester_id"] == "t_anna"
+            assert payload["workspace_id"] == "w_anna_chem9b"
+            assert payload["role"] == "tester"
+            assert payload["profile_complete"] is False
+            assert payload["display_name"] == ""
+            assert payload["stats"]["feedback_notes"] == 0
     finally:
         app.dependency_overrides.clear()
 
@@ -525,5 +527,71 @@ def test_beta_feedback_stores_event(tmp_path: Path, monkeypatch):
         assert message_row[1] == "teacher_feedback"
         assert message_row[2] == "[/beta/feedback] Sweep triage felt slow."
         assert message_row[3] == "feedback"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_beta_profile_patch_completes_identity_and_stats(tmp_path: Path):
+    service = _service(tmp_path)
+    service.provision_tester(
+        tester_id="t_anna",
+        workspace_id="w_anna_chem9b",
+        invite_code="anna-invite",
+        display_label="Anna (seed)",
+    )
+    login = service.login("anna-invite")
+    identity = service.resolve_session_token(login.session_token)
+    service.telemetry.record_teacher_feedback(
+        identity,
+        message="Nice sweep UI",
+        page="/beta/feedback",
+    )
+    service.telemetry.record_app_session(
+        identity,
+        app_session_id="sess-1",
+        class_id=CLASS_ID,
+        mode="ingest",
+        status="chatting",
+    )
+
+    app.dependency_overrides[deps.get_beta_auth_service] = lambda: service
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            client.post("/api/beta/login", json={"invite_code": "anna-invite"})
+            me = client.get("/api/beta/me")
+            assert me.status_code == 200
+            assert me.json()["profile_complete"] is False
+            assert me.json()["display_name"] == "Anna (seed)"
+
+            updated = client.patch(
+                "/api/beta/profile",
+                json={"display_name": "  Anna K.  "},
+            )
+            assert updated.status_code == 200
+            payload = updated.json()
+            assert payload["profile_complete"] is True
+            assert payload["display_name"] == "Anna K."
+            assert payload["stats"]["feedback_notes"] == 1
+            assert payload["stats"]["workflow_sessions"] == 1
+            assert payload["member_since"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_beta_profile_patch_requires_login(tmp_path: Path):
+    service = _service(tmp_path)
+    service.provision_tester(
+        tester_id="t_anna",
+        workspace_id="w_anna_chem9b",
+        invite_code="anna-invite",
+    )
+    app.dependency_overrides[deps.get_beta_auth_service] = lambda: service
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.patch(
+                "/api/beta/profile",
+                json={"display_name": "Anna"},
+            )
+            assert response.status_code == 401
     finally:
         app.dependency_overrides.clear()

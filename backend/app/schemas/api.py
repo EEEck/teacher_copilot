@@ -18,10 +18,24 @@ class BetaLoginRequest(BaseModel):
     invite_code: str
 
 
+class BetaProfileStats(BaseModel):
+    feedback_notes: int = 0
+    workflow_sessions: int = 0
+    wiki_commits: int = 0
+
+
 class BetaIdentityResponse(BaseModel):
     tester_id: str
     workspace_id: str
     role: str
+    display_name: str = ""
+    profile_complete: bool = False
+    member_since: str | None = None
+    stats: BetaProfileStats | None = None
+
+
+class BetaProfileUpdateRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=80)
 
 
 class BetaFeedbackRequest(BaseModel):

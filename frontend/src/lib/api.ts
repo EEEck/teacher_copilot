@@ -23,10 +23,19 @@ function redirectToBetaLoginIfNeeded(status: number): void {
 }
 
 export type ClassSummary = { id: string; label: string; subject: string };
+export type BetaProfileStats = {
+  feedback_notes: number;
+  workflow_sessions: number;
+  wiki_commits: number;
+};
 export type BetaIdentity = {
   tester_id: string;
   workspace_id: string;
   role: string;
+  display_name: string;
+  profile_complete: boolean;
+  member_since: string | null;
+  stats: BetaProfileStats | null;
 };
 export type TimelineEntry = {
   date: string;
@@ -571,6 +580,11 @@ export const client = {
     }),
   betaLogout: () => api<{ status: string }>("/api/beta/logout", { method: "POST" }),
   betaMe: () => api<BetaIdentity>("/api/beta/me"),
+  betaUpdateProfile: (displayName: string) =>
+    api<BetaIdentity>("/api/beta/profile", {
+      method: "PATCH",
+      body: JSON.stringify({ display_name: displayName }),
+    }),
   betaFeedback: (message: string, page?: string) =>
     api<{ status: string }>("/api/beta/feedback", {
       method: "POST",
