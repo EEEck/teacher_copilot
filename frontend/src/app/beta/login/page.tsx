@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { LogIn } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -9,8 +10,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { client } from "@/lib/api";
+import { betaProfileRedirectPath, resolveBetaReturnPath } from "@/lib/beta-profile";
 
 export default function BetaLoginPage() {
+  return (
+    <Suspense fallback={<main className="mx-auto flex min-h-[60vh] max-w-md items-center text-sm text-muted-foreground">Loading…</main>}>
+      <BetaLoginPageContent />
+    </Suspense>
+  );
+}
+
+function BetaLoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [inviteCode, setInviteCode] = useState("");
@@ -22,12 +32,13 @@ export default function BetaLoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await client.betaLogin(inviteCode);
-      const next = searchParams.get("next");
-      const returnTo = next?.startsWith("/") && !next.startsWith("//")
-        ? next
-        : "/";
-      router.replace(returnTo);
+      const identity = await client.betaLogin(inviteCode);
+      const returnTo = resolveBetaReturnPath(searchParams.get("next"));
+      if (!identity.profile_complete) {
+        router.replace(betaProfileRedirectPath(returnTo));
+      } else {
+        router.replace(returnTo);
+      }
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Invite code failed");

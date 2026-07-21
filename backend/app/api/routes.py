@@ -32,6 +32,8 @@ from app.schemas.api import (
     BetaFeedbackResponse,
     BetaIdentityResponse,
     BetaLoginRequest,
+    BetaProfileStats,
+    BetaProfileUpdateRequest,
     ChatRequest,
     ChatResponse,
     ClassesResponse,
@@ -702,6 +704,39 @@ def health() -> HealthResponse:
     )
 
 
+def _beta_identity_response(
+    identity: RequestIdentity,
+    beta_auth: BetaAuthService,
+) -> BetaIdentityResponse:
+    profile = beta_auth.get_tester_profile(identity.tester_id)
+    return BetaIdentityResponse(
+        tester_id=identity.tester_id,
+        workspace_id=identity.workspace_id,
+        role=identity.role,
+        display_name=profile.display_name,
+        profile_complete=profile.profile_complete,
+        member_since=profile.member_since,
+        stats=BetaProfileStats(
+            feedback_notes=profile.feedback_notes,
+            workflow_sessions=profile.workflow_sessions,
+            wiki_commits=profile.wiki_commits,
+        ),
+    )
+
+
+def _resolve_beta_identity(
+    request: Request,
+    beta_auth: BetaAuthService,
+) -> RequestIdentity:
+    token = request.cookies.get(beta_auth.cookie_name)
+    if not token:
+        raise HTTPException(status_code=401, detail="Beta login required")
+    try:
+        return beta_auth.resolve_session_token(token)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+
+
 @router.post("/beta/login", response_model=BetaIdentityResponse)
 def beta_login(
     body: BetaLoginRequest,
@@ -720,11 +755,8 @@ def beta_login(
         samesite="lax",
         path="/",
     )
-    return BetaIdentityResponse(
-        tester_id=login.tester_id,
-        workspace_id=login.workspace_id,
-        role=login.role,
-    )
+    identity = beta_auth.resolve_session_token(login.session_token)
+    return _beta_identity_response(identity, beta_auth)
 
 
 @router.post("/beta/logout")
@@ -745,18 +777,22 @@ def beta_me(
     request: Request,
     beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> BetaIdentityResponse:
-    token = request.cookies.get(beta_auth.cookie_name)
-    if not token:
-        raise HTTPException(status_code=401, detail="Beta login required")
+    identity = _resolve_beta_identity(request, beta_auth)
+    return _beta_identity_response(identity, beta_auth)
+
+
+@router.patch("/beta/profile", response_model=BetaIdentityResponse)
+def beta_update_profile(
+    body: BetaProfileUpdateRequest,
+    request: Request,
+    beta_auth: BetaAuthService = Depends(get_beta_auth_service),
+) -> BetaIdentityResponse:
+    identity = _resolve_beta_identity(request, beta_auth)
     try:
-        identity = beta_auth.resolve_session_token(token)
+        beta_auth.update_tester_profile(identity.tester_id, body.display_name)
     except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e)) from e
-    return BetaIdentityResponse(
-        tester_id=identity.tester_id,
-        workspace_id=identity.workspace_id,
-        role=identity.role,
-    )
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return _beta_identity_response(identity, beta_auth)
 
 
 @router.post("/beta/feedback", response_model=BetaFeedbackResponse)

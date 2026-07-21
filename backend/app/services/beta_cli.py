@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.services.beta import BetaAuthService
-from app.services.beta_report import render_beta_report
+from app.services.beta_report import render_beta_report, write_all_beta_reports
 
 
 def _seed_wiki_root() -> Path:
@@ -25,6 +25,11 @@ def _seed_wiki_root() -> Path:
 def _default_db_path() -> Path:
     settings = get_settings()
     return Path(settings.beta_data_root) / "beta.sqlite3"
+
+
+def _default_reports_dir() -> Path:
+    settings = get_settings()
+    return Path(settings.beta_data_root) / "reports"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -50,10 +55,46 @@ def main(argv: list[str] | None = None) -> int:
     report.add_argument("--limit-sessions", type=int, default=10)
     report.add_argument("--out", type=Path)
 
+    report_all = subparsers.add_parser(
+        "report-all",
+        help="Render Markdown reports for every provisioned beta tester.",
+    )
+    report_all.add_argument("--db", type=Path, default=_default_db_path())
+    report_all.add_argument(
+        "--reports-dir",
+        type=Path,
+        default=_default_reports_dir(),
+        help="Directory for per-tester Markdown files (default: BETA_DATA_ROOT/reports).",
+    )
+    report_all.add_argument("--limit-sessions", type=int, default=10)
+    report_all.add_argument(
+        "--include-disabled",
+        action="store_true",
+        help="Include testers marked disabled in beta.sqlite3.",
+    )
+
     args_list = list(sys.argv[1:] if argv is None else argv)
-    if args_list and args_list[0] not in {"provision", "report", "-h", "--help"}:
+    if args_list and args_list[0] not in {
+        "provision",
+        "report",
+        "report-all",
+        "-h",
+        "--help",
+    }:
         args_list.insert(0, "provision")
     args = parser.parse_args(args_list)
+
+    if args.command == "report-all":
+        written = write_all_beta_reports(
+            args.db,
+            args.reports_dir,
+            limit_sessions=args.limit_sessions,
+            include_disabled=args.include_disabled,
+        )
+        for path in written:
+            print(f"Wrote beta report: {path}")
+        print(f"Wrote {len(written)} beta report(s) under {args.reports_dir}")
+        return 0
 
     if args.command == "report":
         markdown = render_beta_report(
