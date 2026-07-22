@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -10,6 +11,18 @@ from pydantic import BaseModel
 from app.schemas.api import CompletenessChecklist
 
 _SSE_TRUNCATE = 500
+
+
+@dataclass
+class TranslateStreamState:
+    """Per-stream flags for de-duplicating SDK reasoning events.
+
+    The Agents SDK often emits both ``response.reasoning_*_text.delta`` chunks
+    and a later ``reasoning_item_created`` with the full summary. Appending both
+    doubles the teacher-visible trace.
+    """
+
+    reasoning_deltas_emitted: bool = False
 
 
 class SseReasoningDelta(BaseModel):
@@ -132,6 +145,7 @@ def translate_sdk_event(
     *,
     tool_output_limit: int | None = _SSE_TRUNCATE,
     tool_args_limit: int | None = _SSE_TRUNCATE,
+    state: TranslateStreamState | None = None,
 ) -> list[SseEvent]:
     """Map one Agents SDK StreamEvent to zero or more SSE payloads."""
     event_type = getattr(event, "type", None)
@@ -141,6 +155,8 @@ def translate_sdk_event(
         if "reasoning" in data_type and "delta" in data_type:
             delta = _event_data_delta(event)
             if delta:
+                if state is not None:
+                    state.reasoning_deltas_emitted = True
                 return [SseReasoningDelta(text=delta)]
         return []
 
@@ -172,6 +188,10 @@ def translate_sdk_event(
         ]
 
     if name == "reasoning_item_created":
+        # Prefer incremental deltas when the SDK already streamed them; the
+        # completed item repeats the same summary and would double the UI.
+        if state is not None and state.reasoning_deltas_emitted:
+            return []
         raw = getattr(item, "raw_item", None)
         text = ""
         if raw is not None:

@@ -42,6 +42,14 @@ describe("StreamPartsAccumulator", () => {
     });
     expect(parts.at(-1)).toEqual({ type: "text", text: "Done." });
   });
+
+  it("does not double-append a full reasoning snapshot after deltas", () => {
+    const acc = new StreamPartsAccumulator();
+    acc.apply({ type: "reasoning_delta", text: "Hello " });
+    acc.apply({ type: "reasoning_delta", text: "world" });
+    acc.apply({ type: "reasoning_delta", text: "Hello world" });
+    expect(acc.parts()).toEqual([{ type: "reasoning", text: "Hello world" }]);
+  });
 });
 
 describe("streamPartsToRunContent", () => {
