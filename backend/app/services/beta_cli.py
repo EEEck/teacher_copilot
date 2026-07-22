@@ -73,16 +73,91 @@ def main(argv: list[str] | None = None) -> int:
         help="Include testers marked disabled in beta.sqlite3.",
     )
 
+    list_cmd = subparsers.add_parser(
+        "list", help="List provisioned beta testers and workspaces."
+    )
+    list_cmd.add_argument("--db", type=Path, default=_default_db_path())
+    list_cmd.add_argument(
+        "--include-disabled",
+        action="store_true",
+        help="Include testers marked disabled.",
+    )
+
+    disable = subparsers.add_parser(
+        "disable", help="Disable a tester (invite stops working; sessions fail)."
+    )
+    disable.add_argument("--tester-id", required=True)
+    disable.add_argument("--db", type=Path, default=_default_db_path())
+
+    enable = subparsers.add_parser(
+        "enable", help="Re-enable a previously disabled tester."
+    )
+    enable.add_argument("--tester-id", required=True)
+    enable.add_argument("--db", type=Path, default=_default_db_path())
+
     args_list = list(sys.argv[1:] if argv is None else argv)
     if args_list and args_list[0] not in {
         "provision",
         "report",
         "report-all",
+        "list",
+        "disable",
+        "enable",
         "-h",
         "--help",
     }:
         args_list.insert(0, "provision")
     args = parser.parse_args(args_list)
+
+    if args.command == "list":
+        import sqlite3
+
+        if not args.db.exists():
+            print(f"No beta DB at {args.db}", file=sys.stderr)
+            return 1
+        with sqlite3.connect(args.db) as conn:
+            conn.row_factory = sqlite3.Row
+            where = "" if args.include_disabled else "where t.disabled = 0"
+            rows = conn.execute(
+                f"""
+                select
+                    t.tester_id, t.display_label, t.disabled, t.created_at,
+                    w.workspace_id, w.wiki_root
+                from tester t
+                left join workspace w on w.tester_id = t.tester_id
+                {where}
+                order by t.created_at
+                """
+            ).fetchall()
+        if not rows:
+            print("No testers found.")
+            return 0
+        for row in rows:
+            flag = "DISABLED" if row["disabled"] else "active"
+            label = row["display_label"] or "-"
+            print(
+                f"{row['tester_id']}\t{row['workspace_id'] or '-'}\t{flag}\t{label}"
+            )
+        return 0
+
+    if args.command in {"disable", "enable"}:
+        import sqlite3
+
+        if not args.db.exists():
+            print(f"No beta DB at {args.db}", file=sys.stderr)
+            return 1
+        disabled = 1 if args.command == "disable" else 0
+        with sqlite3.connect(args.db) as conn:
+            cur = conn.execute(
+                "update tester set disabled = ?, updated_at = datetime('now') "
+                "where tester_id = ?",
+                (disabled, args.tester_id),
+            )
+            if cur.rowcount == 0:
+                print(f"Unknown tester: {args.tester_id}", file=sys.stderr)
+                return 1
+        print(f"{args.command}d {args.tester_id}")
+        return 0
 
     if args.command == "report-all":
         written = write_all_beta_reports(

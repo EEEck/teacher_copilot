@@ -252,3 +252,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local Railway beta invite tracker (contains secrets)
+deploy/railway/invites.local.md
+

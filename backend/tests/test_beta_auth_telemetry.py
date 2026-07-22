@@ -105,6 +105,24 @@ def test_provisioned_workspace_does_not_inherit_seed_workflow_runtime_data(
     assert not (identity.wiki_root / "workflow").exists()
 
 
+def test_provisioned_workspace_is_group_writable_for_api_process(tmp_path: Path):
+    """Provision must leave the wiki tree writable (Discuss creates workflow/)."""
+    service = _service(tmp_path)
+    identity = service.provision_tester(
+        tester_id="t_cutes",
+        workspace_id="w_cutes",
+        invite_code="cuteS_invite",
+    )
+
+    mode = identity.wiki_root.stat().st_mode & 0o777
+    assert mode & 0o222, f"wiki_root not writable: {oct(mode)}"
+    # App must be able to create the runtime workflow dir after seed copy.
+    workflow = identity.wiki_root / "workflow"
+    workflow.mkdir()
+    (workflow / "probe.txt").write_text("ok", encoding="utf-8")
+    assert (workflow / "probe.txt").read_text(encoding="utf-8") == "ok"
+
+
 def test_invalid_invite_code_is_rejected(tmp_path: Path):
     service = _service(tmp_path)
     service.provision_tester(
