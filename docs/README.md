@@ -17,13 +17,11 @@ follow the local README closest to the code you are changing.
 - `memory_hierarchy.md` - file-by-file memory scope and update rules.
 - `context_management.md` - prompt assembly and context-limit policy.
 - `agent_learning_guide.md` - optional learning/reference notes.
-- `student_learning_copilot_v2.md` - researched V2 expansion note for a
-  student-facing formative learning copilot with separate student memory.
 - `mem_v4/` - **active** memory design, evaluation policy, and live-eval
   ledger. Start at `mem_v4/README.md` for the current admission, Sweep, and
-  teacher-approval contracts.
-- `mem_v2/` and `mem_v3/` - historical reference material only. They retain
-  implementation evidence; active behavior must not depend on them.
+  teacher-approval contracts. The superseded MemV2/MemV3 document trees have
+  been removed; `mem_v4/archive/` keeps one-page historical summaries and Git
+  history holds the full detail.
 
 Use `../implementation_plans/` for the backlog and concrete implementation
 plans only.
@@ -52,8 +50,6 @@ plans only.
 - `../frontend/src/components/README.md` - frontend component layers.
 - `../frontend/src/lib/README.md` - frontend API/parser/utilities map.
 - `../scripts/README.md` - dev, test, Docker, and trace scripts.
-- `../implementation_plans/update_memory_free_agent_plan.md` - phase map for
-  the free-agent Update Memory rollout and remaining trace/eval hardening.
 
 ## Working Rules
 
@@ -79,6 +75,7 @@ plans only.
 - Agents SDK integration changes should update `agent_sdk_practices_review.md`
   when they change orchestration, session strategy, guardrails, approvals,
   tracing, or eval expectations.
-- Implementation plans belong in `../implementation_plans/`, not here.
-  Dated design/build notes under `superpowers/` are historical once shipped;
-  keep durable contracts in the files above.
+- Implementation plans belong in `../implementation_plans/`, not here. Durable
+  contracts live in the files above; `superpowers/specs/` now retains only the
+  active browser-workflow acceptance runbook (older shipped design/build notes
+  were removed and live in Git history).

@@ -49,8 +49,8 @@ app/pages  →  klassenpilot shells  →  assistant-ui Thread
 
 ## Chat turn lifecycle (runner-lite)
 
-Design: `docs/beta_readiness_audit_2026-07-13.md` §A.1 (when present) and this
-port plan: `docs/superpowers/plans/2026-07-20-port-streaming-d1-d4.md`.
+Design: the streaming port plan shipped; its design/build notes live in Git
+history. This document is the current runner-lite reference.
 
 - SSE owner: [`turn-runner.ts`](src/features/workflow-drafts/turn-runner.ts) —
   a module-level runner outside React. Navigation never touches a running

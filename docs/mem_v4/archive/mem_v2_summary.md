@@ -7,5 +7,5 @@ durable change is teacher-approved.
 
 It also established one canonical home per fact. Course progress belongs in
 canonical lesson/course rollups rather than duplicated compact state pages.
-Detailed experiments, retired UI maps, and completed PR checklists remain in
-`../../mem_v2/` and Git history.
+Detailed experiments, retired UI maps, and completed PR checklists were removed
+during doc consolidation and remain in Git history.

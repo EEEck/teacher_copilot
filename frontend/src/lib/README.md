@@ -29,7 +29,7 @@ Small shared utilities and API helpers.
 ## Conventions
 
 - Keep network shape changes in sync with `backend/app/schemas/api.py`.
-- Keep Memory Sweep types aligned with `../../../docs/mem_v3/README.md`,
+- Keep Memory Sweep types aligned with `../../../docs/mem_v4/README.md`,
   `../../../docs/agent_contracts.md`, and backend `app/schemas/api.py`.
 - Keep frontend hint union types aligned with backend literal schema values.
 - Pending-job markers are UI/operation coordination only; they never authorize

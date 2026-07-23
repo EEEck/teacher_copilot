@@ -271,8 +271,7 @@ recall, spaced repetition, and adaptive problem pathways.
 
 This is a strategic expansion after the teacher-side memory loop is proven. It
 must not expose teacher-private wiki memory, let students mutate the teacher
-wiki, or make official grading/high-stakes decisions. See
-`student_learning_copilot_v2.md`.
+wiki, or make official grading/high-stakes decisions.
 
 ## Product Guardrails
 

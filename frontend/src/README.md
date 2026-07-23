@@ -61,9 +61,8 @@ This folder contains the Next.js app and shared UI code.
 
 - API shape changes should be reflected in `lib/api.ts` and backend
   `app/schemas/api.py`.
-- Memory Sweep UI/API changes should also update the current Memory V3 docs
-  under `../../docs/mem_v3/` and `../../docs/agent_contracts.md`;
-  `../../docs/mem_v2/frontend.md` is historical.
+- Memory Sweep UI/API changes should also update the active memory docs under
+  `../../docs/mem_v4/` and `../../docs/agent_contracts.md`.
 - Workflow draft ownership changes should update
   `../../docs/agent_contracts.md` (Workflow Draft Persistence Contract) and
   `features/README.md`.

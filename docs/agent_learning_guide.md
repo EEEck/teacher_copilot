@@ -389,7 +389,8 @@ Use a conservative promotion rule:
 > Historical note (2026-07): this section describes the Memory V2 two-pass
 > sweep. The two-pass machinery was retired in Memory V3 after the first beta
 > round — see "Memory V3: Why The Two-Pass Sweep Was Retired" below and
-> `mem_v3/learnings.md` for the full post-mortem. The *lessons* in this
+> [`mem_v4/archive/mem_v3_summary.md`](mem_v4/archive/mem_v3_summary.md) (the
+> full post-mortem lives in Git history). The *lessons* in this
 > section (normalization as a first-class contract, observable abstractions,
 > teach-the-contract prompts) survived; the specific two-pass implementation
 > did not.
@@ -508,7 +509,9 @@ The first beta round (July 2026) stress-tested the two-pass sweep with real
 teacher behavior and it failed in production despite passing its tests. One
 day of testing produced ~12 ledger rows encoding ~4 claims, which became 6+
 review cards plus 4 raw internal warnings — several cards unresolvable. The
-full post-mortem lives in `mem_v3/learnings.md`; the compressed lessons:
+post-mortem is summarized in
+[`mem_v4/archive/mem_v3_summary.md`](mem_v4/archive/mem_v3_summary.md) (full
+detail in Git history); the compressed lessons:
 
 1. **The dedup LLM never saw the duplicates together.** Packets were keyed on
    `(queue, target, section)`, but `section` was a free-form string invented

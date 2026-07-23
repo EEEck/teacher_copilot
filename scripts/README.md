@@ -106,8 +106,8 @@ memory merging; deterministic tests still live under `backend/tests/`.
 
 - `run_memory_sweep_44_trace_bundle.py`
 
-This script seeds temporary Memory Sweep candidates for the examples in
-`docs/mem_v2/design.md` section 4.4, calls the local public API endpoints, writes
+This script seeds temporary Memory Sweep candidates for the Memory Sweep
+examples (see `docs/mem_v4/`), calls the local public API endpoints, writes
 before/after wiki snapshots, records apply/status responses, and stores a
 review bundle under `backend/runs/`.
 

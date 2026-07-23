@@ -1,10 +1,9 @@
 # Claude TODO — beta feedback roadmap (living document)
 
-> **HIGHEST PRIORITY — Memory next-implementation block:** the post-V3 memory
-> work (capture emission gap, write-boundary leaks, composable read/write
-> skills) is planned as five sequenced PRs in
-> [`docs/mem_v3/next_implementation.md`](mem_v3/next_implementation.md) —
-> awaiting one owner review pass, then PR1 starts.
+> **Memory next-implementation block:** the post-V3 memory work (capture
+> emission gap, write-boundary leaks, composable read/write skills) was folded
+> into MemV4. See [`docs/mem_v4/README.md`](mem_v4/README.md) for the active
+> admission, Sweep, and teacher-approval contracts and the live-eval ledger.
 
 > Working progress document for the improvements derived from the first beta
 > tester results (demo workspace `w_demo_chem9b`). Organized as orthogonal
@@ -86,12 +85,12 @@ Verification: `npx tsc --noEmit`, `npx vitest run` (tests for
 lesson → brief groups render; skip one item → only kept files committed.
 
 > **Superseded (2026-07-05):** Milestones 2 and 3 below merged into the
-> **Memory V3** effort after deeper root-cause analysis — see
-> [`mem_v3/design.md`](mem_v3/design.md) (why + architecture),
-> [`mem_v3/implementation_plan.md`](mem_v3/implementation_plan.md) (phases /
-> PR boundaries), [`mem_v3/testing.md`](mem_v3/testing.md) (test-driven
-> approach). The sweep brief (now "M1b") becomes mem_v3 Phase 6 and consumes
-> the new card model. Sections below kept for history.
+> **Memory V3** effort after deeper root-cause analysis, and MemV3 has since
+> been consolidated into MemV4 — see [`mem_v4/README.md`](mem_v4/README.md) for
+> the active design/evaluation home and
+> [`mem_v4/archive/mem_v3_summary.md`](mem_v4/archive/mem_v3_summary.md) for the
+> historical MemV3 rationale (full detail in Git history). Sections below kept
+> for history.
 
 ## Milestone 2 — Sweep dedup: never re-propose what was applied
 
@@ -166,8 +165,8 @@ no hints; saved plans are dead ends).
 - **Input ↔ wiki reconciliation** (beta 2026-07-07) — trust the committed wiki
   as the baseline; flag teacher input that conflicts (esp. non-roster student
   IDs), clarify, and only accept the deviation on explicit confirmation.
-  Design + eval scaffold landed:
-  [`docs/mem_v3/input_reconciliation.md`](mem_v3/input_reconciliation.md),
+  Design + eval scaffold landed (input-reconciliation design folded into MemV4;
+  see [`mem_v4/README.md`](mem_v4/README.md) and Git history),
   goldens + deterministic/opt-in-live eval in
   `backend/tests/evals/…wiki_reconciliation…`. Detector + clarify wiring +
   removal-on-revise tombstone are the implementation follow-up. **Validate the

@@ -22,12 +22,9 @@ teacher remains the only durable-write authority.
 
 - [`archive/mem_v2_summary.md`](archive/mem_v2_summary.md) and
   [`archive/mem_v3_summary.md`](archive/mem_v3_summary.md) preserve only the
-  durable decisions that led here.
-- `../mem_v2/` and `../mem_v3/` remain readable historical source material;
-  they are not active behavior contracts.
-- [`empirical_inputs.md`](empirical_inputs.md) is retained as supporting
-  research evidence. [`brainstorm.md`](brainstorm.md) is historical discovery
-  material, not an implementation instruction.
+  durable decisions that led here. The full MemV2/MemV3 document trees and the
+  V4 discovery notes (brainstorm, empirical inputs) were removed during doc
+  consolidation and live in Git history.
 
 Related current contracts: [`../agent_contracts.md`](../agent_contracts.md),
 [`../agent_architecture.md`](../agent_architecture.md), and

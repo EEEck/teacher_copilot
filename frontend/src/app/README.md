@@ -37,5 +37,4 @@ state, and composing domain components.
   display backend `memory_state` so the teacher can see whether the target was
   confirmed or still needs confirmation.
 - Memory Sweep pages follow the saved-review contract in
-  `../../../docs/agent_contracts.md` (Memory Sweep) and `../../../docs/mem_v3/`.
-  Do not treat `../../../docs/mem_v2/frontend.md` as current behavior.
+  `../../../docs/agent_contracts.md` (Memory Sweep) and `../../../docs/mem_v4/`.
