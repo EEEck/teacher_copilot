@@ -8,6 +8,7 @@ from app.teacher_agent.stream_events import (
     SseReasoningDelta,
     SseToolCall,
     SseToolResult,
+    TranslateStreamState,
     translate_sdk_event,
 )
 
@@ -21,6 +22,45 @@ def test_raw_reasoning_delta():
     assert len(out) == 1
     assert isinstance(out[0], SseReasoningDelta)
     assert out[0].text == "Thinking…"
+
+
+def test_reasoning_item_created_skipped_after_deltas():
+    state = TranslateStreamState()
+    delta = SimpleNamespace(
+        type="raw_response_event",
+        data=SimpleNamespace(
+            type="response.reasoning_summary_text.delta", delta="Hello "
+        ),
+    )
+    assert translate_sdk_event(delta, state=state)
+    assert state.reasoning_deltas_emitted is True
+
+    summary = SimpleNamespace(
+        type="run_item_stream_event",
+        name="reasoning_item_created",
+        item=SimpleNamespace(
+            raw_item=SimpleNamespace(
+                summary=[SimpleNamespace(text="Hello world")]
+            )
+        ),
+    )
+    assert translate_sdk_event(summary, state=state) == []
+
+
+def test_reasoning_item_created_used_when_no_deltas():
+    summary = SimpleNamespace(
+        type="run_item_stream_event",
+        name="reasoning_item_created",
+        item=SimpleNamespace(
+            raw_item=SimpleNamespace(
+                summary=[SimpleNamespace(text="Only snapshot")]
+            )
+        ),
+    )
+    out = translate_sdk_event(summary, state=TranslateStreamState())
+    assert len(out) == 1
+    assert isinstance(out[0], SseReasoningDelta)
+    assert out[0].text == "Only snapshot"
 
 
 def test_tool_called_run_item():

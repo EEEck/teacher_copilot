@@ -91,6 +91,7 @@ from app.teacher_agent.stream_events import (
     SseError,
     SseEvent,
     SseFinal,
+    TranslateStreamState,
     translate_sdk_event,
 )
 from app.teacher_agent.wiki_store import WikiStore
@@ -567,6 +568,7 @@ class AgentRunner:
         result = Runner.run_streamed(agent, user_input, max_turns=self.max_turns)
         started = time.monotonic()
         wall_clock_limit = timeout or self.timeout
+        translate_state = TranslateStreamState()
         try:
             async for event in result.stream_events():
                 if time.monotonic() - started > wall_clock_limit:
@@ -576,6 +578,7 @@ class AgentRunner:
                     event,
                     tool_output_limit=self.tool_output_limit,
                     tool_args_limit=self.tool_args_limit,
+                    state=translate_state,
                 ):
                     yield translated
         except AgentsException as exc:

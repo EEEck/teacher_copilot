@@ -2,6 +2,42 @@
 
 Utility scripts for local development, testing, Docker, and trace bundles.
 
+## Railway beta invites
+
+- `railway-beta-provision.sh` — **prefer this in Git Bash**
+- `railway-beta-provision.ps1` — same flow for PowerShell
+
+Generate a secure `{prefix}_{random}` invite, SSH into the linked Railway
+**backend**, run `beta_cli provision`, then `chmod`/`chown` the beta volume so
+the API (`app`, uid 1000) can write `workflow/` even when SSH ran as root.
+Prints a paste-ready invite message and appends
+`deploy/railway/invites.local.md` (gitignored).
+
+```bash
+# Git Bash
+cd /c/Users/matth/teacher_agent_v2
+./scripts/railway-beta-provision.sh maria
+./scripts/railway-beta-provision.sh lb "LB (Chemie 9b)"
+```
+
+```powershell
+# PowerShell (optional)
+.\scripts\railway-beta-provision.ps1 -Prefix maria
+```
+
+Requires: Railway CLI logged in + linked project, SSH key registered
+(`railway ssh keys add -k ~/.ssh/railway_ed25519.pub -n railway-klassenpilot-beta`),
+and the backend service healthy with `/data` volume.
+
+On the backend container, manage testers with:
+
+```bash
+railway ssh -s backend -- python -m app.services.beta_cli list
+railway ssh -s backend -- python -m app.services.beta_cli disable --tester-id t_maria
+railway ssh -s backend -- python -m app.services.beta_cli enable --tester-id t_maria
+railway ssh -s backend -- python -m app.services.beta_cli report-all
+```
+
 ## Development
 
 - `restart-dev.ps1` / `restart-dev.sh` / `restart-dev.cmd` - restart backend

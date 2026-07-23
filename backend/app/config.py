@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     # Two model ids. STRONG is the newest/best model; CHEAP is the small model.
     # Set the ids here when a newer model ships. Which call class uses which, and
     # at what reasoning effort, is decided by MODEL_PROFILE below.
-    openai_strong_model: str = "gpt-5.5"
+    # Terra ≈ GPT-5.5 quality at ~½ the API rate; Sol matches 5.5 pricing ($5/$30).
+    openai_strong_model: str = "gpt-5.6-terra"
     openai_cheap_model: str = "gpt-5.4-mini"
     # Call classes (mem_v3 boundary):
     #   CHAT     = plan + ingest chat (high volume, user-facing; capture happens
@@ -102,6 +103,9 @@ class Settings(BaseSettings):
     beta_cookie_name: str = "kp_beta_session"
     beta_session_days: int = 30
     beta_cookie_secure: bool = False
+    # Use "none" when the browser frontend is on a different site than the API
+    # (e.g. separate Railway *.up.railway.app hosts). Requires cookie_secure=true.
+    beta_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     beta_dev_workspace_id: str = ""
     # Local beta-only Memory V4 diagnostic capture. This is intentionally
     # disabled unless beta + development + this explicit flag are all set.

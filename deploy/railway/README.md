@@ -246,7 +246,7 @@ Both production images in `deploy/railway/` follow a practical MVP posture:
 | Health check | `GET /api/health` | HTTP GET on `PORT` |
 | Build context | root `.dockerignore` excludes `.env*`, credentials, local data |
 
-**Intentional tradeoffs:** images are not distroless (slim/alpine keeps Python/Next tooling simple). Base tags are pinned to major/minor (`3.12`, `22`) rather than image digests — rebuild periodically for security patches. If a fresh Railway volume mounts with root-only permissions, the backend `app` user may need a one-time `chown` via `railway ssh` before provisioning; prefer mounting the volume before first deploy so `/data/beta_data` is created with uid 1000.
+**Intentional tradeoffs:** images are not distroless (slim/alpine keeps Python/Next tooling simple). Base tags are pinned to major/minor (`3.12`, `22`) rather than image digests — rebuild periodically for security patches. Provisioning (often via root `railway ssh`) always chmod/`chown`s the new workspace so the container `app` user (uid 1000) can create `workflow/` and write SQLite — friendly private beta, not multi-tenant lockdown. If an old volume is still root-only, one-time `chown -R 1000:1000 /data/beta_data` (or re-run provision) still works.
 - **SSE timeout** — agent turns up to ~240s (`AGENT_TIMEOUT_SECONDS`); ensure Railway/proxy idle timeouts are sufficient.
 - **Secrets** — `OPENAI_API_KEY` only on backend; never on frontend.
 - **AWS path later** — see [`deploy/aws/`](../aws/README.md) and `implementation_plans/beta_push.md` for Postgres + EFS when Option A outgrows one VM.

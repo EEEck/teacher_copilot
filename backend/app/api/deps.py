@@ -56,6 +56,7 @@ def get_beta_auth_service() -> BetaAuthService:
         cookie_name=settings.beta_cookie_name,
         session_days=settings.beta_session_days,
         cookie_secure=settings.beta_cookie_secure,
+        cookie_samesite=settings.beta_cookie_samesite,
     )
     service.initialize()
     return service

@@ -81,7 +81,7 @@ export function HomeLanding() {
               className="whitespace-nowrap text-[11px] leading-relaxed tracking-wide text-muted-foreground sm:text-xs"
               title="How the agent is built"
             >
-              GPT-5.5+ · self-improving · curated memory · human-in-the-loop safeguards
+              GPT-5.6 · self-improving · curated memory · human-in-the-loop safeguards
             </p>
           </div>
 

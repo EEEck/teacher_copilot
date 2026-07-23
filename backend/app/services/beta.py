@@ -5,6 +5,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
+import os
 import secrets
 import shutil
 import sqlite3
@@ -14,6 +15,12 @@ from pathlib import Path
 from typing import Any
 
 from app.services.sqlite_util import connect as sqlite_connect
+
+# Railway beta volume: provision often runs as root via `railway ssh`, while the
+# API container runs as uid/gid 1000 (`app`). Friendly private beta — prefer
+# writable workspaces over strict ownership.
+_BETA_APP_UID = 1000
+_BETA_APP_GID = 1000
 
 
 def _utc_now() -> str:
@@ -30,6 +37,43 @@ def _hash_text(value: str) -> str:
 
 def _json(payload: dict[str, Any] | None) -> str:
     return json.dumps(payload or {}, ensure_ascii=False, sort_keys=True)
+
+
+def ensure_beta_tree_writable(path: Path) -> None:
+    """Make a beta data path writable by the API process.
+
+    - Always chmod dirs ``0o777`` / files ``0o666`` (private volume, trusted testers).
+    - When running as root, also ``chown`` to the container ``app`` user (1000:1000).
+    Best-effort: ignore OSErrors so local/dev provision still succeeds.
+    """
+    root = Path(path)
+    if not root.exists():
+        return
+    want_chown = False
+    try:
+        want_chown = hasattr(os, "chown") and os.geteuid() == 0
+    except AttributeError:
+        want_chown = False
+
+    targets: list[Path] = [root]
+    if root.is_dir():
+        for dirpath, dirnames, filenames in os.walk(root):
+            base = Path(dirpath)
+            targets.append(base)
+            targets.extend(base / name for name in dirnames)
+            targets.extend(base / name for name in filenames)
+
+    for target in targets:
+        try:
+            mode = 0o777 if target.is_dir() else 0o666
+            os.chmod(target, mode)
+        except OSError:
+            pass
+        if want_chown:
+            try:
+                os.chown(target, _BETA_APP_UID, _BETA_APP_GID)
+            except OSError:
+                pass
 
 
 @dataclass(frozen=True)
@@ -452,6 +496,7 @@ class BetaAuthService(BetaStorage):
         cookie_name: str,
         session_days: int,
         cookie_secure: bool,
+        cookie_samesite: str = "lax",
     ) -> None:
         super().__init__(db_path)
         self.data_root = Path(data_root)
@@ -459,6 +504,7 @@ class BetaAuthService(BetaStorage):
         self.cookie_name = cookie_name
         self.session_days = session_days
         self.cookie_secure = cookie_secure
+        self.cookie_samesite = cookie_samesite
 
     @property
     def telemetry(self) -> BetaTelemetry:
@@ -483,6 +529,10 @@ class BetaAuthService(BetaStorage):
                 wiki_root,
                 ignore=shutil.ignore_patterns("workflow"),
             )
+        # Always relax perms (incl. re-provision / existing tree) so Discuss and
+        # other writers can create workflow/ under the wiki even after root SSH.
+        ensure_beta_tree_writable(self.data_root / "workspaces" / workspace_id)
+        ensure_beta_tree_writable(self.data_root)
         with sqlite_connect(self.db_path) as conn:
             conn.execute(
                 """

@@ -126,7 +126,22 @@ export class StreamPartsAccumulator {
 
   apply(event: SseEvent): void {
     if (event.type === "reasoning_delta") {
-      this.reasoningText += event.text;
+      const incoming = event.text;
+      if (!incoming) return;
+      // Backend may emit incremental deltas, then a full summary snapshot
+      // (reasoning_item_created). Treat snapshots as replace, not append.
+      if (
+        this.reasoningText &&
+        (incoming === this.reasoningText ||
+          incoming.startsWith(this.reasoningText) ||
+          this.reasoningText.startsWith(incoming))
+      ) {
+        if (incoming.length >= this.reasoningText.length) {
+          this.reasoningText = incoming;
+        }
+        return;
+      }
+      this.reasoningText += incoming;
       return;
     }
     if (event.type === "tool_call") {
