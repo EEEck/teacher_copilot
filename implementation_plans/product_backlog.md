@@ -105,7 +105,8 @@ the product surface.
 | P1 | **Offline plan-quality calibration** | Run an adapted Bavaria Chemie 9 NTG P/R/O/M rubric over retained beta plan artifacts using DeepEval/LLM-as-judge. Store operator-only results; do not add user latency, hidden rewriting, or a new live save gate. |
 | P1 | **Generic plan empty state** | Replace the legacy pre-filled `Lesson Plan — Next lesson` shell with a class-agnostic empty state that explains that a plan package appears after a teacher request. |
 | P2 | **Reopen saved plan** | Implement the already-scoped `lessonDate` session-start hint so a saved plan can be refined in chat instead of regenerated. |
-| P2 | **Documentation consolidation** | Execute the MemV4 consolidation specification and reconcile stale historical references, particularly generated class profiles and inactive structured lesson artifacts. |
+| P2 | **Editable lesson timeline (manual date edits)** | Let the teacher edit the class timeline directly: reschedule a saved lesson to a different date and correct/adjust lesson dates without regenerating. Since the lesson date is the folder/identity key stamped at save (`normalize_plan_target_date`), a reschedule must move the `lessons/<date>/` artifacts and update `timeline.md` atomically, keep the plan text's `Target date:` in sync, and reject/merge collisions with an existing lesson on the target date. Small UI affordance on the class-home timeline + a backend move/rename that reuses the save gate. |
+| P2 | **Documentation consolidation** *(done 2026-07-22, commit fe18268)* | Executed the MemV4 consolidation and removed stale doc trees/plans; residual: reconcile any remaining generated class profiles and inactive structured lesson artifacts if they resurface. |
 
 Explicitly deferred: Docling runtime ingestion, document/figure rendering,
 source-panel UI, broader Discuss/Class Brief verification packs, and class-home
