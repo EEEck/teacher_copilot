@@ -285,6 +285,13 @@ def teacher_signals_finalize(message: str) -> bool:
         "good to save",
         "please finalize",
         "make the lesson results ready",
+        # German (users often type German)
+        "kann gespeichert",
+        "so speichern",
+        "fertigstellen",
+        "passt so",
+        "bereit zum speichern",
+        "genug details",
     )
     return any(marker in text for marker in markers)
 

@@ -26,6 +26,7 @@ from app.schemas.api import ChatMessage
 from app.teacher_agent.agents import (
     AgentRunner,
     _strip_plan_debug_sections,
+    _strip_plan_target_date,
     _trim_to_last_user_turns,
 )
 from app.context_limits import get_context_limits
@@ -558,6 +559,29 @@ def test_strip_plan_debug_sections_removes_evidence_briefs():
     assert "## Evidence briefs" not in cleaned
     assert "## Learning goals" in cleaned
     assert "## Homework" in cleaned
+
+
+def test_strip_plan_target_date_drops_echoed_date_keeps_content():
+    # A target date the model echoed from teacher input must not survive into
+    # the draft (dates from input are ignored; the picker owns the date).
+    plan = """# Lesson Package -- Carbon bonding
+
+## 1. At a glance
+- Class: chemie_9b_2026_27
+- Target date: 2026-09-28
+- Duration: 45 min | Target date: 2026-09-28
+- Topic: carbon bonding
+
+## Teacher Lesson Plan
+- Review redox on 2026-05-25 first.
+"""
+    cleaned = _strip_plan_target_date(plan)
+    assert "target date" not in cleaned.lower()
+    assert "- Duration: 45 min" in cleaned  # inline strip keeps the rest of the line
+    assert "- Class: chemie_9b_2026_27" in cleaned
+    assert "- Topic: carbon bonding" in cleaned
+    # A real date inside prose (not a target-date field) is left untouched.
+    assert "Review redox on 2026-05-25 first." in cleaned
 
 
 def test_runner_readiness_does_not_parse_assistant_reply_text():

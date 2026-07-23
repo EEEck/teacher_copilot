@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from app.services.sqlite_util import connect as sqlite_connect
+
 
 @dataclass(frozen=True)
 class BetaTesterRef:
@@ -30,7 +32,7 @@ def list_beta_testers(
         raise FileNotFoundError(f"Beta telemetry database not found: {db_path}")
 
     clauses = "" if include_disabled else "where t.disabled = 0"
-    with sqlite3.connect(db_path) as conn:
+    with sqlite_connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
             f"""
@@ -103,7 +105,7 @@ def render_beta_report(
     if not db_path.exists():
         raise FileNotFoundError(f"Beta telemetry database not found: {db_path}")
 
-    with sqlite3.connect(db_path) as conn:
+    with sqlite_connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         filters, params = _filters(
             tester_id=tester_id,

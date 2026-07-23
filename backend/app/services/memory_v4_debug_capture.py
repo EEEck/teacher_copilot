@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from app.services.beta import BetaStorage, RequestIdentity
+from app.services.sqlite_util import connect as sqlite_connect
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ class MemoryV4DebugRecorder:
                 json.dumps(bundle, ensure_ascii=False, indent=2, default=str),
                 encoding="utf-8",
             )
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite_connect(self.db_path) as conn:
                 conn.execute(
                     """
                     insert into memory_v4_debug_trace (

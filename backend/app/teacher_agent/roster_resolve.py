@@ -14,7 +14,7 @@ from typing import Literal
 
 from rapidfuzz import fuzz
 
-from app.teacher_agent.wiki.constants import STUDENT_ID_RE
+from app.teacher_agent.wiki.constants import LESSON_RESULTS_SECTIONS, STUDENT_ID_RE
 
 Decision = Literal["allow", "suggest", "block"]
 
@@ -24,14 +24,6 @@ _ROSTER_ROW_RE = re.compile(
 _MALFORMED_STUDENT_ID_RE = re.compile(
     r"(?<![A-Za-z0-9-])S[-_ ]?(\d{3})(?!\d)", re.IGNORECASE
 )
-_BULLET_LABEL_RE = re.compile(r"^-\s*([^:]{1,80}):", re.MULTILINE)
-_NAME_SPAN_RE = re.compile(
-    r"(?<![A-Za-zÄÖÜäöüß])"
-    r"([A-ZÄÖÜ][A-Za-zÄÖÜäöüß\-']{1,40})"
-    r"(?:\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß\-']{1,40}))?"
-    r"(?![A-Za-zÄÖÜäöüß])"
-)
-_HEADING_RE = re.compile(r"^#{1,3}\s+.+$", re.MULTILINE)
 
 _FUZZY_MIN_SCORE = 88
 _FUZZY_MARGIN = 6
@@ -195,40 +187,6 @@ def _build_exact_keys(index: ClassRosterIndex) -> None:
             _register_key(index, key, student.student_id)
 
 
-def extract_reference_candidates(diary_markdown: str) -> list[tuple[str, str]]:
-    """Return (raw, kind) candidates. kind is id|label|prose."""
-    text = diary_markdown or ""
-    found: list[tuple[str, str]] = []
-    seen: set[str] = set()
-
-    def add(raw: str, kind: str) -> None:
-        cleaned = " ".join(raw.split())
-        if not cleaned:
-            return
-        key = f"{kind}:{cleaned.casefold()}"
-        if key in seen:
-            return
-        seen.add(key)
-        found.append((cleaned, kind))
-
-    for match in STUDENT_ID_RE.finditer(text):
-        add(match.group(1).upper(), "id")
-    for match in _MALFORMED_STUDENT_ID_RE.finditer(text):
-        # Avoid double-counting canonical IDs already captured.
-        if STUDENT_ID_RE.fullmatch(match.group(0)):
-            continue
-        add(match.group(0), "id")
-    for match in _BULLET_LABEL_RE.finditer(text):
-        add(match.group(1), "label")
-
-    prose = _HEADING_RE.sub(" ", text)
-    for match in _NAME_SPAN_RE.finditer(prose):
-        first, last = match.group(1), match.group(2)
-        add(f"{first} {last}" if last else first, "prose")
-
-    return found
-
-
 def _fuzzy_resolve(raw: str, index: ClassRosterIndex) -> ResolveHit | None:
     needle = normalize_person_key(raw)
     if not needle or len(needle) < 3:
@@ -304,7 +262,7 @@ def resolve_reference(
             return ResolveHit(
                 raw=text,
                 decision="block",
-                reason=f"malformed unknown ID {text}",
+                reason=f"malformed unknown ID {student_id}",
             )
         alias = recommended_alias(student, index)
         return ResolveHit(
@@ -344,19 +302,96 @@ def resolve_reference(
     return None
 
 
-def resolve_diary_student_references(
-    wiki, class_id: str, diary_markdown: str
-) -> list[ResolveHit]:
+_OBS_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$")
+_OBS_LABEL_RE = re.compile(r"^-\s*([^:\n]{1,80}):\s*(.+)$")
+# Diary section headings (SSOT). If one appears inside the extracted
+# observations block, the section extractor bled past the section boundary
+# (it over-captures an empty section) — stop before reading the next section's
+# lines as student subjects.
+_DIARY_SECTION_LABELS = {
+    label.casefold() for _, label, _ in LESSON_RESULTS_SECTIONS
+}
+
+
+@dataclass(frozen=True)
+class ResolvedObservations:
+    """Student observations mapped to roster ids, plus review warnings.
+
+    ``by_id`` holds only observations whose subject resolved to a real roster
+    ``S-###`` (exact, alias, or a confident fuzzy match). Unresolved subjects
+    are skipped — never fabricated, never silently dropped — and surfaced in
+    ``warnings`` for the teacher. This is the write-time safety boundary: only
+    mappable observations are persisted.
+    """
+
+    by_id: dict[str, list[str]]
+    warnings: list[str]
+
+
+def resolve_student_observations(
+    wiki, class_id: str, students_block: str
+) -> ResolvedObservations:
+    """Resolve each observation's SUBJECT (a name or S-###) to a roster id.
+
+    Teachers write names (often with typos), not internal ids, so the subject
+    is resolved via the roster (exact -> alias -> rapidfuzz). This reads only
+    the structured observation subject (the token before the colon, or a
+    ``## Subject`` heading) — never free prose — so there is no name-guessing
+    over arbitrary sentences.
+    """
     index = load_class_roster(wiki, class_id)
-    hits: list[ResolveHit] = []
-    seen: set[str] = set()
-    for raw, kind in extract_reference_candidates(diary_markdown):
-        hit = resolve_reference(raw, index, kind=kind)
-        if hit is None:
+    by_id: dict[str, list[str]] = {}
+    warnings: list[str] = []
+    warned: set[str] = set()
+    current_sid: str | None = None
+
+    def _warn_unresolved(subject: str) -> None:
+        key = normalize_person_key(subject)
+        if key and key not in warned:
+            warned.add(key)
+            warnings.append(
+                f'Could not match "{subject}" to the class roster; its notes '
+                "were not saved. Fix the name or add the student to the roster."
+            )
+
+    def _note_fuzzy(subject: str, sid: str) -> None:
+        key = f"fuzzy:{normalize_person_key(subject)}"
+        if key not in warned:
+            warned.add(key)
+            warnings.append(
+                f'Matched "{subject}" to {sid} by similarity — confirm it is '
+                "the right student."
+            )
+
+    def _resolve(subject: str) -> str | None:
+        hit = resolve_reference(subject, index, kind="label")
+        if hit is not None and hit.student_id:
+            if hit.decision == "suggest":
+                _note_fuzzy(subject, hit.student_id)
+            return hit.student_id
+        _warn_unresolved(subject)
+        return None
+
+    for raw_line in (students_block or "").splitlines():
+        line = raw_line.strip()
+        if not line:
             continue
-        dedupe = f"{hit.decision}:{normalize_person_key(hit.raw)}:{hit.student_id or ''}"
-        if dedupe in seen:
+        heading = _OBS_HEADING_RE.match(line)
+        if heading:
+            subject = heading.group(1).strip()
+            if subject.casefold() in _DIARY_SECTION_LABELS:
+                break  # bled into the next diary section; stop.
+            current_sid = _resolve(subject)
+            if current_sid:
+                by_id.setdefault(current_sid, [])
             continue
-        seen.add(dedupe)
-        hits.append(hit)
-    return hits
+        label = _OBS_LABEL_RE.match(line)
+        if label:
+            sid = _resolve(label.group(1).strip())
+            if sid:
+                by_id.setdefault(sid, []).append(label.group(2).strip())
+            continue
+        if line.startswith("-") and current_sid:
+            by_id.setdefault(current_sid, []).append(line.lstrip("- ").strip())
+        # Any other prose line is intentionally ignored (no NER over sentences).
+    return ResolvedObservations(by_id=by_id, warnings=warnings)

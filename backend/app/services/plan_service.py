@@ -235,10 +235,13 @@ class PlanService:
                 plan_markdown = row.artifact_markdown
         if not plan_markdown.strip():
             raise ValueError("plan_markdown must not be empty")
-        # Drafts carry no target date; stamp the chosen lesson date before
-        # verifying/persisting so the stored plan matches its lesson folder
-        # (audit H2 v2).
-        plan_markdown = self.wiki.normalize_plan_target_date(plan_markdown, lesson_date)
+        # Verify and gate the EXACT (undated) draft the teacher reviewed. The
+        # lesson date is a deterministic final-write stamp, not reviewed content,
+        # so it must not enter the verified fingerprint: stamping before the gate
+        # changed the artifact fingerprint and let a completed safety-hold review
+        # slip past evaluate_write_gate (the report stayed pinned to the un-stamped
+        # fingerprint). The draft/session therefore stays undated; only the
+        # persisted file carries the date, stamped after the gate passes.
         await self.core.ensure_plan_judgement(req.session_id, plan_markdown)
         verification = await self.agents.verify_artifact_for_write(
             class_id, "lesson plan", plan_markdown, session.executive
@@ -256,8 +259,12 @@ class PlanService:
         except WriteVerificationBlocked:
             self.core._persist_session(session)
             raise
-        title = self.wiki.extract_title(plan_markdown) or "Lesson plan"
-        path = self.wiki.save_lesson_plan(class_id, lesson_date, plan_markdown)
+        # Gate passed — stamp the chosen lesson date only into the persisted plan
+        # so the stored file matches its lesson folder (audit H2). The reviewed
+        # draft stays undated.
+        stamped_markdown = self.wiki.normalize_plan_target_date(plan_markdown, lesson_date)
+        title = self.wiki.extract_title(stamped_markdown) or "Lesson plan"
+        path = self.wiki.save_lesson_plan(class_id, lesson_date, stamped_markdown)
         self.core.set_status(req.session_id, PlanSessionStatus.saved.value)
         if self.workflow_drafts is not None and session.draft_id:
             self.workflow_drafts.mark_saved(session.draft_id)

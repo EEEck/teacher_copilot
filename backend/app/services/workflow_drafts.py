@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.services.sqlite_util import connect as sqlite_connect
 from app.teacher_agent.executive_verification import artifact_fingerprint as artifact_hash
 
 TERMINAL_STATUSES = {"committed", "saved", "discarded"}
@@ -173,6 +174,10 @@ class WorkflowDraftStore:
             self._ensure_column(conn, "latest_turn_complete", "INTEGER NOT NULL DEFAULT 1")
             self._ensure_column(conn, "pending_turn_json", "TEXT NOT NULL DEFAULT '{}'")
             self._ensure_column(conn, "executive_json", "TEXT NOT NULL DEFAULT '{}'")
+            # These two are in the CREATE TABLE above, but a DB created before
+            # they were added would lack them — migrate additively like the rest.
+            self._ensure_column(conn, "active_review_revision", "INTEGER")
+            self._ensure_column(conn, "active_review_hash", "TEXT")
 
     def open_draft(
         self,
@@ -450,9 +455,7 @@ class WorkflowDraftStore:
         return self.get(draft_id)
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return sqlite_connect(self.db_path, row_factory=True)
 
     @staticmethod
     def _ensure_column(conn: sqlite3.Connection, name: str, definition: str) -> None:

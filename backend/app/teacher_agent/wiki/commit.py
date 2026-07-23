@@ -116,7 +116,11 @@ def commit_ingest(
     if not approved_writes:
         raise ValueError("At least one wiki update must be approved to commit.")
     lesson_results_update = next(
-        (u for u in approved_writes if "lesson_results.md" in u.wiki_path),
+        (
+            u
+            for u in approved_writes
+            if u.wiki_path.replace("\\", "/").endswith("/lesson_results.md")
+        ),
         None,
     )
     if lesson_results_update is None:

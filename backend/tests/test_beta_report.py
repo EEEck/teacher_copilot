@@ -144,7 +144,7 @@ def _provision_tester(
     invite_code: str,
 ) -> BetaAuthService:
     seed_wiki = tmp_path / "seed_wiki"
-    seed_wiki.mkdir()
+    seed_wiki.mkdir(exist_ok=True)
     service = BetaAuthService(
         db_path=tmp_path / "beta.sqlite3",
         data_root=tmp_path,

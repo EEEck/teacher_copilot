@@ -282,7 +282,19 @@ def teacher_signals_plan_finalize(message: str) -> bool:
     text = (message or "").lower()
     if not text.strip():
         return False
-    if any(marker in text for marker in ("not happy", "isn't good", "doesn't work")):
+    if any(
+        marker in text
+        for marker in (
+            "not happy",
+            "isn't good",
+            "doesn't work",
+            # German negatives
+            "nicht gut",
+            "gefällt mir nicht",
+            "passt nicht",
+            "funktioniert nicht",
+        )
+    ):
         return False
     direct = (
         "ready to save",
@@ -291,6 +303,11 @@ def teacher_signals_plan_finalize(message: str) -> bool:
         "finalize it",
         "that's it",
         "that is it",
+        # German (users often type German)
+        "kann gespeichert",
+        "so speichern",
+        "fertigstellen",
+        "passt so",
     )
     if any(marker in text for marker in direct):
         return True
@@ -301,6 +318,10 @@ def teacher_signals_plan_finalize(message: str) -> bool:
         "looks good",
         "works for me",
         "i like it",
+        # German
+        "sieht gut aus",
+        "gefällt mir",
+        "so ist gut",
     )
     completion = (
         "last refinement",
@@ -309,6 +330,10 @@ def teacher_signals_plan_finalize(message: str) -> bool:
         "final tweak",
         "done",
         "finished",
+        # German
+        "fertig",
+        "letzte änderung",
+        "letzter schliff",
     )
     return any(marker in text for marker in acceptance) and any(
         marker in text for marker in completion

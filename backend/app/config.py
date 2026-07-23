@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     # rounds plus synthesis; keep that budget separate from shorter workflows.
     plan_agent_timeout_seconds: float = 600.0
     agent_max_turns: int = 16
+    # Char cap for streamed tool args/output shown live in chat (SSE). Kept here
+    # so the two runner limits are tunable in one place, not hardcoded.
+    agent_tool_stream_chars: int = 500
 
     # --- Context limits (see app/context_limits.py + context_management.md) ---
     # Verbatim teacher turns in the planning user message. Durable context lives

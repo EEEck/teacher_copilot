@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { LogIn } from "lucide-react";
 import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";

@@ -130,6 +130,30 @@ expansion. They do not block the beta memory -> plan loop.
 | **Generic plan empty state** | Replace the legacy pre-filled lesson-plan shell with a class-agnostic empty artifact state. It must explain that a plan package appears after a teacher request and never imply that generic phases/goals have been generated. |
 | **Memory Sweep stale-diff hardening** | See incident **MSW-001** below. Launch patched with `.get()`; v1.1 fingerprint-first stale gate. |
 
+### Pre-beta code-audit backlog (parked 2026-07-21)
+
+Tech-debt / hardening surfaced by the pre-beta QA audit
+([`docs/pre_beta_qa_audit_2026-07-21.md`](../docs/pre_beta_qa_audit_2026-07-21.md)).
+None block beta; each is a refactor best done on the working, test-covered code
+post-launch. The beta-blocking findings (roster over-block, plan safety-gate
+bypass) and the quick hardening were already fixed in the audit branch.
+
+| ID | Item | Engineering notes |
+|---|---|---|
+| F5 | **Contract single-source-of-truth** | Generate `frontend/src/lib/api.ts` types from the FastAPI OpenAPI (e.g. `openapi-typescript`) and/or regenerate + CI-check `contracts/openapi.yaml` (currently ~9 of ~60 endpoints; stale since 2026-05-27). Hand-mirrored TS types can silently drift from the Pydantic contract. |
+| F6 | **`useMemoryReview` extraction** | Pull sessionStorage review persistence, the `beforeunload` guard, the reset effects, and the double-commit idempotency guard out of the ~480-line `MemoryWorkspace` into a hook / state-machine. Overlaps **Workflow-drafts page slim-down** above; regression-test the commit flow. |
+| F7 | **Split `routes.py` monolith** | 2613 lines / ~60 endpoints in one module. Split into per-domain routers (beta, classes, discussion, ingest, plan, memory-sweep) and share the repeated non-stream chat telemetry calls behind one wrapper. |
+| F8 | **Type the API `dict` seam** | Replace untyped `dict` passthroughs (`executive_state`, `session_state`, `lesson_planning_state`, `memory_candidates`) with Pydantic models so the review UI's implicit shape dependency is compile-checked both ends. |
+| F14 | **Retire `PlanTurnOutput` dual state path** | Drop the full-snapshot `session_state`/`lesson_planning_state` compatibility fallback once nothing relies on it; keep only `state_patch`. |
+| F15 | **WikiStore facade boundary** (cosmetic) | ~30 `_private` methods are exposed on the public facade and called cross-module. Formalize public API vs internals. Lowest priority. |
+
+Also parked from the audit: the **4 eval-tier goldens** (deepeval; separate
+triage — likely golden refresh after the F1 capture/verification changes),
+**`knip`** for frontend unused-export detection, and **idle-TTL eviction** for
+the per-workspace `deps.py` service caches (see **Multi-worker / session
+hydrate docs** above — bounding them naively would drop live in-memory
+sessions).
+
 Non-goals:
 
 - School SaaS accounts or role hierarchy.

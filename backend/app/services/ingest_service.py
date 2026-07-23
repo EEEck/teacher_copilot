@@ -54,6 +54,7 @@ from app.teacher_agent.executive_verification import (
     enforce_applied_write_verification,
 )
 from app.teacher_agent.prompt_trace import build_ingest_chat_prompt_trace
+from app.teacher_agent.roster_resolve import resolve_student_observations
 from app.teacher_agent.wiki import parsing as wiki_parsing
 from app.teacher_agent.wiki_store import WikiStore
 
@@ -538,12 +539,20 @@ class IngestService:
         self.core.set_status(req.session_id, IngestSessionStatus.committed.value)
         if self.workflow_drafts is not None and session.draft_id:
             self.workflow_drafts.mark_committed(session.draft_id)
+        # Tell the teacher which student observations we couldn't map to the
+        # roster (skipped at write time, never fabricated).
+        warnings = resolve_student_observations(
+            self.wiki,
+            session.class_id,
+            self.wiki._extract_section_body(diary_markdown, "Student observations"),
+        ).warnings
         return CommitIngestResponse(
             raw_diary_path=raw_path,
             applied_wiki_paths=applied,
             log_entry_id=log_id,
             lesson_date=lesson_date,
             title=title,
+            warnings=warnings,
         )
 
     def discard_draft(self, draft_id: str) -> None:

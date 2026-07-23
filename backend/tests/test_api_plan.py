@@ -116,6 +116,10 @@ def test_plan_chat_returns_deterministic_verification_report(client: TestClient)
         "markdown_package",
         "source_provenance",
         "duration",
+        # Advisory-only rows (never block save) added by build_plan_verification_report.
+        "task_alignment",
+        "student_leak",
+        "exit_buckets",
     }
     draft = client.get(f"{base}/sessions/{session_id}/draft")
     assert draft.status_code == 200

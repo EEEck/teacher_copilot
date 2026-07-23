@@ -86,9 +86,24 @@ def test_explicit_claim_without_scope_is_downgraded():
 
 
 def test_explicit_claim_with_scope_is_kept():
+    # mem_v4 grounding: an explicit claim is kept only when a verified
+    # `Direct teacher quote:` (present in the message) accompanies a durable
+    # speech act + scope. Scope markers alone no longer keep it (mem_v3 idea,
+    # superseded — see docs/mem_v4/brainstorm.md claim↔quote grounding).
     discipline = _require_discipline()
     out = discipline(
-        [_explicit_candidate()],
+        [
+            _explicit_candidate().model_copy(
+                update={
+                    "speech_act": "conduct_request",
+                    "scope": "global",
+                    "evidence": (
+                        "Direct teacher quote: From now on, use MBB-style "
+                        "summaries for all briefs."
+                    ),
+                }
+            )
+        ],
         teacher_message="From now on, use MBB-style summaries for all briefs.",
     )
     assert out[0].source == "teacher_explicit"
@@ -127,7 +142,15 @@ def test_store_request_enables_content_target_fast_lane():
     out = discipline(
         [
             _explicit_candidate("This class needs visual supports first.").model_copy(
-                update={"target": "teaching_patterns.md", "speech_act": "store_request"}
+                update={
+                    "target": "teaching_patterns.md",
+                    "speech_act": "store_request",
+                    "scope": "class",
+                    "evidence": (
+                        "Direct teacher quote: add to the teaching patterns that "
+                        "this class needs visuals first"
+                    ),
+                }
             )
         ],
         teacher_message=message,
@@ -138,14 +161,21 @@ def test_store_request_enables_content_target_fast_lane():
 
 
 def test_conduct_request_keeps_profile_target_without_markers():
-    # "can you communicate more concisely" has no future-scope marker; the
-    # model's speech-act judgment carries it (industry pattern: direct
-    # requests to the agent are first-class).
+    # No future-scope marker needed: a direct conduct request to the agent is
+    # first-class when grounded by a verified quote + scope (mem_v4). It is the
+    # verified quote, not a marker word, that carries the explicit lane.
     discipline = _require_discipline()
     out = discipline(
         [
             _explicit_candidate("Prefers concise communication.").model_copy(
-                update={"speech_act": "conduct_request"}
+                update={
+                    "speech_act": "conduct_request",
+                    "scope": "global",
+                    "evidence": (
+                        "Direct teacher quote: can you communicate more "
+                        "concisely with me"
+                    ),
+                }
             )
         ],
         teacher_message="can you communicate more concisely with me",
@@ -202,6 +232,7 @@ def test_verified_model_quote_is_kept_and_canonicalized():
             _explicit_candidate().model_copy(
                 update={
                     "speech_act": "conduct_request",
+                    "scope": "global",
                     "evidence": (
                         "Direct teacher quote: from now on use MBB-style "
                         "summaries for all briefs"

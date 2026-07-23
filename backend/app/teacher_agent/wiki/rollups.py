@@ -11,6 +11,7 @@ from app.teacher_agent.wiki.constants import (
     STUDENT_ID_RE,
 )
 
+from app.teacher_agent import roster_resolve
 from app.teacher_agent.wiki import parsing
 
 STUDENT_SUMMARY_HEADING = "Student Summary"
@@ -378,7 +379,12 @@ def _compile_students_and_timeline(
     title: str,
 ) -> list[tuple[Path, str, str]]:
     students_block = parsing.extract_section_body(diary_md, "Student observations")
-    by_student = parsing.parse_student_observations(students_block)
+    # Resolve each observation's subject (name or S-###) to a roster id; only
+    # mappable observations are proposed (unmappable ones are surfaced as review
+    # warnings by the verification pack, not written).
+    by_student = roster_resolve.resolve_student_observations(
+        store, class_id, students_block
+    ).by_id
     outputs: list[tuple[Path, str, str]] = []
 
     for sid, bullets in by_student.items():
@@ -437,8 +443,16 @@ def _finalize_lesson_writes(
 ) -> None:
     """Apply student entities, index, and timeline after lesson commit/revise."""
     students_block = parsing.extract_section_body(diary_md, "Student observations")
-    by_student = parsing.parse_student_observations(students_block)
+    # Write only observations whose subject resolves to a real roster id
+    # (name via exact/alias/fuzzy, or a known S-###). Unmappable subjects are
+    # skipped here and warned about at review — never fabricated, never dropped
+    # silently. This is the write-time roster safety boundary.
+    by_student = roster_resolve.resolve_student_observations(
+        store, class_id, students_block
+    ).by_id
     for sid, bullets in by_student.items():
+        if not bullets:
+            continue
         path = store._upsert_student_entity(class_id, sid, lesson_date, bullets)
         rel = store.rel_wiki(path)
         if rel not in applied:

@@ -14,6 +14,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+from app.services.sqlite_util import connect as sqlite_connect
 from typing import Any
 
 from app.services.memory_candidate_ledger import MemoryCandidateLedger
@@ -279,9 +281,7 @@ class MemorySweepReviewStore:
         return self.get(review_id)
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return sqlite_connect(self.db_path, row_factory=True)
 
 
 def build_memory_sweep_source_snapshot(

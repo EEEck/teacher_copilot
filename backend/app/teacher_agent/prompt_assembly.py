@@ -713,6 +713,7 @@ def _discussion_needs_full_subject_expert(messages: list[ChatMessage]) -> bool:
     """
     recent_text = " ".join(message.content.lower() for message in messages[-3:])
     cues = (
+        # English
         "pedagog",
         "how should i",
         "how do i",
@@ -724,6 +725,16 @@ def _discussion_needs_full_subject_expert(messages: list[ChatMessage]) -> bool:
         "teaching approach",
         "curriculum",
         "competenc",
+        # German (the users are German Gymnasium teachers who often type German)
+        "wie soll ich",
+        "wie führe ich",
+        "einführ",
+        "differenzier",
+        "lehrplan",
+        "kompetenz",
+        "didaktik",
+        "veranschaulich",
+        "teilchenmodell",
     )
     return any(cue in recent_text for cue in cues)
 

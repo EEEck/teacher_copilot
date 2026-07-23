@@ -17,6 +17,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Cache CORS preflight so the 3s /workflow/active poll (and other repeated
+    # calls) don't fire an OPTIONS round-trip every time.
+    max_age=3600,
 )
 
 install_error_handlers(app)

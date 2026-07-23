@@ -130,6 +130,25 @@ def _strip_plan_debug_sections(plan_md: str) -> str:
     return _DEBUG_PLAN_SECTION_RE.sub("", plan_md or "").rstrip() + "\n"
 
 
+# The lesson date is teacher-selected at save and stamped into the persisted
+# plan only (normalize_plan_target_date). Any "Target date:" the model echoed
+# from the teacher's request must not live in the draft: it would otherwise
+# reach the write verifier, where an echoed/past/odd date could block the save.
+_PLAN_TARGET_DATE_INLINE_RE = re.compile(r"(?i)[ \t]*\|[ \t]*target date:[^|\n]*")
+_PLAN_TARGET_DATE_LINE_RE = re.compile(r"(?im)^[ \t]*[-*>]?[ \t]*target date:[^\n]*\n?")
+
+
+def _strip_plan_target_date(plan_md: str) -> str:
+    """Drop any teacher-input target date the model echoed into the draft.
+
+    Dates from user input are ignored by design; only the date the teacher
+    picks at save matters, and it is stamped into the saved file afterwards.
+    """
+    text = _PLAN_TARGET_DATE_INLINE_RE.sub("", plan_md or "")
+    text = _PLAN_TARGET_DATE_LINE_RE.sub("", text)
+    return text.rstrip() + "\n"
+
+
 def _student_name_replacements(roster_md: str) -> list[tuple[str, str]]:
     """Return known roster name variants mapped to pseudonymous student IDs."""
     replacements: list[tuple[str, str]] = []
@@ -235,8 +254,8 @@ class AgentRunner:
         self.max_turns = settings.agent_max_turns
         self.wiki = wiki
         self.plan_history_turns = settings.plan_history_turns
-        self.tool_output_limit: int | None = 500
-        self.tool_args_limit: int | None = 500
+        self.tool_output_limit: int | None = settings.agent_tool_stream_chars
+        self.tool_args_limit: int | None = settings.agent_tool_stream_chars
 
     def _require_client(self) -> OpenAI:
         if self.client is None:
@@ -492,8 +511,8 @@ class AgentRunner:
         if not isinstance(parsed, PlanTurnOutput):
             return None
         reply = parsed.reply
-        plan_md = _strip_plan_debug_sections(
-            parsed.plan_markdown.strip() or current_draft
+        plan_md = _strip_plan_target_date(
+            _strip_plan_debug_sections(parsed.plan_markdown.strip() or current_draft)
         )
         ready = self.wiki.is_plan_ready(plan_md)
         self._merge_plan_turn(
@@ -750,6 +769,7 @@ class AgentRunner:
         return any(
             term in latest
             for term in (
+                # English
                 "grade",
                 "diagnose",
                 "placement",
@@ -757,6 +777,16 @@ class AgentRunner:
                 "admission",
                 "discipline",
                 "disciplinary",
+                # German (distinctive education terms; the users are German
+                # Gymnasium teachers who often type in German).
+                "noten",
+                "zeugnis",
+                "versetzung",
+                "sitzenbleib",
+                "förderbedarf",
+                "einstufung",
+                "verweis",
+                "disziplin",
             )
         )
 

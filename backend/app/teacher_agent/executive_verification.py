@@ -117,6 +117,22 @@ class WriteVerificationBlocked(RuntimeError):
                 "safety issue in this exact draft. Revise the safety procedure or confirm "
                 "the local procedure before saving."
             )
+        elif gate.reason == "unresolved_blocking_finding":
+            # Surface the actual blocking finding, not the write-verifier's own
+            # message: a deterministic pack (e.g. roster/target checks) can block
+            # after the write verifier passed, so `result.message` may say the
+            # draft is ready even though a finding is open (the F2 contradiction).
+            blocking = runtime.open_blocking_findings()
+            finding = blocking[0] if blocking else None
+            if finding is not None:
+                detail = " ".join(
+                    part for part in (finding.summary, finding.question) if part.strip()
+                ).strip()
+                message = f"I didn't save this yet. {detail}".strip()
+            else:
+                message = (
+                    result.message or "I didn't save this yet; one detail needs your call."
+                )
         else:
             message = result.message or "I didn't save this yet; one detail needs your call."
         super().__init__(message)

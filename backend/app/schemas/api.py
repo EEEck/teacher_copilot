@@ -463,6 +463,9 @@ class CommitIngestResponse(BaseModel):
     lesson_date: str = ""
     title: str = ""
     class_memory_proposal: Optional[MemoryProposalResponse] = None
+    # Student observations whose subject could not be mapped to the roster were
+    # skipped (never fabricated); these tell the teacher what was not saved.
+    warnings: list[str] = Field(default_factory=list)
 
 
 class WikiFileResponse(BaseModel):

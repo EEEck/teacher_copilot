@@ -135,7 +135,9 @@ def test_ingest_propose_manual_unknown_student_returns_409(client: TestClient):
     assert "S-999" in body["message"]
 
 
-def test_ingest_propose_blocks_malformed_or_named_student_labels(client: TestClient):
+def test_ingest_propose_does_not_block_on_student_labels(client: TestClient):
+    # Weak guard: unresolvable student subjects are advisory, never a hard block.
+    # The resolvable name is proposed for write; the unknown id/name are not.
     base = f"/api/classes/{CLASS_ID}/ingest"
     session_id = client.post(f"{base}/sessions").json()["session_id"]
     chat = client.post(
@@ -146,7 +148,8 @@ def test_ingest_propose_blocks_malformed_or_named_student_labels(client: TestCli
         "## Student observations\n",
         "## Student observations\n"
         "- S006: Needed a model prompt.\n"
-        "- Matt: Explained the model clearly.\n",
+        "- Jens Haller: Explained the model clearly.\n"
+        "- Matt: Asked a good question.\n",
     )
     update = client.patch(
         f"{base}/sessions/{session_id}/draft",
@@ -156,13 +159,12 @@ def test_ingest_propose_blocks_malformed_or_named_student_labels(client: TestCli
 
     propose = client.post(f"{base}/sessions/{session_id}/propose")
 
-    assert propose.status_code == 409, propose.text
-    body = propose.json()
-    assert body["code"] == "write_verification_blocked"
-    findings = body["executive_state"]["open_findings"]
-    finding = next(item for item in findings if item["finding_id"] == "memory-student-references")
-    assert "S-006" in finding["summary"]
-    assert "Matt" in finding["summary"]
+    assert propose.status_code == 200, propose.text
+    paths = [p["wiki_path"] for p in propose.json()["wiki_proposals"]]
+    # "Matt" resolves to Matt Keller (S-042) and is proposed; the unmappable
+    # subjects are skipped (never fabricated into a bogus student page).
+    assert any(p.endswith("students/S-042.md") for p in paths)
+    assert not any("S-006" in p or "S006" in p for p in paths)
 
 
 def test_ingest_commit_rechecks_manual_unknown_student_before_write(client: TestClient):
@@ -190,7 +192,12 @@ def test_ingest_commit_rechecks_manual_unknown_student_before_write(client: Test
     assert "S-999" in body["message"]
 
 
-def test_ingest_commit_blocks_malformed_or_named_student_labels(client: TestClient):
+def test_ingest_commit_writes_resolved_students_and_warns_on_unresolved(
+    client: TestClient,
+):
+    # Strict backend write: only observations whose subject maps to a roster id
+    # are written; unmappable subjects are skipped (never fabricated) and
+    # surfaced as warnings. The commit is not blocked (weak guard).
     base = f"/api/classes/{CLASS_ID}/ingest"
     session_id = client.post(f"{base}/sessions").json()["session_id"]
     chat = client.post(
@@ -201,29 +208,36 @@ def test_ingest_commit_blocks_malformed_or_named_student_labels(client: TestClie
         "## Student observations\n",
         "## Student observations\n"
         "- S006: Needed a model prompt.\n"
-        "- Matt: Explained the model clearly.\n",
+        "- Jens Haller: Explained the model clearly.\n"
+        "- Matt: Asked a good question.\n",
     )
+    client.patch(
+        f"{base}/sessions/{session_id}/draft", json={"diary_markdown": edited}
+    )
+    propose = client.post(f"{base}/sessions/{session_id}/propose")
+    assert propose.status_code == 200, propose.text
+    approved = [
+        {"wiki_path": p["wiki_path"], "content": p["proposed_content"], "approved": True}
+        for p in propose.json()["wiki_proposals"]
+    ]
 
     commit = client.post(
         f"{base}/commit",
         json={
             "session_id": session_id,
             "diary_markdown": edited,
-            "approved_updates": [],
+            "approved_updates": approved,
         },
     )
 
-    assert commit.status_code == 409, commit.text
+    assert commit.status_code == 200, commit.text
     body = commit.json()
-    assert body["code"] == "write_verification_blocked"
-    assert body["action"] == "ingest_commit"
-    finding = next(
-        item
-        for item in body["executive_state"]["open_findings"]
-        if item["finding_id"] == "memory-student-references"
-    )
-    assert "S-006" in finding["summary"]
-    assert "Matt" in finding["summary"]
+    applied = body["applied_wiki_paths"]
+    assert any(p.endswith("students/S-042.md") for p in applied)  # Matt Keller
+    assert not any("S-006" in p or "S006" in p for p in applied)
+    warnings = " ".join(body["warnings"])
+    assert "Jens Haller" in warnings
+    assert "S006" in warnings
 
 
 def test_compact_memory_apply_rejects_non_compact_memory_pages(client: TestClient):

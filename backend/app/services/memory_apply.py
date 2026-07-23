@@ -270,8 +270,10 @@ def _replace_section_bullet(
 
 
 def _normalize_operation(value: str) -> str:
-    operation = (value or "add").strip()
-    return operation if operation in {"add", "adjust"} else operation
+    # Pass through the trimmed operation; callers decide what to do with values
+    # outside {"add", "adjust"} (they record a non-writing skip). Do not coerce
+    # unknown operations to "add" — that would silently apply an unintended write.
+    return (value or "add").strip()
 
 
 def _normalize_section(section: str) -> str:

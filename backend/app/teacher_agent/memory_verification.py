@@ -11,7 +11,7 @@ from app.teacher_agent.executive_verification import (
     artifact_fingerprint,
 )
 from app.teacher_agent.memory_update_state import MemoryRuntime
-from app.teacher_agent.roster_resolve import resolve_diary_student_references
+from app.teacher_agent.roster_resolve import resolve_student_observations
 
 PACK_ID = "update_memory"
 
@@ -30,43 +30,16 @@ class MemoryVerificationReport(BaseModel):
     rows: list[MemoryVerificationRow] = Field(default_factory=list)
 
 
-def _short(items: list[str], limit: int = 5) -> str:
-    shown = items[:limit]
-    suffix = "" if len(items) <= limit else f" and {len(items) - limit} more"
-    return ", ".join(shown) + suffix
+def _student_reference_warnings(wiki, class_id: str, diary_markdown: str) -> list[str]:
+    """Advisory warnings for observation subjects that don't map to the roster.
 
-
-def _student_reference_issues(
-    wiki, class_id: str, diary_markdown: str
-) -> tuple[list[str], list[str], list[str]]:
-    """Return block issues, suggest notes, and allowed recommended aliases.
-
-    Scans the full diary. Teachers typically write names; S-### is the internal
-    key. Teacher-facing recommended form is the unique Firstname[+surname
-    prefix] alias from the roster resolver.
+    Runs the write-time resolver on the Student observations section only, so it
+    mirrors exactly what the commit will (and won't) write: teachers write names
+    (resolved via exact/alias/fuzzy). An unmappable subject is skipped at write
+    time and flagged here — never a hard save block, never a silent drop.
     """
-    hits = resolve_diary_student_references(wiki, class_id, diary_markdown)
-    blocks: list[str] = []
-    suggests: list[str] = []
-    allowed_notes: list[str] = []
-    for hit in hits:
-        if hit.decision == "block":
-            blocks.append(f"{hit.raw} ({hit.reason})")
-        elif hit.decision == "suggest":
-            alias = hit.recommended_alias or hit.student_id or "?"
-            internal = f", internal {hit.student_id}" if hit.student_id else ""
-            suggests.append(f"{hit.raw} → use '{alias}'{internal}")
-        elif (
-            hit.decision == "allow"
-            and hit.recommended_alias
-            and hit.raw != hit.recommended_alias
-            and hit.raw.upper() != (hit.student_id or "")
-        ):
-            # Soft note only — does not block Ready.
-            allowed_notes.append(
-                f"{hit.raw} ok (key {hit.student_id}; preferred '{hit.recommended_alias}')"
-            )
-    return blocks, suggests, allowed_notes
+    block = wiki._extract_section_body(diary_markdown, "Student observations")
+    return resolve_student_observations(wiki, class_id, block).warnings
 
 
 def build_memory_verification_report(
@@ -95,28 +68,17 @@ def build_memory_verification_report(
         ),
     )
 
-    blocks, suggests, _allowed_notes = _student_reference_issues(
-        wiki, class_id, diary_markdown
-    )
-    student_issues: list[str] = []
-    # Suggests still block Ready until the teacher edits the diary; report-only.
-    if blocks:
-        student_issues.append(f"unresolved: {_short(blocks)}")
-    if suggests:
-        student_issues.append(f"suggested fix: {_short(suggests)}")
+    student_warnings = _student_reference_warnings(wiki, class_id, diary_markdown)
+    # Advisory only: the write path skips unmappable observations, so this never
+    # hard-blocks a save (a false positive must not stop a valid write).
     student_row = MemoryVerificationRow(
         row_id="student_references",
         label="Student references",
-        status="needs_teacher_decision" if student_issues else "clear",
+        status="note" if student_warnings else "clear",
         summary=(
-            "Resolve student names against the class roster "
-            "(recommended form: Firstname + unique last-name prefix); "
-            + "; ".join(student_issues)
-            if student_issues
-            else (
-                "Student references uniquely match the class roster "
-                "(recommended Firstname[+last prefix] aliases)."
-            )
+            "; ".join(student_warnings)
+            if student_warnings
+            else "All student observations map to the class roster."
         ),
     )
     rows = [target_row, student_row]
@@ -156,6 +118,29 @@ def _set_or_resolve_blocker(
         )
 
 
+def _set_or_resolve_advisory(
+    executive: ExecutiveRuntime,
+    *,
+    finding_id: str,
+    category: VerificationCategory,
+    summary: str,
+    present: bool,
+) -> None:
+    existing = executive.findings.get(finding_id)
+    if present:
+        executive.findings[finding_id] = ExecutiveFinding(
+            finding_id=finding_id,
+            category=category,
+            severity="advisory",
+            summary=summary,
+            evidence_refs=[PACK_ID],
+        )
+    elif existing and existing.status == "open":
+        executive.findings[finding_id] = existing.model_copy(
+            update={"status": "resolved", "resolution": "Draft corrected."}
+        )
+
+
 def apply_memory_verification_report(
     executive: ExecutiveRuntime, report: MemoryVerificationReport
 ) -> None:
@@ -171,14 +156,10 @@ def apply_memory_verification_report(
         question="Which lesson date should this result be stored under?",
         should_block=target.status == "needs_teacher_decision",
     )
-    _set_or_resolve_blocker(
+    _set_or_resolve_advisory(
         executive,
         finding_id="memory-student-references",
         category="identity",
         summary=student_references.summary,
-        question=(
-            "Please use each student's recommended roster alias "
-            "(Firstname + unique last-name prefix), or a known S-### ID."
-        ),
-        should_block=student_references.status == "needs_teacher_decision",
+        present=student_references.status == "note",
     )

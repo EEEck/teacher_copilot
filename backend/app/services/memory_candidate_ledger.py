@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
 
+from app.services.sqlite_util import connect as sqlite_connect
 from app.teacher_agent.memory_targets import (
     canonical_memory_target,
     is_global_teacher_target,
@@ -400,9 +401,7 @@ class MemoryCandidateLedger:
                 raise KeyError(f"unknown memory candidate: {candidate_id}")
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return sqlite_connect(self.db_path, row_factory=True)
 
     @staticmethod
     def _ensure_column(conn: sqlite3.Connection, name: str, definition: str) -> None:

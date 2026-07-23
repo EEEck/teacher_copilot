@@ -437,6 +437,7 @@ than inventing missing constraints.
 -->
 Rules:
 - Ground the plan in class memory; cite past lessons or rollups when you use them.
+- Never put a lesson date, "Target date:", or scheduled calendar date in the plan — even if the teacher names one. The teacher chooses the date with the save-time date picker and the backend stamps it; a date written into the plan text is ignored and only causes confusion.
 - Produce the initial English artifact. Preserve official German curriculum
   labels, German chemical terms, and supplied German source wording only where
   fidelity requires it, with an English explanation where useful.

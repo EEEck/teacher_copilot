@@ -13,6 +13,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from app.services.sqlite_util import connect as sqlite_connect
+
 
 def _utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -63,7 +65,7 @@ class BetaStorage:
 
     def initialize(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             conn.executescript(
                 """
                 create table if not exists tester (
@@ -203,7 +205,7 @@ class BetaTelemetry(BetaStorage):
         payload: dict[str, Any] | None = None,
     ) -> None:
         self.initialize()
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             conn.execute(
                 """
                 insert into event (
@@ -234,7 +236,7 @@ class BetaTelemetry(BetaStorage):
     ) -> None:
         self.initialize()
         now = _utc_now()
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             conn.execute(
                 """
                 insert into app_session (
@@ -269,7 +271,7 @@ class BetaTelemetry(BetaStorage):
         self, app_session_id: str, status: str
     ) -> None:
         self.initialize()
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             conn.execute(
                 """
                 update app_session set status = ?, last_active_at = ?
@@ -289,7 +291,7 @@ class BetaTelemetry(BetaStorage):
         content: str,
     ) -> None:
         self.initialize()
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             conn.execute(
                 """
                 insert into message (
@@ -352,7 +354,7 @@ class BetaTelemetry(BetaStorage):
         markdown: str,
     ) -> None:
         self.initialize()
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             conn.execute(
                 """
                 insert into artifact_snapshot (
@@ -385,7 +387,7 @@ class BetaTelemetry(BetaStorage):
     ) -> int:
         self.initialize()
         paths = [path for path, _, _ in changed_files]
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             cursor = conn.execute(
                 """
                 insert into wiki_commit (
@@ -481,7 +483,7 @@ class BetaAuthService(BetaStorage):
                 wiki_root,
                 ignore=shutil.ignore_patterns("workflow"),
             )
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             conn.execute(
                 """
                 insert into tester (
@@ -517,7 +519,7 @@ class BetaAuthService(BetaStorage):
     def login(self, invite_code: str) -> LoginResult | None:
         self.initialize()
         invite_hash = _hash_secret(invite_code.strip())
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 """
@@ -560,7 +562,7 @@ class BetaAuthService(BetaStorage):
 
     def resolve_session_token(self, session_token: str) -> RequestIdentity:
         self.initialize()
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 """
@@ -588,7 +590,7 @@ class BetaAuthService(BetaStorage):
 
     def revoke_session_token(self, session_token: str) -> None:
         self.initialize()
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             conn.execute(
                 "update auth_session set revoked_at = ? where token_hash = ?",
                 (_utc_now(), _hash_secret(session_token)),
@@ -596,7 +598,7 @@ class BetaAuthService(BetaStorage):
 
     def get_tester_profile(self, tester_id: str) -> TesterProfileView:
         self.initialize()
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 """
@@ -642,7 +644,7 @@ class BetaAuthService(BetaStorage):
             raise ValueError("display_name too long")
         self.initialize()
         now = _utc_now()
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect(self.db_path) as conn:
             cursor = conn.execute(
                 """
                 update tester
