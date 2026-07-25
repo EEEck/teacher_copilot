@@ -1,6 +1,6 @@
 # AWS deployment (placeholder)
 
-No AWS infrastructure-as-code lives here yet. The intended beta stack is documented in [`implementation_plans/beta_push.md`](../../implementation_plans/beta_push.md):
+No AWS infrastructure-as-code lives here yet. The intended stack is documented in the AWS hosting entry of [`implementation_plans/product_backlog.md`](../../implementation_plans/product_backlog.md#cross-cutting-platform-track):
 
 - **Amplify Hosting** — Next.js frontend
 - **ECS Fargate + ALB** — FastAPI backend (one task, SSE-friendly idle timeout)

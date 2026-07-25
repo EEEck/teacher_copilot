@@ -9,7 +9,7 @@ Railway/Terraform stubs, env examples, and operator runbooks.
 | Path | Purpose |
 |------|---------|
 | [`railway/`](railway/) | **Active** — Railway beta stack for invited testers (Option A: SQLite + file wikis, one backend replica). |
-| [`aws/`](aws/) | Placeholder for the AWS beta path documented in [`implementation_plans/beta_push.md`](../implementation_plans/beta_push.md) (Amplify + ECS + EFS + Postgres). |
+| [`aws/`](aws/) | Placeholder for the AWS path (Amplify + ECS + EFS + Postgres). See the AWS hosting entry in [`implementation_plans/product_backlog.md`](../implementation_plans/product_backlog.md#cross-cutting-platform-track). |
 | [`azure/`](azure/) | Placeholder for a future Azure deployment. |
 
 ## Conventions

@@ -4,7 +4,7 @@ Deploy KlassenPilot for **invited beta testers** on Railway: one backend replica
 
 Repo: [`EEEck/teacher_copilot`](https://github.com/EEEck/teacher_copilot) — two services from the same repo (Next.js frontend + FastAPI backend).
 
-This matches local **Option A** from [`implementation_plans/beta_push.md`](../../implementation_plans/beta_push.md). It is not a multi-replica production SaaS layout.
+This is a single-replica layout (SQLite telemetry + file wikis on one volume), not a multi-replica production SaaS layout.
 
 Operator quick path: [`CHECKLIST.md`](CHECKLIST.md).
 
@@ -249,7 +249,7 @@ Both production images in `deploy/railway/` follow a practical MVP posture:
 **Intentional tradeoffs:** images are not distroless (slim/alpine keeps Python/Next tooling simple). Base tags are pinned to major/minor (`3.12`, `22`) rather than image digests — rebuild periodically for security patches. Provisioning (often via root `railway ssh`) always chmod/`chown`s the new workspace so the container `app` user (uid 1000) can create `workflow/` and write SQLite — friendly private beta, not multi-tenant lockdown. If an old volume is still root-only, one-time `chown -R 1000:1000 /data/beta_data` (or re-run provision) still works.
 - **SSE timeout** — agent turns up to ~240s (`AGENT_TIMEOUT_SECONDS`); ensure Railway/proxy idle timeouts are sufficient.
 - **Secrets** — `OPENAI_API_KEY` only on backend; never on frontend.
-- **AWS path later** — see [`deploy/aws/`](../aws/README.md) and `implementation_plans/beta_push.md` for Postgres + EFS when Option A outgrows one VM.
+- **AWS path later** — see [`deploy/aws/`](../aws/README.md) and the AWS hosting entry in `implementation_plans/product_backlog.md` for Postgres + EFS when one VM is outgrown.
 
 ## Pre-deploy blockers (resolve before clicking Deploy)
 

@@ -330,7 +330,8 @@ ECS/Fargate + ALB for the backend, EFS for per-workspace wiki roots,
 Postgres/Aurora for telemetry metadata, and S3 for exports/backups. Later
 production auth should replace only the invite-code resolver behind
 `RequestIdentity` with Cognito, Auth.js, Clerk, Auth0, or another OAuth/OIDC
-provider. See [`implementation_plans/beta_push.md`](implementation_plans/beta_push.md).
+provider. See the AWS hosting and auth entries in
+[`implementation_plans/product_backlog.md`](implementation_plans/product_backlog.md#cross-cutting-platform-track).
 
 ### OpenAI API key (required for chat & plan)
 
