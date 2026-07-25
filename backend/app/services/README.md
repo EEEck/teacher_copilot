@@ -37,6 +37,21 @@ wiki storage.
   memory apply paths.
 - `plan_service.py` - lesson-planning adapter around the artifact session core,
   plus plan save and trace response assembly.
+- `discussion_service.py` - class Discuss adapter, a thin wrapper over
+  `ArtifactSessionService`.
+- `class_brief_service.py` - on-demand read-only class-home executive briefing
+  (recent lessons, open loops, sparse areas), cached in process with refresh.
+- `output_safety.py` - deterministic safety checks for teacher-visible agent
+  output (complements `stream_safety.py`).
+- `sqlite_util.py` - shared SQLite connection helper (sets `busy_timeout`) used
+  by every app-owned SQLite store.
+- `beta.py` - invite-code beta identity, workspace provisioning, and telemetry
+  storage.
+- `beta_cli.py` - operator CLI for provisioning and managing invite-code beta
+  testers.
+- `beta_report.py` - Markdown reports over beta tester telemetry and wiki diffs.
+- `memory_v4_debug_capture.py` - best-effort local beta trace bundles for MemV4
+  development (gated to beta + development + explicit flag).
 - `artifact_session_service.py` also coordinates the shared persisted
   `ExecutiveRuntime` lifecycle and invokes the bounded Plan/Update Memory
   verification adapters from `teacher_agent/`.

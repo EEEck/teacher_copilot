@@ -13,12 +13,15 @@ Routes should be thin adapters over services and wiki facades.
 ## Route Groups
 
 - Health/classes/timeline/wiki reads.
+- Class brief: read-only class-home briefing and refresh.
 - Ingest sessions: start, optional typed start hint, chat, stream, draft,
   propose, commit.
 - Plan sessions: start, chat, stream, draft, save, trace.
+- Discuss sessions: read-only class discussion chat/stream.
 - Memory maintenance: compact, refresh, profile propose, apply, Memory Sweep
   saved review open/patch/apply/discard, compatibility propose/apply, and
   candidate status updates.
+- Beta: invite-code login and session identity.
 
 ## Conventions
 

@@ -18,6 +18,22 @@ prompt trace diagnostics.
 - `memory_update_state.py` - backend-owned Update Memory runtime state:
   target/date, intent, phase, lesson-result category progress, evidence briefs,
   raw refs, and merge validation.
+- `class_discussion_state.py` - backend-owned runtime state for the read-only
+  class Discuss chat.
+- `executive_verification.py` - shared `ExecutiveRuntime`: findings, severity,
+  fingerprints, readiness, and the deterministic write gate.
+- `roster_resolve.py` - resolve observation subjects (roster keys, aliases, and
+  rapidfuzz fuzzy matches) to `S-###` ids at the write boundary; advisory
+  warnings for unmappable subjects (never hard-blocks).
+- `memory_capture.py` - shared durable-memory candidate capture helpers.
+- `memory_targets.py` - shared target policy for durable memory candidates and
+  apply routes.
+- `citation_presentation.py` - deterministic presentation/validation for
+  reviewed trusted-source summaries.
+- `lesson_package.py` / `package_renderer.py` - structured single-source
+  lesson-package contract and its deterministic Markdown renderer.
+- `quality.py` - deterministic guards and rubric loaders for trusted lesson
+  workflows.
 - `runtime_render.py` - shared compact render helpers for workflow session
   state and evidence briefs.
 - `workflow_contract.py` - minimal spec-level contract for artifact chat

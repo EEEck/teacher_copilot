@@ -17,6 +17,8 @@ Deterministic markdown wiki for KlassenPilot: compile lesson diaries, human-in-t
 | `commit.py` | `compile_from_diary`, `commit_ingest`, lesson plans |
 | `memory.py` | Compact class memory pages, local copilot profile helpers, compaction commits |
 | `context_packs.py` | Agent prompt context bundles and read-only workflow query packs |
+| `subject_frameworks.py` | Shared subject teaching-framework pages (immutable guidance, not write targets) |
+| `trusted_sources.py` | Trusted-source library: class allow-list, compact source TOC/profile, and list/search/read access |
 | `indexing.py` | `log.md`, `index.md` rebuild |
 | `store.py` | `WikiStore` facade delegating to modules |
 
