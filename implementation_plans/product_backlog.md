@@ -469,6 +469,9 @@ teacher-value or engineering trigger.
   `students/S-###.md` keyed — a display/render layer, reversible for real
   students. Held 2026-07-07 (owner testing on IDs first); for beta the name↔ID
   handling stays prompt-based.
+- **Lightweight "add one thing" capture.** Add a forgotten observation or note
+  without a full session and full re-review. No settled design yet; revisit
+  after the review-brief/skip mechanics suggest a shape.
 - Multiple classes polish, class calendar, lesson graph view.
 - Long-running jobs and background queues.
 - Memory approval queue.

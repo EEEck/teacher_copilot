@@ -4,9 +4,9 @@ Guidance for Claude Code (and other coding agents) working in this repo.
 
 - Start with [`AGENTS.md`](AGENTS.md) — repo onboarding, behavior contracts,
   wiki schema rules, and developer guardrails.
-- Current improvement roadmap and per-milestone progress:
-  [`docs/claude_todo.md`](docs/claude_todo.md) — a living document; update
-  its "Implementation status" section when a milestone PR lands.
+- Product strategy and current state: [`docs/pm_hub.md`](docs/pm_hub.md).
+  Engineering roadmap, open work, tech-debt, and incidents:
+  [`implementation_plans/product_backlog.md`](implementation_plans/product_backlog.md).
 - Product/architecture docs index: [`docs/`](docs/) (see
   [`README.md`](README.md) for the full developer file stack).
 
