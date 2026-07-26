@@ -10,6 +10,37 @@ Operator quick path: [`CHECKLIST.md`](CHECKLIST.md).
 
 **Role in the deploy ladder:** this Railway project is **staging / invited beta**, not production. Local worktrees → this stack → a future separate prod project (Railway or AWS). See [Dev → staging → production](../README.md#dev--staging-beta--production-cycle) in [`deploy/README.md`](../README.md).
 
+## Deploy branch workflow (how beta updates)
+
+Railway does **not** auto-deploy from `main`. Both services watch a dedicated deploy branch so day-to-day merges to `main` do not redeploy mid-testing.
+
+| Item | Current value |
+|------|----------------|
+| **Deploy branch** | `railway/beta-cookie-samesite` |
+| **GitHub repo** | `EEEck/teacher_copilot` |
+| **Trigger** | Push to that branch → Railway rebuilds **backend** + **frontend** |
+| **Live URLs (today)** | Frontend: `https://klassenpilot-beta.up.railway.app` · Backend: `https://backend-production-4115.up.railway.app` |
+
+### Ship a new beta build
+
+```bash
+# 1) On the deploy branch, bring in latest main (no Railway deploy yet)
+git fetch origin
+git checkout railway/beta-cookie-samesite
+git merge origin/main
+
+# 2) Manual push when you want testers to get the new build
+git push origin railway/beta-cookie-samesite
+# → Railway deploys both services from this branch tip
+```
+
+Notes:
+
+- Work and merge product changes on **`main`** as usual; beta only moves when you merge + push the deploy branch.
+- Prefer this over `railway up` so both services stay on the same commit.
+- After SSH `beta_cli provision`, the volume must stay writable by uid `1000` (provision code + [`scripts/railway-beta-provision.sh`](../../scripts/railway-beta-provision.sh) chmod/chown for that).
+- Cross-origin cookies (separate `*.up.railway.app` hosts): backend needs `BETA_COOKIE_SAMESITE=none` and `BETA_COOKIE_SECURE=true`.
+
 ## Architecture
 
 ```text
@@ -41,7 +72,7 @@ Do **not** set Root Directory to `backend` or `frontend` when using these Docker
 
 ### Per-service Railway UI settings
 
-Create **two services** from the same connected repo (e.g. deploy branch `cursor/774c1450` or your beta branch):
+Create **two services** from the same connected repo (deploy branch `railway/beta-cookie-samesite`):
 
 | Setting | Backend service | Frontend service |
 |---------|-----------------|------------------|
@@ -110,8 +141,8 @@ Local equivalent (Compose):
 
 ## 1. Create the Railway project
 
-1. New **Railway project** (e.g. `klassenpilot-beta`).
-2. **Connect GitHub repo** `EEEck/teacher_copilot`; deploy branch `cursor/774c1450` (or your beta branch).
+1. New **Railway project** (e.g. `klassenpilot-beta` / `amusing-delight`).
+2. **Connect GitHub repo** `EEEck/teacher_copilot`; set deploy branch to **`railway/beta-cookie-samesite`** (see [Deploy branch workflow](#deploy-branch-workflow-how-beta-updates)).
 3. Add **two services** from the same repo — see [Build strategy](#build-strategy-use-production-dockerfiles-not-nixpacks-root-dirs) table above.
 4. Backend: **replicas = 1** (SQLite + file wikis are not safe with multiple writers).
 

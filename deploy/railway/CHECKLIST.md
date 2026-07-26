@@ -4,8 +4,9 @@ One-page operator sequence. Details and rationale: [`README.md`](README.md).
 
 ## Before deploy
 
-- [ ] GitHub repo `EEEck/teacher_copilot` connected; beta branch selected
-- [ ] DNS planned: `beta.klassenpilot.ai`, `api.klassenpilot.ai`
+- [ ] GitHub repo `EEEck/teacher_copilot` connected; deploy branch **`railway/beta-cookie-samesite`**
+- [ ] Ship updates by merging `main` → deploy branch, then **manually** `git push origin railway/beta-cookie-samesite` (see [`README.md`](README.md#deploy-branch-workflow-how-beta-updates))
+- [ ] Domains: Railway `*.up.railway.app` today, or custom `beta` / `api` when DNS is ready
 - [ ] `OPENAI_API_KEY` ready (backend only)
 
 ## Project setup

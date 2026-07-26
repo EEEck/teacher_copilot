@@ -47,8 +47,8 @@ Honest status today: **one Railway project** is the hosted **beta / staging** pa
 
 ### Branch & promote
 
-1. **Feature work** on a worktree branch (e.g. `cursor/…`); validate with local stack + focused tests.
-2. **Staging deploy** — Railway watches a deploy branch (today: often the beta feature branch, later `main` or `staging`). Merge/PR when ready; Railway rebuilds both services.
+1. **Feature work** on a worktree branch (e.g. `cursor/…`); validate with local stack + focused tests; merge to **`main`**.
+2. **Staging / beta deploy** — Railway watches **`railway/beta-cookie-samesite`**, not `main`. When you want testers to get `main`: merge `origin/main` into that branch, then **manually push** it. Details: [`railway/README.md`](railway/README.md#deploy-branch-workflow-how-beta-updates).
 3. **Promote to prod** — only after staging smoke (login, chat, memory commit, restart persistence). Prefer promoting a **known-good commit** (tag or merge to a prod-tracking branch), not hot-editing Railway env on the beta project.
 4. When prod exists: use a **second Railway project** (or AWS) with its own volume, secrets, and domains — do not flip the beta volume into “prod mode.”
 
