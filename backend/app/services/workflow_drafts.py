@@ -19,10 +19,29 @@ from app.services.sqlite_util import connect as sqlite_connect
 from app.teacher_agent.executive_verification import artifact_fingerprint as artifact_hash
 
 TERMINAL_STATUSES = {"committed", "saved", "discarded"}
+# Ingest review phase always means the teacher has compiled wiki proposals.
+_TOUCHED_STATUSES = frozenset({"reviewing"})
 
 
 def default_workflow_draft_store_path(wiki_root: str | Path) -> Path:
     return Path(wiki_root) / "workflow" / "workflow_drafts.sqlite"
+
+
+def draft_has_resumable_work(row: WorkflowDraftRow) -> bool:
+    """True when a draft is more than an empty page-open shell.
+
+    Opening Plan / Update Memory creates a durable draft immediately (often with
+    an assistant opening message). Class-home Draft chips and timeline
+    "Edit memory draft" should only appear after teacher progress.
+    """
+    if row.artifact_revision > 0:
+        return True
+    if row.status in _TOUCHED_STATUSES:
+        return True
+    return any(
+        isinstance(item, dict) and item.get("role") == "user"
+        for item in (row.messages_json or [])
+    )
 
 
 def _utc_now() -> str:
@@ -288,6 +307,16 @@ class WorkflowDraftStore:
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
         return [WorkflowDraftRow.from_sqlite(row) for row in rows]
+
+    def list_touched_for_class(
+        self, class_id: str, *, mode: str | None = None
+    ) -> list[WorkflowDraftRow]:
+        """Active drafts with teacher progress (for class-home / timeline chips)."""
+        return [
+            row
+            for row in self.list_active_for_class(class_id, mode=mode)
+            if draft_has_resumable_work(row)
+        ]
 
     def list_in_progress(
         self, *, workspace_id: str | None = None

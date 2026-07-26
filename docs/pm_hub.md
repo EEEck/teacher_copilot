@@ -49,8 +49,10 @@ Shipped teacher workflows:
 
 - **Class selection**: choose a class and open its workspace.
 - **Class home**: executive-assistant landing with Classroom dashboard (brief,
-  At a glance, Upcoming, My notes), Actions (Plan / Update memory / Discuss,
-  plus Sharpen your assistant and Browse class files), and Lesson timeline.
+  At a glance, Upcoming, My notes), Actions (Plan / Discuss, plus Sharpen
+  assistant, Other wiki edits, and Browse class files), and Lesson timeline.
+  Lesson memory capture is primarily via timeline row CTAs (Add results);
+  Other wiki edits is the demoted freeform escape hatch.
 - **Update memory**: chat with the copilot, produce lesson-results markdown,
   review proposed wiki file changes, and save only teacher-approved updates.
 - **Create lesson plan**: chat with the copilot, refine a plan markdown artifact,

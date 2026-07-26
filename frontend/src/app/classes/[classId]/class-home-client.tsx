@@ -10,6 +10,7 @@ import {
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { ActionCornerBadge } from "@/components/klassenpilot/action-corner-badge";
 import { ActionLink } from "@/components/klassenpilot/action-link";
 import { ClassHomeNotes } from "@/components/klassenpilot/class-home-notes";
 import { ClassHomeSection } from "@/components/klassenpilot/class-home-section";
@@ -49,6 +50,7 @@ import {
   memorySweepReviewAttentionBadge,
   memorySweepUsefulSubtitle,
 } from "@/lib/memory-sweep-review-status";
+import { workflowDraftCornerBadge } from "@/lib/workflow-draft-badge";
 import {
   normalizeClassWikiPath,
   wikiViewerHref,
@@ -243,6 +245,8 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
   const memorySweepDue = memorySweepDueBadge(memorySweepReview);
   // Chip = attention (4) or weekly due; quiet draft stays as subtitle (2).
   const memorySweepChip = memorySweepAttention || memorySweepDue;
+  const planDraftChip = workflowDraftCornerBadge(timeline.active_plan_draft);
+  const memoryDraftChip = workflowDraftCornerBadge(timeline.active_memory_draft);
 
   const watchItems = useMemo(
     () =>
@@ -435,10 +439,6 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
                 the next lesson or assessment from class memory.
               </li>
               <li>
-                <span className="font-medium">Update memory:</span> teach your
-                class agent what happened today, then approve wiki updates.
-              </li>
-              <li>
                 <span className="font-medium">Discuss:</span> ask about open
                 loops, watch items, or what to do next (opens the chat dock).
               </li>
@@ -446,6 +446,13 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
                 <span className="font-medium">Sharpen assistant:</span>{" "}
                 review quiet insights so it gets more personal for this class.
                 Aim for about once a week; we nudge after 5 days.
+              </li>
+              <li>
+                <span className="font-medium">Other wiki edits:</span> freeform
+                wiki changes when you are not starting from a lesson card.
+                After teaching, prefer{" "}
+                <span className="font-medium">Add results</span> on the
+                timeline.
               </li>
               <li>
                 <span className="font-medium">Browse class files:</span> open
@@ -467,19 +474,12 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
               href={`/classes/${classId}/plan`}
               variant="soft"
               size="lg"
-              className="w-full justify-center px-3"
+              className="relative w-full justify-center px-3"
             >
               Create lesson plan
-            </ActionLink>
-          </WorkflowHover>
-          <WorkflowHover label={CLASS_HOME_HOVER.memory}>
-            <ActionLink
-              href={`/classes/${classId}/memory`}
-              variant="soft"
-              size="lg"
-              className="w-full justify-center px-3"
-            >
-              Update memory
+              {planDraftChip ? (
+                <ActionCornerBadge>{planDraftChip}</ActionCornerBadge>
+              ) : null}
             </ActionLink>
           </WorkflowHover>
           <WorkflowHover label={CLASS_HOME_HOVER.discuss}>
@@ -507,15 +507,24 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
                 </span>
               ) : null}
               {memorySweepChip ? (
-                <span
-                  className={
-                    memorySweepAttention
-                      ? "absolute -top-1.5 -right-1.5 max-w-[7.5rem] truncate rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium leading-none text-foreground shadow-sm"
-                      : "absolute -top-1.5 -right-1.5 max-w-[7.5rem] truncate rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-950 shadow-sm"
-                  }
+                <ActionCornerBadge
+                  tone={memorySweepAttention ? "neutral" : "attention"}
                 >
                   {memorySweepChip}
-                </span>
+                </ActionCornerBadge>
+              ) : null}
+            </ActionLink>
+          </WorkflowHover>
+          <WorkflowHover label={CLASS_HOME_HOVER.memory}>
+            <ActionLink
+              href={`/classes/${classId}/memory`}
+              variant="outline"
+              size="lg"
+              className="relative w-full justify-center px-3"
+            >
+              Other wiki edits
+              {memoryDraftChip ? (
+                <ActionCornerBadge>{memoryDraftChip}</ActionCornerBadge>
               ) : null}
             </ActionLink>
           </WorkflowHover>

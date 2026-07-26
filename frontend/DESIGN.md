@@ -97,6 +97,19 @@ Call sites: classify → `routeWorkflowError` → set action-needed state **or**
 Wired today: Create lesson plan, Update Memory. Discuss has no write-gate yet
 (system banner only).
 
+## Class-home Action chips
+
+Corner chips on Actions CTAs use `ActionCornerBadge` (`components/klassenpilot/`).
+Parent link/button needs `relative`.
+
+| Chip | Tone | When |
+|---|---|---|
+| **Draft** | `attention` (amber) | Touched Create lesson plan / Update memory draft only (user message or artifact edit — not an empty page-open shell) |
+| **Due · weekly** / **Due · 5+ days** | `attention` | Sharpen cadence nudge |
+| Generating / Stale / Failed | `neutral` | Sharpen attention states |
+
+Quiet Sharpen “Draft saved…” stays a subtitle under the label, not a chip.
+
 ## Background jobs
 
 Durable backend work that outlives the current page (chat turns, Memory Sweep

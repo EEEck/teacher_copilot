@@ -54,10 +54,18 @@ export type TimelineEntry = {
   wiki_paths: string[];
   memory_draft_id?: string | null;
 };
+export type ActiveWorkflowDraftHint = {
+  draft_id: string;
+  mode: string;
+  lesson_date?: string | null;
+  updated_at?: string | null;
+};
 export type ClassTimeline = {
   class_id: string;
   entries: TimelineEntry[];
   months: string[];
+  active_plan_draft?: ActiveWorkflowDraftHint | null;
+  active_memory_draft?: ActiveWorkflowDraftHint | null;
 };
 export type ClassMemorySnapshot = {
   class_id: string;

@@ -383,22 +383,74 @@ def test_timeline_marks_matching_active_ingest_draft(client, wiki):
         },
     )
     assert started.status_code == 200, started.text
+    session_id = started.json()["session_id"]
+
+    # Empty open (assistant greeting only) is not a Draft chip / Edit draft CTA.
+    empty_timeline = client.get(f"/api/classes/{CLASS_ID}/timeline")
+    assert empty_timeline.status_code == 200, empty_timeline.text
+    empty_body = empty_timeline.json()
+    empty_entry = next(
+        item for item in empty_body["entries"] if item["date"] == lesson_date
+    )
+    assert empty_entry["memory_draft_id"] is None
+    assert empty_body["active_memory_draft"] is None
+
+    chat = client.post(
+        f"/api/classes/{CLASS_ID}/ingest/sessions/{session_id}/chat",
+        json={"message": "We finished alkanes today."},
+    )
+    assert chat.status_code == 200, chat.text
 
     timeline = client.get(f"/api/classes/{CLASS_ID}/timeline")
 
     assert timeline.status_code == 200, timeline.text
-    entry = next(item for item in timeline.json()["entries"] if item["date"] == lesson_date)
+    body = timeline.json()
+    entry = next(item for item in body["entries"] if item["date"] == lesson_date)
     assert entry["memory_draft_id"] == started.json()["draft_id"]
+    assert body["active_memory_draft"]["draft_id"] == started.json()["draft_id"]
+    assert body["active_plan_draft"] is None
 
     discarded = client.post(
         f"/api/classes/{CLASS_ID}/workflow-drafts/{started.json()['draft_id']}/discard"
     )
     assert discarded.status_code == 200, discarded.text
     refreshed = client.get(f"/api/classes/{CLASS_ID}/timeline")
+    refreshed_body = refreshed.json()
     refreshed_entry = next(
-        item for item in refreshed.json()["entries"] if item["date"] == lesson_date
+        item for item in refreshed_body["entries"] if item["date"] == lesson_date
     )
     assert refreshed_entry["memory_draft_id"] is None
+    assert refreshed_body["active_memory_draft"] is None
+
+
+def test_timeline_plan_draft_chip_needs_teacher_progress(client):
+    started = client.post(f"/api/classes/{CLASS_ID}/plan/sessions")
+    assert started.status_code == 200, started.text
+    session_id = started.json()["session_id"]
+
+    empty = client.get(f"/api/classes/{CLASS_ID}/timeline")
+    assert empty.status_code == 200, empty.text
+    assert empty.json()["active_plan_draft"] is None
+
+    chat = client.post(
+        f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/chat",
+        json={"message": "Plan a short review lesson."},
+    )
+    assert chat.status_code == 200, chat.text
+
+    touched = client.get(f"/api/classes/{CLASS_ID}/timeline")
+    assert touched.status_code == 200, touched.text
+    assert touched.json()["active_plan_draft"]["draft_id"] == started.json()["draft_id"]
+
+    discarded = client.post(
+        f"/api/classes/{CLASS_ID}/workflow-drafts/{started.json()['draft_id']}/discard"
+    )
+    assert discarded.status_code == 200, discarded.text
+    # Discard + auto-open of a fresh shell must not leave a Draft chip.
+    client.post(f"/api/classes/{CLASS_ID}/plan/sessions")
+    after = client.get(f"/api/classes/{CLASS_ID}/timeline")
+    assert after.status_code == 200, after.text
+    assert after.json()["active_plan_draft"] is None
 
 
 def test_ingest_commit_stale_review_returns_409(client):

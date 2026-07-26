@@ -86,6 +86,13 @@ describe("client beta auth transport", () => {
             },
           ],
           months: ["2026-07"],
+          active_memory_draft: {
+            draft_id: "draft-123",
+            mode: "ingest",
+            lesson_date: "2026-07-08",
+            updated_at: "2026-07-25T12:00:00Z",
+          },
+          active_plan_draft: null,
         }),
         { status: 200 },
       ),
@@ -94,6 +101,8 @@ describe("client beta auth transport", () => {
     const timeline = await client.getTimeline("chemie_9b_2026_27");
 
     expect(timeline.entries[0].memory_draft_id).toBe("draft-123");
+    expect(timeline.active_memory_draft?.draft_id).toBe("draft-123");
+    expect(timeline.active_plan_draft).toBeNull();
   });
 
   it("sends credentials on class brief, wiki pages, and discussion bootstrap", async () => {

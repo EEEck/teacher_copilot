@@ -28,6 +28,7 @@ from app.services.memory_v4_debug_capture import MemoryV4DebugRecorder
 from app.schemas.api import (
     ActiveWorkItem,
     ActiveWorkResponse,
+    ActiveWorkflowDraftHint,
     BetaFeedbackRequest,
     BetaFeedbackResponse,
     BetaIdentityResponse,
@@ -884,12 +885,41 @@ def get_timeline(
         wiki.get_class(class_id)
         timeline = wiki.get_timeline(class_id)
         active_by_date: dict[str, str] = {}
-        for draft in workflow_drafts.list_active_for_class(class_id, mode="ingest"):
+        # Empty page-open shells (assistant greeting only) must not chip as Draft.
+        ingest_drafts = workflow_drafts.list_touched_for_class(class_id, mode="ingest")
+        for draft in ingest_drafts:
             if draft.lesson_date and draft.lesson_date not in active_by_date:
                 active_by_date[draft.lesson_date] = draft.draft_id
         for entry in timeline.entries:
             entry.memory_draft_id = active_by_date.get(entry.date)
-        return timeline
+        newest_ingest = ingest_drafts[0] if ingest_drafts else None
+        plan_drafts = workflow_drafts.list_touched_for_class(class_id, mode="plan")
+        newest_plan = plan_drafts[0] if plan_drafts else None
+        return ClassTimeline(
+            class_id=timeline.class_id,
+            entries=timeline.entries,
+            months=timeline.months,
+            active_plan_draft=(
+                ActiveWorkflowDraftHint(
+                    draft_id=newest_plan.draft_id,
+                    mode=newest_plan.mode,
+                    lesson_date=newest_plan.lesson_date,
+                    updated_at=newest_plan.updated_at,
+                )
+                if newest_plan is not None
+                else None
+            ),
+            active_memory_draft=(
+                ActiveWorkflowDraftHint(
+                    draft_id=newest_ingest.draft_id,
+                    mode=newest_ingest.mode,
+                    lesson_date=newest_ingest.lesson_date,
+                    updated_at=newest_ingest.updated_at,
+                )
+                if newest_ingest is not None
+                else None
+            ),
+        )
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 

@@ -316,10 +316,21 @@ class TimelineEntry(BaseModel):
     memory_draft_id: Optional[str] = None
 
 
+class ActiveWorkflowDraftHint(BaseModel):
+    """Newest open plan/memory draft for class-home Action chips."""
+
+    draft_id: str
+    mode: str
+    lesson_date: str = ""
+    updated_at: str = ""
+
+
 class ClassTimeline(BaseModel):
     class_id: str
     entries: list[TimelineEntry]
     months: list[str] = Field(default_factory=list)
+    active_plan_draft: Optional[ActiveWorkflowDraftHint] = None
+    active_memory_draft: Optional[ActiveWorkflowDraftHint] = None
 
 
 class ClassMemorySnapshot(BaseModel):
