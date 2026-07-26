@@ -26,14 +26,17 @@ def test_raw_reasoning_delta():
 
 def test_reasoning_item_created_skipped_after_deltas():
     state = TranslateStreamState()
-    delta = SimpleNamespace(
-        type="raw_response_event",
-        data=SimpleNamespace(
-            type="response.reasoning_summary_text.delta", delta="Hello "
-        ),
-    )
-    assert translate_sdk_event(delta, state=state)
-    assert state.reasoning_deltas_emitted is True
+    for chunk in ("Hello ", "world"):
+        assert translate_sdk_event(
+            SimpleNamespace(
+                type="raw_response_event",
+                data=SimpleNamespace(
+                    type="response.reasoning_summary_text.delta", delta=chunk
+                ),
+            ),
+            state=state,
+        )
+    assert state.reasoning_text == "Hello world"
 
     summary = SimpleNamespace(
         type="run_item_stream_event",
@@ -61,6 +64,57 @@ def test_reasoning_item_created_used_when_no_deltas():
     assert len(out) == 1
     assert isinstance(out[0], SseReasoningDelta)
     assert out[0].text == "Only snapshot"
+
+
+def test_new_reasoning_item_after_tools_is_not_dropped():
+    """Update Memory often reasons → tools → reasons again; keep the 2nd item."""
+    state = TranslateStreamState()
+    assert translate_sdk_event(
+        SimpleNamespace(
+            type="raw_response_event",
+            data=SimpleNamespace(
+                type="response.reasoning_summary_text.delta",
+                delta="Need roster lookup.",
+            ),
+        ),
+        state=state,
+    )
+    # Duplicate completion of the first reasoning segment — still skipped.
+    assert (
+        translate_sdk_event(
+            SimpleNamespace(
+                type="run_item_stream_event",
+                name="reasoning_item_created",
+                item=SimpleNamespace(
+                    raw_item=SimpleNamespace(
+                        summary=[SimpleNamespace(text="Need roster lookup.")]
+                    )
+                ),
+            ),
+            state=state,
+        )
+        == []
+    )
+    # New reasoning after tools must still stream.
+    out = translate_sdk_event(
+        SimpleNamespace(
+            type="run_item_stream_event",
+            name="reasoning_item_created",
+            item=SimpleNamespace(
+                raw_item=SimpleNamespace(
+                    summary=[
+                        SimpleNamespace(
+                            text="Roster matched S-014; update homework next."
+                        )
+                    ]
+                )
+            ),
+        ),
+        state=state,
+    )
+    assert len(out) == 1
+    assert isinstance(out[0], SseReasoningDelta)
+    assert "S-014" in out[0].text
 
 
 def test_tool_called_run_item():

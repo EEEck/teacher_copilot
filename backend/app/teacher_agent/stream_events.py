@@ -15,14 +15,16 @@ _SSE_TRUNCATE = 500
 
 @dataclass
 class TranslateStreamState:
-    """Per-stream flags for de-duplicating SDK reasoning events.
+    """Per-stream accumulator for de-duplicating SDK reasoning events.
 
     The Agents SDK often emits both ``response.reasoning_*_text.delta`` chunks
-    and a later ``reasoning_item_created`` with the full summary. Appending both
-    doubles the teacher-visible trace.
+    and a later ``reasoning_item_created`` with the same summary. Appending both
+    doubles the teacher-visible trace. Tool-heavy turns (Update Memory) may also
+    emit a *new* reasoning item after tools — that must not be dropped just
+    because earlier deltas already streamed.
     """
 
-    reasoning_deltas_emitted: bool = False
+    reasoning_text: str = ""
 
 
 class SseReasoningDelta(BaseModel):
@@ -156,7 +158,7 @@ def translate_sdk_event(
             delta = _event_data_delta(event)
             if delta:
                 if state is not None:
-                    state.reasoning_deltas_emitted = True
+                    state.reasoning_text += delta
                 return [SseReasoningDelta(text=delta)]
         return []
 
@@ -188,10 +190,6 @@ def translate_sdk_event(
         ]
 
     if name == "reasoning_item_created":
-        # Prefer incremental deltas when the SDK already streamed them; the
-        # completed item repeats the same summary and would double the UI.
-        if state is not None and state.reasoning_deltas_emitted:
-            return []
         raw = getattr(item, "raw_item", None)
         text = ""
         if raw is not None:
@@ -207,9 +205,24 @@ def translate_sdk_event(
                     if t:
                         parts.append(str(t))
                 text = "\n".join(parts)
-        if text.strip():
-            return [SseReasoningDelta(text=text)]
-        return []
+        if not text.strip():
+            return []
+        # Dedup against already-streamed deltas; keep new post-tool segments.
+        if state is not None:
+            emitted = state.reasoning_text
+            if emitted and text == emitted:
+                return []
+            if emitted and (
+                text.startswith(emitted) or emitted.startswith(text)
+            ):
+                # Same segment: only re-emit if the snapshot is longer so the
+                # client can replace a partial delta stream.
+                if len(text) <= len(emitted):
+                    return []
+                state.reasoning_text = text
+                return [SseReasoningDelta(text=text)]
+            state.reasoning_text = f"{emitted}\n{text}" if emitted else text
+        return [SseReasoningDelta(text=text)]
 
     return []
 
