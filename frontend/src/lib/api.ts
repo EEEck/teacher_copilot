@@ -503,7 +503,16 @@ export function isUnknownSessionError(err: unknown): boolean {
   );
 }
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
+type ApiOptions = {
+  /** When false, 401 does not hard-navigate to /beta/login (optional probes). */
+  authRedirect?: boolean;
+};
+
+async function api<T>(
+  path: string,
+  init?: RequestInit,
+  options?: ApiOptions,
+): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${getApiBase()}${path}`, {
@@ -521,7 +530,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
   if (!res.ok) {
-    redirectToBetaLoginIfNeeded(res.status);
+    if (options?.authRedirect !== false) {
+      redirectToBetaLoginIfNeeded(res.status);
+    }
     const text = await res.text();
     let message = text || res.statusText;
     try {
@@ -597,7 +608,8 @@ export const client = {
       body: JSON.stringify({ invite_code: inviteCode }),
     }),
   betaLogout: () => api<{ status: string }>("/api/beta/logout", { method: "POST" }),
-  betaMe: () => api<BetaIdentity>("/api/beta/me"),
+  // Shell identity probe — must not hard-redirect when beta is off / no session.
+  betaMe: () => api<BetaIdentity>("/api/beta/me", undefined, { authRedirect: false }),
   betaUpdateProfile: (displayName: string) =>
     api<BetaIdentity>("/api/beta/profile", {
       method: "PATCH",

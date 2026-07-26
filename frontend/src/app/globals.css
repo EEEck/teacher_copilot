@@ -120,9 +120,25 @@
     animation: kp-agent-node-pulse 2.8s ease-in-out infinite;
   }
 
+  /* One-shot CTA attention (e.g. Memory ReviewBrief Save all) */
+  @keyframes kp-cta-attention {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+    }
+    40% {
+      box-shadow: 0 0 0 5px hsl(var(--primary) / 0.35);
+    }
+  }
+
+  .kp-cta-attention {
+    animation: kp-cta-attention 0.85s ease-out 9;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .kp-agent-blink,
-    .kp-agent-node-pulse {
+    .kp-agent-node-pulse,
+    .kp-cta-attention {
       animation: none !important;
     }
   }

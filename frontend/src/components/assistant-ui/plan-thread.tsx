@@ -15,15 +15,15 @@ import { StagedMemoryBanner } from "@/components/klassenpilot/staged-memory-bann
  * and showing it in the welcome made it vanish on the first send ("history
  * disappeared"). A plain static welcome avoids both and matches memory exactly.
  *
- * Save review (`ReviewBrief`) and plan verification share the same in-chat
- * `ThreadActivity` surface as Update Memory's save card.
+ * Plan verification and workflow action-needed cards stay in-chat via
+ * `ThreadActivity`. Plan save confirm lives in the footer.
  */
 export function PlanThread({
   classId,
   activity,
 }: {
   classId: string;
-  /** Extra in-chat activity (e.g. Save lesson plan ReviewBrief), stacked under verification. */
+  /** Optional extra in-chat activity stacked under verification. */
   activity?: ReactNode;
 }) {
   const {

@@ -9,7 +9,7 @@ import {
   SquarePenIcon,
   Undo2Icon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -175,6 +175,7 @@ export function ReviewBrief({
   const entries = useMemo(() => briefFromChanges(items), [items]);
   const lessonDate = useMemo(() => briefLessonDate(items), [items]);
   const [expandedPath, setExpandedPath] = useState<string | null>(null);
+  const [attentionPulse, setAttentionPulse] = useState(true);
 
   const itemsByPath = useMemo(
     () => Object.fromEntries(items.map((i) => [i.path, i])),
@@ -182,24 +183,35 @@ export function ReviewBrief({
   );
   const approvedCount = entries.filter((e) => e.approved).length;
 
+  useEffect(() => {
+    if (!attentionPulse) return;
+    const timer = window.setTimeout(() => setAttentionPulse(false), 7700);
+    return () => window.clearTimeout(timer);
+  }, [attentionPulse]);
+
   const setEntryApproved = (entry: BriefEntry, approved: boolean) => {
     for (const path of entry.paths) onSetApproved(path, approved);
   };
 
   return (
-    <ReviewChrome>
-      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
-        <div className="min-w-0 text-sm font-medium">
-          {title}
-          {lessonDate ? ` — ${lessonDate}` : ""}
-          <span className="ml-2 font-normal text-muted-foreground">
+    <ReviewChrome variant="commit">
+      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2.5">
+        <div className="min-w-0 space-y-0.5">
+          <div className="text-sm font-medium">
+            {title}
+            {lessonDate ? ` — ${lessonDate}` : ""}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Review the wiki updates, then save.
+          </p>
+          <p className="text-sm text-muted-foreground">
             {approvedCount} of {entries.length} changes selected
-          </span>
+          </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2 text-xs">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground"
+            className="text-sm text-muted-foreground hover:text-foreground"
             onClick={onUndoAll}
             disabled={actionsDisabled}
           >
@@ -207,8 +219,8 @@ export function ReviewBrief({
           </button>
           <Button
             type="button"
-            size="sm"
-            className="h-7 px-2 text-xs"
+            size="default"
+            className={attentionPulse ? "kp-cta-attention" : undefined}
             onClick={onSave}
             disabled={saving || saveDisabled}
           >

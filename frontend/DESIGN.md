@@ -18,7 +18,7 @@ Lightweight design rules for app screens and [assistant-ui](https://github.com/a
 | Primitives | `src/components/ui/` | Button, Card, Alert, StickyNote, SegmentedToggle, … |
 | Features | `src/features/` | Cross-route draft/job ownership (workflow drafts) |
 | Chat | `src/components/assistant-ui/` | Thread, markdown (from assistant-ui registry) |
-| Domain | `src/components/klassenpilot/` | Timeline, checklist, wiki cards, pending jobs, discuss dock |
+| Domain | `src/components/klassenpilot/` | Timeline, checklist, wiki cards, pending jobs, discuss dock, workflow errors |
 | Pages | `src/app/` | Routes compose domain + ui + chat |
 
 Reuse and turn-lifecycle rules for plan / memory / discuss:
@@ -75,12 +75,27 @@ Current helpers:
   (default Simple triage; `SegmentedToggle` Simple / Detailed for full cards).
 - `lib/review-brief.ts` and `lib/sweep-brief.ts` for grouping and labels.
 
-Plan verification, Plan save (`ReviewBrief`), and Save lesson memory are
-transcript activities, not assistant-authored messages and not standalone
-panels. Compose them with the shared `ThreadActivity` surface so they scroll
-with the conversation. A
+Plan verification, Plan save confirm (footer), Update Memory `ReviewBrief`, and
+workflow action-needed cards are not assistant-authored messages. Compose chat
+activities with `ThreadActivity` so they scroll with the conversation. A
 selected file diff remains the pinned review surface above the Thread; it must
 not collapse the transcript into a nested card or add a competing primary CTA.
+
+## Workflow errors (two channels)
+
+Teacher-facing failures use exactly two channels. Do not invent a third banner
+or toast path for plan / memory write flows.
+
+| Channel | When | UI | Helpers |
+|---|---|---|---|
+| **Action needed** | Executive write-gate (`WriteVerificationBlocked` / 409) — teacher must reply before a durable write | In-chat red card + **Respond in chat** | `WorkflowActionNeededCard` (`components/klassenpilot/workflow/`), `classifyWorkflowError` / `routeWorkflowError` (`lib/workflow-error.ts`) |
+| **System** | Network, bootstrap, discard, validation, other ops | Existing page/dock red `Alert` under the title (`ArtifactSessionPage` / discuss dock) | `onError` / local `setError` |
+
+Call sites: classify → `routeWorkflowError` → set action-needed state **or** page
+`onError`. Clear both when starting prepare/save/discard again.
+
+Wired today: Create lesson plan, Update Memory. Discuss has no write-gate yet
+(system banner only).
 
 ## Background jobs
 

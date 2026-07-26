@@ -8,7 +8,7 @@ import {
 import { dedupeMemoryCandidates } from "@/lib/memory-candidates";
 
 describe("writeVerificationErrorMessage", () => {
-  it("formats blocking findings for the page alert", () => {
+  it("formats blocking findings for teacher-facing copy", () => {
     const err = new WriteVerificationBlockedError({
       code: "write_verification_blocked",
       action: "plan_save",
@@ -32,6 +32,35 @@ describe("writeVerificationErrorMessage", () => {
       ].join("\n"),
     );
     expect(errorMessageFromUnknown(err, "Save failed")).toContain("S-999");
+  });
+
+  it("does not repeat finding prose already embedded in the payload message", () => {
+    const summary =
+      "The submitted lesson result is dated 2026-10-01, but the currently loaded lesson target remains 2026-07-25.";
+    const question =
+      "Should I apply this artifact as the 2026-10-01 lesson instead of the current 2026-07-25 draft?";
+    const err = new WriteVerificationBlockedError({
+      code: "write_verification_blocked",
+      action: "ingest_propose",
+      artifact_fingerprint: "fp",
+      executive_state: {
+        open_findings: [
+          {
+            summary,
+            question,
+            severity: "blocking",
+          },
+        ],
+      },
+      message: `I didn't save this yet. ${summary} ${question}`,
+    });
+
+    expect(writeVerificationErrorMessage(err)).toBe(
+      [
+        "I didn't save this yet; one detail needs your call.",
+        `• ${summary} — ${question}`,
+      ].join("\n"),
+    );
   });
 
   it("falls back for ordinary errors", () => {

@@ -93,6 +93,10 @@ refresh resumes with plain reply + turn flags).
 5. Ensure `running-jobs.ts` accepts the mode and `runningJobHref` returns the
    right resume URL.
 6. **Never** fork Thread or invent a textarea chat.
+7. For write/save failures, use the two-channel workflow error helpers
+   (`lib/workflow-error.ts` + `WorkflowActionNeededCard`) — see
+   [`DESIGN.md`](DESIGN.md#workflow-errors-two-channels). Do not add a
+   mode-specific error surface.
 
 ## Shells
 

@@ -202,15 +202,17 @@ def test_telemetry_records_visible_messages_artifacts_and_wiki_diff(tmp_path: Pa
     assert "+new line" in diff_row[3]
 
 
-def test_beta_login_endpoint_sets_cookie_and_me_resolves_identity(tmp_path: Path):
+def test_beta_login_endpoint_sets_cookie_and_me_resolves_identity(
+    tmp_path: Path, monkeypatch
+):
     service = _service(tmp_path)
     service.provision_tester(
         tester_id="t_anna",
         workspace_id="w_anna_chem9b",
         invite_code="anna-invite",
     )
+    _enable_beta(monkeypatch, tmp_path, service)
 
-    app.dependency_overrides[deps.get_beta_auth_service] = lambda: service
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
             login = client.post("/api/beta/login", json={"invite_code": "anna-invite"})
@@ -227,6 +229,17 @@ def test_beta_login_endpoint_sets_cookie_and_me_resolves_identity(tmp_path: Path
             assert payload["profile_complete"] is False
             assert payload["display_name"] == ""
             assert payload["stats"]["feedback_notes"] == 0
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_beta_me_not_found_when_beta_disabled(tmp_path: Path, monkeypatch):
+    service = _service(tmp_path)
+    _disable_beta(monkeypatch, tmp_path, service)
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            me = client.get("/api/beta/me")
+            assert me.status_code == 404
     finally:
         app.dependency_overrides.clear()
 
@@ -549,7 +562,9 @@ def test_beta_feedback_stores_event(tmp_path: Path, monkeypatch):
         app.dependency_overrides.clear()
 
 
-def test_beta_profile_patch_completes_identity_and_stats(tmp_path: Path):
+def test_beta_profile_patch_completes_identity_and_stats(
+    tmp_path: Path, monkeypatch
+):
     service = _service(tmp_path)
     service.provision_tester(
         tester_id="t_anna",
@@ -571,8 +586,8 @@ def test_beta_profile_patch_completes_identity_and_stats(tmp_path: Path):
         mode="ingest",
         status="chatting",
     )
+    _enable_beta(monkeypatch, tmp_path, service)
 
-    app.dependency_overrides[deps.get_beta_auth_service] = lambda: service
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
             client.post("/api/beta/login", json={"invite_code": "anna-invite"})

@@ -17,6 +17,28 @@ describe("client beta auth transport", () => {
     );
   });
 
+  it("does not hard-redirect on betaMe 401 (optional shell probe)", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("window", {
+      location: {
+        pathname: "/",
+        search: "",
+        assign,
+      },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { type: "http_error", message: "Beta login required" },
+        }),
+        { status: 401 },
+      ),
+    );
+
+    await expect(client.betaMe()).rejects.toThrow(/API 401/);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
   it("sends browser credentials on beta login and normal API calls", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

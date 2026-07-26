@@ -17,6 +17,7 @@ import {
   useFileChangeReview,
   WikiProposalEditor,
 } from "@/components/klassenpilot/review";
+import { WorkflowActionNeededCard } from "@/components/klassenpilot/workflow";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -42,7 +43,10 @@ import {
   loadPendingMemoryReview,
   savePendingMemoryReview,
 } from "@/lib/pending-memory-review";
-import { errorMessageFromUnknown } from "@/lib/write-verification-error";
+import {
+  classifyWorkflowError,
+  routeWorkflowError,
+} from "@/lib/workflow-error";
 import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 import { useAuiState } from "@assistant-ui/react";
 
@@ -165,8 +169,27 @@ function MemoryWorkspace({
     artifactRevision: number;
     artifactHash: string;
   } | null>(null);
+  const [actionNeeded, setActionNeeded] = useState<{
+    message: string;
+    respondInChat: boolean;
+  } | null>(null);
   const restoredReviewRef = useRef(false);
   const hasDraftMessage = useAuiState((s) => !s.composer.isEmpty);
+
+  const clearWorkflowErrors = useCallback(() => {
+    onError(null);
+    setActionNeeded(null);
+  }, [onError]);
+
+  const reportWorkflowError = useCallback(
+    (error: unknown, fallback: string) => {
+      routeWorkflowError(classifyWorkflowError(error, fallback), {
+        onActionNeeded: setActionNeeded,
+        onSystem: onError,
+      });
+    },
+    [onError],
+  );
 
   const {
     items: reviewItems,
@@ -326,7 +349,7 @@ function MemoryWorkspace({
   const handleDiscardDraft = useCallback(async () => {
     if (!draftId) return;
     setDiscarding(true);
-    onError(null);
+    clearWorkflowErrors();
     try {
       await client.discardWorkflowDraft(classId, draftId);
       useWorkflowDraftStore.getState().remove(draftId);
@@ -341,10 +364,18 @@ function MemoryWorkspace({
         }
       }
     } catch (e) {
-      onError(errorMessageFromUnknown(e, "Could not discard draft"));
+      reportWorkflowError(e, "Could not discard draft");
       setDiscarding(false);
     }
-  }, [classId, discardRedirectHref, draftId, onError, reviewStorageKey, router]);
+  }, [
+    classId,
+    clearWorkflowErrors,
+    discardRedirectHref,
+    draftId,
+    reportWorkflowError,
+    reviewStorageKey,
+    router,
+  ]);
 
   const homeHrefAfterCommit = commitResult
     ? commitResult.lesson_date
@@ -379,7 +410,7 @@ function MemoryWorkspace({
       return;
     }
     setLoading(true);
-    onError(null);
+    clearWorkflowErrors();
     setCommitResult(null);
     try {
       await runWithSessionRecovery((sessionId) =>
@@ -401,16 +432,18 @@ function MemoryWorkspace({
       initFromProposals(unique);
       setInReview(true);
     } catch (e) {
-      onError(errorMessageFromUnknown(e, "Could not prepare save"));
+      reportWorkflowError(e, "Could not prepare save");
     } finally {
       setLoading(false);
     }
   }, [
     classId,
+    clearWorkflowErrors,
     diaryMarkdown,
     hasDraftMessage,
     isUpdating,
     onError,
+    reportWorkflowError,
     runWithSessionRecovery,
     initFromProposals,
   ]);
@@ -427,7 +460,7 @@ function MemoryWorkspace({
       return;
     }
     setLoading(true);
-    onError(null);
+    clearWorkflowErrors();
     try {
       const result = await runWithSessionRecovery((sessionId) =>
         client.ingestCommit(classId, sessionId, diaryMarkdown, getCommitPayload(), {
@@ -456,7 +489,7 @@ function MemoryWorkspace({
       }
       router.refresh();
     } catch (e) {
-      onError(errorMessageFromUnknown(e, "Commit failed"));
+      reportWorkflowError(e, "Commit failed");
     } finally {
       setLoading(false);
     }
@@ -464,6 +497,7 @@ function MemoryWorkspace({
     artifactHash,
     artifactRevision,
     classId,
+    clearWorkflowErrors,
     diaryMarkdown,
     draftId,
     getCommitPayload,
@@ -472,6 +506,7 @@ function MemoryWorkspace({
     loading,
     commitResult,
     onError,
+    reportWorkflowError,
     reviewStorageKey,
     router,
     runWithSessionRecovery,
@@ -494,8 +529,8 @@ function MemoryWorkspace({
     if (typeof window !== "undefined") {
       clearPendingMemoryReview(window.sessionStorage, classId, reviewStorageKey);
     }
-    onError(null);
-  }, [classId, onError, clearReview, reviewStorageKey]);
+    clearWorkflowErrors();
+  }, [classId, clearWorkflowErrors, clearReview, reviewStorageKey]);
 
   const draftPanel =
     inReview && editingWiki && selectedPath && selectedPath in contentByPath ? (
@@ -543,23 +578,38 @@ function MemoryWorkspace({
         thread={
           <IngestThread
             activity={
+              actionNeeded ||
               shouldShowReviewBrief({
                 inReview,
                 alreadyCommitted: !!commitResult,
                 itemCount: reviewItems.length,
               }) ? (
-                <ReviewBrief
-                  items={reviewItems}
-                  selectedPath={selectedPath ?? reviewItems[0]?.path ?? null}
-                  onSelectPath={selectFile}
-                  onSetApproved={setApproved}
-                  onUndoAll={undoAll}
-                  onKeepAll={keepAll}
-                  onSave={commit}
-                  saving={reviewActionsDisabled}
-                  actionsDisabled={reviewActionsDisabled}
-                  saveDisabled={reviewSaveDisabled}
-                />
+                <div className="flex flex-col gap-2">
+                  {actionNeeded ? (
+                    <WorkflowActionNeededCard
+                      message={actionNeeded.message}
+                      respondInChat={actionNeeded.respondInChat}
+                    />
+                  ) : null}
+                  {shouldShowReviewBrief({
+                    inReview,
+                    alreadyCommitted: !!commitResult,
+                    itemCount: reviewItems.length,
+                  }) ? (
+                    <ReviewBrief
+                      items={reviewItems}
+                      selectedPath={selectedPath ?? reviewItems[0]?.path ?? null}
+                      onSelectPath={selectFile}
+                      onSetApproved={setApproved}
+                      onUndoAll={undoAll}
+                      onKeepAll={keepAll}
+                      onSave={commit}
+                      saving={reviewActionsDisabled}
+                      actionsDisabled={reviewActionsDisabled}
+                      saveDisabled={reviewSaveDisabled}
+                    />
+                  ) : null}
+                </div>
               ) : null
             }
           />

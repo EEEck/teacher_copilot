@@ -777,6 +777,9 @@ def beta_me(
     request: Request,
     beta_auth: BetaAuthService = Depends(get_beta_auth_service),
 ) -> BetaIdentityResponse:
+    settings = get_settings()
+    if not settings.beta_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
     identity = _resolve_beta_identity(request, beta_auth)
     return _beta_identity_response(identity, beta_auth)
 

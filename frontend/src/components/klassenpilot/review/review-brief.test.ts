@@ -29,5 +29,7 @@ describe("ReviewBrief", () => {
     expect(html).toContain("disabled");
     expect(html).toContain("Reviewing approved changes and saving");
     expect(html).toContain("animate-spin");
+    expect(html).toContain("Review the wiki updates, then save.");
+    expect(html).toContain("border-primary");
   });
 });

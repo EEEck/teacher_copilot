@@ -11,6 +11,10 @@ function IngestWelcomeChecklist() {
   return <DiaryChecklist checklist={completeness} inline />;
 }
 
+/**
+ * Update Memory thread. Pass stacked `ThreadActivity` children (action-needed
+ * card, ReviewBrief) via `activity` — same pattern as PlanThread.
+ */
 export function IngestThread({ activity }: { activity?: ReactNode }) {
   const { draftId, turnInProgress } = useArtifactSession();
   return (

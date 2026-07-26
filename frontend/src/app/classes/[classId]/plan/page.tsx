@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { LoaderCircleIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { PlanThread } from "@/components/assistant-ui/plan-thread";
 import { ArtifactDraftPanel } from "@/components/klassenpilot/artifact-draft-panel";
@@ -11,30 +11,40 @@ import {
   type ArtifactSessionBodyProps,
 } from "@/components/klassenpilot/artifact-session-page";
 import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
-import { fromPlanSave, ReviewBrief } from "@/components/klassenpilot/review";
+import { PlanSaveConfirm } from "@/components/klassenpilot/plan-save-confirm";
+import { WorkflowActionNeededCard } from "@/components/klassenpilot/workflow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { client } from "@/lib/api";
-import { errorMessageFromUnknown } from "@/lib/write-verification-error";
+import {
+  classifyWorkflowError,
+  routeWorkflowError,
+} from "@/lib/workflow-error";
 import { useWorkflowDraftStore } from "@/features/workflow-drafts/workflow-draft-store";
 
 function PlanSaveFooter({
   classId,
   onError,
+  reportWorkflowError,
+  clearWorkflowErrors,
   inReview,
   setInReview,
   lessonDate,
   setLessonDate,
-  setBeforePlan,
+  onConfirmSave,
+  saving,
 }: {
   classId: string;
   onError: (message: string | null) => void;
+  reportWorkflowError: (error: unknown, fallback: string) => void;
+  clearWorkflowErrors: () => void;
   inReview: boolean;
   setInReview: (v: boolean) => void;
   lessonDate: string;
   setLessonDate: (v: string) => void;
-  setBeforePlan: (v: string) => void;
+  onConfirmSave: () => void;
+  saving: boolean;
 }) {
   const {
     artifactMarkdown,
@@ -53,30 +63,32 @@ function PlanSaveFooter({
       return;
     }
     setOperation("preparing");
-    onError(null);
+    clearWorkflowErrors();
     try {
       await runWithSessionRecovery((sessionId) =>
         client.planUpdateDraft(classId, sessionId, artifactMarkdown),
       );
-      const path = `wiki/classes/${classId}/lessons/${lessonDate.trim()}/lesson_plan.md`;
-      try {
-        const file = await client.getWikiFile(classId, path);
-        setBeforePlan(file.markdown);
-      } catch {
-        setBeforePlan("");
-      }
       setInReview(true);
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Could not prepare save");
+      reportWorkflowError(e, "Could not prepare save");
     } finally {
       setOperation("idle");
     }
-  }, [classId, artifactMarkdown, lessonDate, onError, runWithSessionRecovery, setBeforePlan, setInReview]);
+  }, [
+    classId,
+    artifactMarkdown,
+    lessonDate,
+    onError,
+    clearWorkflowErrors,
+    reportWorkflowError,
+    runWithSessionRecovery,
+    setInReview,
+  ]);
 
   const handleDiscard = useCallback(async () => {
     if (!draftId) return;
     setOperation("discarding");
-    onError(null);
+    clearWorkflowErrors();
     try {
       await client.discardWorkflowDraft(classId, draftId);
       useWorkflowDraftStore.getState().remove(draftId);
@@ -85,28 +97,20 @@ function PlanSaveFooter({
         window.location.reload();
       }
     } catch (e) {
-      onError(errorMessageFromUnknown(e, "Could not discard draft"));
+      reportWorkflowError(e, "Could not discard draft");
       setOperation("idle");
     }
-  }, [classId, draftId, onError]);
+  }, [classId, draftId, clearWorkflowErrors, reportWorkflowError]);
 
   if (inReview) {
-    // Save actions live in the in-chat ReviewBrief (same as Update Memory).
-    // Keep only the lesson-date control here so the teacher can retarget.
     return (
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <Label htmlFor="lesson-date-review">Lesson date</Label>
-          <Input
-            id="lesson-date-review"
-            type="date"
-            value={lessonDate}
-            onChange={(e) => setLessonDate(e.target.value)}
-            className="w-[180px]"
-            disabled={busy}
-          />
-        </div>
-      </div>
+      <PlanSaveConfirm
+        lessonDate={lessonDate}
+        onLessonDateChange={setLessonDate}
+        onConfirm={onConfirmSave}
+        onCancel={() => setInReview(false)}
+        saving={saving}
+      />
     );
   }
 
@@ -131,7 +135,7 @@ function PlanSaveFooter({
           {operation === "preparing" ? (
             <>
               <LoaderCircleIcon className="animate-spin" />
-              Reviewing the latest draft…
+              Preparing save…
             </>
           ) : (
             "Ready to save plan"
@@ -155,7 +159,7 @@ function PlanSaveFooter({
       </div>
       {readyToSave && (
         <p className="text-xs text-primary">
-          Plan looks complete — pick a date, then review changes before saving.
+          Plan looks complete — pick a date, then confirm save.
         </p>
       )}
     </div>
@@ -182,23 +186,35 @@ function PlanWorkspace({
     runWithSessionRecovery,
   } = useArtifactSession();
   const [inReview, setInReview] = useState(false);
-  const [beforePlan, setBeforePlan] = useState("");
-  const [approved, setApproved] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [actionNeeded, setActionNeeded] = useState<{
+    message: string;
+    respondInChat: boolean;
+  } | null>(null);
+
+  const clearWorkflowErrors = useCallback(() => {
+    onError(null);
+    setActionNeeded(null);
+  }, [onError]);
+
+  const reportWorkflowError = useCallback(
+    (error: unknown, fallback: string) => {
+      routeWorkflowError(classifyWorkflowError(error, fallback), {
+        onActionNeeded: setActionNeeded,
+        onSystem: onError,
+      });
+    },
+    [onError],
+  );
 
   const goToLesson = useCallback(() => {
     router.push(`/classes/${classId}/lessons/${encodeURIComponent(lessonDate.trim())}`);
   }, [router, classId, lessonDate]);
 
-  const fileItem = useMemo(() => {
-    if (!inReview || !lessonDate.trim()) return null;
-    return fromPlanSave(classId, lessonDate.trim(), beforePlan, artifactMarkdown, approved);
-  }, [inReview, classId, lessonDate, beforePlan, artifactMarkdown, approved]);
-
   const savePlan = useCallback(async () => {
-    if (!approved || !lessonDate.trim()) return;
+    if (!lessonDate.trim()) return;
     setLoading(true);
-    onError(null);
+    clearWorkflowErrors();
     try {
       // Staged remember(...) candidates stay in the ledger for Memory Sweep;
       // do not surface a post-save preference / signal review screen.
@@ -211,38 +227,21 @@ function PlanWorkspace({
       );
       goToLesson();
     } catch (e) {
-      onError(errorMessageFromUnknown(e, "Save failed"));
+      reportWorkflowError(e, "Save failed");
       setLoading(false);
     }
   }, [
-    approved,
     lessonDate,
     classId,
     artifactMarkdown,
     draftId,
     artifactRevision,
     artifactHash,
-    onError,
+    clearWorkflowErrors,
+    reportWorkflowError,
     goToLesson,
     runWithSessionRecovery,
   ]);
-
-  useEffect(() => {
-    if (!inReview || !lessonDate.trim()) return;
-    const path = `wiki/classes/${classId}/lessons/${lessonDate.trim()}/lesson_plan.md`;
-    let cancelled = false;
-    void client.getWikiFile(classId, path).then(
-      (file) => {
-        if (!cancelled) setBeforePlan(file.markdown);
-      },
-      () => {
-        if (!cancelled) setBeforePlan("");
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [inReview, classId, lessonDate]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -251,20 +250,10 @@ function PlanWorkspace({
           <PlanThread
             classId={classId}
             activity={
-              inReview && fileItem ? (
-                <ReviewBrief
-                  items={[fileItem]}
-                  selectedPath={fileItem.path}
-                  title="Save lesson plan"
-                  onSetApproved={(_, v) => setApproved(v)}
-                  onUndoAll={() => setInReview(false)}
-                  onKeepAll={() => {
-                    setApproved(true);
-                    void savePlan();
-                  }}
-                  onSave={savePlan}
-                  saving={loading}
-                  saveDisabled={!approved}
+              actionNeeded ? (
+                <WorkflowActionNeededCard
+                  message={actionNeeded.message}
+                  respondInChat={actionNeeded.respondInChat}
                 />
               ) : null
             }
@@ -286,11 +275,16 @@ function PlanWorkspace({
           <PlanSaveFooter
             classId={classId}
             onError={onError}
+            reportWorkflowError={reportWorkflowError}
+            clearWorkflowErrors={clearWorkflowErrors}
             inReview={inReview}
             setInReview={setInReview}
             lessonDate={lessonDate}
             setLessonDate={setLessonDate}
-            setBeforePlan={setBeforePlan}
+            onConfirmSave={() => {
+              void savePlan();
+            }}
+            saving={loading}
           />
         }
       />
