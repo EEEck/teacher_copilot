@@ -227,7 +227,7 @@ export function ReviewBrief({
             {saving ? (
               <>
                 <LoaderCircleIcon className="animate-spin" />
-                Reviewing approved changes and saving…
+                Saving…
               </>
             ) : (
               `Save ${approvedCount === entries.length ? "all" : "selected"} (${approvedCount})`
