@@ -44,30 +44,56 @@ USER_AGENT = "KlassenPilot-curriculum-ingest/0.1 (teacher copilot; contact via r
 SECTION_BUDGET = 1400
 
 
+OBERSTUFE = (
+    "https://www.lehrplanplus.bayern.de/schulart/gymnasium/jgs/{grade}/fach/physik"
+    "/inhalt/fachlehrplaene?w_schulart=gymnasium&wt_1=schulart&w_fach=physik"
+    "&wt_2=fach&w_jgs={grade}&wt_3=jgs&w_auspraegung={auspraegung}"
+)
+
+
 @dataclass(frozen=True)
 class Route:
     subject: str
     grade: int
     url: str
     title: str
+    branch: str = "NTG"
 
     @property
     def slug(self) -> str:
-        return f"{self.subject}_{self.grade}_ntg"
+        # Oberstufe has no NTG branch — the Ausprägung is carried by the subject.
+        suffix = "_ntg" if self.branch == "NTG" else ""
+        return f"{self.subject}_{self.grade}{suffix}"
 
     @property
     def source_id(self) -> str:
-        return f"by-lehrplanplus-{self.subject}-{self.grade}-ntg"
+        return "by-lehrplanplus-" + self.slug.replace("_", "-")
 
 
-# Physik 12/13 redirect to the site root: the Oberstufe uses a different
-# structure and is out of scope until someone confirms its shape.
+# The Oberstufe Ausprägungen are separate courses, not branches of one course, so
+# each is its own subject: a teacher picks "Physik 12 (erhöhtes Anforderungsniveau)"
+# the way they would pick a subject. Biophysik exists only in grade 12.
 ROUTES: tuple[Route, ...] = (
     *(
         Route("physik", g, f"{BASE}/{g}/physik", f"LehrplanPLUS Physik {g} NTG")
         for g in (8, 9, 10, 11)
     ),
     Route("chemie", 10, f"{BASE}/10/chemie/ch-ntg", "LehrplanPLUS Chemie 10 NTG"),
+    *(
+        Route(
+            subject,
+            grade,
+            OBERSTUFE.format(grade=grade, auspraegung=auspraegung),
+            f"LehrplanPLUS {label} {grade}",
+            branch="Oberstufe",
+        )
+        for subject, auspraegung, label, grades in (
+            ("physik_grundlegend", "grundlegend", "Physik grundlegendes Anforderungsniveau", (12, 13)),
+            ("physik_grundlegend_bio", "grundlegend-bio", "Physik grundlegendes Anforderungsniveau Biophysik", (12,)),
+            ("physik_erhoeht", "erhoeht", "Physik erhöhtes Anforderungsniveau", (12, 13)),
+        )
+        for grade in grades
+    ),
 )
 
 
@@ -86,10 +112,15 @@ def _clean(text: str) -> str:
 
 
 def _section_id(subject: str, grade: int, heading: str) -> str:
-    """"Ph9 Lernbereich 1: Energie …" -> "ph9_lb1"."""
-    m = re.search(r"Lernbereich\s+(\d+)", heading)
-    prefix = ("ph" if subject == "physik" else "c") + str(grade)
-    return f"{prefix}_lb{m.group(1)}" if m else f"{prefix}_{_slug(heading)}"
+    """"Ph9 Lernbereich 1: Energie …" -> "ph9_lb1".
+
+    The document supplies its own prefix ("Ph9", "C10"), which stays right for
+    the Oberstufe Ausprägungen where the subject slug no longer matches it.
+    """
+    prefix_m = re.match(r"\s*([A-Za-zÄÖÜäöü]+\d+)\b", heading)
+    prefix = prefix_m.group(1).lower() if prefix_m else f"{subject}{grade}"
+    lb = re.search(r"Lernbereich\s+(\d+)", heading)
+    return f"{prefix}_lb{lb.group(1)}" if lb else f"{prefix}_{_slug(heading)}"
 
 
 def _section_title(heading: str) -> str:
@@ -158,7 +189,7 @@ def curated_page(route: Route, doc_title: str, sections, retrieved_at: str) -> s
         "jurisdiction: BY",
         f"subject: {route.subject}",
         "school_type: Gymnasium",
-        "branch: NTG",
+        f"branch: {route.branch}",
         f"grade: {route.grade}",
         f"canonical_url: {route.url}",
         f"retrieved_at: {retrieved_at}",
