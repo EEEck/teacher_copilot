@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from app.schemas.api import ClassSummary, WikiUpdateProposal
+from app.schemas.api import WikiUpdateProposal
 
 ROLLUP_LABELS = {
     "course_state": "Course state",
@@ -12,10 +12,6 @@ ROLLUP_LABELS = {
     "misconceptions": "Misconceptions",
     "students": "Students",
 }
-
-CLASS_REGISTRY: list[ClassSummary] = [
-    ClassSummary(id="chemie_9b_2026_27", label="Chemie 9b — 2026/27", subject="chemie"),
-]
 
 LESSON_RESULTS_SECTIONS: list[tuple[str, str, bool]] = [
     ("what_was_covered", "What was covered", True),

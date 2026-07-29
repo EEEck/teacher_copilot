@@ -1,7 +1,6 @@
 """KlassenPilot teacher wiki — deterministic compile, index, and read APIs."""
 
 from app.teacher_agent.wiki.constants import (
-    CLASS_REGISTRY,
     DIARY_SECTION_HEADINGS,
     LESSON_RESULTS_SECTIONS,
     ROLLUP_LABELS,
@@ -10,7 +9,6 @@ from app.teacher_agent.wiki.constants import (
 from app.teacher_agent.wiki.store import WikiStore
 
 __all__ = [
-    "CLASS_REGISTRY",
     "DIARY_SECTION_HEADINGS",
     "LESSON_RESULTS_SECTIONS",
     "ROLLUP_LABELS",

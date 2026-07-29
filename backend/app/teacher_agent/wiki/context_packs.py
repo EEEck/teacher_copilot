@@ -202,6 +202,14 @@ def build_context_package(store, class_id: str, mode: str) -> str:
     raise ValueError(f"Unknown context package mode: {mode}")
 
 
+_NO_FRAMEWORK_NOTICE = (
+    "No reviewed teaching framework covers this class's subject/grade/branch "
+    "route ({reason}) Plan from class memory, the subject guide, and trusted "
+    "sources instead, and tell the teacher that no shared framework is available "
+    "for this route rather than inventing framework guidance."
+)
+
+
 def _trace_section(
     *,
     name: str,
@@ -415,11 +423,25 @@ def build_active_subject_expert_context_trace(store, class_id: str, *, purpose: 
     if full_pedagogy:
         from app.teacher_agent.wiki.subject_frameworks import framework_for_class
 
-        framework = framework_for_class(store, class_id)
         adjustments_path = store.memory_paths(class_id)["teaching_framework_adjustments"]
         adjustments = store.read_text(adjustments_path).strip()
+        try:
+            framework = framework_for_class(store, class_id)
+        except ValueError as exc:
+            # No reviewed framework covers this subject/grade/branch route. Say so
+            # instead of failing the turn — the class still has its own memory and
+            # trusted sources to work from, and sparse memory is reported honestly.
+            framework = None
+            framework_source = store.rel_wiki(
+                store.class_dir(class_id) / "curriculum_profile.md"
+            )
+            framework_text = _NO_FRAMEWORK_NOTICE.format(reason=exc)
+        else:
+            framework_source = framework.path
+            framework_text = framework.text.strip()
+
         profile_text = "\n\n".join(
-            part for part in (framework.text.strip(), adjustments) if part
+            part for part in (framework_text, adjustments) if part
         )
         if profile_text:
             profile_text = _mem.clamp_memory_page(
@@ -429,8 +451,8 @@ def build_active_subject_expert_context_trace(store, class_id: str, *, purpose: 
                 _trace_section(
                     name="Selected teaching framework",
                     function="build_active_subject_expert_context_trace",
-                    source=framework.path,
-                    text=framework.text.strip(),
+                    source=framework_source,
+                    text=framework_text,
                     authority="curated_guidance",
                 )
             )
@@ -449,7 +471,7 @@ def build_active_subject_expert_context_trace(store, class_id: str, *, purpose: 
                 _trace_section(
                     name="Selected teaching framework",
                     function="build_active_subject_expert_context_trace",
-                    source=framework.path,
+                    source=framework_source,
                     text="",
                     authority="curated_guidance",
                     included=False,

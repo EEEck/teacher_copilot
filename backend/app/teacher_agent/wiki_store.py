@@ -1,7 +1,6 @@
 """Backward-compatible re-exports for the wiki package."""
 
 from app.teacher_agent.wiki.constants import (
-    CLASS_REGISTRY,
     DIARY_SECTION_HEADINGS,
     INDEX_WIKI_PATH_RE,
     LESSON_RESULTS_SECTIONS,
@@ -14,7 +13,6 @@ from app.teacher_agent.wiki.constants import (
 from app.teacher_agent.wiki.store import WikiStore
 
 __all__ = [
-    "CLASS_REGISTRY",
     "DIARY_SECTION_HEADINGS",
     "INDEX_WIKI_PATH_RE",
     "LESSON_RESULTS_SECTIONS",

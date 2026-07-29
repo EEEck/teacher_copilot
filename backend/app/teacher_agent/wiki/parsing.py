@@ -268,10 +268,30 @@ def parse_log_entry(header: str, block: str) -> Optional[dict]:
         return None
     ts_m = re.match(r"##\s*\[([^\]]+)\]", header.strip())
     committed_at = ts_m.group(1) if ts_m else lesson_date
+    wiki_paths = [p.strip() for p in paths]
     return {
         "lesson_date": lesson_date,
         "title": title.strip(),
         "entry_id": entry_id,
-        "wiki_paths": [p.strip() for p in paths],
+        "wiki_paths": wiki_paths,
         "committed_at": committed_at,
+        "class_id": log_entry_class_id(block, wiki_paths),
     }
+
+
+def log_entry_class_id(block: str, wiki_paths: list[str]) -> str:
+    """Attribute one log entry to a class.
+
+    `_append_log` writes an explicit `> Class:` line, but older entries (including
+    the seeded `log.md` that every beta workspace already holds a copy of) predate
+    it. Fall back to the class segment of the written paths so those entries stay
+    attributable without rewriting existing logs.
+    """
+    m = re.search(r"^>\s*Class:\s*(\S+)", block, re.M)
+    if m:
+        return m.group(1).strip()
+    for path in wiki_paths:
+        m = re.search(r"(?:wiki|raw)/classes/([^/]+)/", path)
+        if m:
+            return m.group(1)
+    return ""

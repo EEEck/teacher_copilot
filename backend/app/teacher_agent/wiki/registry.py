@@ -8,12 +8,14 @@ from app.schemas.api import (
     ClassSummary,
 )
 
-from app.teacher_agent.wiki.constants import (
-    CLASS_REGISTRY,
-)
-
 
 def list_classes(store) -> list[ClassSummary]:
+    """Classes are exactly the directories under `wiki/classes/`.
+
+    An empty workspace reports no classes; there is deliberately no seeded
+    fallback, or a teacher who has not created a class yet would be shown one
+    that does not exist in their wiki.
+    """
     discovered: list[ClassSummary] = []
     classes_root = store.root / "wiki" / "classes"
     if classes_root.exists():
@@ -23,9 +25,7 @@ def list_classes(store) -> list[ClassSummary]:
             class_id = class_dir.name
             label, subject = store._read_class_meta(class_id)
             discovered.append(ClassSummary(id=class_id, label=label, subject=subject))
-    if discovered:
-        return discovered
-    return CLASS_REGISTRY
+    return discovered
 
 
 def _read_class_meta(store, class_id: str) -> tuple[str, str]:
@@ -34,13 +34,12 @@ def _read_class_meta(store, class_id: str) -> tuple[str, str]:
     subject = "general"
     m = re.search(r"^#\s+(.+)$", config, re.M)
     if m:
-        label = m.group(1).strip()
+        # Older pages (including the seeded class every beta workspace copied)
+        # title the file rather than the class: "# Class Config — Chemie 9b".
+        label = re.sub(r"^class config\s*[—-]\s*", "", m.group(1).strip(), flags=re.I)
     m = re.search(r"^subject:\s*(\S+)", config, re.M | re.I)
     if m:
         subject = m.group(1).strip().lower()
-    for c in CLASS_REGISTRY:
-        if c.id == class_id:
-            return c.label, c.subject
     return label, subject
 
 

@@ -383,11 +383,11 @@ class WikiStore:
     def _parse_log_entry(self, header, block):
         return parsing.parse_log_entry(header, block)
 
-    def _parse_log_by_date(self):
-        return indexing._parse_log_by_date(self)
+    def _parse_log_by_date(self, class_id=None):
+        return indexing._parse_log_by_date(self, class_id)
 
-    def _latest_log_commit(self):
-        return indexing._latest_log_commit(self)
+    def _latest_log_commit(self, class_id=None):
+        return indexing._latest_log_commit(self, class_id)
 
     def _append_log(self, class_id, lesson_date, title, applied, kind):
         return indexing._append_log(self, class_id, lesson_date, title, applied, kind)

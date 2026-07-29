@@ -110,4 +110,6 @@ def read_wiki_index(store, class_id: Optional[str] = None) -> str:
             next_class = rest.find("\n## Class")
             end = start + 10 + (next_class if next_class >= 0 else len(rest))
             return text[start:end]
-    return text
+    # No section for this class (e.g. created but not yet indexed). Returning the
+    # whole file here would inject every other class's index into the prompt.
+    return ""

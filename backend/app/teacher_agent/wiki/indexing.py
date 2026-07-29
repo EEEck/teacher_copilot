@@ -11,39 +11,45 @@ from app.teacher_agent.wiki.constants import ROLLUP_LABELS
 from app.teacher_agent.wiki import parsing
 
 
-def _parse_log_by_date(store) -> dict[str, dict]:
-    """Map lesson_date -> latest log metadata."""
+def _iter_log_entries(store):
+    """Yield parsed log entries, newest last, in file order."""
     log_text = store.read_text(store.log_path)
-    by_date: dict[str, dict] = {}
     headers = list(re.finditer(r"^##\s*\[", log_text, re.M))
     for i, hm in enumerate(headers):
         start = hm.start()
         end = headers[i + 1].start() if i + 1 < len(headers) else len(log_text)
         block = log_text[start:end]
-        header_line = block.split("\n", 1)[0]
-        meta = parsing.parse_log_entry(header_line, block)
-        if meta and meta["lesson_date"]:
-            by_date[meta["lesson_date"]] = meta
+        meta = parsing.parse_log_entry(block.split("\n", 1)[0], block)
+        if meta and meta.get("lesson_date"):
+            yield meta
+
+
+def _parse_log_by_date(store, class_id: Optional[str] = None) -> dict[str, dict]:
+    """Map lesson_date -> latest log metadata, scoped to one class when given.
+
+    `log.md` is a single wiki-wide audit log, so an unscoped read attributes
+    another class's commit to whatever date it happens to share.
+    """
+    by_date: dict[str, dict] = {}
+    for meta in _iter_log_entries(store):
+        if class_id and meta.get("class_id") != class_id:
+            continue
+        by_date[meta["lesson_date"]] = meta
     return by_date
 
 
-def _latest_log_commit(store) -> dict[str, str]:
-    """Newest log entry with a valid YYYY-MM-DD lesson date (skip malformed headers)."""
-    log_text = store.read_text(store.log_path)
-    headers = list(re.finditer(r"^##\s*\[", log_text, re.M))
-    for i in range(len(headers) - 1, -1, -1):
-        start = headers[i].start()
-        end = headers[i + 1].start() if i + 1 < len(headers) else len(log_text)
-        block = log_text[start:end]
-        header_line = block.split("\n", 1)[0]
-        meta = parsing.parse_log_entry(header_line, block)
-        if meta and meta.get("lesson_date"):
-            return {
-                "lesson_date": meta["lesson_date"],
-                "committed_at": meta["committed_at"],
-                "title": meta["title"],
-            }
-    return {}
+def _latest_log_commit(store, class_id: Optional[str] = None) -> dict[str, str]:
+    """Newest log entry with a valid lesson date, scoped to one class when given."""
+    latest: dict[str, str] = {}
+    for meta in _iter_log_entries(store):
+        if class_id and meta.get("class_id") != class_id:
+            continue
+        latest = {
+            "lesson_date": meta["lesson_date"],
+            "committed_at": meta["committed_at"],
+            "title": meta["title"],
+        }
+    return latest
 
 
 def _append_log(

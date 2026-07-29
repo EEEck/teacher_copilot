@@ -22,7 +22,7 @@ from app.teacher_agent.wiki import parsing
 
 def get_timeline(store, class_id: str) -> ClassTimeline:
     lessons_root = store.class_dir(class_id) / "lessons"
-    log_by_date = store._parse_log_by_date()
+    log_by_date = store._parse_log_by_date(class_id)
     entries: list[TimelineEntry] = []
     if lessons_root.exists():
         for day_dir in sorted(lessons_root.iterdir()):
@@ -92,7 +92,10 @@ def get_snapshot(store, class_id: str) -> ClassMemorySnapshot:
     current_unit = ""
     m = re.search(r"## Current unit\s*\n(.+?)(?:\n##|\Z)", course_state, re.S)
     if m:
-        current_unit = m.group(1).strip().split("\n")[0].lstrip("- ")
+        # An empty section would otherwise capture the following heading and show
+        # a new class its own "## Last lesson" as the current unit.
+        first = m.group(1).strip().split("\n")[0].lstrip("- ").strip()
+        current_unit = "" if first.startswith("#") else first
 
     open_loop_count = len(re.findall(r"^-\s", open_loops, re.M))
     top_misconceptions = [
@@ -101,7 +104,7 @@ def get_snapshot(store, class_id: str) -> ClassMemorySnapshot:
         if line.strip().startswith("-")
     ][:5]
     recent = [f"{e.date} — {e.title}" for e in timeline.entries[:3]]
-    last_committed = store._latest_log_commit()
+    last_committed = store._latest_log_commit(class_id)
 
     return ClassMemorySnapshot(
         class_id=class_id,
