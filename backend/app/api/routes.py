@@ -38,8 +38,12 @@ from app.schemas.api import (
     ChatRequest,
     ChatResponse,
     ClassesResponse,
+    CreateClassRequest,
+    CurriculumRouteOption,
+    CurriculumRoutesResponse,
     ClassBriefResponse,
     ClassMemorySnapshot,
+    ClassSummary,
     ClassTimeline,
     CommitIngestRequest,
     CommitIngestResponse,
@@ -91,6 +95,7 @@ from app.schemas.api import (
     WikiPagesResponse,
 )
 from app.services.beta import BetaAuthService, RequestIdentity
+from app.services import class_provisioning
 from app.services.class_brief_service import ClassBriefService
 from app.services.discussion_service import DiscussionService
 from app.services.ingest_service import IngestService
@@ -830,6 +835,41 @@ def beta_feedback(
 @router.get("/classes", response_model=ClassesResponse)
 def list_classes(wiki: WikiStore = Depends(get_wiki)) -> ClassesResponse:
     return ClassesResponse(classes=wiki.list_classes())
+
+
+@router.get("/classes/curriculum-routes", response_model=CurriculumRoutesResponse)
+def list_curriculum_routes(
+    wiki: WikiStore = Depends(get_wiki),
+) -> CurriculumRoutesResponse:
+    """Subject/grade/branch combinations a class may be created for."""
+    return CurriculumRoutesResponse(
+        routes=[
+            CurriculumRouteOption(subject=r.subject, grade=r.grade, branch=r.branch)
+            for r in class_provisioning.available_routes(wiki)
+        ]
+    )
+
+
+@router.post("/classes", response_model=ClassSummary, status_code=201)
+def create_class(
+    body: CreateClassRequest, wiki: WikiStore = Depends(get_wiki)
+) -> ClassSummary:
+    spec = class_provisioning.ClassSpec(
+        label=body.label,
+        subject=body.subject,
+        grade=body.grade,
+        section=body.section,
+        school_year=body.school_year,
+        branch=body.branch,
+        school_type=body.school_type,
+        state=body.state,
+        prior_learning=body.prior_learning,
+        student_names=tuple(body.student_names),
+    )
+    try:
+        return class_provisioning.create_class(wiki, spec)
+    except class_provisioning.ClassProvisioningError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/workflow/active", response_model=ActiveWorkResponse)

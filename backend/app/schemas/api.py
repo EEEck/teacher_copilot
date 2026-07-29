@@ -57,6 +57,31 @@ class ClassesResponse(BaseModel):
     classes: list[ClassSummary]
 
 
+class CurriculumRouteOption(BaseModel):
+    """A (subject, grade, branch) that has a reviewed shared teaching framework."""
+
+    subject: str
+    grade: int
+    branch: str
+
+
+class CurriculumRoutesResponse(BaseModel):
+    routes: list[CurriculumRouteOption]
+
+
+class CreateClassRequest(BaseModel):
+    label: str
+    subject: str
+    grade: int
+    section: str = ""
+    school_year: str = ""
+    branch: str = "NTG"
+    school_type: str = "Gymnasium"
+    state: str = "BY"
+    prior_learning: str = ""
+    student_names: list[str] = Field(default_factory=list)
+
+
 class WikiLintResponse(BaseModel):
     class_id: str
     report_markdown: str

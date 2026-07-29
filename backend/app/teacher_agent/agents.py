@@ -795,7 +795,9 @@ class AgentRunner:
 
     def _class_brief_fallback(self, class_id: str) -> ClassBriefOutput:
         snap = self.wiki.get_snapshot(class_id)
-        unit = snap.current_unit or "the current unit"
+        # A class with no approved lessons reports "Not set", which does not read
+        # as a unit name ("Chemie 9e is in Not set.").
+        unit = snap.current_unit if snap.current_unit not in ("", "Not set") else ""
         reasons: list[str] = []
         watch: list[str] = []
         sources = [
@@ -813,8 +815,8 @@ class AgentRunner:
             reasons.append("Class memory is available for the next planning step.")
         return ClassBriefOutput(
             summary=(
-                f"{snap.label} is in {unit}. "
-                "Use Create lesson plan when you want the next teaching move, "
+                (f"{snap.label} is in {unit}. " if unit else f"{snap.label} has no lessons logged yet. ")
+                + "Use Create lesson plan when you want the next teaching move, "
                 "or Update memory after the next lesson."
             ),
             recommended_action_label="Create lesson plan",
