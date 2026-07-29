@@ -5,7 +5,7 @@ grade: 9
 branch: NTG
 authority: curated_guidance
 source_refs: by-lehrplanplus-physik-9-ntg
-status: draft_pending_review
+status: reviewed_seed
 version: 1
 ---
 

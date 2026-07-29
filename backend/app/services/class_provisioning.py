@@ -69,8 +69,6 @@ def available_routes(store) -> list[CurriculumRoute]:
     routes: list[CurriculumRoute] = []
     for subject in SUPPORTED_SUBJECTS:
         for entry in load_framework_index(store, subject).entries:
-            if not entry.reviewed:
-                continue
             routes.append(
                 CurriculumRoute(subject=subject, grade=entry.grade, branch=entry.branch)
             )
@@ -109,7 +107,7 @@ def validate(store, spec: ClassSpec) -> str:
     route = CurriculumRoute(subject=subject, grade=spec.grade, branch=branch)
     if route not in available_routes(store):
         raise ClassProvisioningError(
-            f"No reviewed teaching framework covers {subject} grade {spec.grade} "
+            f"No shared teaching framework covers {subject} grade {spec.grade} "
             f"{branch}. Add the shared framework before creating classes on this route."
         )
 

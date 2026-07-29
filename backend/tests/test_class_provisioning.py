@@ -20,14 +20,13 @@ def _spec(**overrides) -> cp.ClassSpec:
     return cp.ClassSpec(**base)
 
 
-def test_only_routes_with_a_reviewed_framework_are_offered(wiki):
+def test_offered_routes_are_exactly_those_with_a_shared_framework(wiki):
     routes = cp.available_routes(wiki)
 
     assert cp.CurriculumRoute("chemie", 9, "NTG") in routes
-    # Grade 10 has a seeded *source* but no reviewed framework, and physik has
-    # neither — neither may be offered.
-    assert cp.CurriculumRoute("chemie", 10, "NTG") not in routes
-    assert not [route for route in routes if route.subject == "physik"]
+    assert cp.CurriculumRoute("physik", 9, "NTG") in routes
+    # A subject with no framework library at all is never offered.
+    assert not [route for route in routes if route.subject == "biologie"]
 
 
 def test_create_class_writes_every_file_the_wiki_expects(wiki):
@@ -133,8 +132,8 @@ def test_trusted_sources_are_linked_for_the_route(wiki):
     "overrides, expected",
     [
         ({"subject": "biologie"}, "not supported"),
-        ({"subject": "physik"}, "No reviewed teaching framework"),
-        ({"grade": 10}, "No reviewed teaching framework"),
+        ({"grade": 7}, "No shared teaching framework"),
+        ({"grade": 12}, "No shared teaching framework"),
         ({"branch": "SG"}, "NTG branch"),
         ({"label": "  "}, "label is required"),
         ({"section": "ab"}, "single letter"),

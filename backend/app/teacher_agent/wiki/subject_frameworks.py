@@ -18,11 +18,6 @@ class FrameworkSummary:
     version: str
     status: str = ""
 
-    @property
-    def reviewed(self) -> bool:
-        """A human has read this page. Drafts are not offered as class routes."""
-        return self.status == "reviewed_seed"
-
 
 @dataclass(frozen=True)
 class FrameworkIndex:
