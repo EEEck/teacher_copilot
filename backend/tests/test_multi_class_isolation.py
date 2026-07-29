@@ -13,12 +13,13 @@ from app.teacher_agent.wiki.context_packs import (
 ACTIVE_CLASS = "chemie_9b_2026_27"
 
 
-def _add_bare_class(wiki, class_id="physik_9a_2026_27", *, curriculum=True):
-    """A class the factory could produce: config, no lessons, no framework."""
+def _add_bare_class(wiki, class_id="biologie_9a_2026_27", *, curriculum=True):
+    """A class on a subject with no shared framework at all (the factory will not
+    create one, but a hand-edited wiki can contain one)."""
     root = wiki.root / "wiki" / "classes" / class_id
     root.mkdir(parents=True)
     (root / "class_config.md").write_text(
-        "# Physik 9a — 2026/27\n\nsubject: physik\n", encoding="utf-8"
+        "# Biologie 9a — 2026/27\n\nsubject: biologie\n", encoding="utf-8"
     )
     if curriculum:
         (root / "curriculum_profile.md").write_text(
@@ -27,9 +28,9 @@ def _add_bare_class(wiki, class_id="physik_9a_2026_27", *, curriculum=True):
             "school_type: Gymnasium\n"
             "branch: NTG\n"
             "grade: 9\n"
-            "subject: physik\n"
+            "subject: biologie\n"
             "---\n"
-            "# Curriculum Profile — Physik 9a\n",
+            "# Curriculum Profile — Biologie 9a\n",
             encoding="utf-8",
         )
     return class_id

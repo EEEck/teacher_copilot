@@ -11,7 +11,9 @@ version: 1
 Navigation for reviewed, shared Chemistry teaching knowledge. These pages are
 immutable from class workflows and are not curriculum authority on their own.
 
-| Grade | Branch | Primary page | Detailed pages | Source refs |
+| Grade | Branch | Primary page | Status | Source refs |
 |---|---|---|---|---|
-| 8 | NTG | `08/key_summary.md` | none in this seed | `by-lehrplanplus-chemie-8-ntg` |
-| 9 | NTG | `09/key_summary.md` | competencies, differentiation, representations/models | `by-lehrplanplus-chemie-9-ntg` |
+| 8 | NTG | `08/key_summary.md` | reviewed_seed | `by-lehrplanplus-chemie-8-ntg` |
+| 9 | NTG | `09/key_summary.md`, detailed pages | reviewed_seed | `by-lehrplanplus-chemie-9-ntg,kmk-ahr-chemie-2020` |
+| 10 | NTG | `10/key_summary.md` | draft_pending_review | `by-lehrplanplus-chemie-10-ntg` |
+| 11 | NTG | `11/key_summary.md` | draft_pending_review | `by-lehrplanplus-chemie-11-ntg` |

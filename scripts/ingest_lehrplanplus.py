@@ -78,7 +78,12 @@ ROUTES: tuple[Route, ...] = (
         Route("physik", g, f"{BASE}/{g}/physik", f"LehrplanPLUS Physik {g} NTG")
         for g in (8, 9, 10, 11)
     ),
+    # Chemie is NTG-only in 8 and 11, so those grades have no ch-ntg document;
+    # 9 and 10 do, and their plain paths redirect to the site root.
+    Route("chemie", 8, f"{BASE}/8/chemie", "LehrplanPLUS Chemie 8 NTG"),
+    Route("chemie", 9, f"{BASE}/9/chemie/ch-ntg", "LehrplanPLUS Chemie 9 NTG"),
     Route("chemie", 10, f"{BASE}/10/chemie/ch-ntg", "LehrplanPLUS Chemie 10 NTG"),
+    Route("chemie", 11, f"{BASE}/11/chemie", "LehrplanPLUS Chemie 11 NTG"),
     *(
         Route(
             subject,
@@ -220,7 +225,7 @@ def curated_page(route: Route, doc_title: str, sections, retrieved_at: str) -> s
     return "\n".join(lines).rstrip() + "\n"
 
 
-def ingest(route: Route, wiki_root: Path, retrieved_at: str) -> None:
+def ingest(route: Route, wiki_root: Path, retrieved_at: str, force_curated: bool = False) -> None:
     html = fetch(route.url)
     doc_title, sections = parse(html, route)
     if not sections:
@@ -238,10 +243,24 @@ def ingest(route: Route, wiki_root: Path, retrieved_at: str) -> None:
 
     wiki_dir = wiki_root / "wiki" / "sources" / "bayern" / "lehrplanplus"
     wiki_dir.mkdir(parents=True, exist_ok=True)
-    (wiki_dir / f"{route.slug}.md").write_text(
-        curated_page(route, doc_title, sections, retrieved_at), encoding="utf-8"
-    )
-    print(f"  {route.source_id}: {len(sections)} sections — {doc_title[:60]}")
+    curated = wiki_dir / f"{route.slug}.md"
+    note = ""
+    if _is_hand_curated(curated) and not force_curated:
+        # Some curated pages were condensed into English by hand. A crawl draft is
+        # strictly worse than reviewed prose, so refuse to overwrite one.
+        note = "  [kept hand-curated page; raw artefacts refreshed]"
+    else:
+        curated.write_text(
+            curated_page(route, doc_title, sections, retrieved_at), encoding="utf-8"
+        )
+    print(f"  {route.source_id}: {len(sections)} sections — {doc_title[:52]}{note}")
+
+
+def _is_hand_curated(path: Path) -> bool:
+    if not path.exists():
+        return False
+    head = path.read_text(encoding="utf-8")[:1200]
+    return "ingestion_method: crawl" not in head
 
 
 def main() -> int:
@@ -250,6 +269,8 @@ def main() -> int:
     parser.add_argument("--subject", help="only this subject")
     parser.add_argument("--grade", type=int, help="only this grade")
     parser.add_argument("--list", action="store_true", help="show routes and exit")
+    parser.add_argument("--force-curated", action="store_true",
+                        help="overwrite hand-curated source pages with crawl drafts")
     args = parser.parse_args()
 
     routes = [
@@ -268,7 +289,7 @@ def main() -> int:
     for route in routes:
         print(f"{route.source_id} <- {route.url}")
         try:
-            ingest(route, args.wiki_root, retrieved_at)
+            ingest(route, args.wiki_root, retrieved_at, args.force_curated)
         except Exception as exc:  # keep going; report at the end
             failures += 1
             print(f"  FAILED: {exc}", file=sys.stderr)

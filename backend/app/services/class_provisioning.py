@@ -69,6 +69,8 @@ def available_routes(store) -> list[CurriculumRoute]:
     routes: list[CurriculumRoute] = []
     for subject in SUPPORTED_SUBJECTS:
         for entry in load_framework_index(store, subject).entries:
+            if not entry.reviewed:
+                continue
             routes.append(
                 CurriculumRoute(subject=subject, grade=entry.grade, branch=entry.branch)
             )

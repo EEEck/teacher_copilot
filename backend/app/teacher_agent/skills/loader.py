@@ -22,15 +22,24 @@ def load_skill(name: str) -> str:
     return _read_markdown(filename) if filename else ""
 
 
+# Backend-owned subject references, keyed by the exact route each one covers.
+# A reference is written for one subject/grade/branch and does not generalise to
+# another, so routes without an entry correctly get nothing rather than
+# borrowing guidance written for a different course.
+_SUBJECT_REFERENCES: dict[tuple[str, int, str], str] = {
+    ("chemie", 9, "NTG"): "chemie_bayern_reference.md",
+}
+
+_SUBJECT_ALIASES = {"chemistry": "chemie", "physics": "physik"}
+
+
 def load_subject_reference(subject: str, grade: int, branch: str | None) -> str:
-    """Return mandatory subject/grade guidance for the supported initial scope."""
-    if (
-        subject.strip().lower() not in {"chemie", "chemistry"}
-        or grade != 9
-        or (branch or "").strip().upper() != "NTG"
-    ):
-        return ""
-    return _read_markdown("chemie_bayern_reference.md")
+    """Return mandatory subject/grade guidance when a reference covers the route."""
+    normalized = subject.strip().lower()
+    normalized = _SUBJECT_ALIASES.get(normalized, normalized)
+    key = (normalized, grade, (branch or "").strip().upper())
+    filename = _SUBJECT_REFERENCES.get(key)
+    return _read_markdown(filename) if filename else ""
 
 
 def compose_active_skill(subject: str, grade: int, branch: str | None, task: str) -> str:

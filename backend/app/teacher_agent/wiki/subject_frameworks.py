@@ -16,6 +16,12 @@ class FrameworkSummary:
     text: str
     source_refs: tuple[str, ...]
     version: str
+    status: str = ""
+
+    @property
+    def reviewed(self) -> bool:
+        """A human has read this page. Drafts are not offered as class routes."""
+        return self.status == "reviewed_seed"
 
 
 @dataclass(frozen=True)
@@ -72,6 +78,7 @@ def load_framework_index(store, subject: str) -> FrameworkIndex:
                 text=body.strip(),
                 source_refs=_source_refs(metadata.get("source_refs", "")),
                 version=metadata.get("version", ""),
+                status=metadata.get("status", ""),
             )
         )
     index_path = root / "index.md"
