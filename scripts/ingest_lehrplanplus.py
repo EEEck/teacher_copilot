@@ -260,7 +260,9 @@ def _is_hand_curated(path: Path) -> bool:
     if not path.exists():
         return False
     head = path.read_text(encoding="utf-8")[:1200]
-    return "ingestion_method: crawl" not in head
+    # Exact match: "crawl_then_manual_summary" contains "crawl", and a substring
+    # test here silently overwrites the condensed pages this guard protects.
+    return not re.search(r"^ingestion_method:\s*crawl\s*$", head, re.M)
 
 
 def main() -> int:
