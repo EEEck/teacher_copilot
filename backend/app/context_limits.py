@@ -84,6 +84,7 @@ class ContextLimits:
     ingest_draft_chars: int
     upload_attachment_chars: int
     trusted_source_index_chars: int
+    materials_index_chars: int
 
     # --- Runtime session memory (PlanRuntime) --------------------------------
     state_list_limit: int
@@ -117,6 +118,7 @@ class ContextLimits:
             ingest_draft_chars=settings.ingest_draft_chars,
             upload_attachment_chars=settings.upload_attachment_chars,
             trusted_source_index_chars=settings.trusted_source_index_chars,
+            materials_index_chars=settings.materials_index_chars,
             state_list_limit=settings.plan_state_list_limit,
             state_bullet_max_chars=settings.plan_state_bullet_max_chars,
             briefs_inject_limit=settings.plan_briefs_inject_limit,

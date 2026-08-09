@@ -13,6 +13,10 @@ dependencies = [
     "python-multipart>=0.0.12",
     "httpx>=0.28.0",
     "rapidfuzz>=3.9.0",
+    "mistralai>=1.5.0",
+    "pypdf>=5.0.0",
+    "pypdfium2>=4.30.0",
+    "Pillow>=10.0.0",
 ]
 
 [project.optional-dependencies]

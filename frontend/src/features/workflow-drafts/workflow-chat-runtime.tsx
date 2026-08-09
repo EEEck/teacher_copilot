@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef } from "react";
 import {
   useExternalStoreRuntime,
   type AppendMessage,
+  type AttachmentAdapter,
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 
@@ -22,12 +23,15 @@ export function useWorkflowChatRuntime({
   isRunning,
   onNew,
   onCancel,
+  attachmentAdapter,
 }: {
   draftId: string;
   isRunning: boolean;
   onNew: (message: AppendMessage, updateThread: UpdateWorkflowThread) => Promise<void>;
   /** Abort the in-flight SSE turn (Composer stop button). */
   onCancel?: () => Promise<void>;
+  /** When set, enables composer + / drag-drop attachments (assistant-ui adapters). */
+  attachmentAdapter?: AttachmentAdapter;
 }) {
   // Stable fallback reference — an inline `?? []` here allocates per render
   // and loops useSyncExternalStore forever when the key is missing (Bug A).
@@ -66,8 +70,12 @@ export function useWorkflowChatRuntime({
       onNew: (message: AppendMessage) => onNew(message, updateThread),
       onEdit,
       onCancel,
+      adapters: attachmentAdapter
+        ? { attachments: attachmentAdapter }
+        : undefined,
     }),
     [
+      attachmentAdapter,
       draftId,
       isRunning,
       messages,

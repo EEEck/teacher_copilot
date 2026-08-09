@@ -6,7 +6,7 @@ import logging
 from collections.abc import AsyncIterator, Callable
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.api.deps import (
@@ -74,6 +74,7 @@ from app.schemas.api import (
     PlanChatResponse,
     PlanDraft,
     PlanLessonRequest,
+    PlanMaterialSummary,
     PlanSession,
     PlanTraceResponse,
     ProfileProposalRequest,
@@ -2541,6 +2542,53 @@ def plan_trace(
         return plan_svc.trace(class_id, session_id)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post(
+    "/classes/{class_id}/plan/sessions/{session_id}/materials",
+    response_model=PlanMaterialSummary,
+)
+async def plan_upload_material(
+    class_id: str,
+    session_id: str,
+    file: UploadFile = File(...),
+    arm: str = Form("textbook"),
+    page_range: str | None = Form(None),
+    plan_svc: PlanService = Depends(get_plan_service),
+    wiki: WikiStore = Depends(get_wiki),
+) -> PlanMaterialSummary:
+    """OCR a PDF into plan-session scratch (promote to wiki on plan save)."""
+    try:
+        wiki.get_class(class_id)
+        session = plan_svc.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+        arm_norm = (arm or "textbook").strip().lower()
+        if arm_norm not in {"textbook", "personal"}:
+            raise ValueError("arm must be 'textbook' or 'personal'")
+        filename = file.filename or "upload.pdf"
+        if not filename.lower().endswith(".pdf"):
+            raise ValueError("Only PDF uploads are supported for class materials")
+        pdf_bytes = await file.read()
+        if not pdf_bytes:
+            raise ValueError("Uploaded PDF is empty")
+        if len(pdf_bytes) > 40 * 1024 * 1024:
+            raise ValueError("PDF exceeds 40 MB limit")
+        return plan_svc.upload_material(
+            class_id,
+            session_id,
+            pdf_bytes=pdf_bytes,
+            filename=filename,
+            arm=arm_norm,  # type: ignore[arg-type]
+            page_range=(page_range or None),
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except RuntimeError as e:
+        # Missing API key / OCR provider failure
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except ValueError as e:
+        _raise_workflow_value_error(e, default_status=422)
 
 
 @router.patch(

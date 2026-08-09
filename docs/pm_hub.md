@@ -201,7 +201,7 @@ Primary bets:
 - material upload and source library
 - inherited subject/grade setup: shared Chemistry framework plus a bounded
   teacher-adjustment page composed at runtime
-- Docling/PDF ingestion spike
+- Mistral OCR 4 material upload first; Docling later backup for digital PDFs
 - teacher-approved import from notes, worksheets, plans, and curriculum docs
 
 ### v1.3 - Expand The Agent's Knowledge Safely

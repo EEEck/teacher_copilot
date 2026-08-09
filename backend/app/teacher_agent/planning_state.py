@@ -15,10 +15,12 @@ structured state + compact injection + progressive exposure of raw evidence.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.context_limits import get_context_limits
+from app.services.materials_scratch import SessionMaterialEntry
 from app.teacher_agent.runtime_render import (
     append_bullet_section,
     render_evidence_briefs,
@@ -155,9 +157,21 @@ class PlanRuntime:
     consulted_sources: list[dict[str, str]] = field(default_factory=list)
     raw_store: dict[str, str] = field(default_factory=dict)
     memory_candidates: list[MemoryCandidate] = field(default_factory=list)
+    materials: list[SessionMaterialEntry] = field(default_factory=list)
     plan_version: int = 0
     last_change_summary: str = ""
     _raw_counter: int = 0
+
+    def upsert_material(self, entry: SessionMaterialEntry) -> None:
+        """Add or replace a session material inventory entry by material_id."""
+        for index, existing in enumerate(self.materials):
+            if existing.material_id == entry.material_id:
+                self.materials[index] = entry
+                return
+        self.materials.append(entry)
+
+    def materials_payload(self) -> list[dict[str, Any]]:
+        return [entry.to_dict() for entry in self.materials]
 
     def next_raw_ref(self, kind: str) -> str:
         self._raw_counter += 1

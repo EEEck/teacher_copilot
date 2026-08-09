@@ -604,6 +604,16 @@ class PlanSession(BaseModel):
     opening_message: str = ""
 
 
+class PlanMaterialSummary(BaseModel):
+    material_id: str
+    arm: Literal["textbook", "personal"]
+    title: str = ""
+    summary: str = ""
+    page_count: int = 0
+    asset_counts: dict[str, int] = Field(default_factory=dict)
+    promoted: bool = False
+
+
 class PlanDraft(BaseModel):
     draft_id: str = ""
     artifact_revision: int = 0
@@ -613,6 +623,7 @@ class PlanDraft(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
     plan_markdown: str
     executive_state: dict = Field(default_factory=dict)
+    materials: list[PlanMaterialSummary] = Field(default_factory=list)
 
 
 class PlanChatRequest(BaseModel):
@@ -659,6 +670,7 @@ class SavePlanResponse(BaseModel):
     # Proposed durable-memory updates from the session (proposed only; never
     # written here — durable writes are a separate teacher-approved action).
     memory_candidates: list[dict] = Field(default_factory=list)
+    material_ids: list[str] = Field(default_factory=list)
 
 
 class WriteVerificationBlockedResponse(BaseModel):

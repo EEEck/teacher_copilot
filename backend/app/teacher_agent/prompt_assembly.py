@@ -472,11 +472,15 @@ def build_plan_chat_prompt_assembly(
         grade = int(curriculum.grade)
     except (TypeError, ValueError):
         grade = 0
+    materials_list = wiki.list_class_materials(
+        class_id, inventory=rt.materials, lesson_date=None
+    )
     subject_skill = compose_active_skill(
         class_config.subject,
         grade,
         curriculum.branch,
         "planning",
+        include_materials_use=bool(materials_list),
     )
     if not subject_skill:
         # Keep existing subjects working until each has a reviewable production
@@ -488,6 +492,7 @@ def build_plan_chat_prompt_assembly(
     subject_trace = wiki.build_active_subject_expert_context_trace(
         class_id, purpose="plan"
     )
+    materials_trace = wiki.build_materials_context_trace(materials_list)
     session_state = render_session_state(rt.session_state)
     lesson_state = render_lesson_planning_state(rt.lesson_planning_state)
     current_plan_text = (
@@ -509,6 +514,8 @@ def build_plan_chat_prompt_assembly(
         teacher_context=teacher_trace["text"],
         active_class_core=class_trace["text"],
         active_subject_expert=subject_trace["text"],
+        class_materials=materials_trace["text"]
+        or "- (no uploaded class materials in this plan session)",
         session_state=session_state,
         lesson_state=lesson_state,
         current_plan=current_plan_text,
@@ -566,6 +573,12 @@ def build_plan_chat_prompt_assembly(
             text=subject_trace["text"],
         ),
         _section(
+            name="Class materials",
+            function="wiki.build_materials_context_trace",
+            source="PlanRuntime.materials + materials/*/summary.md",
+            text=materials_trace["text"],
+        ),
+        _section(
             name="Executive state",
             function="render_executive_runtime",
             source="ArtifactSession.executive",
@@ -620,6 +633,7 @@ def build_plan_chat_prompt_assembly(
             "teacher_context": teacher_trace,
             "active_class_core": class_trace,
             "active_subject_expert": subject_trace,
+            "class_materials": materials_trace,
             "user_input": user_input,
         },
     }

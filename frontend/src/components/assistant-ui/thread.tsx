@@ -1,5 +1,5 @@
 import {
-  ComposerAddAttachment,
+  ComposerAttachmentControls,
   ComposerAttachments,
   UserMessageAttachments,
 } from "@/components/assistant-ui/attachment";
@@ -18,6 +18,11 @@ import {
 } from "@/components/assistant-ui/tool-group";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import {
+  isPlanPdfFile,
+  isPlanTextNoteFile,
+  usePlanAttachOptional,
+} from "@/components/klassenpilot/plan-attach-dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { workflowTurnActivity } from "@/features/workflow-drafts/workflow-turn-activity";
@@ -32,6 +37,7 @@ import {
   MessagePrimitive,
   SuggestionPrimitive,
   ThreadPrimitive,
+  useAui,
   useAuiState,
   useComposerRuntime,
 } from "@assistant-ui/react";
@@ -48,7 +54,15 @@ import {
   PencilIcon,
   SquareIcon,
 } from "lucide-react";
-import { useEffect, useRef, type FC, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type FC,
+  type ReactNode,
+} from "react";
 
 export type ThreadWelcomeConfig = {
   title: string;
@@ -68,6 +82,7 @@ export const Thread: FC<{
   showSuggestions?: boolean;
   composerStorageKey?: string;
   backgroundTurnInProgress?: boolean;
+  addAttachmentTooltip?: string;
 }> = ({
   welcome = DEFAULT_WELCOME,
   welcomeExtra,
@@ -75,6 +90,7 @@ export const Thread: FC<{
   showSuggestions = true,
   composerStorageKey,
   backgroundTurnInProgress = false,
+  addAttachmentTooltip,
 }) => {
   return (
     <ThreadPrimitive.Root
@@ -111,7 +127,7 @@ export const Thread: FC<{
 
           <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 z-10 mt-auto flex shrink-0 flex-col gap-4 overflow-visible rounded-t-(--composer-radius) bg-background pb-4 md:pb-6">
             <ThreadScrollToBottom />
-            <Composer />
+            <Composer addAttachmentTooltip={addAttachmentTooltip} />
           </ThreadPrimitive.ViewportFooter>
         </div>
       </ThreadPrimitive.Viewport>
@@ -257,33 +273,130 @@ const ThreadSuggestionItem: FC = () => {
   );
 };
 
-const Composer: FC = () => {
+const Composer: FC<{
+  addAttachmentTooltip?: string;
+}> = ({ addAttachmentTooltip }) => {
+  const aui = useAui();
+  const planAttach = usePlanAttachOptional();
+
+  const handlePlanFiles = useCallback(
+    async (files: File[]) => {
+      if (!planAttach || files.length === 0) return;
+      const pdf = files.find(isPlanPdfFile);
+      if (pdf) {
+        planAttach.openAttachDialog(pdf);
+        return;
+      }
+      const notes = files.filter(isPlanTextNoteFile);
+      await Promise.all(
+        notes.map(async (file) => {
+          try {
+            await aui.composer().addAttachment(file);
+          } catch (error) {
+            console.error("Failed to add attachment:", error);
+          }
+        }),
+      );
+    },
+    [aui, planAttach],
+  );
+
+  const shellClassName =
+    "flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-background p-(--composer-padding) transition-shadow focus-within:border-ring/75 focus-within:ring-2 focus-within:ring-ring/20 data-[dragging=true]:border-ring data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50";
+
+  const composerBody = (
+    <>
+      <ComposerAttachments />
+      <ComposerPrimitive.Input
+        placeholder="Send a message..."
+        className="aui-composer-input max-h-32 min-h-10 w-full resize-none bg-transparent px-1.75 py-1 text-sm outline-none placeholder:text-muted-foreground/80"
+        rows={1}
+        autoFocus
+        aria-label="Message input"
+        addAttachmentOnPaste={!planAttach}
+        onPaste={
+          planAttach
+            ? (e) => {
+                const files = Array.from(e.clipboardData?.files || []);
+                if (files.length === 0) return;
+                e.preventDefault();
+                void handlePlanFiles(files);
+              }
+            : undefined
+        }
+      />
+      <ComposerAction addAttachmentTooltip={addAttachmentTooltip} />
+    </>
+  );
+
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
-      <ComposerPrimitive.AttachmentDropzone asChild>
-        <div
-          data-slot="aui_composer-shell"
-          className="flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-background p-(--composer-padding) transition-shadow focus-within:border-ring/75 focus-within:ring-2 focus-within:ring-ring/20 data-[dragging=true]:border-ring data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50"
+      {planAttach ? (
+        <PlanComposerDropzone
+          className={shellClassName}
+          onFiles={handlePlanFiles}
         >
-          <ComposerAttachments />
-          <ComposerPrimitive.Input
-            placeholder="Send a message..."
-            className="aui-composer-input max-h-32 min-h-10 w-full resize-none bg-transparent px-1.75 py-1 text-sm outline-none placeholder:text-muted-foreground/80"
-            rows={1}
-            autoFocus
-            aria-label="Message input"
-          />
-          <ComposerAction />
-        </div>
-      </ComposerPrimitive.AttachmentDropzone>
+          {composerBody}
+        </PlanComposerDropzone>
+      ) : (
+        <ComposerPrimitive.AttachmentDropzone asChild>
+          <div data-slot="aui_composer-shell" className={shellClassName}>
+            {composerBody}
+          </div>
+        </ComposerPrimitive.AttachmentDropzone>
+      )}
     </ComposerPrimitive.Root>
   );
 };
 
-const ComposerAction: FC = () => {
+/** Plan dropzone: same drag chrome as assistant-ui, but PDFs open the attach dialog. */
+const PlanComposerDropzone: FC<{
+  className?: string;
+  onFiles: (files: File[]) => void | Promise<void>;
+  children: ReactNode;
+}> = ({ className, onFiles, children }) => {
+  const [isDragging, setIsDragging] = useState(false);
+
+  const onDragEnterCapture = (e: DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+  const onDragOverCapture = (e: DragEvent) => {
+    e.preventDefault();
+    if (!isDragging) setIsDragging(true);
+  };
+  const onDragLeaveCapture = (e: DragEvent) => {
+    e.preventDefault();
+    const next = e.relatedTarget as Node | null;
+    if (next && e.currentTarget.contains(next)) return;
+    setIsDragging(false);
+  };
+
+  return (
+    <div
+      data-slot="aui_composer-shell"
+      className={className}
+      data-dragging={isDragging ? "true" : undefined}
+      onDragEnterCapture={onDragEnterCapture}
+      onDragOverCapture={onDragOverCapture}
+      onDragLeaveCapture={onDragLeaveCapture}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        void onFiles(Array.from(e.dataTransfer.files));
+      }}
+    >
+      {children}
+    </div>
+  );
+};
+
+const ComposerAction: FC<{
+  addAttachmentTooltip?: string;
+}> = ({ addAttachmentTooltip }) => {
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <ComposerAddAttachment />
+      <ComposerAttachmentControls addTooltip={addAttachmentTooltip} />
       <AuiIf condition={(s) => !s.thread.isRunning}>
         <ComposerPrimitive.Send asChild>
           <TooltipIconButton

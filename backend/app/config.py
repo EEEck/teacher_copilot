@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: SecretStr = SecretStr("")
+    # Mistral Document OCR for class materials (v1.2). Empty = OCR disabled.
+    mistral_api_key: SecretStr = SecretStr("")
+    mistral_ocr_model: str = "mistral-ocr-latest"
     # Two model ids. STRONG is the newest/best model; CHEAP is the small model.
     # Set the ids here when a newer model ships. Which call class uses which, and
     # at what reasoning effort, is decided by MODEL_PROFILE below.
@@ -84,6 +87,12 @@ class Settings(BaseSettings):
     upload_attachment_chars: int = 0
     # Compact trusted-source metadata/TOC injected into active class context.
     trusted_source_index_chars: int = 1200
+    # Compact class-materials TOC injected into plan chat (summaries only).
+    materials_index_chars: int = 1200
+    # Plan-session OCR scratch (outside wiki index) until promote-on-save.
+    materials_scratch_dir: Path = (
+        Path(__file__).resolve().parent.parent / "data" / "materials_scratch"
+    )
     # Runtime session memory (PlanRuntime) — see context_limits.py
     plan_state_list_limit: int = 24
     plan_state_bullet_max_chars: int = 160

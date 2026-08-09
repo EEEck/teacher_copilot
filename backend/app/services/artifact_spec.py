@@ -40,6 +40,7 @@ from app.teacher_agent.executive_verification import (
     ExecutiveRuntime,
     executive_api_payload,
 )
+from app.services.materials_scratch import SessionMaterialEntry
 from app.teacher_agent.planning_state import (
     EvidenceBrief,
     LessonPlanningState,
@@ -418,6 +419,7 @@ def _plan_runtime_dump(runtime: Any) -> dict:
         "evidence_briefs": [brief.model_dump() for brief in runtime.evidence_briefs],
         "raw_store": dict(runtime.raw_store),
         "memory_candidates": [candidate.model_dump() for candidate in runtime.memory_candidates],
+        "materials": runtime.materials_payload(),
         "plan_version": runtime.plan_version,
         "last_change_summary": runtime.last_change_summary,
         "raw_counter": runtime._raw_counter,
@@ -449,6 +451,11 @@ def _plan_runtime_load(data: dict) -> PlanRuntime:
     }
     runtime.memory_candidates = [
         MemoryCandidate(**item) for item in _list_dict_field(data, "memory_candidates")
+    ]
+    runtime.materials = [
+        SessionMaterialEntry.from_dict(item)
+        for item in _list_dict_field(data, "materials")
+        if str(item.get("material_id", "")).strip()
     ]
     runtime.plan_version = int(data.get("plan_version") or 0)
     runtime.last_change_summary = str(data.get("last_change_summary") or "")

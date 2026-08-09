@@ -186,6 +186,15 @@ export type PlanSession = {
   messages: ChatMessage[];
   opening_message: string;
 };
+export type PlanMaterialSummary = {
+  material_id: string;
+  arm: "textbook" | "personal";
+  title: string;
+  summary: string;
+  page_count: number;
+  asset_counts?: Record<string, number>;
+  promoted?: boolean;
+};
 export type PlanDraft = {
   draft_id: string;
   artifact_revision: number;
@@ -195,6 +204,7 @@ export type PlanDraft = {
   messages?: ChatMessage[];
   plan_markdown: string;
   executive_state?: Record<string, unknown>;
+  materials?: PlanMaterialSummary[];
 };
 export type PlanChatResponse = {
   reply: string;
@@ -249,6 +259,7 @@ export type SavePlanResponse = {
   session_state?: Record<string, unknown> | null;
   lesson_planning_state?: Record<string, unknown> | null;
   memory_candidates?: MemoryCandidate[];
+  material_ids?: string[];
 };
 export type WriteVerificationBlockedResponse = {
   code: "write_verification_blocked";
@@ -516,6 +527,40 @@ type ApiOptions = {
   authRedirect?: boolean;
 };
 
+async function raiseApiError(res: Response, options?: ApiOptions): Promise<never> {
+  if (options?.authRedirect !== false) {
+    redirectToBetaLoginIfNeeded(res.status);
+  }
+  const text = await res.text();
+  let message = text || res.statusText;
+  try {
+    const body = JSON.parse(text) as {
+      code?: string;
+      action?: WriteVerificationBlockedResponse["action"];
+      artifact_fingerprint?: string;
+      executive_state?: Record<string, unknown>;
+      message?: string;
+      error?: { message?: string };
+      detail?: string;
+    };
+    if (res.status === 409 && body.code === "write_verification_blocked") {
+      throw new WriteVerificationBlockedError({
+        code: "write_verification_blocked",
+        action: body.action ?? "plan_save",
+        artifact_fingerprint: body.artifact_fingerprint ?? "",
+        executive_state: body.executive_state ?? {},
+        message: body.message ?? "I didn't save this yet; one detail needs your call.",
+      });
+    }
+    message = body.error?.message ?? body.detail ?? message;
+  } catch (err) {
+    if (err instanceof WriteVerificationBlockedError) {
+      throw err;
+    }
+  }
+  throw new Error(`API ${res.status}: ${message}`);
+}
+
 async function api<T>(
   path: string,
   init?: RequestInit,
@@ -538,39 +583,31 @@ async function api<T>(
     );
   }
   if (!res.ok) {
-    if (options?.authRedirect !== false) {
-      redirectToBetaLoginIfNeeded(res.status);
-    }
-    const text = await res.text();
-    let message = text || res.statusText;
-    try {
-      const body = JSON.parse(text) as {
-        code?: string;
-        action?: WriteVerificationBlockedResponse["action"];
-        artifact_fingerprint?: string;
-        executive_state?: Record<string, unknown>;
-        message?: string;
-        error?: { message?: string };
-        detail?: string;
-      };
-      if (res.status === 409 && body.code === "write_verification_blocked") {
-        throw new WriteVerificationBlockedError({
-          code: "write_verification_blocked",
-          action: body.action ?? "plan_save",
-          artifact_fingerprint: body.artifact_fingerprint ?? "",
-          executive_state: body.executive_state ?? {},
-          message: body.message ?? "I didn't save this yet; one detail needs your call.",
-        });
-      }
-      // Typed envelope { error: { message } }, with fallback to legacy { detail }.
-      message = body.error?.message ?? body.detail ?? message;
-    } catch (err) {
-      if (err instanceof WriteVerificationBlockedError) {
-        throw err;
-      }
-      /* use raw text */
-    }
-    throw new Error(`API ${res.status}: ${message}`);
+    return raiseApiError(res, options);
+  }
+  return res.json() as Promise<T>;
+}
+
+async function apiForm<T>(
+  path: string,
+  form: FormData,
+  options?: ApiOptions,
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${getApiBase()}${path}`, {
+      method: "POST",
+      cache: "no-store",
+      credentials: "include",
+      body: form,
+    });
+  } catch {
+    throw new Error(
+      `Cannot reach API at ${getApiBase()}. Start the backend (docker compose up, or ./scripts/restart-dev.ps1 -NoNewWindow).`,
+    );
+  }
+  if (!res.ok) {
+    return raiseApiError(res, options);
   }
   return res.json() as Promise<T>;
 }
@@ -769,6 +806,22 @@ export const client = {
       method: "PATCH",
       body: JSON.stringify({ plan_markdown: planMarkdown }),
     }),
+  planUploadMaterial: async (
+    classId: string,
+    sessionId: string,
+    file: File,
+    arm: "textbook" | "personal" = "textbook",
+    pageRange?: string,
+  ) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("arm", arm);
+    if (pageRange) form.append("page_range", pageRange);
+    return apiForm<PlanMaterialSummary>(
+      `/api/classes/${classId}/plan/sessions/${sessionId}/materials`,
+      form,
+    );
+  },
   planSave: (
     classId: string,
     sessionId: string,

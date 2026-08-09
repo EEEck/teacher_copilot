@@ -21,6 +21,10 @@ import type { ChatStreamChunk } from "@/components/assistant-ui/artifact-runtime
 import type { ArtifactMode } from "@/components/assistant-ui/artifact-runtime-config";
 import { initialAssistantRunContent, lessonContextFromMemoryState } from "@/lib/chat-run-feedback";
 import { extractSessionAttachments, type SessionAttachment } from "@/lib/session-attachments";
+import {
+  createIngestAttachmentAdapter,
+  createPlanAttachmentAdapter,
+} from "@/lib/workflow-attachment-adapters";
 import { cancelTurn, runTurn } from "@/features/workflow-drafts/turn-runner";
 import { useWorkflowChatRuntime, type UpdateWorkflowThread } from "@/features/workflow-drafts/workflow-chat-runtime";
 import { workflowTurnActivity } from "@/features/workflow-drafts/workflow-turn-activity";
@@ -315,11 +319,23 @@ export function ArtifactSessionRuntimeProvider({
       turn?.phase === "awaiting_backend" ||
       (turn == null && (storedDraft?.turnInProgress ?? turnInProgress) === true),
   });
+  const attachmentAdapter = useMemo(() => {
+    if (mode === "plan") {
+      return createPlanAttachmentAdapter({
+        getClassId: () => classId,
+        getSessionId: () => sessionIdRef.current,
+      });
+    }
+    // Ingest / discuss: text notes only via composer +
+    return createIngestAttachmentAdapter();
+  }, [classId, mode]);
+
   const runtime = useWorkflowChatRuntime({
     draftId: draftKey,
     isRunning: turnActivity.runtimeIsRunning,
     onNew,
     onCancel,
+    attachmentAdapter,
   });
 
   useEffect(() => {

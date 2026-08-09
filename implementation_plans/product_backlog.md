@@ -111,10 +111,11 @@ reason to expand the product surface.
 | P2 | **Operator beta runbook + hydrate docs** | Daily report generation, wiki-diff review, tester feedback, backup/export, retention cleanup (CLI/docs-first). Document the single-worker-per-wiki assumption: durable drafts + executive JSON survive restart, but in-memory `deps.py` session caches are not multi-worker safe without sticky routing or always-hydrate-from-draft-store. |
 | P2 | **Beta feedback survey** | Short per-session / weekly tester survey linked to `tester_id` (and optionally session ids): did the wiki capture the right teaching facts, did the next plan improve because of prior memory, what felt wrong/stale/missing, how much editing was needed, did approval feel trustworthy. Lets the operator compare survey comments against wiki diffs and transcripts — measures whether memory is improving, not just whether the UI works. |
 
-Explicitly deferred: Docling runtime ingestion and document/figure rendering
-(now the v1.2 theme), broader Discuss/Class Brief verification packs beyond the
-advisory ones above, and class-home proactive expansion (v1.5). They do not
-block the beta loop.
+Explicitly deferred: class materials upload / OCR (v1.2 theme; Mistral OCR 4
+first, Docling later backup — see
+[`v1.2_class_materials_epic.md`](v1.2_class_materials_epic.md)), broader
+Discuss/Class Brief verification packs beyond the advisory ones above, and
+class-home proactive expansion (v1.5). They do not block the beta loop.
 
 ### Pre-beta code-audit backlog (parked 2026-07-21)
 
@@ -183,15 +184,22 @@ photo, handwritten notes, prior exam, curriculum doc) and get OCR'd, structured
 content into the class — as source-library material or a draft memory/plan
 input — without retyping. All writes stay teacher-approved.
 
+**Living epic:** [`v1.2_class_materials_epic.md`](v1.2_class_materials_epic.md)
+(status board, locked decisions, Option 1 architecture). OCR primary for the
+first slice is **Mistral OCR 4**; Docling stays a later optional backup for
+born-digital PDF / offline / self-hosted paths — not co-equal in the first
+slice.
+
 Primary items:
 
 | Item | Engineering notes |
 |---|---|
-| **Scan/photo OCR ingestion** | Bounded extraction step for images/scans. Docling and/or a Mistral OCR model (external trial done); pick one, wire it as an extraction step that returns structured markdown + source spans, never a direct wiki write. |
-| **Docling/PDF ingestion** | Evaluate Docling for PDF/DOCX/PPTX extraction; preserve source pages/sections for citations. |
-| **Material upload library** | Store teacher-provided notes, prior plans, worksheets, and curriculum docs as source material with provenance. |
+| **Scan/photo OCR ingestion** | Bounded extraction via **Mistral OCR 4** (external trial done). Returns structured markdown + source spans + artifact trio; never a direct wiki write. In-plan upload first (see epic). |
+| **Docling/PDF ingestion (later backup)** | Optional later path for born-digital PDF/DOCX/PPTX or self-hosted/offline extraction; preserve source pages/sections. Not first-slice runtime. |
+| **Material upload library** | Store teacher-provided notes, prior plans, worksheets, and curriculum docs as source material with provenance (`materials/{textbooks\|personal}/`, separate from curriculum `wiki/sources`). |
 | **Extraction review** | Show source pages/sections and the extracted structure before any write; the teacher edits/approves. Preserve citations back to the upload. |
 | **Teacher-approved import to wiki** | Distinguish one-time planning context, source-library material, and durable class memory when importing extracted content. |
+
 
 Non-goals:
 

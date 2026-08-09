@@ -2,6 +2,13 @@
 ref_repos
 literature/*.pdf
 literature/**/*.pdf
+# Large materials OCR fixtures (keep page-slice PDFs in-repo)
+backend/tests/fixtures/materials/esl_textbook_sample.pdf
+backend/tests/fixtures/materials/chemie_10sg_pages_5_to_14.pdf
+backend/tests/fixtures/materials/_live_ocr_output/
+backend/tests/fixtures/materials/_live_ocr_chemie_10sg_p5_14/
+backend/tests/fixtures/materials/_live_ocr_chemie_10sg_p5_14_safe/
+backend/tests/fixtures/materials/_live_ocr_chemie_10sg_p5_14_prompted/
 # Python
 backend/.env
 backend/.venv/
@@ -29,6 +36,9 @@ scripts/.logs/
 /backend/beta_data/
 /backend/beta_data_sandbox/
 /backend/teacher_wiki_sandbox/
+/backend/data/materials_scratch/
+/backend/data/_e2e_*.json
+/backend/data/_e2e_*.md
 /.worktree-stack/
 
 # Secrets

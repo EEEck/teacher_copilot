@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { LoaderCircleIcon } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { PlanThread } from "@/components/assistant-ui/plan-thread";
 import { ArtifactDraftPanel } from "@/components/klassenpilot/artifact-draft-panel";
@@ -16,7 +16,7 @@ import { WorkflowActionNeededCard } from "@/components/klassenpilot/workflow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { client } from "@/lib/api";
+import { client, type PlanMaterialSummary } from "@/lib/api";
 import {
   classifyWorkflowError,
   routeWorkflowError,
@@ -181,16 +181,37 @@ function PlanWorkspace({
   const {
     artifactMarkdown,
     draftId,
+    sessionId,
     artifactRevision,
     artifactHash,
     runWithSessionRecovery,
   } = useArtifactSession();
   const [inReview, setInReview] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [materials, setMaterials] = useState<PlanMaterialSummary[]>([]);
   const [actionNeeded, setActionNeeded] = useState<{
     message: string;
     respondInChat: boolean;
   } | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    const refresh = () => {
+      void client.planGetDraft(classId, sessionId).then((draft) => {
+        if (!cancelled) setMaterials(draft.materials ?? []);
+      }).catch(() => {
+        /* draft hydrate is best-effort */
+      });
+    };
+    refresh();
+    const onUpdated = () => refresh();
+    window.addEventListener("kp:plan-materials-updated", onUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("kp:plan-materials-updated", onUpdated);
+    };
+  }, [classId, sessionId]);
 
   const clearWorkflowErrors = useCallback(() => {
     onError(null);
@@ -272,20 +293,28 @@ function PlanWorkspace({
           />
         }
         footer={
-          <PlanSaveFooter
-            classId={classId}
-            onError={onError}
-            reportWorkflowError={reportWorkflowError}
-            clearWorkflowErrors={clearWorkflowErrors}
-            inReview={inReview}
-            setInReview={setInReview}
-            lessonDate={lessonDate}
-            setLessonDate={setLessonDate}
-            onConfirmSave={() => {
-              void savePlan();
-            }}
-            saving={loading}
-          />
+          <div className="flex flex-col gap-2">
+            {materials.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {materials.length} material{materials.length === 1 ? "" : "s"} will be
+                kept with this lesson on save.
+              </p>
+            ) : null}
+            <PlanSaveFooter
+              classId={classId}
+              onError={onError}
+              reportWorkflowError={reportWorkflowError}
+              clearWorkflowErrors={clearWorkflowErrors}
+              inReview={inReview}
+              setInReview={setInReview}
+              lessonDate={lessonDate}
+              setLessonDate={setLessonDate}
+              onConfirmSave={() => {
+                void savePlan();
+              }}
+              saving={loading}
+            />
+          </div>
         }
       />
     </div>

@@ -278,6 +278,8 @@ teacher_wiki/
 | Variable | Where | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | `backend/.env` | OpenAI API (required for chat & plan) |
+| `MISTRAL_API_KEY` | `backend/.env` | Mistral OCR for class materials (v1.2); required for live OCR tests / extraction |
+| `MISTRAL_OCR_MODEL` | `backend/.env` | OCR model id. Default `mistral-ocr-latest` |
 | `OPENAI_STRONG_MODEL` | `backend/.env` | Production strong model. Default `gpt-5.6-terra` (~½ GPT-5.5/Sol API rate). Use `gpt-5.6-sol` for flagship at GPT-5.5 pricing. Runs IMPORTANT always + CHAT/UTILITY in the production profile |
 | `OPENAI_CHEAP_MODEL` | `backend/.env` | The small model. Default `gpt-5.4-mini`. Runs CHAT/UTILITY in the economy profile |
 | `MODEL_PROFILE` | `backend/.env` | Routes three call classes — CHAT (plan+ingest), IMPORTANT (Memory Sweep only), UTILITY (one-shots). `production`: strong high / strong xhigh / strong minimal (one model, reasoning-tiered). `economy`: cheap medium / strong high / cheap minimal. Unset derives from `APP_ENV` (production→production, else economy) |

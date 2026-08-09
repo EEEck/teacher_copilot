@@ -1,0 +1,45 @@
+{
+  "pages": [
+    {
+      "index": 0,
+      "markdown": "Unit 1\n\n![img-0.jpeg](img-0.jpeg)\n\nVOCABULARY\n\n![img-1.jpeg](img-1.jpeg)\n",
+      "images": [
+        {
+          "id": "img-0.jpeg",
+          "image_base64": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/AHvf/9k=",
+          "image_annotation": "{\"image_type\": \"comic\", \"short_description\": \"Kids greet on Brook Lane.\", \"visible_text\": [\"Hi Holly.\", \"Hi Luke.\"]}"
+        },
+        {
+          "id": "img-1.jpeg",
+          "image_base64": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/AHvf/9k=",
+          "image_annotation": "{\"image_type\": \"decorative\", \"short_description\": \"\", \"visible_text\": []}"
+        }
+      ],
+      "dimensions": {
+        "width": 800,
+        "height": 1000,
+        "dpi": 72
+      }
+    },
+    {
+      "index": 1,
+      "markdown": "Check-in\n\n![img-2.jpeg](img-2.jpeg)\n",
+      "images": [
+        {
+          "id": "img-2.jpeg",
+          "image_base64": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/AHvf/9k=",
+          "image_annotation": "{\"image_type\": \"comic\", \"short_description\": \"Kids greet on Brook Lane.\", \"visible_text\": [\"Hi Holly.\", \"Hi Luke.\"]}"
+        }
+      ],
+      "dimensions": {
+        "width": 800,
+        "height": 1000,
+        "dpi": 72
+      }
+    }
+  ],
+  "model": "mistral-ocr-fixture",
+  "usage_info": {
+    "pages_processed": 2
+  }
+}

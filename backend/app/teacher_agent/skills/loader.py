@@ -9,6 +9,7 @@ _SKILL_DIR = Path(__file__).parent
 _SKILL_FILES = {
     "lesson_planning": "lesson_planning_procedure.md",
     "differentiation": "lesson_differentiation_procedure.md",
+    "materials_use": "materials_use_procedure.md",
 }
 
 
@@ -33,12 +34,25 @@ def load_subject_reference(subject: str, grade: int, branch: str | None) -> str:
     return _read_markdown("chemie_bayern_reference.md")
 
 
-def compose_active_skill(subject: str, grade: int, branch: str | None, task: str) -> str:
+def compose_active_skill(
+    subject: str,
+    grade: int,
+    branch: str | None,
+    task: str,
+    *,
+    include_materials_use: bool = False,
+) -> str:
     """Compose the mandatory procedure and scoped subject reference for a task."""
     normalized_task = task.strip().lower()
     reference = load_subject_reference(subject, grade, branch)
+    materials = load_skill("materials_use") if include_materials_use else ""
     if normalized_task == "differentiation":
-        parts = (load_skill("differentiation"), reference)
+        parts = (load_skill("differentiation"), reference, materials)
     else:
-        parts = (load_skill("lesson_planning"), reference, load_skill("differentiation"))
+        parts = (
+            load_skill("lesson_planning"),
+            reference,
+            load_skill("differentiation"),
+            materials,
+        )
     return "\n\n".join(part for part in parts if part)

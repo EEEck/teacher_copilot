@@ -16,11 +16,18 @@ from app.schemas.api import (
     PlanChatResponse,
     PlanDraft,
     PlanLessonRequest,
+    PlanMaterialSummary,
     PlanSession,
     PlanSessionStatus,
     PlanTraceResponse,
     SavePlanRequest,
     SavePlanResponse,
+)
+from app.services.materials_scratch import (
+    MaterialArmName,
+    ocr_pdf_to_scratch,
+    promote_scratch_material,
+    write_lesson_materials_json,
 )
 from app.services.artifact_session_service import (
     ArtifactSession,
@@ -110,7 +117,59 @@ class PlanService:
     def get_draft(self, session_id: str) -> PlanDraft:
         draft = self.core.get_draft(session_id)
         assert isinstance(draft, PlanDraft)
+        session = self.core.get_session(session_id)
+        if session.runtime and session.runtime.materials:
+            draft.materials = [
+                self._material_summary(entry) for entry in session.runtime.materials
+            ]
         return draft
+
+    def _material_summary(self, entry) -> PlanMaterialSummary:
+        return PlanMaterialSummary(
+            material_id=entry.material_id,
+            arm=entry.arm,
+            title=entry.title,
+            summary=entry.summary,
+            page_count=entry.page_count or len(entry.page_numbers),
+            asset_counts=dict(entry.asset_counts or {}),
+            promoted=bool(entry.promoted),
+        )
+
+    def upload_material(
+        self,
+        class_id: str,
+        session_id: str,
+        *,
+        pdf_bytes: bytes,
+        filename: str,
+        arm: MaterialArmName,
+        page_range: str | None = None,
+        ocr_runner=None,
+    ) -> PlanMaterialSummary:
+        session = self.core.get_session(session_id)
+        if session.class_id != class_id:
+            raise KeyError("Session class mismatch")
+        if session.runtime is None:
+            from app.teacher_agent.planning_state import PlanRuntime
+
+            session.runtime = PlanRuntime()
+        class_meta = self.wiki.get_class(class_id)
+        curriculum = self.wiki.get_curriculum_profile(class_id)
+        entry = ocr_pdf_to_scratch(
+            pdf_bytes=pdf_bytes,
+            filename=filename,
+            session_id=session_id,
+            class_id=class_id,
+            arm=arm,
+            subject=class_meta.subject,
+            grade=curriculum.grade,
+            branch=curriculum.branch,
+            page_range=page_range,
+            ocr_runner=ocr_runner,
+        )
+        session.runtime.upsert_material(entry)
+        self.core._persist_session(session)
+        return self._material_summary(entry)
 
     async def chat(
         self,
@@ -265,6 +324,26 @@ class PlanService:
         stamped_markdown = self.wiki.normalize_plan_target_date(plan_markdown, lesson_date)
         title = self.wiki.extract_title(stamped_markdown) or "Lesson plan"
         path = self.wiki.save_lesson_plan(class_id, lesson_date, stamped_markdown)
+        promoted_ids: list[str] = []
+        if session.runtime and session.runtime.materials:
+            for entry in list(session.runtime.materials):
+                if not entry.scratch_path:
+                    continue
+                promoted = promote_scratch_material(
+                    wiki_root=self.wiki.root,
+                    class_id=class_id,
+                    entry=entry,
+                )
+                session.runtime.upsert_material(promoted)
+                promoted_ids.append(promoted.material_id)
+            if promoted_ids:
+                write_lesson_materials_json(
+                    wiki_root=self.wiki.root,
+                    class_id=class_id,
+                    lesson_date=lesson_date,
+                    material_ids=promoted_ids,
+                )
+            self.core._persist_session(session)
         self.core.set_status(req.session_id, PlanSessionStatus.saved.value)
         if self.workflow_drafts is not None and session.draft_id:
             self.workflow_drafts.mark_saved(session.draft_id)
@@ -307,6 +386,7 @@ class PlanService:
             session_state=planning.get("session_state"),
             lesson_planning_state=planning.get("lesson_planning_state"),
             memory_candidates=candidates,
+            material_ids=promoted_ids,
         )
 
     async def generate(self, class_id: str, req: PlanLessonRequest) -> LessonPlan:

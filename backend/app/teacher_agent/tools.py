@@ -704,6 +704,67 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
         except ValueError as e:
             return f"Error: {e}"
 
+    def _plan_materials():
+        inventory = []
+        if ctx.planning is not None and hasattr(ctx.planning, "materials"):
+            inventory = ctx.planning.materials
+        return wiki.list_class_materials(class_id, inventory=inventory)
+
+    @function_tool
+    def list_class_materials() -> str:
+        """List uploaded class materials available in this plan session.
+
+        Returns material_id, arm (textbook/personal), title, summary blurb,
+        page span, and section ids. Use before inventing textbook facts when a
+        materials TOC is present. Separate from trusted curriculum sources.
+        """
+        records = [
+            {
+                "material_id": m.material_id,
+                "arm": m.arm,
+                "title": m.title,
+                "summary": m.summary,
+                "page_numbers": m.page_numbers,
+                "source": m.source,
+                "sections": [
+                    {"id": s.id, "title": s.title} for s in m.sections[:20]
+                ],
+            }
+            for m in _plan_materials()
+        ]
+        return _capture(
+            ctx.planning, "class_materials_list", json.dumps(records, indent=2)
+        )
+
+    @function_tool
+    def search_class_materials(query: str, max_results: int = 8) -> str:
+        """Search session class materials (summary + OCR markdown sections)."""
+        hits = wiki.search_class_materials(
+            _plan_materials(),
+            query,
+            max_results=max(1, min(max_results or 8, 20)),
+        )
+        return _capture(
+            ctx.planning, "class_materials_search", json.dumps(hits, indent=2)
+        )
+
+    @function_tool
+    def read_class_material(material_id: str, section_id: str = "summary") -> str:
+        """Read one class-material section (summary or OCR heading chunk).
+
+        Returns content plus image_paths under assets/ (including tbl-*.jpg table
+        crops when present). Cite as Material: material_id.
+        """
+        try:
+            payload = wiki.read_class_material(
+                _plan_materials(), material_id, section_id
+            )
+            return _capture(
+                ctx.planning, "class_materials_read", json.dumps(payload, indent=2)
+            )
+        except ValueError as e:
+            return f"Error: {e}"
+
     @function_tool
     def get_raw_evidence(raw_ref: str) -> str:
         """Fetch full raw output for a previously captured evidence raw_ref.
@@ -723,6 +784,9 @@ def create_chat_wiki_tools(ctx: WikiToolContext) -> list:
         list_trusted_sources,
         search_trusted_sources,
         read_trusted_source,
+        list_class_materials,
+        search_class_materials,
+        read_class_material,
         search_subject_guidance,
         read_subject_guidance,
         get_raw_evidence,

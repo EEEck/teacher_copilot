@@ -18,6 +18,7 @@ from . import (
     rollups,
     search,
     subject_frameworks,
+    materials,
     trusted_sources,
 )
 
@@ -98,6 +99,24 @@ class WikiStore:
         return trusted_sources.read_source_for_class(
             self.root, class_id, source_id, section_id, max_chars
         )
+
+    def list_class_materials(self, class_id, *, inventory, lesson_date=None):
+        return materials.list_materials_for_plan(
+            self.root, class_id, inventory=inventory, lesson_date=lesson_date
+        )
+
+    def search_class_materials(self, materials_list, query, max_results=8):
+        return materials.search_class_materials(
+            materials_list, query, max_results=max_results
+        )
+
+    def read_class_material(self, materials_list, material_id, section_id="", max_chars=12000):
+        return materials.read_class_material(
+            materials_list, material_id, section_id, max_chars=max_chars
+        )
+
+    def build_materials_context_trace(self, materials_list):
+        return materials.build_materials_context_trace(materials_list)
 
     def load_framework_index(self, subject):
         return subject_frameworks.load_framework_index(self, subject)

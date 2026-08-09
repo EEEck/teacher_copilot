@@ -26,9 +26,13 @@ Maintenance notes:
 - Discuss on class home is chrome-only (`discuss-dock.tsx`); it must reuse the
   same runtime + `Thread` stack. See `frontend/ARCHITECTURE.md` for turn
   lifecycle and how to add a mode.
-- For future inline chat artifacts, attachments, message actions, or richer
-  tool/result displays, inspect upstream assistant-ui examples first and adapt
-  the smallest useful pattern locally.
+- Attachments: follow
+  [assistant-ui File Attachments](https://www.assistant-ui.com/docs/guides/attachments).
+  Plan PDFs OCR via `lib/workflow-attachment-adapters.ts`; Textbook/Personal sits
+  beside composer `+` (`composer-attachment-controls.tsx`).
+- For future inline chat artifacts, message actions, or richer tool/result
+  displays, inspect upstream assistant-ui examples first and adapt the smallest
+  useful pattern locally.
 - Keep KlassenPilot-specific session, artifact, safety, and SSE behavior in the
   local runtime integration files, the workflow-draft feature module, and
   backend stream policy.

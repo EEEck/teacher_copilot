@@ -234,6 +234,12 @@ Canonical files include:
 
 - `lessons/{date}/lesson_results.md`
 - `lessons/{date}/lesson_plan.md`
+- `lessons/{date}/materials.json` — lesson → `material_ids` pointers only
+  (promoted on plan save; no material→lesson backlinks yet)
+- `materials/{textbooks|personal}/{material_id}/` — OCR package (`source.pdf`
+  reference, `summary.md`, `document.agent.md`, `assets/`, `provenance.json`).
+  Citation/source layer, not MemV4 durable memory. Pre-save packages live in
+  plan-session scratch outside the wiki index.
 - `course_state.md`
 - `open_loops.md`
 - `misconceptions.md`

@@ -233,15 +233,20 @@ class ArtifactSessionService:
         session.artifact_hash = row.artifact_hash
 
     def _with_draft_metadata(self, draft: object, session: ArtifactSession) -> object:
+        materials_payload = []
+        runtime = session.runtime
+        if runtime is not None and hasattr(runtime, "materials_payload"):
+            materials_payload = runtime.materials_payload()
         for field_name, value in (
             ("draft_id", session.draft_id),
             ("artifact_revision", session.artifact_revision),
             ("artifact_hash", session.artifact_hash),
             ("turn_in_progress", session.turn_in_progress),
-              ("latest_turn_complete", session.latest_turn_complete),
-              ("messages", session.messages),
-              ("executive_state", executive_api_payload(session.executive)),
-          ):
+            ("latest_turn_complete", session.latest_turn_complete),
+            ("messages", session.messages),
+            ("executive_state", executive_api_payload(session.executive)),
+            ("materials", materials_payload),
+        ):
             if hasattr(draft, field_name):
                 setattr(draft, field_name, value)
         return draft

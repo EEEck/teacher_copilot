@@ -1,7 +1,19 @@
 "use client";
 
-import { type PropsWithChildren, useEffect, useState, type FC } from "react";
-import { XIcon, PlusIcon, FileText } from "lucide-react";
+import {
+  type PropsWithChildren,
+  useEffect,
+  useState,
+  type FC,
+  type ReactNode,
+} from "react";
+import {
+  XIcon,
+  PlusIcon,
+  FileText,
+  Loader2Icon,
+  AlertCircleIcon,
+} from "lucide-react";
 import {
   AttachmentPrimitive,
   ComposerPrimitive,
@@ -13,6 +25,7 @@ import { useShallow } from "zustand/shallow";
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
@@ -23,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { usePlanAttachOptional } from "@/components/klassenpilot/plan-attach-dialog";
 import { cn } from "@/lib/utils";
 
 const useFileSrc = (file: File | undefined) => {
@@ -142,32 +156,85 @@ const AttachmentUI: FC = () => {
     }
   });
 
+  const uploadState = useAuiState((s) =>
+    s.attachment.status.type === "running"
+      ? "uploading"
+      : s.attachment.status.type === "incomplete" &&
+          s.attachment.status.reason === "error"
+        ? "error"
+        : undefined,
+  );
+  const isUploading = uploadState === "uploading";
+  const isError = uploadState === "error";
+  const progress = useAuiState((s) =>
+    s.attachment.status.type === "running" && "progress" in s.attachment.status
+      ? Math.round((s.attachment.status.progress ?? 0) * 100)
+      : null,
+  );
+
   return (
-    <Tooltip>
-      <AttachmentPrimitive.Root
-        className={cn(
-          "aui-attachment-root relative",
-          isImage && "aui-attachment-root-composer only:*:first:size-24",
-        )}
-      >
-        <AttachmentPreviewDialog>
-          <TooltipTrigger asChild>
-            <div
-              className="aui-attachment-tile size-14 cursor-pointer overflow-hidden rounded-[calc(var(--composer-radius)-var(--composer-padding))] border bg-muted transition-opacity hover:opacity-75"
-              role="button"
-              tabIndex={0}
-              aria-label={`${typeLabel} attachment`}
-            >
-              <AttachmentThumb />
-            </div>
-          </TooltipTrigger>
-        </AttachmentPreviewDialog>
-        {isComposer && <AttachmentRemove />}
-      </AttachmentPrimitive.Root>
-      <TooltipContent side="top">
-        <AttachmentPrimitive.Name />
-      </TooltipContent>
-    </Tooltip>
+    <TooltipProvider>
+      <Tooltip>
+        <AttachmentPrimitive.Root
+          className={cn(
+            "aui-attachment-root relative",
+            isImage &&
+              !isComposer &&
+              "aui-attachment-root-message only:*:first:size-24",
+          )}
+        >
+          <AttachmentPreviewDialog>
+            <TooltipTrigger asChild>
+              <div
+                className={cn(
+                  "aui-attachment-tile relative size-14 cursor-pointer overflow-hidden rounded-[calc(var(--composer-radius)-var(--composer-padding))] border bg-muted transition-opacity hover:opacity-75",
+                  isError && "border-destructive",
+                )}
+                role="button"
+                tabIndex={0}
+                aria-label={`${typeLabel} attachment${
+                  isError
+                    ? ", upload failed"
+                    : isUploading
+                      ? ", uploading"
+                      : ""
+                }`}
+              >
+                <AttachmentThumb />
+                {isUploading && (
+                  <div
+                    aria-hidden="true"
+                    className="aui-attachment-tile-uploading absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-background/60 backdrop-blur-[1px]"
+                  >
+                    <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+                    {progress != null ? (
+                      <span className="text-[10px] font-medium text-muted-foreground">
+                        {progress}%
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+                {isError && (
+                  <div
+                    aria-hidden="true"
+                    className="aui-attachment-tile-error absolute inset-0 flex items-center justify-center bg-destructive/10"
+                  >
+                    <AlertCircleIcon className="size-5 text-destructive" />
+                  </div>
+                )}
+              </div>
+            </TooltipTrigger>
+          </AttachmentPreviewDialog>
+          {isComposer && <AttachmentRemove />}
+        </AttachmentPrimitive.Root>
+        <TooltipContent side="top">
+          <AttachmentPrimitive.Name />
+          {isError ? (
+            <p className="aui-attachment-error-message">Upload failed</p>
+          ) : null}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 
@@ -205,19 +272,52 @@ export const ComposerAttachments: FC = () => {
   );
 };
 
-export const ComposerAddAttachment: FC = () => {
-  return (
-    <ComposerPrimitive.AddAttachment asChild>
+export const ComposerAddAttachment: FC<{
+  tooltip?: string;
+}> = ({ tooltip = "Add Attachment" }) => {
+  const planAttach = usePlanAttachOptional();
+
+  if (planAttach) {
+    return (
       <TooltipIconButton
-        tooltip="Add Attachment"
+        tooltip={tooltip}
         side="bottom"
         variant="ghost"
         size="icon"
         className="aui-composer-add-attachment size-8 rounded-full p-1 font-semibold text-xs hover:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
-        aria-label="Add Attachment"
+        aria-label={tooltip}
+        onClick={() => planAttach.openAttachDialog(null)}
+      >
+        <PlusIcon className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
+      </TooltipIconButton>
+    );
+  }
+
+  return (
+    <ComposerPrimitive.AddAttachment asChild>
+      <TooltipIconButton
+        tooltip={tooltip}
+        side="bottom"
+        variant="ghost"
+        size="icon"
+        className="aui-composer-add-attachment size-8 rounded-full p-1 font-semibold text-xs hover:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
+        aria-label={tooltip}
       >
         <PlusIcon className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
       </TooltipIconButton>
     </ComposerPrimitive.AddAttachment>
+  );
+};
+
+/** Left side of composer actions: optional controls + +. */
+export const ComposerAttachmentControls: FC<{
+  leading?: ReactNode;
+  addTooltip?: string;
+}> = ({ leading, addTooltip }) => {
+  return (
+    <div className="flex items-center gap-2">
+      {leading}
+      <ComposerAddAttachment tooltip={addTooltip} />
+    </div>
   );
 };
