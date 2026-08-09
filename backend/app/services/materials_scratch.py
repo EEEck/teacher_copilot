@@ -194,6 +194,98 @@ def ocr_pdf_to_scratch(
     )
 
 
+_ASSET_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+
+
+def resolve_material_asset_file(
+    *,
+    session_id: str,
+    material_id: str,
+    filename: str,
+    entry: SessionMaterialEntry | None = None,
+    wiki_root: Path | None = None,
+    class_id: str | None = None,
+    settings: Settings | None = None,
+) -> Path:
+    """Resolve a safe image path under scratch or promoted wiki assets/."""
+    name = Path(filename or "").name
+    if not name or name != filename.replace("\\", "/").split("/")[-1]:
+        raise ValueError("Invalid asset filename")
+    if Path(name).suffix.lower() not in _ASSET_SUFFIXES:
+        raise ValueError("Unsupported asset type")
+
+    candidates: list[Path] = []
+    if entry and entry.scratch_path:
+        candidates.append(Path(entry.scratch_path) / "assets" / name)
+    else:
+        candidates.append(
+            material_scratch_dir(session_id, material_id, settings=settings)
+            / "assets"
+            / name
+        )
+    if entry and entry.promoted and entry.wiki_path and wiki_root and class_id:
+        candidates.append(Path(wiki_root) / entry.wiki_path / "assets" / name)
+        candidates.append(
+            wiki_material_dir(wiki_root, class_id, entry.arm, material_id) / "assets" / name
+        )
+
+    for path in candidates:
+        if not path.is_file():
+            continue
+        # Path traversal guard: must stay under an assets directory.
+        try:
+            path.resolve().relative_to(path.parent.resolve())
+        except ValueError as exc:
+            raise ValueError("Invalid asset path") from exc
+        if path.parent.name != "assets":
+            raise ValueError("Invalid asset path")
+        return path
+    raise FileNotFoundError(f"Asset not found: {filename}")
+
+
+def attach_prebuilt_package(
+    *,
+    session_id: str,
+    package_src: Path,
+    arm: MaterialArmName = "textbook",
+    material_id: str | None = None,
+    settings: Settings | None = None,
+) -> SessionMaterialEntry:
+    """Copy a prebuilt OCR package into session scratch (evals / offline seed)."""
+    settings = settings or get_settings()
+    src = Path(package_src)
+    if not src.is_dir():
+        raise FileNotFoundError(f"package missing: {src}")
+    material_id = material_id or new_material_id()
+    out_dir = material_scratch_dir(session_id, material_id, settings=settings)
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
+    shutil.copytree(src, out_dir)
+    summary_md = ""
+    summary_path = out_dir / "summary.md"
+    if summary_path.is_file():
+        summary_md = summary_path.read_text(encoding="utf-8")
+    pages: list[int] = []
+    prov_path = out_dir / "provenance.json"
+    if prov_path.is_file():
+        try:
+            prov = json.loads(prov_path.read_text(encoding="utf-8"))
+            pages = [int(p) for p in prov.get("original_page_numbers") or []]
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pages = []
+    return SessionMaterialEntry(
+        material_id=material_id,
+        arm=arm,
+        title=_title_from_summary_md(summary_md) or src.name,
+        summary=_summary_blurb(summary_md),
+        page_numbers=pages,
+        scratch_path=str(out_dir),
+        page_count=len(pages),
+        asset_counts=_asset_counts(out_dir),
+        promoted=False,
+    )
+
+
 def arm_dir_name(arm: MaterialArmName) -> str:
     return "textbooks" if arm == "textbook" else "personal"
 

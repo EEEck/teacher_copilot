@@ -117,6 +117,7 @@ def eval_client(eval_wiki: WikiStore) -> Iterator[TestClient]:
     app.dependency_overrides[deps.get_plan_service] = lambda: plan
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
+            client.plan_service = plan  # type: ignore[attr-defined]
             yield client
     finally:
         app.dependency_overrides.clear()
@@ -147,6 +148,7 @@ def live_eval_client(eval_wiki: WikiStore) -> Iterator[TestClient]:
     app.dependency_overrides[deps.get_plan_service] = lambda: plan
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
+            client.plan_service = plan  # type: ignore[attr-defined]
             yield client
     finally:
         app.dependency_overrides.clear()

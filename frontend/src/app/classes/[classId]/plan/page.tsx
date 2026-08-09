@@ -290,6 +290,15 @@ function PlanWorkspace({
             }
             placeholder="Your lesson plan will build here as you chat, or type directly…"
             updatingLabel="Updating plan from chat…"
+            materialAssets={
+              sessionId && materials.length > 0
+                ? {
+                    classId,
+                    sessionId,
+                    materialIds: materials.map((m) => m.material_id),
+                  }
+                : null
+            }
           />
         }
         footer={

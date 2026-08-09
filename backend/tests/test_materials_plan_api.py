@@ -176,6 +176,58 @@ Note which Lewis forms need review.
     assert (dest / "document.agent.md").is_file()
 
 
+def test_serve_material_asset_from_scratch(client: TestClient, tmp_path, monkeypatch):
+    from app.services.materials_scratch import attach_prebuilt_package, scratch_root
+
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(
+        "app.services.materials_scratch.scratch_root",
+        lambda settings=None: scratch,
+    )
+    start = client.post(f"/api/classes/{CLASS_ID}/plan/sessions")
+    session_id = start.json()["session_id"]
+    package = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "materials"
+        / "mini_bonding_package"
+    )
+    # Seed via service on the overridden plan client path: upload-like attach
+    from app.api import deps
+    from app.main import app
+
+    plan_svc = app.dependency_overrides[deps.get_plan_service]()
+    summary = plan_svc.attach_prebuilt_material(
+        CLASS_ID, session_id, package_dir=package, arm="textbook"
+    )
+    material_id = summary.material_id
+    res = client.get(
+        f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}"
+        f"/materials/{material_id}/assets/img-0.jpeg"
+    )
+    assert res.status_code == 200, res.text
+    assert res.content[:2] == b"\xff\xd8"
+    bad = client.get(
+        f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}"
+        f"/materials/{material_id}/assets/../summary.md"
+    )
+    assert bad.status_code in {400, 404}
+
+
+def test_materials_use_procedure_authorizes_classroom_asset_embeds():
+    text = (
+        Path(__file__).resolve().parents[1]
+        / "app"
+        / "teacher_agent"
+        / "skills"
+        / "materials_use_procedure.md"
+    ).read_text(encoding="utf-8")
+    assert "classroom use" in text.lower()
+    assert "assets/img-" in text
+    assert "not" in text.lower() and "instructions" in text.lower()
+
+
 def test_materials_search_and_toc(tmp_path):
     from app.teacher_agent.wiki.materials import (
         build_materials_context_trace,

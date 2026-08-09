@@ -32,6 +32,8 @@ class ChatGolden:
     expected_ready: bool | None = None
     security_checks: tuple[str, ...] = ()
     expected_safety_redirect: bool = False
+    # Relative dir under tests/fixtures/materials/ to seed before the turn.
+    seed_material_fixture: str = ""
 
 
 PLAN_CHAT_GOLDENS: tuple[ChatGolden, ...] = (
@@ -80,6 +82,32 @@ PLAN_CHAT_GOLDENS: tuple[ChatGolden, ...] = (
             "oxidation number from recent lectures."
         ),
         artifact_patterns=(r"review|recap",),
+    ),
+    ChatGolden(
+        golden_id="9b_plan_materials_embed_mo_asset",
+        workflow="plan",
+        class_id=CHEMIE_9B_CLASS_ID,
+        message=(
+            "Plan a short 45-minute lesson on H2 molecular orbitals using the "
+            "uploaded textbook material. We have classroom rights to use the "
+            "figures — embed at least one textbook image cutout (assets/img-…) "
+            "in the lesson package for the MO diagram."
+        ),
+        turn=1,
+        tools_any_of=(
+            "list_class_materials",
+            "search_class_materials",
+            "read_class_material",
+        ),
+        tools_any_of_min=1,
+        seed_material_fixture="mini_bonding_package",
+        # Deterministic bar: at least one OCR cutout path in the artifact.
+        artifact_patterns=(r"assets/img-",),
+        geval_criteria=(
+            "The lesson plan should use the uploaded textbook material and include "
+            "at least one markdown image pointing at an assets/img-* cutout for the "
+            "H2 molecular-orbital diagram (classroom use authorized)."
+        ),
     ),
 )
 

@@ -2,17 +2,20 @@
 
 import { useArtifactSession } from "@/components/assistant-ui/artifact-session-runtime";
 import { MarkdownEditorPanel } from "@/components/klassenpilot/markdown-editor-panel";
+import type { MaterialAssetContext } from "@/lib/material-asset-urls";
 
 export function ArtifactDraftPanel({
   title,
   placeholder,
   emptyPreviewFallback,
   updatingLabel = "Updating draft from chat…",
+  materialAssets,
 }: {
   title: string;
   placeholder: string;
   emptyPreviewFallback?: string;
   updatingLabel?: string;
+  materialAssets?: MaterialAssetContext | null;
 }) {
   const {
     artifactMarkdown,
@@ -40,6 +43,7 @@ export function ArtifactDraftPanel({
       onRedo={redo}
       canUndo={canUndo}
       canRedo={canRedo}
+      materialAssets={materialAssets}
     />
   );
 }

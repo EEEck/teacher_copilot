@@ -9,7 +9,7 @@ from deepeval import assert_test
 from deepeval.dataset import Golden
 
 from tests.evals.goldens.chat_plan import CHAT_GOLDENS, CHAT_SCENARIO_PRIORS
-from tests.evals.harness import run_chat_scenario, start_session, run_chat_turn
+from tests.evals.harness import run_chat_scenario, run_chat_turn, start_session
 from tests.evals.metrics.chat_metrics import build_chat_test_case, chat_metrics_for_golden
 
 pytestmark = pytest.mark.skipif(
@@ -21,7 +21,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.mark.parametrize("golden", CHAT_GOLDENS, ids=[g.golden_id for g in CHAT_GOLDENS])
 def test_chat_golden_live(live_eval_client, golden):
     priors = CHAT_SCENARIO_PRIORS.get(golden.golden_id, ())
-    if priors:
+    if priors or golden.seed_material_fixture:
         result = run_chat_scenario(
             live_eval_client,
             workflow=golden.workflow,
@@ -29,6 +29,7 @@ def test_chat_golden_live(live_eval_client, golden):
             prior_messages=priors,
             message=golden.message,
             attachments=golden.attachments,
+            seed_material_fixture=golden.seed_material_fixture,
         )
     else:
         session_id = start_session(live_eval_client, workflow=golden.workflow, class_id=golden.class_id)

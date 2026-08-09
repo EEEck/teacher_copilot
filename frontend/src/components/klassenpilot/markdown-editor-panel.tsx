@@ -7,6 +7,7 @@ import { MarkdownPreview } from "@/components/klassenpilot/markdown-preview";
 import { Button } from "@/components/ui/button";
 import { SegmentedToggle } from "@/components/ui/segmented-toggle";
 import { Textarea } from "@/components/ui/textarea";
+import type { MaterialAssetContext } from "@/lib/material-asset-urls";
 import { cn } from "@/lib/utils";
 
 type ViewMode = "edit" | "preview";
@@ -31,6 +32,7 @@ export type MarkdownEditorPanelProps = {
   /** Optional dismiss control (e.g. close wiki proposal → lesson diary). */
   onDismiss?: () => void;
   dismissAriaLabel?: string;
+  materialAssets?: MaterialAssetContext | null;
 };
 
 export function MarkdownEditorPanel({
@@ -51,6 +53,7 @@ export function MarkdownEditorPanel({
   canRedo = false,
   onDismiss,
   dismissAriaLabel = "Dismiss",
+  materialAssets,
 }: MarkdownEditorPanelProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("preview");
   const editable = !readOnly && Boolean(onChange);
@@ -147,7 +150,10 @@ export function MarkdownEditorPanel({
         />
       ) : (
         <div className="min-h-0 max-h-full w-full min-w-0 flex-1 basis-0 overflow-y-auto overscroll-contain rounded-md border bg-background p-3">
-          <MarkdownPreview markdown={previewMarkdown} />
+          <MarkdownPreview
+            markdown={previewMarkdown}
+            materialAssets={materialAssets}
+          />
         </div>
       )}
     </div>

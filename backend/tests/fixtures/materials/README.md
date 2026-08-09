@@ -5,6 +5,7 @@
 | `esl_textbook_sample_pages_9_to_11.pdf` | ~3.9 MB | tracked | Quick OCR / upload tests |
 | `esl_textbook_sample.pdf` | ~16.8 MB | **gitignored** (local-only) | Full-book / longer OCR runs |
 | `mistral_ocr_pages_9_10_min.json` | ~3 KB | tracked | Offline packaging spike (no API) |
+| `mini_bonding_package/` | tiny | tracked | Seeded plan-session material for asset-embed golden |
 
 Restore the full sample from the local OCR lab if missing:
 

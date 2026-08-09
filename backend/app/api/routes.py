@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator, Callable
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from app.api.deps import (
     get_agents,
@@ -2589,6 +2589,32 @@ async def plan_upload_material(
         raise HTTPException(status_code=503, detail=str(e)) from e
     except ValueError as e:
         _raise_workflow_value_error(e, default_status=422)
+
+
+@router.get(
+    "/classes/{class_id}/plan/sessions/{session_id}/materials/{material_id}/assets/{filename}",
+)
+def plan_material_asset(
+    class_id: str,
+    session_id: str,
+    material_id: str,
+    filename: str,
+    plan_svc: PlanService = Depends(get_plan_service),
+    wiki: WikiStore = Depends(get_wiki),
+):
+    """Serve an OCR cutout image from session scratch (or promoted wiki package)."""
+    try:
+        wiki.get_class(class_id)
+        path = plan_svc.resolve_material_asset(
+            class_id, session_id, material_id, filename
+        )
+        return FileResponse(path)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.patch(

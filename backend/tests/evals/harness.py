@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -69,6 +70,34 @@ def start_session(client: TestClient, *, workflow: str, class_id: str) -> str:
     return start.json()["session_id"]
 
 
+_MATERIALS_FIXTURES = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "materials"
+)
+
+
+def seed_plan_material_fixture(
+    client: TestClient,
+    *,
+    class_id: str,
+    session_id: str,
+    fixture_name: str,
+) -> str:
+    """Copy a prebuilt OCR package into the plan session (live/offline goldens)."""
+    plan_svc = getattr(client, "plan_service", None)
+    if plan_svc is None:
+        raise RuntimeError("TestClient missing plan_service (eval fixture)")
+    package = _MATERIALS_FIXTURES / fixture_name
+    if not package.is_dir():
+        raise FileNotFoundError(f"materials fixture missing: {package}")
+    summary = plan_svc.attach_prebuilt_material(
+        class_id,
+        session_id,
+        package_dir=package,
+        arm="textbook",
+    )
+    return summary.material_id
+
+
 def run_chat_turn(
     client: TestClient,
     *,
@@ -119,8 +148,16 @@ def run_chat_scenario(
     prior_messages: tuple[str, ...],
     message: str,
     attachments: tuple[tuple[str, str], ...] = (),
+    seed_material_fixture: str = "",
 ) -> ChatTurnResult:
     session_id = start_session(client, workflow=workflow, class_id=class_id)
+    if seed_material_fixture:
+        seed_plan_material_fixture(
+            client,
+            class_id=class_id,
+            session_id=session_id,
+            fixture_name=seed_material_fixture,
+        )
     for prior in prior_messages:
         run_chat_turn(
             client,

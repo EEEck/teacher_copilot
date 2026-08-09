@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import date
+from pathlib import Path
 
 from app.schemas.api import (
     ChatAttachment,
@@ -25,8 +26,10 @@ from app.schemas.api import (
 )
 from app.services.materials_scratch import (
     MaterialArmName,
+    attach_prebuilt_package,
     ocr_pdf_to_scratch,
     promote_scratch_material,
+    resolve_material_asset_file,
     write_lesson_materials_json,
 )
 from app.services.artifact_session_service import (
@@ -170,6 +173,60 @@ class PlanService:
         session.runtime.upsert_material(entry)
         self.core._persist_session(session)
         return self._material_summary(entry)
+
+    def attach_prebuilt_material(
+        self,
+        class_id: str,
+        session_id: str,
+        *,
+        package_dir: Path,
+        arm: MaterialArmName = "textbook",
+        material_id: str | None = None,
+    ) -> PlanMaterialSummary:
+        """Seed session materials from a prebuilt OCR package (evals)."""
+        session = self.core.get_session(session_id)
+        if session.class_id != class_id:
+            raise KeyError("Session class mismatch")
+        if session.runtime is None:
+            from app.teacher_agent.planning_state import PlanRuntime
+
+            session.runtime = PlanRuntime()
+        entry = attach_prebuilt_package(
+            session_id=session_id,
+            package_src=Path(package_dir),
+            arm=arm,
+            material_id=material_id,
+        )
+        session.runtime.upsert_material(entry)
+        self.core._persist_session(session)
+        return self._material_summary(entry)
+
+    def resolve_material_asset(
+        self,
+        class_id: str,
+        session_id: str,
+        material_id: str,
+        filename: str,
+    ) -> Path:
+        session = self.core.get_session(session_id)
+        if session.class_id != class_id:
+            raise KeyError("Session class mismatch")
+        entry = None
+        if session.runtime and session.runtime.materials:
+            for item in session.runtime.materials:
+                if item.material_id == material_id:
+                    entry = item
+                    break
+        if entry is None:
+            raise KeyError(f"Unknown material_id: {material_id}")
+        return resolve_material_asset_file(
+            session_id=session_id,
+            material_id=material_id,
+            filename=filename,
+            entry=entry,
+            wiki_root=Path(self.wiki.root),
+            class_id=class_id,
+        )
 
     async def chat(
         self,
