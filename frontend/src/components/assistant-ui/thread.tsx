@@ -25,6 +25,7 @@ import {
 } from "@/components/klassenpilot/plan-attach-dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { composerHasRunningAttachments } from "@/lib/workflow-attachment-adapters";
 import { workflowTurnActivity } from "@/features/workflow-drafts/workflow-turn-activity";
 import {
   ActionBarMorePrimitive,
@@ -394,19 +395,35 @@ const PlanComposerDropzone: FC<{
 const ComposerAction: FC<{
   addAttachmentTooltip?: string;
 }> = ({ addAttachmentTooltip }) => {
+  const planAttach = usePlanAttachOptional();
+  const attachmentBusy = useAuiState((s) =>
+    planAttach
+      ? composerHasRunningAttachments(s.composer.attachments)
+      : false,
+  );
+
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
       <ComposerAttachmentControls addTooltip={addAttachmentTooltip} />
       <AuiIf condition={(s) => !s.thread.isRunning}>
         <ComposerPrimitive.Send asChild>
           <TooltipIconButton
-            tooltip="Send message"
+            tooltip={
+              attachmentBusy
+                ? "Wait for PDF to finish reading…"
+                : "Send message"
+            }
             side="bottom"
             type="button"
             variant="default"
             size="icon"
             className="aui-composer-send size-8 rounded-full"
-            aria-label="Send message"
+            aria-label={
+              attachmentBusy
+                ? "Wait for PDF to finish reading"
+                : "Send message"
+            }
+            disabled={attachmentBusy}
           >
             <ArrowUpIcon className="aui-composer-send-icon size-4" />
           </TooltipIconButton>

@@ -13,6 +13,18 @@ import { client, type PlanMaterialSummary } from "@/lib/api";
 import { getPlanMaterialArm } from "@/lib/plan-material-arm";
 
 const materialByAttachmentId = new Map<string, PlanMaterialSummary>();
+const materialErrorByAttachmentId = new Map<string, string>();
+
+export function getPlanMaterialAttachmentError(id: string): string | undefined {
+  return materialErrorByAttachmentId.get(id);
+}
+
+/** True while any composer attachment is still uploading / OCR-ing. */
+export function composerHasRunningAttachments(
+  attachments: ReadonlyArray<{ status: { type: string } }>,
+): boolean {
+  return attachments.some((a) => a.status.type === "running");
+}
 
 /** Text notes (.md / .txt) — kept as composer chips until send. */
 class KlassenPilotTextAttachmentAdapter implements AttachmentAdapter {
@@ -39,7 +51,7 @@ type MaterialsUploadContext = {
 };
 
 /**
- * PDF → plan materials OCR on attach (ChatGPT-style: chip appears while uploading).
+ * PDF → plan materials OCR on attach (optimistic tile while OCR runs).
  * On send, injects a short Material: citation into the user message text.
  */
 class PlanMaterialsPdfAttachmentAdapter implements AttachmentAdapter {
@@ -64,9 +76,11 @@ class PlanMaterialsPdfAttachmentAdapter implements AttachmentAdapter {
       file,
     };
 
+    materialErrorByAttachmentId.delete(id);
     yield {
       ...base,
-      status: { type: "running", reason: "uploading", progress: 0.15 },
+      // Progress required by assistant-ui typings; UI shows indeterminate copy.
+      status: { type: "running", reason: "uploading", progress: 0 },
     };
 
     try {
@@ -82,6 +96,7 @@ class PlanMaterialsPdfAttachmentAdapter implements AttachmentAdapter {
         getPlanMaterialArm(),
       );
       materialByAttachmentId.set(id, summary);
+      materialErrorByAttachmentId.delete(id);
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("kp:plan-materials-updated", { detail: summary }),
@@ -94,11 +109,14 @@ class PlanMaterialsPdfAttachmentAdapter implements AttachmentAdapter {
       };
     } catch (err) {
       materialByAttachmentId.delete(id);
+      const message =
+        err instanceof Error ? err.message : "Materials OCR failed";
+      materialErrorByAttachmentId.set(id, message);
       yield {
         ...base,
         status: { type: "incomplete", reason: "error" },
       };
-      throw err instanceof Error ? err : new Error("Materials OCR failed");
+      throw err instanceof Error ? err : new Error(message);
     }
   }
 
@@ -128,6 +146,7 @@ class PlanMaterialsPdfAttachmentAdapter implements AttachmentAdapter {
 
   async remove(attachment: { id: string }): Promise<void> {
     materialByAttachmentId.delete(attachment.id);
+    materialErrorByAttachmentId.delete(attachment.id);
   }
 }
 

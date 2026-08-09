@@ -71,7 +71,8 @@ export function PlanThread({
                 <li>I use last lesson, open loops, and misconceptions automatically.</li>
                 <li>
                   Use + or drop a PDF to open the attach dialog — choose Textbook
-                  or Personal, then OCR runs into a composer tile before you send.
+                  or Personal; OCR continues on a composer tile (green check when
+                  ready).
                 </li>
                 <li>The plan draft on the right updates as we talk; you can edit it anytime.</li>
                 <li>Click “Ready to save plan” when you want to attach it to a lesson date.</li>

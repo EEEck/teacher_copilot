@@ -10,8 +10,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { FileText, Loader2Icon, UploadIcon } from "lucide-react";
+import { FileText, UploadIcon } from "lucide-react";
 import { useAui } from "@assistant-ui/react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -120,19 +121,18 @@ function PlanAttachDialog({
   }, [open]);
 
   const uploadPdf = useCallback(
-    async (file: File) => {
-      setBusy(true);
+    (file: File) => {
       setError(null);
       setPlanMaterialArm(arm);
-      try {
-        await aui.composer().addAttachment(file);
-        onOpenChange(false);
-        onStagedFileChange(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Upload failed");
-      } finally {
-        setBusy(false);
-      }
+      // Optimistic: close dialog immediately; OCR continues on the composer tile.
+      onOpenChange(false);
+      onStagedFileChange(null);
+      void aui
+        .composer()
+        .addAttachment(file)
+        .catch((err: unknown) => {
+          toast.error(err instanceof Error ? err.message : "PDF upload failed");
+        });
     },
     [arm, aui, onOpenChange, onStagedFileChange],
   );
@@ -146,7 +146,10 @@ function PlanAttachDialog({
         onOpenChange(false);
         onStagedFileChange(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not attach notes");
+        const message =
+          err instanceof Error ? err.message : "Could not attach notes";
+        setError(message);
+        toast.error(message);
       } finally {
         setBusy(false);
       }
@@ -193,8 +196,8 @@ function PlanAttachDialog({
         <DialogHeader>
           <DialogTitle>Attach class material</DialogTitle>
           <DialogDescription>
-            Choose Textbook or Personal, then drop or browse a PDF. OCR runs
-            before you send.
+            Choose Textbook or Personal, then drop or browse a PDF. Upload
+            closes this dialog; reading continues on a composer tile.
           </DialogDescription>
         </DialogHeader>
 
@@ -319,17 +322,10 @@ function PlanAttachDialog({
             variant="default"
             disabled={busy || !stagedFile}
             onClick={() => {
-              if (stagedFile) void uploadPdf(stagedFile);
+              if (stagedFile) uploadPdf(stagedFile);
             }}
           >
-            {busy ? (
-              <>
-                <Loader2Icon className="size-4 animate-spin" />
-                Uploading…
-              </>
-            ) : (
-              "Upload PDF"
-            )}
+            Upload PDF
           </Button>
         </DialogFooter>
       </DialogContent>

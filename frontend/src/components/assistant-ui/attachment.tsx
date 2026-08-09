@@ -13,6 +13,7 @@ import {
   FileText,
   Loader2Icon,
   AlertCircleIcon,
+  CheckIcon,
 } from "lucide-react";
 import {
   AttachmentPrimitive,
@@ -37,6 +38,7 @@ import {
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { usePlanAttachOptional } from "@/components/klassenpilot/plan-attach-dialog";
+import { getPlanMaterialAttachmentError } from "@/lib/workflow-attachment-adapters";
 import { cn } from "@/lib/utils";
 
 const useFileSrc = (file: File | undefined) => {
@@ -156,21 +158,28 @@ const AttachmentUI: FC = () => {
     }
   });
 
-  const uploadState = useAuiState((s) =>
-    s.attachment.status.type === "running"
-      ? "uploading"
-      : s.attachment.status.type === "incomplete" &&
-          s.attachment.status.reason === "error"
-        ? "error"
-        : undefined,
-  );
+  const attachmentId = useAuiState((s) => s.attachment.id);
+  const uploadState = useAuiState((s) => {
+    const status = s.attachment.status;
+    if (status.type === "running") return "uploading" as const;
+    if (status.type === "incomplete" && status.reason === "error") {
+      return "error" as const;
+    }
+    if (
+      isComposer &&
+      status.type === "requires-action" &&
+      status.reason === "composer-send"
+    ) {
+      return "ready" as const;
+    }
+    return undefined;
+  });
   const isUploading = uploadState === "uploading";
   const isError = uploadState === "error";
-  const progress = useAuiState((s) =>
-    s.attachment.status.type === "running" && "progress" in s.attachment.status
-      ? Math.round((s.attachment.status.progress ?? 0) * 100)
-      : null,
-  );
+  const isReady = uploadState === "ready";
+  const errorMessage = isError
+    ? getPlanMaterialAttachmentError(attachmentId) ?? "Upload failed"
+    : null;
 
   return (
     <TooltipProvider>
@@ -189,6 +198,7 @@ const AttachmentUI: FC = () => {
                 className={cn(
                   "aui-attachment-tile relative size-14 cursor-pointer overflow-hidden rounded-[calc(var(--composer-radius)-var(--composer-padding))] border bg-muted transition-opacity hover:opacity-75",
                   isError && "border-destructive",
+                  isReady && "border-primary/40",
                 )}
                 role="button"
                 tabIndex={0}
@@ -196,22 +206,22 @@ const AttachmentUI: FC = () => {
                   isError
                     ? ", upload failed"
                     : isUploading
-                      ? ", uploading"
-                      : ""
+                      ? ", reading PDF"
+                      : isReady
+                        ? ", ready"
+                        : ""
                 }`}
               >
                 <AttachmentThumb />
                 {isUploading && (
                   <div
                     aria-hidden="true"
-                    className="aui-attachment-tile-uploading absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-background/60 backdrop-blur-[1px]"
+                    className="aui-attachment-tile-uploading absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-background/60 px-1 backdrop-blur-[1px]"
                   >
                     <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
-                    {progress != null ? (
-                      <span className="text-[10px] font-medium text-muted-foreground">
-                        {progress}%
-                      </span>
-                    ) : null}
+                    <span className="text-center text-[9px] font-medium leading-tight text-muted-foreground">
+                      Reading PDF…
+                    </span>
                   </div>
                 )}
                 {isError && (
@@ -222,6 +232,14 @@ const AttachmentUI: FC = () => {
                     <AlertCircleIcon className="size-5 text-destructive" />
                   </div>
                 )}
+                {isReady && (
+                  <div
+                    aria-hidden="true"
+                    className="aui-attachment-tile-ready absolute right-0.5 bottom-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm"
+                  >
+                    <CheckIcon className="size-2.5" strokeWidth={3} />
+                  </div>
+                )}
               </div>
             </TooltipTrigger>
           </AttachmentPreviewDialog>
@@ -229,8 +247,16 @@ const AttachmentUI: FC = () => {
         </AttachmentPrimitive.Root>
         <TooltipContent side="top">
           <AttachmentPrimitive.Name />
-          {isError ? (
-            <p className="aui-attachment-error-message">Upload failed</p>
+          {isUploading ? (
+            <p className="text-muted-foreground">Reading PDF…</p>
+          ) : null}
+          {isReady ? (
+            <p className="text-muted-foreground">Ready to send</p>
+          ) : null}
+          {isError && errorMessage ? (
+            <p className="aui-attachment-error-message text-destructive">
+              {errorMessage}
+            </p>
           ) : null}
         </TooltipContent>
       </Tooltip>
