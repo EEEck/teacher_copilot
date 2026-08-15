@@ -101,6 +101,44 @@ def test_upload_material_to_scratch_inventory(
     assert "image_base64" not in prov
 
 
+def test_promote_skips_debug_ocr_artifacts(tmp_path):
+    from app.services.materials_scratch import (
+        SessionMaterialEntry,
+        promote_scratch_material,
+    )
+
+    scratch = tmp_path / "scratch" / "mat_debug"
+    scratch.mkdir(parents=True)
+    (scratch / "document.agent.md").write_text("# ok\n", encoding="utf-8")
+    (scratch / "summary.md").write_text("# summary\n", encoding="utf-8")
+    (scratch / "source.pdf").write_bytes(b"%PDF")
+    (scratch / "raw_response.json").write_text("{}\n", encoding="utf-8")
+    (scratch / "document_annotation.json").write_text("{}\n", encoding="utf-8")
+    entry = SessionMaterialEntry(
+        material_id="mat_debug",
+        arm="textbook",
+        title="t",
+        summary="s",
+        scratch_path=str(scratch),
+    )
+    dest = (
+        tmp_path
+        / "wiki"
+        / "wiki"
+        / "classes"
+        / "c1"
+        / "materials"
+        / "textbooks"
+        / "mat_debug"
+    )
+    promote_scratch_material(wiki_root=tmp_path / "wiki", class_id="c1", entry=entry)
+    assert (dest / "document.agent.md").is_file()
+    assert (dest / "summary.md").is_file()
+    assert not (dest / "raw_response.json").exists()
+    assert not (dest / "document_annotation.json").exists()
+    assert (scratch / "raw_response.json").is_file()
+
+
 def test_save_promotes_materials_to_wiki(
     client: TestClient, mock_ocr, wiki
 ):

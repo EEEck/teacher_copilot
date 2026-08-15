@@ -2574,7 +2574,8 @@ async def plan_upload_material(
             raise ValueError("Uploaded PDF is empty")
         if len(pdf_bytes) > 40 * 1024 * 1024:
             raise ValueError("PDF exceeds 40 MB limit")
-        return plan_svc.upload_material(
+        return await asyncio.to_thread(
+            plan_svc.upload_material,
             class_id,
             session_id,
             pdf_bytes=pdf_bytes,

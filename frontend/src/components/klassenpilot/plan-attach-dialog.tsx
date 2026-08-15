@@ -196,7 +196,8 @@ function PlanAttachDialog({
         <DialogHeader>
           <DialogTitle>Attach class material</DialogTitle>
           <DialogDescription>
-            Choose Textbook or Personal, then drop or browse a PDF. Upload
+            Choose Textbook or Personal, then drop or browse a PDF. PDF only —
+            export from Word, PowerPoint, or a tablet app if needed. Upload
             closes this dialog; reading continues on a composer tile.
           </DialogDescription>
         </DialogHeader>
@@ -222,7 +223,7 @@ function PlanAttachDialog({
               Drag a PDF here
             </p>
             <p className="text-xs text-muted-foreground">
-              or browse from your computer
+              PDF only — or browse from your computer
             </p>
             <Button
               type="button"

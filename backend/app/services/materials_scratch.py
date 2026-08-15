@@ -273,6 +273,14 @@ def arm_dir_name(arm: MaterialArmName) -> str:
     return "textbooks" if arm == "textbook" else "personal"
 
 
+# Lab/debug dumps — keep in session scratch, never copy into durable wiki.
+_PROMOTE_SKIP_NAMES = frozenset({"raw_response.json", "document_annotation.json"})
+
+
+def _promote_ignore(_directory: str, names: list[str]) -> list[str]:
+    return [name for name in names if name in _PROMOTE_SKIP_NAMES]
+
+
 def wiki_material_dir(wiki_root: Path, class_id: str, arm: MaterialArmName, material_id: str) -> Path:
     return (
         Path(wiki_root)
@@ -299,7 +307,7 @@ def promote_scratch_material(
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         shutil.rmtree(dest)
-    shutil.copytree(src, dest)
+    shutil.copytree(src, dest, ignore=_promote_ignore)
     # Prefer canonical source.pdf name after promote.
     upload = dest / "upload.pdf"
     source = dest / "source.pdf"

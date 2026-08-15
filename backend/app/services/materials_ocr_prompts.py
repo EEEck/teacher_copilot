@@ -5,8 +5,8 @@ Mistral:
 - Bbox notes are steered by schema ``Field(description=...)``.
 
 Prompts are assembled from class wiki context (curriculum profile, class
-label, thin teacher locale) plus an optional subject overlay. Chemie figure
-vocabulary is an overlay keyed by subject, not the default path.
+label, thin teacher locale) plus a subject overlay. STEM Fächer have a small figure library;
+other subjects use a generic prior. Overlays name figure *kinds*, not a chapter.
 
 Keep the bbox schema small: agent-friendly figure notes, not lesson-planning
 policy. Importance / HITL come later.
@@ -27,6 +27,13 @@ _SUBJECT_LABELS = {
     "chemistry": "Chemie",
     "physik": "Physik",
     "physics": "Physik",
+    "biologie": "Biologie",
+    "biology": "Biologie",
+    "mathe": "Mathematik",
+    "mathematik": "Mathematik",
+    "math": "Mathematik",
+    "mathematics": "Mathematik",
+    "informatik": "Informatik",
 }
 
 _STATE_LABELS = {
@@ -58,30 +65,51 @@ _PLANNING_LANG_RE = re.compile(
     re.I,
 )
 
-# Subject-specific figure priors. Unknown subjects get no overlay.
+_GENERIC_OVERLAY = (
+    "Typical figures: diagrams, photos, tables, charts, handwritten notes, "
+    "and inserted images. Describe what is literally visible; do not invent."
+)
+
+# STEM figure library for now. Other Fächer (Latin, ESL, …) use _GENERIC_OVERLAY.
 _SUBJECT_OVERLAYS: dict[str, str] = {
     "chemie": (
-        "Typical figures: Lewis/structure formulas (Valenzstrichformeln), "
-        "molecular-orbital / energy-level diagrams (bonding/antibonding), "
-        "bond-energy vs distance curves, molecule models (ball-and-stick / space-filling), "
-        "apparatus, reaction equations. Colored orbital clouds are NOT Venn diagrams. "
-        "Describe what is literally visible; do not invent."
+        "Typical figures: reaction equations, structure formulas, particle or "
+        "atom models, lab apparatus, energy or process diagrams, tables, and "
+        "photos of experiments. Describe what is literally visible; do not invent."
     ),
     "physik": (
-        "Typical figures: circuit diagrams, force / free-body diagrams, energy and "
-        "motion graphs, wave / optics sketches, experimental setups, formulas and "
+        "Typical figures: circuit diagrams, force or motion sketches, energy "
+        "graphs, wave or optics diagrams, experimental setups, formulas, and "
         "data tables. Describe what is literally visible; do not invent."
+    ),
+    "biologie": (
+        "Typical figures: organism or cell diagrams, life-cycle sketches, "
+        "experimental setups, tables, and photos. Describe what is literally "
+        "visible; do not invent."
+    ),
+    "mathe": (
+        "Typical figures: worked examples, geometric sketches, graphs, number "
+        "lines, formulas, and tables. Describe what is literally visible; "
+        "do not invent."
     ),
 }
 
 _FIGURE_TYPE_EXAMPLES: dict[str, str] = {
     "chemie": (
-        "orbital_diagram, energy_curve, molecule_model, structure_formula, "
-        "apparatus, photo, comic, chart, decorative, other"
+        "structure_formula, reaction_equation, particle_model, apparatus, "
+        "energy_diagram, table, photo, chart, decorative, other"
     ),
     "physik": (
-        "circuit_diagram, free_body, energy_graph, wave_sketch, apparatus, "
+        "circuit_diagram, force_diagram, energy_graph, wave_sketch, apparatus, "
         "formula, photo, chart, decorative, other"
+    ),
+    "biologie": (
+        "organism_diagram, cell_diagram, life_cycle, apparatus, table, "
+        "photo, chart, decorative, other"
+    ),
+    "mathe": (
+        "worked_example, geometric_sketch, graph, number_line, formula, "
+        "table, decorative, other"
     ),
 }
 _DEFAULT_FIGURE_TYPES = "diagram, photo, table, chart, handwriting, decorative, other"
@@ -108,6 +136,12 @@ class MaterialsOcrContext:
             return "chemie"
         if key in {"physics"}:
             return "physik"
+        if key in {"biology"}:
+            return "biologie"
+        if key in {"math", "mathematics", "mathematik"}:
+            return "mathe"
+        if key in {"informatics", "cs"}:
+            return "informatik"
         return key
 
 
@@ -177,13 +211,20 @@ def _school_line(ctx: MaterialsOcrContext) -> str:
     return ", ".join(parts) if parts else "(unspecified)"
 
 
+def _overlay_for(ctx: MaterialsOcrContext) -> tuple[str, str]:
+    key = ctx.subject_key
+    if key in _SUBJECT_OVERLAYS:
+        return key, _SUBJECT_OVERLAYS[key]
+    return "generic", _GENERIC_OVERLAY
+
+
 def _material_kind_block(ctx: MaterialsOcrContext) -> str:
     if ctx.arm == "textbook":
         return (
             "MATERIAL KIND (textbook)\n"
-            "Excerpt from a textbook / publisher worksheet for this class — not "
-            "fiction or an unrelated language book. Expect chapter structure and "
-            "publisher figures. The file may be a PDF export (scan, photo, or slides)."
+            "Excerpt from a textbook or publisher worksheet for this class. "
+            "Expect chapter structure and publisher figures. The file may be a "
+            "PDF export (scan, photo, or slides)."
         )
     return (
         "MATERIAL KIND (personal)\n"
@@ -210,9 +251,8 @@ def build_document_annotation_prompt(ctx: MaterialsOcrContext) -> str:
     if ctx.working_language:
         lines.append(f"- Teacher planning/feedback language: {ctx.working_language}")
     lines.extend(["", _material_kind_block(ctx)])
-    overlay = _SUBJECT_OVERLAYS.get(ctx.subject_key)
-    if overlay:
-        lines.extend(["", f"SUBJECT OVERLAY ({ctx.subject_key})", overlay])
+    overlay_key, overlay = _overlay_for(ctx)
+    lines.extend(["", f"SUBJECT OVERLAY ({overlay_key})", overlay])
     lines.extend(
         [
             "",
@@ -255,9 +295,8 @@ def build_teaching_image_note_model(
 ) -> type[BaseModel]:
     """Simple bbox schema (close to Mistral's cookbook Image example)."""
     background = build_document_annotation_prompt(ctx)
-    type_examples = _FIGURE_TYPE_EXAMPLES.get(
-        ctx.subject_key, _DEFAULT_FIGURE_TYPES
-    )
+    overlay_key, _ = _overlay_for(ctx)
+    type_examples = _FIGURE_TYPE_EXAMPLES.get(overlay_key, _DEFAULT_FIGURE_TYPES)
 
     class FigureNote(BaseModel):
         image_type: str = Field(
