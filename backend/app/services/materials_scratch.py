@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from app.config import Settings, get_settings
 from app.services.materials_ocr import run_mistral_ocr_on_pdf
-from app.services.materials_ocr_prompts import SubjectId
+from app.services.materials_ocr_prompts import MaterialsOcrContext
 
 MaterialArmName = Literal["textbook", "personal"]
 
@@ -75,20 +75,6 @@ def material_scratch_dir(
     return scratch_root(settings) / session_id / material_id
 
 
-def _subject_id(subject: str) -> SubjectId:
-    return "chemie" if subject.strip().lower() in {"chemie", "chemistry"} else "general"
-
-
-def _grade_hint(grade: str | None, branch: str | None) -> str:
-    grade = (grade or "").strip()
-    branch = (branch or "").strip()
-    if grade and branch:
-        return f"Gymnasium, Jahrgangsstufe {grade} ({branch})"
-    if grade:
-        return f"Gymnasium, etwa Jahrgangsstufe {grade}"
-    return "Gymnasium, etwa Jahrgangsstufe 9–10 (NTG)"
-
-
 def _title_from_summary_md(summary_md: str) -> str:
     for line in summary_md.splitlines():
         if line.lower().startswith("- chapter/topic:"):
@@ -134,9 +120,7 @@ def ocr_pdf_to_scratch(
     session_id: str,
     class_id: str,
     arm: MaterialArmName,
-    subject: str,
-    grade: str | None = None,
-    branch: str | None = None,
+    ocr_context: MaterialsOcrContext | None = None,
     page_range: str | None = None,
     original_page_numbers: list[int] | None = None,
     settings: Settings | None = None,
@@ -165,9 +149,8 @@ def ocr_pdf_to_scratch(
         original_page_numbers=original_page_numbers,
         page_range=page_range,
         settings=settings,
-        subject=_subject_id(subject),
-        arm=arm,  # type: ignore[arg-type]
-        grade_hint=_grade_hint(grade, branch),
+        ocr_context=ocr_context or MaterialsOcrContext(arm=arm),
+        arm=arm,
         material_id=material_id,
         session_id=session_id,
         copy_source_pdf=True,

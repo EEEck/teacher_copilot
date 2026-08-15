@@ -47,7 +47,6 @@ def test_live_mistral_ocr_packages_esl_page_slice(tmp_path: Path) -> None:
         FIXTURE_PDF,
         out_dir=tmp_path / "mistral_ocr",
         original_page_numbers=[9, 10, 11],
-        subject="general",
         arm="textbook",
     )
 

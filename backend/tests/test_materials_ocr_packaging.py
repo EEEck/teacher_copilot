@@ -193,7 +193,6 @@ def test_sota_ocr_process_kwargs_include_ocr4_flags() -> None:
     kwargs = build_mistral_ocr_process_kwargs(
         document_url="data:application/pdf;base64,AA==",
         model="mistral-ocr-latest",
-        subject="chemie",
         arm="textbook",
     )
     assert kwargs["include_image_base64"] is True

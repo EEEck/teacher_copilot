@@ -28,7 +28,7 @@ from app.services.materials_ocr_packaging import (
 from app.services.materials_ocr_prompts import (
     MaterialArm,
     MaterialsDocumentAnnotation,
-    SubjectId,
+    MaterialsOcrContext,
     build_document_annotation_prompt,
     build_teaching_image_note_model,
 )
@@ -98,19 +98,16 @@ def build_mistral_ocr_process_kwargs(
     model: str,
     include_bbox_annotations: bool = True,
     include_document_annotation: bool = True,
-    subject: SubjectId = "chemie",
+    ocr_context: MaterialsOcrContext | None = None,
     arm: MaterialArm = "textbook",
-    grade_hint: str | None = None,
 ) -> dict[str, Any]:
     """OCR 4 process kwargs (testable without a live call).
 
-    Subject/arm context is injected into:
+    Class-wiki context is injected into:
     - ``document_annotation_prompt`` (document-level schema only), and
     - bbox schema Field descriptions (what actually steers figure notes).
     """
-    prompt_kwargs: dict[str, Any] = {"subject": subject, "arm": arm}
-    if grade_hint:
-        prompt_kwargs["grade_hint"] = grade_hint
+    ctx = ocr_context or MaterialsOcrContext(arm=arm)
     kwargs: dict[str, Any] = {
         "model": model,
         "document": {
@@ -129,17 +126,13 @@ def build_mistral_ocr_process_kwargs(
         "image_limit": 40,
     }
     if include_bbox_annotations:
-        note_model = build_teaching_image_note_model(
-            subject=subject, arm=arm, grade_hint=grade_hint
-        )
+        note_model = build_teaching_image_note_model(ctx)
         kwargs["bbox_annotation_format"] = _mistral_response_format(note_model)
     if include_document_annotation:
         kwargs["document_annotation_format"] = _mistral_response_format(
             MaterialsDocumentAnnotation
         )
-        kwargs["document_annotation_prompt"] = build_document_annotation_prompt(
-            **prompt_kwargs
-        )
+        kwargs["document_annotation_prompt"] = build_document_annotation_prompt(ctx)
     return kwargs
 
 
@@ -216,9 +209,8 @@ def run_mistral_ocr_on_pdf(
     settings: Settings | None = None,
     include_bbox_annotations: bool = True,
     include_document_annotation: bool = True,
-    subject: SubjectId = "chemie",
+    ocr_context: MaterialsOcrContext | None = None,
     arm: MaterialArm = "textbook",
-    grade_hint: str | None = None,
     inject_vlm_image_notes: bool = True,
     material_id: str | None = None,
     session_id: str | None = None,
@@ -265,9 +257,8 @@ def run_mistral_ocr_on_pdf(
             model=settings.mistral_ocr_model,
             include_bbox_annotations=include_bbox_annotations,
             include_document_annotation=include_document_annotation,
-            subject=subject,
+            ocr_context=ocr_context,
             arm=arm,
-            grade_hint=grade_hint,
         )
         response = client.ocr.process(**kwargs)
     finally:

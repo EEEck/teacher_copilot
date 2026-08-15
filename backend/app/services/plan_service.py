@@ -24,6 +24,7 @@ from app.schemas.api import (
     SavePlanRequest,
     SavePlanResponse,
 )
+from app.services.materials_ocr_prompts import materials_ocr_context_from_wiki
 from app.services.materials_scratch import (
     MaterialArmName,
     attach_prebuilt_package,
@@ -156,17 +157,14 @@ class PlanService:
             from app.teacher_agent.planning_state import PlanRuntime
 
             session.runtime = PlanRuntime()
-        class_meta = self.wiki.get_class(class_id)
-        curriculum = self.wiki.get_curriculum_profile(class_id)
+        ocr_context = materials_ocr_context_from_wiki(self.wiki, class_id, arm)
         entry = ocr_pdf_to_scratch(
             pdf_bytes=pdf_bytes,
             filename=filename,
             session_id=session_id,
             class_id=class_id,
             arm=arm,
-            subject=class_meta.subject,
-            grade=curriculum.grade,
-            branch=curriculum.branch,
+            ocr_context=ocr_context,
             page_range=page_range,
             ocr_runner=ocr_runner,
         )
