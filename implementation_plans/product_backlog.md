@@ -189,6 +189,27 @@ teacher-approved.
 OCR primary is **Mistral OCR 4**. Backups are **not shipped**: OpenAI vision/VLM
 is a code skeleton (`NotImplementedError`); Docling is a later optional path.
 
+### Approved next program: class course network (planned, not shipped)
+
+The teacher-feedback concept-map direction has passed product design and moved
+out of the parking lot. The MVP is a class-owned Chemie 8/9 NTG course network
+with one `Lernbaustein` node type, standalone reviewed material ingestion,
+reviewed material/graph enrichment, and automatic weekly planning retrieval and
+lesson references. It does not add cross-class graph reuse, a question bank,
+Kanban, vector search, or a graph database.
+
+- Approved product contract:
+  [`2026-08-17-class-course-network-design.md`](../docs/superpowers/specs/2026-08-17-class-course-network-design.md)
+- Delivery/PR map:
+  [`2026-08-18-class-course-network-program.md`](../docs/superpowers/plans/2026-08-18-class-course-network-program.md)
+- Detailed execution plans: foundation/adoption, reviewed editing,
+  materials/mapping, and planner/lesson integration in
+  [`docs/superpowers/plans/`](../docs/superpowers/plans/)
+
+Track progress through the A1-A3, B1-B2, C1-C3, and D1-D3 PR boundaries in the
+delivery program. Move individual capabilities into Shipped only when their PR
+and focused documentation updates merge.
+
 ### Shipped (in-plan slice)
 
 - Plan-session PDF upload (Textbook / Personal), optimistic composer tile,
@@ -490,12 +511,6 @@ teacher-value or engineering trigger.
   compact profile pages through approved flows, and explicit new-class sparse
   memory handling (one targeted setup question at a time). Displaced when v1.2
   became scan/upload processing.
-- **Class concept map / curriculum graph.** Small class-scoped concept graph
-  (concepts, skills, vocabulary, misconceptions, prerequisites, assessment
-  targets) with a backend graph-patch validator and teacher-approved writes.
-  Design inspiration from `ref_repos/AutoSci` (schema/validator discipline, not
-  the research runtime) is in Git history. Heavy and speculative — needs a clear
-  planning/assessment payoff before promotion.
 - **Names-first student display (beta UX), IDs stay the internal key.** Surface
   student *names* on all teacher-facing surfaces while wiki entities stay
   `students/S-###.md` keyed — a display/render layer, reversible for real

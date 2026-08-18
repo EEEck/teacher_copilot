@@ -205,6 +205,13 @@ is Mistral only — OpenAI vision/VLM and Docling are **not** working backups
 
 Remaining bets:
 
+- approved class course-network program for Chemie 8/9 NTG: class-owned
+  `Lernbausteine`, reviewed curriculum adoption, standalone reviewed materials,
+  graph/material enrichment, and automatic use in weekly planning. Product
+  contract and PR map live in the
+  [course-network design](superpowers/specs/2026-08-17-class-course-network-design.md)
+  and [delivery program](superpowers/plans/2026-08-18-class-course-network-program.md);
+  this remains planned until the individual slices merge
 - class wiki factory
 - guided class setup and personalization
 - teacher preference setup
