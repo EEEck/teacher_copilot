@@ -107,6 +107,10 @@ refresh resumes with plain reply + turn flags).
 
 Discuss dock is **chrome only**; chat behavior is the shared runtime + Thread.
 
+Plan composer can attach a **PDF class material** (Textbook / Personal). OCR
+runs in the background; Send stays gated until the tile leaves Reading. See
+`lib/workflow-attachment-adapters.ts` and `composer-attachment-controls.tsx`.
+
 ## Class home dashboard
 
 [`class-home-client.tsx`](src/app/classes/[classId]/class-home-client.tsx) is a light

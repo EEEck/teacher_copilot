@@ -278,6 +278,7 @@ trace bundle sections.
 | Layer isolation — 10c mock | `10c_global`, `10c_global_class`, `10c_global_class_subject` | Same + `ESL.md`, no chemie leakage |
 | Workflow startup — 9b | `9b_plan_startup`, `9b_ingest_startup` | Session-open `prompt_assembly` |
 | Chat stub/live — 9b | `9b_plan_fckw_turn1`, `9b_plan_redox_lesson_lookup`, `9b_plan_fckw_turn2_review`, `9b_ingest_turn2_collect` | Message → tools → trace → (live) GEval judge |
+| Chat live — 9b materials | `9b_plan_materials_embed_mo_asset` | Seeded OCR package; materials tools + `assets/img-` embed. Stub CI skips seeded-material goldens; live: `RUN_LIVE_AGENT_EVALS=1` |
 
 Fixture wiki overlay: `tests/fixtures/eval_wiki/` (`engl_10c_2026_27`, `ESL.md`).
 

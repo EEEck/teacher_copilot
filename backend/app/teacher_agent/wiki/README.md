@@ -19,6 +19,7 @@ Deterministic markdown wiki for KlassenPilot: compile lesson diaries, human-in-t
 | `context_packs.py` | Agent prompt context bundles and read-only workflow query packs |
 | `subject_frameworks.py` | Shared subject teaching-framework pages (immutable guidance, not write targets) |
 | `trusted_sources.py` | Trusted-source library: class allow-list, compact source TOC/profile, and list/search/read access |
+| `materials.py` | Class materials registry: session scratch ∪ promoted packages; list/search/read (separate from `wiki/sources`) |
 | `indexing.py` | `log.md`, `index.md` rebuild |
 | `store.py` | `WikiStore` facade delegating to modules |
 
@@ -27,7 +28,8 @@ Deterministic markdown wiki for KlassenPilot: compile lesson diaries, human-in-t
 ## Boundaries
 
 - **This package** — trusted writes after teacher approval, deterministic compile, index/log maintenance.
-- **`tools.py`** — read-only agent tools (`recall_lesson`, `find_in_memory`, `read_memory_page`).
+- **`tools.py`** — read-only agent tools (`recall_lesson`, `find_in_memory`,
+  `read_memory_page`, plus plan-session `list/search/read_class_material`).
 - **Dashboard** — uses REST (`get_timeline`, `get_snapshot`); does not require agent tools.
 
 Agents should read `index.md` first (via prompt context or tools), then open specific pages.

@@ -8,7 +8,9 @@ larger than a single page helper in `lib/`.
 
 ### `workflow-drafts/`
 
-Backend-backed Plan and Update Memory chat.
+Backend-backed Plan and Update Memory chat. Plan composer can attach a PDF
+class material (Textbook/Personal); OCR and Send-gating live in
+`lib/workflow-attachment-adapters.ts`.
 
 | File | Role |
 |------|------|

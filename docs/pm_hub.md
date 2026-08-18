@@ -56,7 +56,10 @@ Shipped teacher workflows:
 - **Update memory**: chat with the copilot, produce lesson-results markdown,
   review proposed wiki file changes, and save only teacher-approved updates.
 - **Create lesson plan**: chat with the copilot, refine a plan markdown artifact,
-  review the plan-file diff, and save it to a lesson date.
+  review the plan-file diff, and save it to a lesson date. Plan chat can attach a
+  **PDF class material** (Textbook or Personal): Mistral OCR 4 writes a session
+  scratch package; the planner cites/embeds cutouts; durable wiki promotion
+  happens only on plan save. Not a year-start materials library yet.
 - **Timeline/detail shortcuts**: one status chip per lesson — **Upcoming**
   (future plan), **Add results** (plan due / past), **Done** (results logged).
   Matching row CTAs open Update Memory (“Add results” / “Correct with agent”).
@@ -160,7 +163,7 @@ Core implementation shape:
 | Product now has local beta isolation but no hosted deployment | First external testers need persistence, HTTPS, backups, and operator recovery | AWS beta track: Amplify frontend, ECS/Fargate backend, EFS workspaces, Postgres telemetry, S3 exports |
 | Auth is beta-grade invite-code auth | Good for first testers, not proper production identity, account recovery, or school roles | Keep `RequestIdentity`; later swap invite-code provider for Cognito/Auth.js/Clerk/Auth0/OAuth |
 | Evidence is not visible enough | Trust depends on inspecting sources | Source panel for class memory, uploads, and trusted web |
-| New classes need manual memory building | Product is strongest after memory exists | Class wiki factory and material ingestion |
+| New classes need manual memory building | Product is strongest after memory exists | Class wiki factory (remaining). In-plan PDF materials already ship as a citation layer; year-start library / chapterize is Phase 3 |
 | Input capture still requires web workflow | Teachers often have seconds after class | Voice memo / Telegram capture after core value is validated |
 
 ## Product Roadmap Themes
@@ -193,16 +196,25 @@ Primary bets:
 
 Make KlassenPilot useful on day one, not only after weeks of logged lessons.
 
-Primary bets:
+**Shipped (in-plan materials slice):** PDF textbook/personal upload in Create
+lesson plan, Mistral OCR 4 → session scratch → materials tools/cite/embed →
+promote on plan save. OCR prompts assemble from class wiki + a STEM figure
+library (Chemie, Physik, Biologie, Mathe) with a generic fallback. OCR runtime
+is Mistral only — OpenAI vision/VLM and Docling are **not** working backups
+(VLM is a code skeleton; Docling is a later optional path).
+
+Remaining bets:
 
 - class wiki factory
 - guided class setup and personalization
 - teacher preference setup
-- material upload and source library
+- year-start source library / chapterize (Phase 3 of the materials epic)
+- OCR backups: OpenAI vision/VLM (skeleton only), Docling later
+- native Word/PPT/photo ingest, page-range UI, background OCR jobs, scratch GC
 - inherited subject/grade setup: shared Chemistry framework plus a bounded
   teacher-adjustment page composed at runtime
-- Mistral OCR 4 material upload first; Docling later backup for digital PDFs
 - teacher-approved import from notes, worksheets, plans, and curriculum docs
+  into durable memory (still not automatic from OCR)
 
 ### v1.3 - Expand The Agent's Knowledge Safely
 

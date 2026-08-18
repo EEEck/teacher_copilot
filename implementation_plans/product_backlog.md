@@ -111,8 +111,8 @@ reason to expand the product surface.
 | P2 | **Operator beta runbook + hydrate docs** | Daily report generation, wiki-diff review, tester feedback, backup/export, retention cleanup (CLI/docs-first). Document the single-worker-per-wiki assumption: durable drafts + executive JSON survive restart, but in-memory `deps.py` session caches are not multi-worker safe without sticky routing or always-hydrate-from-draft-store. |
 | P2 | **Beta feedback survey** | Short per-session / weekly tester survey linked to `tester_id` (and optionally session ids): did the wiki capture the right teaching facts, did the next plan improve because of prior memory, what felt wrong/stale/missing, how much editing was needed, did approval feel trustworthy. Lets the operator compare survey comments against wiki diffs and transcripts — measures whether memory is improving, not just whether the UI works. |
 
-Explicitly deferred: class materials upload / OCR (v1.2 theme; Mistral OCR 4
-first, Docling later backup — see
+Explicitly deferred from this v1.1 slice: year-start materials library /
+chapterize (v1.2 Phase 3 — in-plan PDF upload already shipped; see
 [`v1.2_class_materials_epic.md`](v1.2_class_materials_epic.md)), broader
 Discuss/Class Brief verification packs beyond the advisory ones above, and
 class-home proactive expansion (v1.5). They do not block the beta loop.
@@ -179,27 +179,45 @@ Validation:
 **Theme:** Turn photographed or scanned teacher material into reviewable,
 structured, teacher-approved input.
 
-**What it enables:** A teacher can upload a scan/photo/PDF (worksheet, board
-photo, handwritten notes, prior exam, curriculum doc) and get OCR'd, structured
-content into the class — as source-library material or a draft memory/plan
-input — without retyping. All writes stay teacher-approved.
+**What it enables:** A teacher can attach a PDF (worksheet, textbook pages,
+board photo exported to PDF, handwritten notes, prior exam) in Create lesson
+plan, get OCR'd citable content without retyping, and promote it into the class
+on save. Year-start library browse is still remaining. All durable writes stay
+teacher-approved.
 
-**Living epic:** [`v1.2_class_materials_epic.md`](v1.2_class_materials_epic.md)
-(status board, locked decisions, Option 1 architecture). OCR primary for the
-first slice is **Mistral OCR 4**; Docling stays a later optional backup for
-born-digital PDF / offline / self-hosted paths — not co-equal in the first
-slice.
+**Living epic:** [`v1.2_class_materials_epic.md`](v1.2_class_materials_epic.md).
+OCR primary is **Mistral OCR 4**. Backups are **not shipped**: OpenAI vision/VLM
+is a code skeleton (`NotImplementedError`); Docling is a later optional path.
 
-Primary items:
+### Shipped (in-plan slice)
+
+- Plan-session PDF upload (Textbook / Personal), optimistic composer tile,
+  Send gated until OCR finishes. PDF only (export from Word/PPT/tablet).
+- Mistral OCR 4 → session scratch (outside wiki). Upload OCR runs off the
+  FastAPI event loop.
+- Compact materials TOC + `list/search/read_class_material`; cite
+  `Material: id`; embed `assets/img-*` / `tbl-*.jpg`.
+- Promote on plan save into `materials/{textbooks|personal}/` +
+  `lessons/{date}/materials.json`. Debug OCR dumps stay in scratch.
+- OCR annotation prompts assemble from class wiki (subject/grade/school) plus a
+  small STEM figure library (Chemie, Physik, Biologie, Mathe). Unknown Fächer
+  get a generic overlay. Not a per-upload prompt generator.
+
+### Remaining
 
 | Item | Engineering notes |
 |---|---|
-| **Scan/photo OCR ingestion** | Bounded extraction via **Mistral OCR 4** (external trial done). Returns structured markdown + source spans + artifact trio; never a direct wiki write. In-plan upload first (see epic). |
-| **Docling/PDF ingestion (later backup)** | Optional later path for born-digital PDF/DOCX/PPTX or self-hosted/offline extraction; preserve source pages/sections. Not first-slice runtime. |
-| **Material upload library** | Store teacher-provided notes, prior plans, worksheets, and curriculum docs as source material with provenance (`materials/{textbooks\|personal}/`, separate from curriculum `wiki/sources`). |
-| **Extraction review** | Show source pages/sections and the extracted structure before any write; the teacher edits/approves. Preserve citations back to the upload. |
-| **Teacher-approved import to wiki** | Distinguish one-time planning context, source-library material, and durable class memory when importing extracted content. |
-
+| **OpenAI vision / VLM OCR backup** | Skeleton in `materials_ocr.py` (`engine="openai_vision"`). Raises `NotImplementedError`. Not wired to upload. Rasterize PDF pages → OpenAI image inputs → same package shape. |
+| **Native Word / PPT / photo ingest** | PDF only today. Teacher exports first. |
+| **Page-range picker UI** | API `page_range` exists; attach dialog does not send it. |
+| **Background OCR jobs** | Upload still waits on OCR. `asyncio.to_thread` only unblocks the event loop. |
+| **Keep-in-materials without plan save** | Promotion is save-only. |
+| **Year-start material library** | Browse promoted textbooks/personal; “use chapter 1”; flag plan-scoped vs standing library entries. |
+| **Textbook chapterize / Batch** | Split large books; Mistral Batch. |
+| **Scratch GC / TTL** | Expire abandoned plan-scratch OCR packages. |
+| **Docling/PDF ingestion (later backup)** | Born-digital PDF/DOCX/PPTX or self-hosted/offline extraction. Not first-slice runtime. |
+| **Extraction review UI** | Teacher-facing page/section review before promote (today: plan chat + save). |
+| **Teacher-approved import to wiki memory** | OCR never auto-writes MemV4 / course_state / diary. |
 
 Non-goals:
 
@@ -209,10 +227,14 @@ Non-goals:
 - Vector database as the default retrieval path unless deterministic retrieval
   shows measured limits.
 
-Validation:
+Validation (in-plan slice):
 
-- A teacher uploads a scanned worksheet or prior exam and gets a cited, reviewed
-  structured import into the class in a few minutes, with no retyping.
+- Offline unit tests: OCR prompt assembly (STEM + generic), packaging, upload →
+  scratch, promote-skip-debug, save → wiki, asset URLs, send-gate.
+- HITL browser: new plan → PDF attach → ask about content; Send blocked while
+  reading.
+- Opt-in live Mistral: `RUN_LIVE_MISTRAL_OCR=1`. Live golden
+  `9b_plan_materials_embed_mo_asset`.
 
 ---
 

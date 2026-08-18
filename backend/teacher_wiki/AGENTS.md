@@ -78,6 +78,9 @@ wiki/classes/{class_id}/
   lessons/{YYYY-MM-DD}/
     lesson_results.md
     lesson_plan.md
+    materials.json      # lesson → promoted material_ids (plan save)
+  materials/
+    textbooks|personal/{material_id}/  # OCR citation layer, not MemV4
 ```
 
 ## Lesson results sections (required)
@@ -117,7 +120,10 @@ wiki/classes/{class_id}/
 
 1. Read `index.md` -> open 2-5 relevant pages such as roll-ups, compact memory, lessons, or students.
 2. Synthesize with citations to wiki paths.
-3. Do not write wiki files unless the teacher saves via HITL commit or explicit revise API.
+3. Do not write wiki files unless the teacher saves via HITL commit, plan save
+   (which may promote OCR packages into `materials/`), or explicit revise API.
+   Class materials are a citation/source layer; OCR never writes course_state,
+   diary, or compact memory pages.
 
 ### Lint
 

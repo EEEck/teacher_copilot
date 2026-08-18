@@ -59,10 +59,18 @@ Uploaded textbook/personal PDFs are a **citation/source layer**, separate from
 trusted curriculum sources (`wiki/sources`) and from durable class memory
 (MemV4 / course_state / diary).
 
-- Upload is in-plan only for this slice. OCR writes a package to **session
-  scratch** (outside the wiki index). Durable promotion happens **only on plan
-  save**, into `wiki/classes/{class_id}/materials/{textbooks|personal}/{id}/`,
-  with lesson linkage via `lessons/{date}/materials.json` (`material_ids` only).
+- Upload is in-plan only for this slice, **PDF only** (export from Word/PPT/
+  tablet). OCR writes a package to **session scratch** (outside the wiki
+  index). Durable promotion happens **only on plan save**, into
+  `wiki/classes/{class_id}/materials/{textbooks|personal}/{id}/`, with lesson
+  linkage via `lessons/{date}/materials.json` (`material_ids` only). Debug OCR
+  dumps (`raw_response.json`, `document_annotation.json`) stay in scratch.
+- OCR annotation prompts are **assembled from class wiki** (curriculum
+  profile, class label, thin teacher locale) plus a small STEM figure library
+  (Chemie, Physik, Biologie, Mathe). Unknown Fächer get a generic overlay.
+  Prompts are not generated per PDF and must not hardcode a chapter (bonding,
+  MO, Lewis, etc.). English instruction language; German on the pages is a
+  fact (`predominantly German`), not a prompt locale.
 - Plan chat receives a compact materials TOC from `summary.md` (char-capped;
   never merged into the trusted-source TOC). Full OCR markdown and images are
   progressive: `list_class_materials` / `search_class_materials` /
@@ -76,6 +84,9 @@ trusted curriculum sources (`wiki/sources`) and from durable class memory
 - PDF `source.pdf` is reference only. Search/ingest uses MD + summary. Table HTML
   may flatten drawings; prefer `assets/tbl-*.jpg` crops when present.
 - Never auto-write course_state, diary, or other curated memory from OCR.
+- Runtime OCR is **Mistral OCR 4 only**. `engine="openai_vision"` /
+  `run_openai_vision_ocr_fallback` is a **skeleton** (`NotImplementedError`)
+  and is not wired to plan upload. Docling/LlamaParse are not in the runtime.
 
 ## Shared Memory-Classification Context Contract
 
@@ -142,7 +153,9 @@ revision/hash metadata during draft and review.
   and revision/hash are present. Client-supplied markdown is legacy fallback,
   not the authoritative write source.
 - Lesson Plan save follows the same revision/hash guard and saves the
-  backend-stored plan markdown for draft-aware clients.
+  backend-stored plan markdown for draft-aware clients. If the session has OCR
+  packages, save also promotes them into `materials/{textbooks|personal}/` and
+  writes `lessons/{date}/materials.json`. Scratch debug JSON is not promoted.
 - Lesson Plan save accepts any non-empty teacher-authored Markdown format.
   Heading conventions are planning-quality guidance and UI hints, never a
   durable-write gate; only revision integrity and severe safety findings may
@@ -955,6 +968,7 @@ Rules:
 - Plan stream final results must be request-local, not stored on shared runner
   state.
 - Plan save must validate `lesson_date` as an ISO date before using it in paths.
+  Materials promotion is part of that same save, not a chat-tool side effect.
 - `WikiStore` facade defaults should match underlying wiki helper defaults.
 - Broader ingest hardening is deferred unless the ingest flow is being changed.
 

@@ -29,7 +29,9 @@ Maintenance notes:
 - Attachments: follow
   [assistant-ui File Attachments](https://www.assistant-ui.com/docs/guides/attachments).
   Plan PDFs OCR via `lib/workflow-attachment-adapters.ts`; Textbook/Personal sits
-  beside composer `+` (`composer-attachment-controls.tsx`).
+  beside composer `+` (`composer-attachment-controls.tsx`). PDF only. The attach
+  dialog closes on pick; the composer tile shows Reading → check/fail; Send is
+  gated until OCR finishes.
 - For future inline chat artifacts, message actions, or richer tool/result
   displays, inspect upstream assistant-ui examples first and adapt the smallest
   useful pattern locally.

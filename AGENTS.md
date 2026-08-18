@@ -13,7 +13,8 @@ two focused workflows:
 - **Update memory**: help a teacher turn a lesson conversation into structured
   lesson results, then apply wiki updates only after teacher approval.
 - **Create lesson plan**: help a teacher draft a practical next lesson or
-  assessment plan grounded in class wiki memory.
+  assessment plan grounded in class wiki memory, with optional in-plan PDF
+  materials (citation/source layer; promote on plan save).
 
 The app uses a Karpathy-style markdown wiki as persistent compiled memory. The
 wiki is not just retrieval storage; it is the agent-maintained working memory
@@ -48,7 +49,8 @@ It is an educational note, not a behavior contract.
   reduce work about work, preserve teacher trust, and avoid expanding surface
   area before the core class-memory loop is valuable.
 - Planning chat is read-only with respect to the wiki. It may update
-  `plan_markdown`, but it must not write wiki files directly.
+  `plan_markdown`, but it must not write wiki files during chat. Durable
+  materials promotion happens only on teacher plan save.
 - Memory update chat may update `diary_markdown`, but curated wiki writes happen
   only through the teacher-approved commit flow.
 - Prefer compiled wiki memory over raw sources.
@@ -83,6 +85,11 @@ It is an educational note, not a behavior contract.
 - API schemas: `backend/app/schemas/api.py`
 - Wiki store facade: `backend/app/teacher_agent/wiki/store.py`
 - Wiki package internals: `backend/app/teacher_agent/wiki/`
+- Class materials registry (scratch ∪ promoted): `backend/app/teacher_agent/wiki/materials.py`
+- Materials OCR / scratch / packaging: `backend/app/services/materials_ocr.py`,
+  `materials_ocr_prompts.py`, `materials_ocr_packaging.py`, `materials_scratch.py`
+  (Mistral only at runtime; OpenAI vision fallback is a `NotImplementedError`
+  skeleton, not a working backup)
 - Seed/dev wiki: `backend/teacher_wiki/`
 - Memory hierarchy and update rules: `docs/memory_hierarchy.md`
 - Backend tests: `backend/tests/`
@@ -111,12 +118,15 @@ Important current contracts:
  base slice; tool outputs are captured behind a `raw_ref` and only compact
  evidence briefs are re-injected (use `get_raw_evidence` for raw on demand).
 - Date-range or assessment requests should use range-aware tools.
-- Generated plans should cite or name the class memory they use.
+- Generated plans should cite or name the class memory they use. In-plan PDF
+  materials are a separate citation layer (`Material: material_id`); OCR never
+  auto-writes MemV4 / course_state / diary.
 - Sparse memory must be reported honestly; ask at most one targeted question.
 - Direct wiki writes are explicit actions, never hidden side effects of chat.
  Durable profile/state writes go only through the teacher-approved
  `POST /classes/{id}/memory/apply` (proposals via `/memory/refresh` and
- `/memory/profile/propose`).
+ `/memory/profile/propose`). Plan save may promote OCR packages into
+ `materials/` — still a teacher save, not a chat tool write.
 - Durable capture during chat is an explicit `remember(target, content,
  speech_act, quote)` tool the model calls when the teacher gives a standing
  instruction. It stages a review-only candidate grounded in the

@@ -239,7 +239,8 @@ Canonical files include:
 - `materials/{textbooks|personal}/{material_id}/` — OCR package (`source.pdf`
   reference, `summary.md`, `document.agent.md`, `assets/`, `provenance.json`).
   Citation/source layer, not MemV4 durable memory. Pre-save packages live in
-  plan-session scratch outside the wiki index.
+  plan-session scratch outside the wiki index. Promote copies the artifact
+  trio only; debug OCR JSON stays in scratch.
 - `course_state.md`
 - `open_loops.md`
 - `misconceptions.md`
@@ -263,18 +264,21 @@ Loaded where:
 - Compact context slices use selected snapshot/rollup data.
 - Tools read canonical pages when the model needs evidence:
   `list_lessons`, `read_lesson`, `read_lesson_range`, `search_memory`,
-  `read_memory_page`.
+  `read_memory_page`. Plan chat also uses `list_class_materials` /
+  `search_class_materials` / `read_class_material` for the citation layer.
 - Memory compaction reads canonical wiki memory as source material.
 
 Updated by:
 
 - Memory update flow (`commit_ingest`) after teacher approval.
-- Save-plan flow for `lesson_plan.md`.
+- Save-plan flow for `lesson_plan.md` and, when the session has OCR packages,
+  promotion into `materials/{textbooks|personal}/` plus
+  `lessons/{date}/materials.json`.
 - Explicit revise/commit actions.
 
 Do not update from:
 
-- normal planning chat
+- normal planning chat (OCR scratch is outside the wiki; promotion is save-only)
 - normal ingest chat before teacher approval
 - profile proposal flow
 

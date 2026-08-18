@@ -61,10 +61,11 @@ The app has five product layers.
    Current core workflows are:
    - update memory from a lesson conversation
    - create a lesson plan from class memory
+   - attach PDF class materials in plan chat (citation/source layer; promote on save)
 
    Near-term workflows include:
    - generate tests/exams
-   - import class materials
+   - year-start materials library / teacher-approved import into durable memory
    - adapt trusted resources
    - draft reports and teaching-admin artifacts
 
@@ -196,7 +197,9 @@ line between class memory and external sources.
 - Timeline/detail shortcuts for adding or correcting lesson results without
   turning Update Memory into a wizard; class-home timeline status chips
   (Upcoming / Add results / Done) with matching CTAs.
-- Create lesson plan with read-only wiki access.
+- Create lesson plan with read-only wiki access during chat. PDF class
+  materials (Textbook/Personal) OCR into session scratch; promote into
+  `materials/` only on plan save.
 - Compact memory compaction and profile proposal/apply endpoints.
 - MemV4 candidate capture, ledger folding/gating, and teacher-reviewed
   Memory Sweep brief with backend-owned saved review sessions.
@@ -211,7 +214,8 @@ line between class memory and external sources.
 - Add evidence/source UI.
 - Productize test/exam generation.
 - Build the class wiki factory and guided setup.
-- Support teacher-approved material ingestion.
+- Year-start materials library / chapterize, and teacher-approved import of
+  extracted material into durable wiki memory (OCR never auto-writes MemV4).
 - Add trusted search and resource adaptation.
 - Make profile updates visible and reviewable.
 - Add proactive wiki/input reconciliation, starting with roster/name mismatch

@@ -246,7 +246,9 @@ accepted model turn. See [backend/README.md](backend/README.md) and
 1. **Landing** -> select a class
 2. **Class home** -> lesson timeline + status
 3. **Update memory** -> chat + diary draft (right panel) -> review wiki proposals and memory suggestions -> save
-4. **Create lesson plan** -> chat + plan draft (same layout) -> save to a lesson date
+4. **Create lesson plan** -> chat + plan draft (same layout) -> optional **PDF
+   class material** (Textbook / Personal; OCR into session scratch) -> save to a
+   lesson date (promotes materials into the class wiki)
 5. **Memory Sweep** -> open/resume a saved review of accumulated durable-memory
    signals, decide in Simple or Detailed view, then apply teacher-approved writes
 
@@ -265,6 +267,8 @@ teacher_wiki/
     lessons/{YYYY-MM-DD}/
       lesson_results.md
       lesson_plan.md
+      materials.json                # lesson → promoted material_ids
+    materials/{textbooks|personal}/{id}/  # OCR package (promote on plan save)
     memory/
       planning_brief.md
       teaching_patterns.md
@@ -273,13 +277,18 @@ teacher_wiki/
     course_state.md, student_notes.md, misconceptions.md, open_loops.md
 ```
 
+Plan-session OCR scratch lives **outside** the wiki (`MATERIALS_SCRATCH_DIR`)
+until the teacher saves the plan.
+
 ## Environment
 
 | Variable | Where | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | `backend/.env` | OpenAI API (required for chat & plan) |
-| `MISTRAL_API_KEY` | `backend/.env` | Mistral OCR for class materials (v1.2); required for live OCR tests / extraction |
+| `MISTRAL_API_KEY` | `backend/.env` | Mistral OCR for in-plan PDF class materials; required for live OCR / extraction |
 | `MISTRAL_OCR_MODEL` | `backend/.env` | OCR model id. Default `mistral-ocr-latest` |
+| `MATERIALS_SCRATCH_DIR` | `backend/.env` | Plan-session OCR scratch (outside wiki) until promote-on-save. Default `backend/data/materials_scratch` |
+| `MATERIALS_INDEX_CHARS` | `backend/.env` | Compact materials TOC injected into plan chat (summaries only). Default `1200` |
 | `OPENAI_STRONG_MODEL` | `backend/.env` | Production strong model. Default `gpt-5.6-terra` (~½ GPT-5.5/Sol API rate). Use `gpt-5.6-sol` for flagship at GPT-5.5 pricing. Runs IMPORTANT always + CHAT/UTILITY in the production profile |
 | `OPENAI_CHEAP_MODEL` | `backend/.env` | The small model. Default `gpt-5.4-mini`. Runs CHAT/UTILITY in the economy profile |
 | `MODEL_PROFILE` | `backend/.env` | Routes three call classes — CHAT (plan+ingest), IMPORTANT (Memory Sweep only), UTILITY (one-shots). `production`: strong high / strong xhigh / strong minimal (one model, reasoning-tiered). `economy`: cheap medium / strong high / cheap minimal. Unset derives from `APP_ENV` (production→production, else economy) |
@@ -459,8 +468,9 @@ Near-term themes:
 - **v1.1:** make the core memory/planning loop trustworthy with evidence UI,
   class-home briefing, plan review, assessment generation, and visible memory
   suggestions.
-- **v1.2:** make onboarding and memory creation easy with a class wiki factory,
-  guided setup, material upload, and document-ingestion spike.
+- **v1.2:** in-plan PDF class materials (Textbook/Personal, Mistral OCR 4,
+  promote on plan save) shipped; remaining: class wiki factory, guided setup,
+  year-start library / chapterize, OCR backups (OpenAI VLM skeleton, Docling).
 - **v1.3:** expand knowledge safely with trusted search, source cards, resource
   adaptation, and a narrow subject teaching-practice library.
 - **v1.4+:** proactive suggested tasks, voice/messaging capture, and broader

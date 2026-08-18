@@ -18,7 +18,8 @@ in `agent_contracts.md`. The detailed file-by-file memory hierarchy lives in
 KlassenPilot should use one visible teacher copilot with clear workflow
 boundaries, not a broad multi-agent graph.
 
-- Planning is read-only with respect to the wiki.
+- Planning is read-only with respect to the wiki during chat. Durable class
+  materials promotion happens only on teacher plan save.
 - Memory update can draft lesson memory, but durable wiki writes happen only
   through teacher-approved commit or explicit revise actions.
 - The model receives explicit prompt layers (global teacher profile, active
@@ -488,6 +489,9 @@ should receive enough context to start well and use tools for the long tail.
 - Prompt trace compatibility wrapper: `backend/app/teacher_agent/prompt_trace.py`
 - Wiki facade: `backend/app/teacher_agent/wiki/store.py`
 - Wiki retrieval: `backend/app/teacher_agent/wiki/search.py`
+- Class materials registry: `backend/app/teacher_agent/wiki/materials.py`
+- Materials OCR / scratch: `backend/app/services/materials_ocr.py`,
+  `materials_ocr_prompts.py`, `materials_ocr_packaging.py`, `materials_scratch.py`
 - Context packs (incl. `build_plan_context_slim` / `build_ingest_context_slim`): `backend/app/teacher_agent/wiki/context_packs.py`
 - Compact memory + budgets/clamp + bounded profile writers: `backend/app/teacher_agent/wiki/memory.py`
 - Shared memory candidate capture + discipline + `remember(...)` validation (`validate_remember_call`): `backend/app/teacher_agent/memory_capture.py`

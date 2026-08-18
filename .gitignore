@@ -22,6 +22,8 @@ frontend/node_modules/
 frontend/.next/
 frontend/.env.local
 frontend/*.tsbuildinfo
+frontend/public/_test_upload.pdf
+frontend/public/_test_*.pdf
 
 # OS
 .DS_Store

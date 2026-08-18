@@ -10,6 +10,10 @@ Small shared utilities and API helpers.
 - `sse-chat.ts` - SSE event parsing for chat streams.
 - `sse-chat.test.ts` - Vitest coverage for SSE parsing.
 - `session-attachments.ts` - attachment handling helpers.
+- `workflow-attachment-adapters.ts` - Plan PDF OCR attach (Textbook/Personal);
+  optimistic tile + Send gate until OCR finishes.
+- `plan-material-arm.ts` / `material-asset-urls.ts` - material arm toggle and
+  classroom asset URL rewrite for plan preview.
 - `markdown-diff.ts` - markdown diff utilities for review UI.
 - `diary-utils.ts` - diary artifact helpers.
 - `review-brief.ts` - teacher-first grouping for proposed wiki file changes.

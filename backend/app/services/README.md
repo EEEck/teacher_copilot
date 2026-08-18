@@ -36,7 +36,13 @@ wiki storage.
 - `memory_skills.py` - typed memory write/read service contract for curated
   memory apply paths.
 - `plan_service.py` - lesson-planning adapter around the artifact session core,
-  plus plan save and trace response assembly.
+  plus plan save, in-plan PDF material upload (OCR → scratch), and promote-on-save.
+- `materials_ocr.py` / `materials_ocr_prompts.py` / `materials_ocr_packaging.py`
+  - Mistral OCR 4 runtime, wiki-assembled STEM/generic annotation prompts, and
+  artifact-trio packaging. `run_openai_vision_ocr_fallback` / `engine="openai_vision"`
+  is a skeleton only (`NotImplementedError`); not an automatic backup.
+- `materials_scratch.py` - plan-session OCR packages outside the wiki index;
+  promote copies into `materials/{textbooks|personal}/` (skips debug JSON).
 - `discussion_service.py` - class Discuss adapter, a thin wrapper over
   `ArtifactSessionService`.
 - `class_brief_service.py` - on-demand read-only class-home executive briefing

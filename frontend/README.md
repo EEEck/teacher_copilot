@@ -2,7 +2,8 @@
 
 Next.js frontend for teacher workflows. The UI is intentionally a practical
 tool shell rather than a marketing site: class selection, class memory, lesson
-timeline, update-memory chat, create-plan chat, and Memory Sweep review.
+timeline, update-memory chat, create-plan chat (optional PDF class materials),
+and Memory Sweep review.
 
 ## Run
 

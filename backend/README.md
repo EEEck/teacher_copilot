@@ -14,6 +14,10 @@ uvicorn app.main:app --reload --port 8010
 
 Health: `GET http://127.0.0.1:8010/api/health` — includes `openai_configured` (true when `OPENAI_API_KEY` is set in `backend/.env`).
 
+In-plan PDF class materials need `MISTRAL_API_KEY` (Mistral OCR 4). Scratch
+packages land under `MATERIALS_SCRATCH_DIR` until plan save. See
+[`docs/agent_contracts.md`](../docs/agent_contracts.md) Class Materials Contract.
+
 ## OpenAI API key
 
 1. Copy `../.env.example` to `backend/.env` and set `OPENAI_API_KEY`.

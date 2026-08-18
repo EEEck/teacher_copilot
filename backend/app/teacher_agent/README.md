@@ -12,7 +12,8 @@ prompt trace diagnostics.
   high-level agent methods used by services.
 - `prompts.py` - system prompts and policy blocks.
 - `models.py` - structured output models returned by agents.
-- `tools.py` - class-scoped wiki read tools for agent use.
+- `tools.py` - class-scoped wiki read tools for agent use, including plan-session
+  `list/search/read_class_material`.
 - `planning_state.py` - backend-owned planning runtime state, state patches,
   evidence briefs, raw evidence refs, and memory candidates.
 - `memory_update_state.py` - backend-owned Update Memory runtime state:
@@ -53,8 +54,9 @@ prompt trace diagnostics.
 
 - Ingest chat updates only `diary_markdown`; curated wiki writes happen later
   through teacher-approved commit.
-- Plan chat updates only `plan_markdown` plus in-memory planning runtime state;
-  wiki/profile writes happen through separate save/apply flows.
+- Plan chat updates only `plan_markdown` plus in-memory planning runtime state
+  (including materials inventory). OCR scratch is outside the wiki; promotion
+  happens on plan save, not as a chat side effect.
 - Memory compaction/profile proposal agents propose bounded updates; backend
   code validates scope and persistence.
 - Memory Sweep uses the V3/V4 path: candidate capture flows through

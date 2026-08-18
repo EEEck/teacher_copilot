@@ -162,7 +162,10 @@ The purpose-specific subject addition is:
 8. **Verbatim window** — last `plan_history_turns` teacher turns in the user
    message (default 8).
 9. **Evidence briefs** — compact tool summaries; raw outputs behind `raw_ref`.
-10. **No blunt 14k clip** on composed instructions.
+10. **Class materials TOC** — when the plan session has uploaded PDFs, a
+    char-capped `summary.md` index (`MATERIALS_INDEX_CHARS`); full OCR via
+    `list_class_materials` / `search_class_materials` / `read_class_material`.
+11. **No blunt 14k clip** on composed instructions.
 
 The planning-specific orientation should add only the compact recent taught
 sequence, misconception priorities, open loops, and planning brief. The existing
@@ -263,6 +266,8 @@ forgetting.
 | `ingest_saved_plan_chars` | **0** | Most recent saved plan excerpt in slim ingest context; 0 = unlimited |
 | `ingest_draft_chars` | **0** | Current diary draft in ingest user input; 0 = unlimited |
 | `upload_attachment_chars` | **0** | Per-upload content in chat user input; 0 = unlimited |
+| `trusted_source_index_chars` | 1200 | Compact trusted-source TOC in class context |
+| `materials_index_chars` | 1200 | Compact class-materials TOC in plan chat (summaries only) |
 | `plan_state_list_limit` | 24 | Max items per state list injected into prompt |
 | `plan_state_bullet_max_chars` | 160 | Max chars per injected state bullet |
 | `plan_briefs_inject_limit` | 12 | Evidence briefs shown in system prompt |

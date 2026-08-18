@@ -13,6 +13,7 @@ Guidance for Claude Code (and other coding agents) working in this repo.
 ## Testing quick reference
 
 - Backend: `cd backend && .venv\Scripts\python -m pytest` (offline,
-  deterministic; no OpenAI calls by default).
+  deterministic; no OpenAI calls by default). Materials OCR packaging/prompts
+  are in that suite; live Mistral needs `RUN_LIVE_MISTRAL_OCR=1`.
 - Frontend: `cd frontend && npx tsc --noEmit && npx vitest run`.
 - Full suite: `.\scripts\test.ps1`.

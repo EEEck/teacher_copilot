@@ -23,6 +23,11 @@ not call OpenAI or mutate the repo wiki.
 - `test_memory_*.py` - compact memory and profile/apply helpers.
 - `test_prompts.py` - prompt contracts and policy text.
 - `test_cli_trace.py` - local JSONL/terminal trace formatting.
+- `test_materials_ocr_packaging.py` / `test_materials_ocr_prompts.py` /
+  `test_materials_plan_api.py` - OCR packaging, wiki-assembled STEM/generic
+  prompts, upload → scratch, promote-skip-debug.
+- `test_materials_ocr_live.py` - opt-in live Mistral OCR. Skipped unless
+  `RUN_LIVE_MISTRAL_OCR=1`.
 - `test_live_api_plan_trace.py` - opt-in live API integration test for the
   three-turn FCKW scenario. Skipped unless `RUN_LIVE_API_TESTS=1`.
 - `eval/test_fckw_plan_contract.py` - offline FCKW trace contract scorer
@@ -60,7 +65,7 @@ credits required for the committed suite.
 | Layer isolation — Englisch 10c mock | `10c_global`, `10c_global_class`, `10c_global_class_subject` | Same progression with `engl_10c_2026_27` + `ESL.md` (no chemie leakage) |
 | Workflow startup — Chemie 9b | `9b_plan_startup`, `9b_ingest_startup` | Full plan/ingest session trace before first teacher message |
 | **Chat turns (stub, CI)** | `9b_plan_fckw_turn1`, `9b_plan_redox_lesson_lookup`, `9b_plan_fckw_turn2_review`, `9b_ingest_turn2_collect` | Message → tool calls → trace evidence (deterministic) |
-| **Chat turns (live, opt-in)** | same chat goldens | Above + selected DeepEval `GEval` LLM judge on retrieval context |
+| **Chat turns (live, opt-in)** | same chat goldens + `9b_plan_materials_embed_mo_asset` | Above + selected DeepEval `GEval` LLM judge; materials golden is live-only (seeded OCR fixture) |
 
 Additional deterministic goldens:
 

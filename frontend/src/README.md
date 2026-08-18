@@ -40,6 +40,9 @@ This folder contains the Next.js app and shared UI code.
 - `lib/api.ts` - typed HTTP client helpers.
 - `lib/sse-chat.ts` - SSE parser/runtime helpers, with `sse-chat.test.ts`.
 - `lib/session-attachments.ts` - upload/session attachment utilities.
+- `lib/workflow-attachment-adapters.ts` - Plan PDF OCR attach + Send gate.
+- `lib/plan-material-arm.ts` / `lib/material-asset-urls.ts` - Textbook/Personal
+  arm and classroom asset URLs in plan preview.
 - `lib/markdown-diff.ts` - review diff helpers.
 - `lib/diary-utils.ts` - diary-specific helpers.
 - `lib/review-brief.ts` - groups proposed wiki file changes into a
