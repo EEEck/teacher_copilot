@@ -4,6 +4,9 @@ Requires ``MISTRAL_API_KEY`` in ``backend/.env`` and::
 
     set RUN_LIVE_MISTRAL_OCR=1
     .\\.venv\\Scripts\\python -m pytest tests\\test_materials_ocr_live.py -q
+
+Live upload reject (same flag) hits plan-session OCR + subject mismatch.
+Browser HITL: ``scripts/plan_context_materials_hitl.md``.
 """
 
 from __future__ import annotations
@@ -64,3 +67,43 @@ def test_live_mistral_ocr_packages_esl_page_slice(tmp_path: Path) -> None:
     assert '"blocks"' in raw or "confidence" in raw.lower()
     if result.page_structure_path is not None:
         assert result.page_structure_path.is_file()
+
+
+@pytest.mark.skipif(
+    not RUN_LIVE,
+    reason="live Mistral OCR is opt-in (set RUN_LIVE_MISTRAL_OCR=1)",
+)
+def test_live_esl_upload_rejected_on_chemie_plan(client, tmp_path, monkeypatch):
+    """ESL fixture on Chemie 9b must 422 and leave the session empty."""
+    if not mistral_ocr_configured():
+        pytest.skip("MISTRAL_API_KEY not configured in backend/.env")
+    if not FIXTURE_PDF.is_file():
+        pytest.skip(f"missing fixture PDF: {FIXTURE_PDF}")
+
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(
+        "app.services.materials_scratch.scratch_root",
+        lambda settings=None: scratch,
+    )
+
+    start = client.post("/api/classes/chemie_9b_2026_27/plan/sessions")
+    assert start.status_code == 200, start.text
+    session_id = start.json()["session_id"]
+    with FIXTURE_PDF.open("rb") as handle:
+        res = client.post(
+            f"/api/classes/chemie_9b_2026_27/plan/sessions/{session_id}/materials",
+            files={"file": (FIXTURE_PDF.name, handle, "application/pdf")},
+            data={"arm": "textbook"},
+        )
+    assert res.status_code == 422, res.text
+    message = res.json()["error"]["message"].lower()
+    assert "english" in message or "esl" in message or "englisch" in message
+    draft = client.get(
+        f"/api/classes/chemie_9b_2026_27/plan/sessions/{session_id}/draft"
+    ).json()
+    assert draft["materials"] == []
+    scratch_session = scratch / session_id
+    if scratch_session.exists():
+        leftover = list(scratch_session.iterdir())
+        assert leftover == []

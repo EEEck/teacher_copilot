@@ -112,6 +112,7 @@ def test_plan_policy_uses_information_need_not_keyword_triggers():
     assert "read_trusted_source" in policy
     assert "search_subject_guidance" in policy
     assert "read_subject_guidance" in policy
+    assert "remaining uploads are a set" in policy or "cover every listed material" in policy
 
 
 def test_chemie_plan_skill_requires_progressive_trusted_source_grounding(wiki):

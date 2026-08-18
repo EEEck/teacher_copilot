@@ -505,15 +505,35 @@ def build_base_assistant_context_trace(store, class_id: str, *, purpose: str) ->
     }
 
 
-def build_active_class_core_context_trace(store, class_id: str) -> dict:
+_LOCKED_CORE_KEYS = frozenset({"class_identity"})
+_SNAPSHOT_CORE_LABELS: dict[str, str] = {
+    "top_misconceptions": "Top misconceptions",
+    "recent_lessons": "Recent lessons",
+}
+
+
+def _normalized_exclude(exclude) -> set[str]:
+    keys = {
+        str(key).strip()
+        for key in (exclude or [])
+        if str(key).strip()
+    }
+    return keys - _LOCKED_CORE_KEYS
+
+
+def build_active_class_core_context_trace(
+    store, class_id: str, exclude=None
+) -> dict:
     """Return only class facts and compact class memory.
 
     Subject guidance has a separate authority and is composed purposefully by
     ``build_active_subject_expert_context_trace``. Canonical lessons, roll-ups,
     student pages, and raw diaries remain on-demand tool evidence.
+    ``exclude`` is a session-only list of togglable section keys.
     """
     from app.teacher_agent.wiki import memory as _mem
 
+    excluded = _normalized_exclude(exclude)
     snapshot = store.get_snapshot(class_id)
     cls = store.get_class(class_id)
     sections: list[dict] = []
@@ -524,22 +544,26 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
         source: str,
         lines: list[str],
         *,
+        key: str = "",
         authority: str = "committed_wiki",
         included: bool = True,
         function: str = "build_active_class_core_context_trace",
     ) -> None:
+        if key and key in excluded:
+            included = False
         labeled_lines = [f"[authority={authority}; source={source}]", *lines]
         text = "\n".join(labeled_lines)
-        sections.append(
-            _trace_section(
-                name=name,
-                function=function,
-                source=source,
-                text=text,
-                authority=authority,
-                included=included,
-            )
+        section = _trace_section(
+            name=name,
+            function=function,
+            source=source,
+            text=text,
+            authority=authority,
+            included=included,
         )
+        if key:
+            section["key"] = key
+        sections.append(section)
         if included:
             parts.extend(labeled_lines)
 
@@ -552,6 +576,7 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
             f"Last committed lesson: {snapshot.last_committed_date or 'None'} | "
             f"Open loops: {snapshot.open_loop_count}",
         ],
+        key="class_identity",
     )
     add_section(
         "Top misconceptions",
@@ -561,6 +586,7 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
             "## Top misconceptions",
             *([f"- {m}" for m in snapshot.top_misconceptions[:6]] or ["- None listed"]),
         ],
+        key="top_misconceptions",
     )
     if snapshot.recent_lessons:
         add_section(
@@ -571,6 +597,7 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
                 "## Recent lessons",
                 *[f"- {line}" for line in snapshot.recent_lessons[:3]],
             ],
+            key="recent_lessons",
         )
 
     memory_files = _active_memory_files(store, class_id)
@@ -586,18 +613,22 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
                 f"Class memory: {path.name}",
                 source,
                 ["", f"## {label}", _mem.clamp_memory_page(key, text).rstrip()],
+                key=key,
                 authority="curated_advisory",
             )
         else:
             sections.append(
-                _trace_section(
-                    name=f"Class memory: {path.name}",
-                    function="build_active_class_core_context_trace",
-                    source=source,
-                    text="",
-                    authority="curated_advisory",
-                    included=False,
-                )
+                {
+                    **_trace_section(
+                        name=f"Class memory: {path.name}",
+                        function="build_active_class_core_context_trace",
+                        source=source,
+                        text="",
+                        authority="curated_advisory",
+                        included=False,
+                    ),
+                    "key": key,
+                }
             )
 
     if not seen_memory:
@@ -619,6 +650,44 @@ def build_active_class_core_context_trace(store, class_id: str) -> dict:
         "text": rendered,
         "sections": sections,
     }
+
+
+def list_plan_class_core_items(store, class_id: str, exclude=None) -> list[dict]:
+    """Togglable Active Class Core rows for the plan Context tab."""
+    excluded = _normalized_exclude(exclude)
+    snapshot = store.get_snapshot(class_id)
+    items: list[dict] = [
+        {
+            "key": "top_misconceptions",
+            "label": _SNAPSHOT_CORE_LABELS["top_misconceptions"],
+            "included": "top_misconceptions" not in excluded,
+            "locked": False,
+        }
+    ]
+    if snapshot.recent_lessons:
+        items.append(
+            {
+                "key": "recent_lessons",
+                "label": _SNAPSHOT_CORE_LABELS["recent_lessons"],
+                "included": "recent_lessons" not in excluded,
+                "locked": False,
+            }
+        )
+    for path in _active_memory_files(store, class_id):
+        text = store.read_text(path).strip()
+        if not text:
+            continue
+        key = _memory_context_key(path)
+        label = _MEMORY_SECTION_LABELS.get(key, path.stem.replace("_", " ").title())
+        items.append(
+            {
+                "key": key,
+                "label": label,
+                "included": key not in excluded,
+                "locked": False,
+            }
+        )
+    return items
 
 
 def build_plan_context_slim_trace(store, class_id: str) -> dict:

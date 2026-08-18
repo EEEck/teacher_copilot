@@ -149,7 +149,7 @@ on the timeline toolbar beside Jump to month.
 
 ## Segmented controls
 
-Use [`SegmentedToggle`](src/components/ui/segmented-toggle.tsx) for mutually exclusive modes (e.g. Edit / Preview, Memory Sweep Simple / Detailed). Do not copy toggle classes into feature components.
+Use [`SegmentedToggle`](src/components/ui/segmented-toggle.tsx) for mutually exclusive modes (e.g. Edit / Preview, plan Preview / Edit / Context, Memory Sweep Simple / Detailed). Do not copy toggle classes into feature components.
 
 | Part | Tokens / classes |
 |------|------------------|

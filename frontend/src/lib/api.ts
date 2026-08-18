@@ -195,6 +195,12 @@ export type PlanMaterialSummary = {
   asset_counts?: Record<string, number>;
   promoted?: boolean;
 };
+export type PlanClassCoreItem = {
+  key: string;
+  label: string;
+  included: boolean;
+  locked?: boolean;
+};
 export type PlanDraft = {
   draft_id: string;
   artifact_revision: number;
@@ -205,6 +211,7 @@ export type PlanDraft = {
   plan_markdown: string;
   executive_state?: Record<string, unknown>;
   materials?: PlanMaterialSummary[];
+  class_core?: PlanClassCoreItem[];
 };
 export type PlanChatResponse = {
   reply: string;
@@ -822,6 +829,23 @@ export const client = {
       form,
     );
   },
+  planDeleteMaterial: (classId: string, sessionId: string, materialId: string) =>
+    api<PlanDraft>(
+      `/api/classes/${classId}/plan/sessions/${sessionId}/materials/${encodeURIComponent(materialId)}`,
+      { method: "DELETE" },
+    ),
+  planPatchContext: (
+    classId: string,
+    sessionId: string,
+    excludedCoreKeys: string[],
+  ) =>
+    api<PlanDraft>(
+      `/api/classes/${classId}/plan/sessions/${sessionId}/context`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ excluded_core_keys: excludedCoreKeys }),
+      },
+    ),
   planSave: (
     classId: string,
     sessionId: string,

@@ -26,8 +26,9 @@ not call OpenAI or mutate the repo wiki.
 - `test_materials_ocr_packaging.py` / `test_materials_ocr_prompts.py` /
   `test_materials_plan_api.py` - OCR packaging, wiki-assembled STEM/generic
   prompts, upload → scratch, promote-skip-debug.
-- `test_materials_ocr_live.py` - opt-in live Mistral OCR. Skipped unless
-  `RUN_LIVE_MISTRAL_OCR=1`.
+- `test_materials_ocr_live.py` - opt-in live Mistral OCR (packaging + ESL
+  upload 422 on Chemie). Skipped unless `RUN_LIVE_MISTRAL_OCR=1`.
+  Browser playbook: `scripts/plan_context_materials_hitl.md`.
 - `test_live_api_plan_trace.py` - opt-in live API integration test for the
   three-turn FCKW scenario. Skipped unless `RUN_LIVE_API_TESTS=1`.
 - `eval/test_fckw_plan_contract.py` - offline FCKW trace contract scorer

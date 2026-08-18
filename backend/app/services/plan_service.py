@@ -10,11 +10,13 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from datetime import date
 from pathlib import Path
+import shutil
 
 from app.schemas.api import (
     ChatAttachment,
     LessonPlan,
     PlanChatResponse,
+    PlanClassCoreItem,
     PlanDraft,
     PlanLessonRequest,
     PlanMaterialSummary,
@@ -32,6 +34,10 @@ from app.services.materials_scratch import (
     promote_scratch_material,
     resolve_material_asset_file,
     write_lesson_materials_json,
+)
+from app.services.materials_subject import (
+    raise_if_off_subject,
+    read_package_annotation_subject,
 )
 from app.services.artifact_session_service import (
     ArtifactSession,
@@ -126,7 +132,19 @@ class PlanService:
             draft.materials = [
                 self._material_summary(entry) for entry in session.runtime.materials
             ]
+        draft.class_core = self._class_core_items(session)
         return draft
+
+    def _class_core_items(self, session) -> list[PlanClassCoreItem]:
+        excluded: list[str] = []
+        if session.runtime is not None:
+            excluded = list(getattr(session.runtime, "excluded_core_keys", []) or [])
+        return [
+            PlanClassCoreItem(**item)
+            for item in self.wiki.list_plan_class_core_items(
+                session.class_id, exclude=excluded
+            )
+        ]
 
     def _material_summary(self, entry) -> PlanMaterialSummary:
         return PlanMaterialSummary(
@@ -168,9 +186,58 @@ class PlanService:
             page_range=page_range,
             ocr_runner=ocr_runner,
         )
+        try:
+            class_subject = self.wiki.get_class(class_id).subject
+            annotation_subject = read_package_annotation_subject(Path(entry.scratch_path))
+            raise_if_off_subject(
+                class_subject=class_subject,
+                annotation_subject=annotation_subject,
+            )
+        except ValueError:
+            if entry.scratch_path:
+                shutil.rmtree(entry.scratch_path, ignore_errors=True)
+            raise
         session.runtime.upsert_material(entry)
         self.core._persist_session(session)
         return self._material_summary(entry)
+
+    def remove_material(
+        self, class_id: str, session_id: str, material_id: str
+    ) -> PlanDraft:
+        session = self.core.get_session(session_id)
+        if session.class_id != class_id:
+            raise KeyError("Session class mismatch")
+        if session.runtime is None:
+            raise KeyError(f"Unknown material_id: {material_id}")
+        entry = session.runtime.remove_material(material_id)
+        if entry is None:
+            raise KeyError(f"Unknown material_id: {material_id}")
+        if not entry.promoted and entry.scratch_path:
+            shutil.rmtree(entry.scratch_path, ignore_errors=True)
+        self.core._persist_session(session)
+        return self.get_draft(session_id)
+
+    def patch_context(
+        self, class_id: str, session_id: str, excluded_core_keys: list[str]
+    ) -> PlanDraft:
+        session = self.core.get_session(session_id)
+        if session.class_id != class_id:
+            raise KeyError("Session class mismatch")
+        if session.runtime is None:
+            from app.teacher_agent.planning_state import PlanRuntime
+
+            session.runtime = PlanRuntime()
+        allowed = {
+            item["key"]
+            for item in self.wiki.list_plan_class_core_items(class_id, exclude=[])
+        }
+        session.runtime.excluded_core_keys = [
+            key.strip()
+            for key in excluded_core_keys
+            if str(key).strip() in allowed
+        ]
+        self.core._persist_session(session)
+        return self.get_draft(session_id)
 
     def attach_prebuilt_material(
         self,

@@ -1,7 +1,7 @@
 "use client";
 
 import { Redo2, Undo2 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { MarkdownPreview } from "@/components/klassenpilot/markdown-preview";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import type { MaterialAssetContext } from "@/lib/material-asset-urls";
 import { cn } from "@/lib/utils";
 
-type ViewMode = "edit" | "preview";
+type ViewMode = "edit" | "preview" | (string & {});
+
+export type MarkdownEditorExtraView = {
+  value: string;
+  label: string;
+  content: ReactNode;
+};
 
 export type MarkdownEditorPanelProps = {
   label: string;
@@ -33,6 +39,7 @@ export type MarkdownEditorPanelProps = {
   onDismiss?: () => void;
   dismissAriaLabel?: string;
   materialAssets?: MaterialAssetContext | null;
+  extraViews?: MarkdownEditorExtraView[];
 };
 
 export function MarkdownEditorPanel({
@@ -54,10 +61,12 @@ export function MarkdownEditorPanel({
   onDismiss,
   dismissAriaLabel = "Dismiss",
   materialAssets,
+  extraViews = [],
 }: MarkdownEditorPanelProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("preview");
   const editable = !readOnly && Boolean(onChange);
-  const showToggle = editable;
+  const extra = extraViews.find((view) => view.value === viewMode);
+  const showToggle = editable || extraViews.length > 0;
 
   const previewMarkdown =
     markdown.trim() !== ""
@@ -109,7 +118,11 @@ export function MarkdownEditorPanel({
               aria-label="View mode"
               options={[
                 { value: "preview", label: "Preview" },
-                { value: "edit", label: "Edit" },
+                ...(editable ? [{ value: "edit", label: "Edit" }] : []),
+                ...extraViews.map((view) => ({
+                  value: view.value,
+                  label: view.label,
+                })),
               ]}
             />
           )}
@@ -140,7 +153,9 @@ export function MarkdownEditorPanel({
         </p>
       )}
 
-      {editable && viewMode === "edit" ? (
+      {extra ? (
+        extra.content
+      ) : editable && viewMode === "edit" ? (
         <Textarea
           className="min-h-0 w-full flex-1 basis-0 resize-none overflow-y-auto overscroll-contain [field-sizing:fixed] font-mono text-sm"
           value={markdown}

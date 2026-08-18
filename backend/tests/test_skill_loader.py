@@ -12,7 +12,15 @@ def test_local_skill_filenames_are_product_neutral():
     assert loader._SKILL_FILES == {
         "lesson_planning": "lesson_planning_procedure.md",
         "differentiation": "lesson_differentiation_procedure.md",
+        "materials_use": "materials_use_procedure.md",
     }
+
+
+def test_materials_use_skill_treats_remaining_uploads_as_a_set():
+    skill = load_skill("materials_use")
+    assert "Remaining session materials are a **set**" in skill
+    assert "every** listed material" in skill or "cover **every** listed material" in skill
+    assert "Material: material_id" in skill
 
 
 def test_planning_core_is_reviewable_and_requires_subject_grounding():

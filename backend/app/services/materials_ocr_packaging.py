@@ -483,6 +483,10 @@ def package_mistral_ocr_response(
         )
 
     doc_ann = _parse_document_annotation(response.get("document_annotation"))
+    (out_dir / "document_annotation.json").write_text(
+        json.dumps(doc_ann, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     summary_md_path = write_summary_md(
         out_dir=out_dir,
         original_page_numbers=original_page_numbers,

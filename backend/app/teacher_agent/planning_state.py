@@ -158,6 +158,7 @@ class PlanRuntime:
     raw_store: dict[str, str] = field(default_factory=dict)
     memory_candidates: list[MemoryCandidate] = field(default_factory=list)
     materials: list[SessionMaterialEntry] = field(default_factory=list)
+    excluded_core_keys: list[str] = field(default_factory=list)
     plan_version: int = 0
     last_change_summary: str = ""
     _raw_counter: int = 0
@@ -169,6 +170,16 @@ class PlanRuntime:
                 self.materials[index] = entry
                 return
         self.materials.append(entry)
+
+    def remove_material(self, material_id: str) -> SessionMaterialEntry | None:
+        """Drop a session material by id. Returns the removed entry, if any."""
+        wanted = (material_id or "").strip()
+        if not wanted:
+            return None
+        for index, existing in enumerate(self.materials):
+            if existing.material_id == wanted:
+                return self.materials.pop(index)
+        return None
 
     def materials_payload(self) -> list[dict[str, Any]]:
         return [entry.to_dict() for entry in self.materials]

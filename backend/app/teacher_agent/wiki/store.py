@@ -232,8 +232,15 @@ class WikiStore:
     def build_teacher_context_trace(self):
         return context_packs.build_teacher_context_trace(self)
 
-    def build_active_class_core_context_trace(self, class_id):
-        return context_packs.build_active_class_core_context_trace(self, class_id)
+    def build_active_class_core_context_trace(self, class_id, exclude=None):
+        return context_packs.build_active_class_core_context_trace(
+            self, class_id, exclude=exclude
+        )
+
+    def list_plan_class_core_items(self, class_id, exclude=None):
+        return context_packs.list_plan_class_core_items(
+            self, class_id, exclude=exclude
+        )
 
     def build_subject_knowledge_trace(self, class_id, *, purpose):
         return context_packs.build_subject_knowledge_trace(self, class_id, purpose=purpose)

@@ -488,7 +488,9 @@ def build_plan_chat_prompt_assembly(
         subject_skill = lesson_skill_for_subject(class_config.subject)
     active_skill = "\n\n".join(part for part in (PLAN_SKILL, subject_skill) if part)
     teacher_trace = wiki.build_teacher_context_trace()
-    class_trace = wiki.build_active_class_core_context_trace(class_id)
+    class_trace = wiki.build_active_class_core_context_trace(
+        class_id, exclude=rt.excluded_core_keys
+    )
     subject_trace = wiki.build_active_subject_expert_context_trace(
         class_id, purpose="plan"
     )

@@ -72,6 +72,7 @@ from app.schemas.api import (
     MemoryTraceResponse,
     PlanChatRequest,
     PlanChatResponse,
+    PlanContextPatchRequest,
     PlanDraft,
     PlanLessonRequest,
     PlanMaterialSummary,
@@ -2590,6 +2591,48 @@ async def plan_upload_material(
         raise HTTPException(status_code=503, detail=str(e)) from e
     except ValueError as e:
         _raise_workflow_value_error(e, default_status=422)
+
+
+@router.delete(
+    "/classes/{class_id}/plan/sessions/{session_id}/materials/{material_id}",
+    response_model=PlanDraft,
+)
+def plan_delete_material(
+    class_id: str,
+    session_id: str,
+    material_id: str,
+    plan_svc: PlanService = Depends(get_plan_service),
+) -> PlanDraft:
+    """Drop one session PDF from inventory and scratch (not promoted wiki)."""
+    try:
+        session = plan_svc.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return plan_svc.remove_material(class_id, session_id, material_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.patch(
+    "/classes/{class_id}/plan/sessions/{session_id}/context",
+    response_model=PlanDraft,
+)
+def plan_patch_context(
+    class_id: str,
+    session_id: str,
+    body: PlanContextPatchRequest,
+    plan_svc: PlanService = Depends(get_plan_service),
+) -> PlanDraft:
+    """Exclude Active Class Core pages from this plan session's prompt only."""
+    try:
+        session = plan_svc.get_session(session_id)
+        if session.class_id != class_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return plan_svc.patch_context(
+            class_id, session_id, body.excluded_core_keys
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get(

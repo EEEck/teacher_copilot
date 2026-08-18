@@ -71,10 +71,21 @@ trusted curriculum sources (`wiki/sources`) and from durable class memory
   Prompts are not generated per PDF and must not hardcode a chapter (bonding,
   MO, Lewis, etc.). English instruction language; German on the pages is a
   fact (`predominantly German`), not a prompt locale.
-- Plan chat receives a compact materials TOC from `summary.md` (char-capped;
-  never merged into the trusted-source TOC). Full OCR markdown and images are
-  progressive: `list_class_materials` / `search_class_materials` /
-  `read_class_material` with `raw_ref` capture.
+- Plan chat receives a compact materials TOC from `summary.md` (char-capped
+  on blurbs only; every remaining `material_id` + title stays in the TOC;
+  never merged into the trusted-source TOC). Session inventory is a **set**:
+  vague “summarize this / this PDF / the upload” covers all remaining
+  uploads unless the teacher names one title or `material_id`. Full OCR
+  markdown and images are progressive: `list_class_materials` /
+  `search_class_materials` / `read_class_material` with `raw_ref` capture.
+  The teacher may drop one session PDF (`DELETE …/materials/{id}`): it leaves
+  inventory and scratch and is not promoted on save.
+- If OCR `document_annotation.subject` is a *known other* school subject than
+  the class (e.g. ESL / English on Chemie), upload is **rejected** (422) and
+  the scratch package is deleted. Empty or unclear subject still accepts.
+- Plan-session Context may exclude Active Class Core pages for this session
+  only (`PATCH …/context` `excluded_core_keys`). Tools still read those pages.
+  Teacher profile and Active Subject Expert stay injected.
 - Cite materials as `Material: material_id`. Do not invent textbook facts when
   materials are available; adapt into a self-contained plan with light citations.
 - A plan-session upload implies the teacher authorizes classroom use of that

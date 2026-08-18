@@ -111,6 +111,22 @@ def test_teacher_and_active_class_core_are_separate_layers():
     assert "Session Summaries" in core["text"]
 
 
+def test_active_class_core_exclude_omits_planning_brief():
+    wiki = WikiStore(root=SEED_WIKI)
+    trace = wiki.build_active_class_core_context_trace(
+        CLASS_ID, exclude=["planning_brief"]
+    )
+    assert "## Planning brief" not in trace["text"]
+    excluded = [
+        section
+        for section in trace["sections"]
+        if section.get("key") == "planning_brief"
+    ]
+    assert excluded
+    assert excluded[0]["included"] is False
+    assert "Top misconceptions" in trace["text"]
+
+
 def test_review_query_pack_is_available():
     wiki = WikiStore(root=SEED_WIKI)
     ctx = wiki.build_review_query_pack(CLASS_ID)

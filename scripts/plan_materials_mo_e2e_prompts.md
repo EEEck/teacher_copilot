@@ -36,3 +36,6 @@ lets focus on mo theory and also the dissociton curve lets use the images from t
 - API (seed + both turns): `python scripts/run_plan_materials_mo_e2e.py`
 - Live golden (single-turn seed):  
   `RUN_LIVE_AGENT_EVALS=1 pytest tests/evals/test_klassenpilot_chat_live.py -k 9b_plan_materials_embed_mo_asset`
+
+Context tab / Remove / ESL 422 HITL (separate playbook):
+[`plan_context_materials_hitl.md`](plan_context_materials_hitl.md).

@@ -614,6 +614,17 @@ class PlanMaterialSummary(BaseModel):
     promoted: bool = False
 
 
+class PlanClassCoreItem(BaseModel):
+    key: str
+    label: str
+    included: bool = True
+    locked: bool = False
+
+
+class PlanContextPatchRequest(BaseModel):
+    excluded_core_keys: list[str] = Field(default_factory=list)
+
+
 class PlanDraft(BaseModel):
     draft_id: str = ""
     artifact_revision: int = 0
@@ -624,6 +635,7 @@ class PlanDraft(BaseModel):
     plan_markdown: str
     executive_state: dict = Field(default_factory=dict)
     materials: list[PlanMaterialSummary] = Field(default_factory=list)
+    class_core: list[PlanClassCoreItem] = Field(default_factory=list)
 
 
 class PlanChatRequest(BaseModel):

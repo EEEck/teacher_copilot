@@ -27,3 +27,6 @@ $env:RUN_LIVE_MISTRAL_OCR="1"
 ```
 
 See `implementation_plans/v1.2_class_materials_epic.md` § Test assets.
+
+Browser HITL (Context tab, Remove, live ESL reject):
+`scripts/plan_context_materials_hitl.md`.

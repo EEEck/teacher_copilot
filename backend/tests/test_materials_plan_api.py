@@ -9,6 +9,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.services.materials_ocr_packaging import MaterialsOcrPackage, package_mistral_ocr_response
+from app.schemas.api import ChatMessage
+from app.teacher_agent.prompt_assembly import build_plan_chat_prompt_assembly
+from app.teacher_agent.wiki.materials import build_materials_context_trace
 
 CLASS_ID = "chemie_9b_2026_27"
 FIXTURE_PDF = (
@@ -19,7 +22,15 @@ FIXTURE_PDF = (
 )
 
 
-def _fake_ocr(pdf_path: Path, *, out_dir: Path, **kwargs) -> MaterialsOcrPackage:
+def _fake_ocr(
+    pdf_path: Path,
+    *,
+    out_dir: Path,
+    subject: str = "Chemie",
+    topic: str = "Aufbau von Molekülen",
+    summary: str = "Elektronenpaarbindung und Valenzstrichformeln.",
+    **kwargs,
+) -> MaterialsOcrPackage:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     source = out_dir / "source.pdf"
@@ -27,15 +38,15 @@ def _fake_ocr(pdf_path: Path, *, out_dir: Path, **kwargs) -> MaterialsOcrPackage
     response = {
         "model": "mock-ocr",
         "document_annotation": {
-            "document_kind": "chemistry_textbook_chapter",
-            "subject": "Chemie",
-            "chapter_or_topic": "Aufbau von Molekülen",
-            "language": "Deutsch",
-            "teacher_summary_de": "Elektronenpaarbindung und Valenzstrichformeln.",
+            "document_kind": "textbook_chapter",
+            "subject": subject,
+            "chapter_or_topic": topic,
+            "language": "Deutsch" if subject == "Chemie" else "English",
+            "teacher_summary_de": summary,
         },
         "pages": [
             {
-                "markdown": "# Moleküle\n\nElektronenpaarbindung.\n",
+                "markdown": f"# {topic}\n\n{summary}\n",
                 "images": [],
                 "tables": [],
             }
@@ -264,6 +275,7 @@ def test_materials_use_procedure_authorizes_classroom_asset_embeds():
     assert "classroom use" in text.lower()
     assert "assets/img-" in text
     assert "not" in text.lower() and "instructions" in text.lower()
+    assert "every" in text.lower() and "listed material" in text.lower()
 
 
 def test_materials_search_and_toc(tmp_path):
@@ -305,3 +317,193 @@ def test_materials_search_and_toc(tmp_path):
     assert hits
     payload = read_class_material(materials, "mat_1", "summary")
     assert "Elektronenpaarbindung" in payload["content"]
+
+
+def _upload_pdf(client: TestClient, session_id: str, name: str = "chapter.pdf"):
+    with FIXTURE_PDF.open("rb") as f:
+        return client.post(
+            f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/materials",
+            files={"file": (name, f, "application/pdf")},
+            data={"arm": "textbook"},
+        )
+
+
+def test_two_on_subject_pdfs_both_injected_then_delete_one(
+    client: TestClient, mock_ocr, wiki, monkeypatch
+):
+    topics = iter(
+        [
+            ("Lewis structures", "Valenzstrichformeln for H2O."),
+            ("Molekülorbitale", "MO diagrams for diatomic molecules."),
+        ]
+    )
+
+    def fake(pdf_path, *, out_dir, **kwargs):
+        topic, summary = next(topics)
+        return _fake_ocr(
+            pdf_path,
+            out_dir=out_dir,
+            topic=topic,
+            summary=summary,
+            **kwargs,
+        )
+
+    monkeypatch.setattr("app.services.materials_scratch.run_mistral_ocr_on_pdf", fake)
+
+    start = client.post(f"/api/classes/{CLASS_ID}/plan/sessions")
+    session_id = start.json()["session_id"]
+    first = _upload_pdf(client, session_id, "bonding.pdf")
+    second = _upload_pdf(client, session_id, "mo.pdf")
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    id_a = first.json()["material_id"]
+    id_b = second.json()["material_id"]
+    assert id_a != id_b
+
+    draft = client.get(
+        f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/draft"
+    ).json()
+    ids = {item["material_id"] for item in draft["materials"]}
+    assert ids == {id_a, id_b}
+    assert draft["class_core"]
+
+    from app.api import deps
+    from app.main import app
+
+    plan_svc = app.dependency_overrides[deps.get_plan_service]()
+    session = plan_svc.get_session(session_id)
+    assembly = build_plan_chat_prompt_assembly(
+        wiki,
+        CLASS_ID,
+        messages=[ChatMessage(role="user", content="Summarize this PDF.")],
+        current_plan="",
+        runtime=session.runtime,
+    )
+    toc = assembly["nested"]["class_materials"]["text"]
+    assert id_a in toc
+    assert id_b in toc
+    assert "as a set" in toc.lower() or "every material" in toc.lower()
+
+    deleted = client.delete(
+        f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/materials/{id_a}"
+    )
+    assert deleted.status_code == 200, deleted.text
+    remaining = {item["material_id"] for item in deleted.json()["materials"]}
+    assert remaining == {id_b}
+    assert not (mock_ocr / session_id / id_a).exists()
+    assert (mock_ocr / session_id / id_b).is_dir()
+
+    session = plan_svc.get_session(session_id)
+    after = build_plan_chat_prompt_assembly(
+        wiki,
+        CLASS_ID,
+        messages=[ChatMessage(role="user", content="Summarize this PDF.")],
+        current_plan="",
+        runtime=session.runtime,
+    )["nested"]["class_materials"]["text"]
+    assert id_a not in after
+    assert id_b in after
+
+
+def test_materials_toc_keeps_both_ids_under_tight_char_cap():
+    from app.teacher_agent.wiki.materials import ClassMaterialRecord, MaterialSection
+
+    records = [
+        ClassMaterialRecord(
+            material_id="mat_aaa",
+            arm="textbook",
+            title="First chapter",
+            summary="x" * 800,
+            page_numbers=[1, 2, 3],
+            root=Path("."),
+            source="scratch",
+            wiki_path="",
+            sections=(MaterialSection(id="summary", title="Summary", body=""),),
+        ),
+        ClassMaterialRecord(
+            material_id="mat_bbb",
+            arm="textbook",
+            title="Second chapter",
+            summary="y" * 800,
+            page_numbers=[4, 5],
+            root=Path("."),
+            source="scratch",
+            wiki_path="",
+            sections=(MaterialSection(id="summary", title="Summary", body=""),),
+        ),
+    ]
+    toc = build_materials_context_trace(records, index_chars=400)
+    assert "mat_aaa" in toc["text"]
+    assert "mat_bbb" in toc["text"]
+    assert "First chapter" in toc["text"]
+    assert "Second chapter" in toc["text"]
+
+
+def test_esl_pdf_rejected_on_chemie_class(client: TestClient, mock_ocr, monkeypatch):
+    def fake_esl(pdf_path, *, out_dir, **kwargs):
+        return _fake_ocr(
+            pdf_path,
+            out_dir=out_dir,
+            subject="English",
+            topic="It's fun at home",
+            summary="Family and home vocabulary.",
+            **kwargs,
+        )
+
+    monkeypatch.setattr(
+        "app.services.materials_scratch.run_mistral_ocr_on_pdf", fake_esl
+    )
+    start = client.post(f"/api/classes/{CLASS_ID}/plan/sessions")
+    session_id = start.json()["session_id"]
+    res = _upload_pdf(client, session_id, "esl_textbook_sample_pages_9_to_11.pdf")
+    assert res.status_code == 422, res.text
+    message = res.json()["error"]["message"]
+    assert "English" in message or "ESL" in message
+    draft = client.get(
+        f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/draft"
+    ).json()
+    assert draft["materials"] == []
+    scratch_session = mock_ocr / session_id
+    if scratch_session.exists():
+        leftover = list(scratch_session.iterdir())
+        assert leftover == []
+
+
+def test_patch_context_excludes_planning_brief(client: TestClient, wiki):
+    start = client.post(f"/api/classes/{CLASS_ID}/plan/sessions")
+    session_id = start.json()["session_id"]
+    draft = client.get(
+        f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/draft"
+    ).json()
+    keys = {item["key"] for item in draft["class_core"]}
+    assert "planning_brief" in keys
+    patched = client.patch(
+        f"/api/classes/{CLASS_ID}/plan/sessions/{session_id}/context",
+        json={"excluded_core_keys": ["planning_brief"]},
+    )
+    assert patched.status_code == 200, patched.text
+    items = {item["key"]: item for item in patched.json()["class_core"]}
+    assert items["planning_brief"]["included"] is False
+
+    from app.api import deps
+    from app.main import app
+
+    plan_svc = app.dependency_overrides[deps.get_plan_service]()
+    session = plan_svc.get_session(session_id)
+    assembly = build_plan_chat_prompt_assembly(
+        wiki,
+        CLASS_ID,
+        messages=[ChatMessage(role="user", content="Plan next lesson.")],
+        current_plan="",
+        runtime=session.runtime,
+    )
+    core_text = assembly["nested"]["active_class_core"]["text"]
+    assert "Active class core" in core_text
+    assert "## Planning brief" not in core_text
+    included = [
+        section
+        for section in assembly["nested"]["active_class_core"]["sections"]
+        if section.get("key") == "planning_brief"
+    ]
+    assert included
+    assert included[0]["included"] is False

@@ -11,12 +11,13 @@ import {
   type ArtifactSessionBodyProps,
 } from "@/components/klassenpilot/artifact-session-page";
 import { ArtifactSessionWorkspace } from "@/components/klassenpilot/artifact-session-workspace";
+import { PlanContextPanel } from "@/components/klassenpilot/plan-context-panel";
 import { PlanSaveConfirm } from "@/components/klassenpilot/plan-save-confirm";
 import { WorkflowActionNeededCard } from "@/components/klassenpilot/workflow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { client, type PlanMaterialSummary } from "@/lib/api";
+import { client, type PlanClassCoreItem, type PlanMaterialSummary } from "@/lib/api";
 import {
   classifyWorkflowError,
   routeWorkflowError,
@@ -189,6 +190,8 @@ function PlanWorkspace({
   const [inReview, setInReview] = useState(false);
   const [loading, setLoading] = useState(false);
   const [materials, setMaterials] = useState<PlanMaterialSummary[]>([]);
+  const [classCore, setClassCore] = useState<PlanClassCoreItem[]>([]);
+  const [contextBusy, setContextBusy] = useState(false);
   const [actionNeeded, setActionNeeded] = useState<{
     message: string;
     respondInChat: boolean;
@@ -199,7 +202,10 @@ function PlanWorkspace({
     let cancelled = false;
     const refresh = () => {
       void client.planGetDraft(classId, sessionId).then((draft) => {
-        if (!cancelled) setMaterials(draft.materials ?? []);
+        if (!cancelled) {
+          setMaterials(draft.materials ?? []);
+          setClassCore(draft.class_core ?? []);
+        }
       }).catch(() => {
         /* draft hydrate is best-effort */
       });
@@ -226,6 +232,69 @@ function PlanWorkspace({
       });
     },
     [onError],
+  );
+
+  const applyDraft = useCallback(
+    (draft: { materials?: PlanMaterialSummary[]; class_core?: PlanClassCoreItem[] }) => {
+      setMaterials(draft.materials ?? []);
+      setClassCore(draft.class_core ?? []);
+    },
+    [],
+  );
+
+  const removeMaterial = useCallback(
+    async (materialId: string) => {
+      if (!sessionId) return;
+      setContextBusy(true);
+      clearWorkflowErrors();
+      try {
+        const draft = await runWithSessionRecovery((sid) =>
+          client.planDeleteMaterial(classId, sid, materialId),
+        );
+        applyDraft(draft);
+        window.dispatchEvent(new CustomEvent("kp:plan-materials-updated"));
+      } catch (e) {
+        reportWorkflowError(e, "Could not remove that PDF");
+      } finally {
+        setContextBusy(false);
+      }
+    },
+    [
+      sessionId,
+      classId,
+      applyDraft,
+      runWithSessionRecovery,
+      clearWorkflowErrors,
+      reportWorkflowError,
+    ],
+  );
+
+  const toggleCore = useCallback(
+    async (key: string, included: boolean) => {
+      if (!sessionId) return;
+      const excluded = classCore
+        .filter((item) => (item.key === key ? !included : !item.included))
+        .map((item) => item.key);
+      setContextBusy(true);
+      try {
+        const draft = await runWithSessionRecovery((sid) =>
+          client.planPatchContext(classId, sid, excluded),
+        );
+        applyDraft(draft);
+      } catch (e) {
+        reportWorkflowError(e, "Could not update context");
+      } finally {
+        setContextBusy(false);
+      }
+    },
+    [
+      sessionId,
+      classId,
+      classCore,
+      applyDraft,
+      runWithSessionRecovery,
+      reportWorkflowError,
+    ],
   );
 
   const goToLesson = useCallback(() => {
@@ -298,6 +367,19 @@ function PlanWorkspace({
                     materialIds: materials.map((m) => m.material_id),
                   }
                 : null
+            }
+            contextPanel={
+              <PlanContextPanel
+                materials={materials}
+                classCore={classCore}
+                onRemoveMaterial={(id) => {
+                  void removeMaterial(id);
+                }}
+                onToggleCore={(key, included) => {
+                  void toggleCore(key, included);
+                }}
+                busy={contextBusy}
+              />
             }
           />
         }

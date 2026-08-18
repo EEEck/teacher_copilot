@@ -55,6 +55,16 @@ Run from repo root:
 .\scripts\test.ps1
 ```
 
+## Plan materials browser HITL
+
+- [`plan_materials_mo_e2e_prompts.md`](plan_materials_mo_e2e_prompts.md) —
+  textbook attach → MO / dissociation chat; images in `plan_markdown`.
+  Helper: `python scripts/run_plan_materials_mo_e2e.py`.
+- [`plan_context_materials_hitl.md`](plan_context_materials_hitl.md) —
+  Context tab groups, two PDFs as a set, Remove, class-memory toggles,
+  live ESL-on-Chemie 422. Helper:
+  `python scripts/run_plan_context_materials_e2e.py`.
+
 If Node is installed but not on PATH in the current PowerShell session:
 
 ```powershell

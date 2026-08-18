@@ -420,6 +420,7 @@ def _plan_runtime_dump(runtime: Any) -> dict:
         "raw_store": dict(runtime.raw_store),
         "memory_candidates": [candidate.model_dump() for candidate in runtime.memory_candidates],
         "materials": runtime.materials_payload(),
+        "excluded_core_keys": list(runtime.excluded_core_keys),
         "plan_version": runtime.plan_version,
         "last_change_summary": runtime.last_change_summary,
         "raw_counter": runtime._raw_counter,
@@ -456,6 +457,11 @@ def _plan_runtime_load(data: dict) -> PlanRuntime:
         SessionMaterialEntry.from_dict(item)
         for item in _list_dict_field(data, "materials")
         if str(item.get("material_id", "")).strip()
+    ]
+    runtime.excluded_core_keys = [
+        str(key).strip()
+        for key in data.get("excluded_core_keys", [])
+        if str(key).strip()
     ]
     runtime.plan_version = int(data.get("plan_version") or 0)
     runtime.last_change_summary = str(data.get("last_change_summary") or "")
