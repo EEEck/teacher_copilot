@@ -27,6 +27,8 @@
 
 ## PR A1 — Deterministic Chemie Class Provisioning
 
+> **Verification status (2026-08-19): A1 verified / merge-ready — not merged or shipped.** Fresh root gate: backend 635 passed / 45 skipped, frontend typecheck passed, and Vitest 205/205 passed. Retained live API and in-app-browser acceptance passed in the same sandbox; tracked `backend/teacher_wiki/` remained unchanged. A2/A3/C remain pending.
+
 ### Task 1: Port the class-provisioning backend without unrelated branch scope
 
 **Files:**
