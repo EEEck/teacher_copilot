@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1496,12 +1497,17 @@ def test_memory_sweep_apply_updates_status_after_successful_write(
 
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()
+    recent_now = datetime.now(timezone.utc).replace(microsecond=0)
+    group_roles_created_at = (
+        (recent_now - timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
+    )
+    already_covered_created_at = recent_now.isoformat().replace("+00:00", "Z")
     ledger.add_many(
         [
             MemoryCandidateRow(
                 id="batch_apply_group_roles",
-                created_at="2026-06-22T09:00:00Z",
-                updated_at="2026-06-22T09:00:00Z",
+                created_at=group_roles_created_at,
+                updated_at=group_roles_created_at,
                 class_id=CLASS_ID,
                 subject="chemie",
                 workflow="ingest",
@@ -1519,8 +1525,8 @@ def test_memory_sweep_apply_updates_status_after_successful_write(
             ),
             MemoryCandidateRow(
                 id="batch_already_covered_mbb",
-                created_at="2026-06-22T09:05:00Z",
-                updated_at="2026-06-22T09:05:00Z",
+                created_at=already_covered_created_at,
+                updated_at=already_covered_created_at,
                 class_id=None,
                 subject=None,
                 workflow="plan",
