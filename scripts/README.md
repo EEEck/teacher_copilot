@@ -55,6 +55,19 @@ Run from repo root:
 .\scripts\test.ps1
 ```
 
+## A1 live class provisioning acceptance
+
+After starting this worktree's sandbox with `worktree-stack.cmd up`, paste the
+printed backend URL (do not reuse a port from another worktree):
+
+```powershell
+$backendUrl = Read-Host "Paste the backend URL printed by worktree-stack.cmd up"
+.\backend\.venv\Scripts\python .\scripts\run_a1_class_provisioning_e2e.py `
+  --api-base $backendUrl `
+  --wiki-root .\backend\teacher_wiki_sandbox `
+  --report .\.worktree-stack\a1-api-report.json
+```
+
 ## Plan materials browser HITL
 
 - [`plan_materials_mo_e2e_prompts.md`](plan_materials_mo_e2e_prompts.md) —
