@@ -27,7 +27,7 @@
 
 ## PR A1 — Deterministic Chemie Class Provisioning
 
-> **Verification status (2026-08-19): A1 awaiting final remediation verification — not merged or shipped.** The prior root and live gates remain historical evidence, but final-review findings required backend remediation. Merge readiness may be restored only after scoped re-review and fresh proportionate root/live gates. A2/A3/C remain pending.
+> **Verification status (2026-08-19): A1 verified / merge-ready after review remediation — not merged or shipped.** Remediation commit `75d0c8e` passed a fresh full root gate (backend 663 passed / 45 skipped, frontend typecheck passed, Vitest 205/205), fresh-sandbox live API acceptance, and the complete visible in-app-browser runbook. Tracked `backend/teacher_wiki/` remained unchanged. A2/A3/C remain pending.
 
 ### Task 1: Port the class-provisioning backend without unrelated branch scope
 
