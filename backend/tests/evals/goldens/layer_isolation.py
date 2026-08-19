@@ -13,14 +13,22 @@ LAYER_GOLDENS: tuple[LayerExpectation, ...] = (
         class_id=CHEMIE_9B_CLASS_ID,
         layer_scope=LayerScope.GLOBAL_ONLY,
         required_markers=("Prefers concise 45-minute lesson plans",),
-        forbidden_markers=("chemie_9b", "Confusing oxidation", "Distinguish ion charge"),
+        forbidden_markers=(
+            "chemie_9b",
+            "Confusing oxidation",
+            "Distinguish ion charge",
+        ),
     ),
     LayerExpectation(
         golden_id="9b_global_class",
         class_id=CHEMIE_9B_CLASS_ID,
         layer_scope=LayerScope.GLOBAL_PLUS_CLASS,
         subject_id="chemie",
-        required_markers=("Chemie 9b", "Distinguish ion charge from oxidation number", "Peer checking"),
+        required_markers=(
+            "Chemie 9b",
+            "Distinguish ion charge from oxidation number",
+            "Peer checking",
+        ),
         forbidden_markers=("Confusing oxidation number with ionic charge",),
         required_memory_files=(
             "planning_brief.md",
@@ -34,9 +42,13 @@ LAYER_GOLDENS: tuple[LayerExpectation, ...] = (
         class_id=CHEMIE_9B_CLASS_ID,
         layer_scope=LayerScope.GLOBAL_PLUS_CLASS_PLUS_SUBJECT,
         subject_id="chemie",
-        required_markers=("Chemie 9b", "Distinguish ion charge from oxidation number", "Peer checking"),
+        required_markers=(
+            "Chemie 9b",
+            "Distinguish ion charge from oxidation number",
+            "Peer checking",
+        ),
         forbidden_markers=("ESL", "engl_10c", "mathe"),
-        subject_required_markers=("Confusing oxidation number with ionic charge",),
+        subject_required_markers=("Oxidation number is not the same as ionic charge.",),
         required_memory_files=(
             "planning_brief.md",
             "teaching_patterns.md",
@@ -49,15 +61,28 @@ LAYER_GOLDENS: tuple[LayerExpectation, ...] = (
         class_id=ENGL_10C_CLASS_ID,
         layer_scope=LayerScope.GLOBAL_ONLY,
         required_markers=("Prefers concise 45-minute lesson plans",),
-        forbidden_markers=("engl_10c", "Focus on essay scaffolding", "chemie", "oxidation"),
+        forbidden_markers=(
+            "engl_10c",
+            "Focus on essay scaffolding",
+            "chemie",
+            "oxidation",
+        ),
     ),
     LayerExpectation(
         golden_id="10c_global_class",
         class_id=ENGL_10C_CLASS_ID,
         layer_scope=LayerScope.GLOBAL_PLUS_CLASS,
         subject_id="ESL",
-        required_markers=("Englisch 10c", "Focus on essay scaffolding for 10c", "pair feedback in ESL writing blocks"),
-        forbidden_markers=("chemie", "oxidation", "Confusing oxidation number with ionic charge"),
+        required_markers=(
+            "Englisch 10c",
+            "Focus on essay scaffolding for 10c",
+            "pair feedback in ESL writing blocks",
+        ),
+        forbidden_markers=(
+            "chemie",
+            "oxidation",
+            "Confusing oxidation number with ionic charge",
+        ),
         required_memory_files=("planning_brief.md", "copilot_profile.md"),
     ),
     LayerExpectation(

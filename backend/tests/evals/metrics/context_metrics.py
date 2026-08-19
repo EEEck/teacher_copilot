@@ -35,10 +35,15 @@ class LayerContextMetric(BaseMetric):
 
     def measure(self, test_case: LLMTestCase) -> float:
         try:
-            metadata = test_case.metadata or getattr(test_case, "additional_metadata", None) or {}
+            metadata = (
+                test_case.metadata
+                or getattr(test_case, "additional_metadata", None)
+                or {}
+            )
             result = score_layer_context(
                 teacher_trace=metadata.get("teacher_trace") or {},
                 core_trace=metadata.get("core_trace"),
+                subject_trace=metadata.get("subject_trace"),
                 expectation=self.expectation,
             )
             self.score = 1.0 if result.passed else 0.0
@@ -53,9 +58,7 @@ class LayerContextMetric(BaseMetric):
         return self.measure(test_case)
 
     def is_successful(self) -> bool:
-        if self.error is not None:
-            self.success = False
-        elif self.score is None:
+        if self.error is not None or self.score is None:
             self.success = False
         else:
             self.success = self.score >= self.threshold
@@ -95,9 +98,7 @@ class PlanStartupContextMetric(BaseMetric):
         return self.measure(test_case)
 
     def is_successful(self) -> bool:
-        if self.error is not None:
-            self.success = False
-        elif self.score is None:
+        if self.error is not None or self.score is None:
             self.success = False
         else:
             self.success = self.score >= self.threshold
@@ -137,9 +138,7 @@ class IngestStartupContextMetric(BaseMetric):
         return self.measure(test_case)
 
     def is_successful(self) -> bool:
-        if self.error is not None:
-            self.success = False
-        elif self.score is None:
+        if self.error is not None or self.score is None:
             self.success = False
         else:
             self.success = self.score >= self.threshold
@@ -151,7 +150,9 @@ class IngestStartupContextMetric(BaseMetric):
 
 
 def _trace_from_test_case(test_case: LLMTestCase) -> dict[str, Any]:
-    metadata = test_case.metadata or getattr(test_case, "additional_metadata", None) or {}
+    metadata = (
+        test_case.metadata or getattr(test_case, "additional_metadata", None) or {}
+    )
     trace = metadata.get("trace")
     if isinstance(trace, dict):
         return trace

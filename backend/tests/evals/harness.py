@@ -66,13 +66,13 @@ def start_session(client: TestClient, *, workflow: str, class_id: str) -> str:
     _, base, _ = _workflow_paths(workflow, class_id)
     start = client.post(base)
     if start.status_code != 200:
-        raise RuntimeError(f"Failed to start {workflow} session: {start.status_code} {start.text}")
+        raise RuntimeError(
+            f"Failed to start {workflow} session: {start.status_code} {start.text}"
+        )
     return start.json()["session_id"]
 
 
-_MATERIALS_FIXTURES = (
-    Path(__file__).resolve().parents[1] / "fixtures" / "materials"
-)
+_MATERIALS_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "materials"
 
 
 def seed_plan_material_fixture(
@@ -127,7 +127,9 @@ def run_chat_turn(
 
     trace_res = client.get(trace_path.format(session_id=session_id))
     if trace_res.status_code != 200:
-        raise RuntimeError(f"Failed to fetch trace: {trace_res.status_code} {trace_res.text}")
+        raise RuntimeError(
+            f"Failed to fetch trace: {trace_res.status_code} {trace_res.text}"
+        )
 
     return ChatTurnResult(
         class_id=class_id,
@@ -205,10 +207,16 @@ def run_workflow_scenario(
 
 
 def tool_names_from_events(events: list[dict[str, Any]]) -> list[str]:
-    return [str(event.get("name", "")) for event in events if event.get("type") == "tool_call"]
+    return [
+        str(event.get("name", ""))
+        for event in events
+        if event.get("type") == "tool_call"
+    ]
 
 
-def build_retrieval_context(result: ChatTurnResult, *, max_chars: int = 12000) -> list[str]:
+def build_retrieval_context(
+    result: ChatTurnResult, *, max_chars: int = 12000
+) -> list[str]:
     """Compact evidence packet for LLM judge metrics."""
     chunks: list[str] = []
     stack = result.trace.get("prompt_stack") or {}
@@ -229,9 +237,13 @@ def build_retrieval_context(result: ChatTurnResult, *, max_chars: int = 12000) -
             chunks.append(f"## Raw evidence {ref}\n{str(payload)[:2500]}")
 
     runtime = result.trace.get("runtime") or {}
-    briefs = runtime.get("evidence_briefs") or runtime.get("memory_evidence_briefs") or []
+    briefs = (
+        runtime.get("evidence_briefs") or runtime.get("memory_evidence_briefs") or []
+    )
     if briefs:
-        chunks.append(f"## Evidence briefs\n{json.dumps(briefs, ensure_ascii=False)[:3000]}")
+        chunks.append(
+            f"## Evidence briefs\n{json.dumps(briefs, ensure_ascii=False)[:3000]}"
+        )
 
     joined = "\n\n".join(chunks)
     if len(joined) > max_chars:
@@ -262,15 +274,20 @@ def check_artifact_patterns(text: str, patterns: tuple[str, ...]) -> list[str]:
 
 
 def fetch_layer_traces(wiki: WikiStore, class_id: str) -> dict[str, Any]:
-    """Build teacher + active class core traces via pack builders."""
+    """Build the three plan-startup layer traces via their pack builders."""
     return {
         "class_id": class_id,
         "teacher_trace": wiki.build_teacher_context_trace(),
         "core_trace": wiki.build_active_class_core_context_trace(class_id),
+        "subject_trace": wiki.build_active_subject_expert_context_trace(
+            class_id, purpose="plan"
+        ),
     }
 
 
-def fetch_startup_trace(client: TestClient, *, workflow: str, class_id: str) -> dict[str, Any]:
+def fetch_startup_trace(
+    client: TestClient, *, workflow: str, class_id: str
+) -> dict[str, Any]:
     """Start a session and return the trace snapshot before the first teacher message."""
     normalized = workflow.strip().lower()
     if normalized == "plan":
@@ -283,12 +300,16 @@ def fetch_startup_trace(client: TestClient, *, workflow: str, class_id: str) -> 
         raise ValueError(f"Unknown workflow for startup trace: {workflow!r}")
 
     if start.status_code != 200:
-        raise RuntimeError(f"Failed to start {workflow} session: {start.status_code} {start.text}")
+        raise RuntimeError(
+            f"Failed to start {workflow} session: {start.status_code} {start.text}"
+        )
 
     session_id = start.json()["session_id"]
     trace = client.get(trace_path.format(session_id=session_id))
     if trace.status_code != 200:
-        raise RuntimeError(f"Failed to fetch {workflow} trace: {trace.status_code} {trace.text}")
+        raise RuntimeError(
+            f"Failed to fetch {workflow} trace: {trace.status_code} {trace.text}"
+        )
 
     payload = trace.json()
     payload["golden_workflow"] = normalized

@@ -27,13 +27,10 @@ class LayerExpectation:
     required_memory_files: tuple[str, ...] = ()
 
 
-def _section_text(sections: list[dict[str, Any]], *, include_subject: bool) -> str:
+def _section_text(sections: list[dict[str, Any]]) -> str:
     parts: list[str] = []
     for section in sections:
         if not section.get("included", True):
-            continue
-        name = str(section.get("name", ""))
-        if not include_subject and name.lower().startswith("subject guide"):
             continue
         parts.append(str(section.get("text", "")))
     return "\n".join(parts)
@@ -42,35 +39,42 @@ def _section_text(sections: list[dict[str, Any]], *, include_subject: bool) -> s
 def _combined_text(
     teacher_trace: dict[str, Any],
     core_trace: dict[str, Any] | None,
+    subject_trace: dict[str, Any] | None,
     *,
     layer_scope: LayerScope,
 ) -> str:
     parts = [str(teacher_trace.get("text", ""))]
-    if core_trace is None:
-        return "\n".join(parts)
-
-    include_subject = layer_scope == LayerScope.GLOBAL_PLUS_CLASS_PLUS_SUBJECT
-    if layer_scope in {LayerScope.GLOBAL_PLUS_CLASS, LayerScope.GLOBAL_PLUS_CLASS_PLUS_SUBJECT}:
-        parts.append(_section_text(core_trace.get("sections") or [], include_subject=include_subject))
+    if (
+        layer_scope
+        in {LayerScope.GLOBAL_PLUS_CLASS, LayerScope.GLOBAL_PLUS_CLASS_PLUS_SUBJECT}
+        and core_trace is not None
+    ):
+        parts.append(_section_text(core_trace.get("sections") or []))
+    if (
+        layer_scope == LayerScope.GLOBAL_PLUS_CLASS_PLUS_SUBJECT
+        and subject_trace is not None
+    ):
+        parts.append(_section_text(subject_trace.get("sections") or []))
     return "\n".join(parts)
 
 
-def _has_included_subject_section(core_trace: dict[str, Any] | None, subject_id: str) -> bool:
-    if not core_trace or not subject_id:
-        return False
+def _subject_section_text(subject_trace: dict[str, Any] | None, subject_id: str) -> str:
+    if not subject_trace or not subject_id:
+        return ""
     target = f"subject guide: {subject_id}".lower()
-    for section in core_trace.get("sections") or []:
+    for section in subject_trace.get("sections") or []:
         if not section.get("included", True):
             continue
         if str(section.get("name", "")).lower() == target:
-            return bool(str(section.get("text", "")).strip())
-    return False
+            return str(section.get("text", "")).strip()
+    return ""
 
 
 def score_layer_context(
     *,
     teacher_trace: dict[str, Any],
     core_trace: dict[str, Any] | None,
+    subject_trace: dict[str, Any] | None,
     expectation: LayerExpectation,
 ) -> ScoreResult:
     failures: list[str] = []
@@ -78,12 +82,21 @@ def score_layer_context(
     label = expectation.golden_id
 
     if expectation.layer_scope == LayerScope.GLOBAL_ONLY:
-        scored_text = _combined_text(teacher_trace, None, layer_scope=expectation.layer_scope)
+        scored_text = _combined_text(
+            teacher_trace, None, None, layer_scope=expectation.layer_scope
+        )
     else:
         if core_trace is None:
             failures.append(f"{label}: missing active class core trace")
             return ScoreResult(passed=False, failures=failures, warnings=warnings)
-        scored_text = _combined_text(teacher_trace, core_trace, layer_scope=expectation.layer_scope)
+        scored_text = _combined_text(
+            teacher_trace,
+            core_trace,
+            subject_trace
+            if expectation.layer_scope == LayerScope.GLOBAL_PLUS_CLASS_PLUS_SUBJECT
+            else None,
+            layer_scope=expectation.layer_scope,
+        )
 
     if not str(teacher_trace.get("text", "")).strip():
         failures.append(f"{label}: teacher context is empty")
@@ -94,17 +107,17 @@ def score_layer_context(
             failures.append(f"{label}: forbidden marker present {marker!r}")
 
     if expectation.layer_scope == LayerScope.GLOBAL_PLUS_CLASS_PLUS_SUBJECT:
-        if not _has_included_subject_section(core_trace, expectation.subject_id):
+        subject_text = _subject_section_text(subject_trace, expectation.subject_id)
+        if not subject_text:
             failures.append(
                 f"{label}: missing included subject guide section for {expectation.subject_id!r}"
             )
-        subject_text = ""
-        if core_trace:
-            for section in core_trace.get("sections") or []:
-                if str(section.get("name", "")).lower() == f"subject guide: {expectation.subject_id}".lower():
-                    subject_text = str(section.get("text", ""))
-                    break
-        _check_markers(subject_text, expectation.subject_required_markers, f"{label} subject", failures)
+        _check_markers(
+            subject_text,
+            expectation.subject_required_markers,
+            f"{label} subject",
+            failures,
+        )
 
     if core_trace and expectation.required_memory_files:
         included_sources = {
