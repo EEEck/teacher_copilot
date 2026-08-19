@@ -101,7 +101,7 @@ def get_snapshot(store, class_id: str) -> ClassMemorySnapshot:
         if line.strip().startswith("-")
     ][:5]
     recent = [f"{e.date} — {e.title}" for e in timeline.entries[:3]]
-    last_committed = store._latest_log_commit()
+    last_committed = store._latest_log_commit(class_id)
 
     return ClassMemorySnapshot(
         class_id=class_id,

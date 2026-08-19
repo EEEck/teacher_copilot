@@ -40,9 +40,13 @@ from app.schemas.api import (
     ClassesResponse,
     ClassBriefResponse,
     ClassMemorySnapshot,
+    ClassSummary,
     ClassTimeline,
     CommitIngestRequest,
     CommitIngestResponse,
+    CreateClassRequest,
+    CurriculumRouteOption,
+    CurriculumRoutesResponse,
     DiscussChatRequest,
     DiscussChatResponse,
     DiscussDraft,
@@ -93,6 +97,7 @@ from app.schemas.api import (
     WikiPagesResponse,
 )
 from app.services.beta import BetaAuthService, RequestIdentity
+from app.services import class_provisioning
 from app.services.class_brief_service import ClassBriefService
 from app.services.discussion_service import DiscussionService
 from app.services.ingest_service import IngestService
@@ -832,6 +837,46 @@ def beta_feedback(
 @router.get("/classes", response_model=ClassesResponse)
 def list_classes(wiki: WikiStore = Depends(get_wiki)) -> ClassesResponse:
     return ClassesResponse(classes=wiki.list_classes())
+
+
+@router.get("/classes/curriculum-routes", response_model=CurriculumRoutesResponse)
+def list_curriculum_routes(
+    wiki: WikiStore = Depends(get_wiki),
+) -> CurriculumRoutesResponse:
+    return CurriculumRoutesResponse(
+        routes=[
+            CurriculumRouteOption(subject=item.subject, grade=item.grade, branch=item.branch)
+            for item in class_provisioning.available_routes(wiki)
+        ]
+    )
+
+
+@router.post("/classes", response_model=ClassSummary, status_code=201)
+def create_class(
+    body: CreateClassRequest,
+    wiki: WikiStore = Depends(get_wiki),
+) -> ClassSummary:
+    try:
+        return class_provisioning.create_class(
+            wiki,
+            class_provisioning.ClassSpec(
+                label=body.label,
+                subject=body.subject,
+                grade=body.grade,
+                section=body.section,
+                school_year=body.school_year,
+                branch=body.branch,
+                school_type=body.school_type,
+                state=body.state,
+                prior_learning=body.prior_learning,
+                student_names=tuple(body.student_names),
+            ),
+        )
+    except class_provisioning.ClassProvisioningError as exc:
+        # The global HTTP exception handler uses the application-wide error
+        # envelope. This creation contract intentionally exposes FastAPI's
+        # conventional ``detail`` field to the setup form.
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
 @router.get("/workflow/active", response_model=ActiveWorkResponse)
