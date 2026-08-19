@@ -44,21 +44,29 @@ def expect_status(response: httpx.Response, status: int) -> dict:
     return response.json()
 
 
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
 def run(api_base: str, wiki_root: Path) -> dict:
     class_8a = "chemie_8a_2026_27"
     seeded_9b = "chemie_9b_2026_27"
     classes_root = wiki_root / "wiki" / "classes"
     with httpx.Client(base_url=api_base, timeout=30.0) as client:
-        assert expect_status(client.get("/api/health"), 200)["status"] == "ok"
+        require(
+            expect_status(client.get("/api/health"), 200)["status"] == "ok",
+            "health endpoint did not report status=ok",
+        )
         initial = expect_status(client.get("/api/classes"), 200)["classes"]
         initial_ids = {item["id"] for item in initial}
-        assert seeded_9b in initial_ids
-        assert class_8a not in initial_ids
+        require(seeded_9b in initial_ids, f"missing seeded class {seeded_9b}")
+        require(class_8a not in initial_ids, f"class {class_8a} already exists")
 
         routes = expect_status(
             client.get("/api/classes/curriculum-routes"), 200
         )["routes"]
-        assert routes == SUPPORTED_ROUTES
+        require(routes == SUPPORTED_ROUTES, "curriculum routes did not match")
 
         seeded_snapshot = expect_status(
             client.get(f"/api/classes/{seeded_9b}/snapshot"), 200
@@ -68,11 +76,15 @@ def run(api_base: str, wiki_root: Path) -> dict:
         )
 
         created = expect_status(client.post("/api/classes", json=CREATE_8A), 201)
-        assert created == {
-            "id": class_8a,
-            "label": "Chemie 8a — 2026/27",
-            "subject": "chemie",
-        }
+        require(
+            created
+            == {
+                "id": class_8a,
+                "label": "Chemie 8a — 2026/27",
+                "subject": "chemie",
+            },
+            "created class summary did not match",
+        )
 
         fresh_snapshot = expect_status(
             client.get(f"/api/classes/{class_8a}/snapshot"), 200
@@ -80,12 +92,24 @@ def run(api_base: str, wiki_root: Path) -> dict:
         fresh_timeline = expect_status(
             client.get(f"/api/classes/{class_8a}/timeline"), 200
         )
-        assert fresh_snapshot["current_unit"] == "Not set"
-        assert fresh_snapshot["last_committed_date"] is None
-        assert fresh_snapshot["open_loop_count"] == 0
-        assert fresh_snapshot["recent_lessons"] == []
-        assert fresh_timeline["entries"] == []
-        assert fresh_timeline["months"] == []
+        require(
+            fresh_snapshot["current_unit"] == "Not set",
+            "new class has a current unit",
+        )
+        require(
+            fresh_snapshot["last_committed_date"] is None,
+            "new class has a committed lesson date",
+        )
+        require(
+            fresh_snapshot["open_loop_count"] == 0,
+            "new class has open loops",
+        )
+        require(
+            fresh_snapshot["recent_lessons"] == [],
+            "new class has recent lessons",
+        )
+        require(fresh_timeline["entries"] == [], "new class timeline has entries")
+        require(fresh_timeline["months"] == [], "new class timeline has months")
 
         class_root = classes_root / class_8a
         required = {
@@ -97,32 +121,61 @@ def run(api_base: str, wiki_root: Path) -> dict:
             "memory/teaching_framework_adjustments.md",
             "students/S-001.md", "students/S-002.md",
         }
-        assert all((class_root / rel).is_file() for rel in required)
-        assert not (class_root / "course_network" / "network.json").exists()
-        assert "Atombau und Periodensystem" in (
-            class_root / "course_state.md"
-        ).read_text(encoding="utf-8")
+        require(
+            all((class_root / rel).is_file() for rel in required),
+            "new class is missing required wiki files",
+        )
+        require(
+            not (class_root / "course_network" / "network.json").exists(),
+            "new class unexpectedly has a course network",
+        )
+        require(
+            "Atombau und Periodensystem"
+            in (class_root / "course_state.md").read_text(encoding="utf-8"),
+            "new class course state did not retain prior learning",
+        )
 
-        before_duplicate = tree_digest(class_root)
+        before_duplicate = tree_digest(classes_root)
         duplicate = expect_status(client.post("/api/classes", json=CREATE_8A), 422)
-        assert "already exists" in duplicate["detail"]
-        assert tree_digest(class_root) == before_duplicate
+        require(
+            "already exists" in duplicate["detail"],
+            "duplicate was not reported",
+        )
+        require(
+            tree_digest(classes_root) == before_duplicate,
+            "duplicate rejection mutated the class sandbox",
+        )
 
         unsupported = CREATE_8A | {
             "label": "Chemie 8c — 2026/27",
             "section": "c",
             "branch": "SG",
         }
+        before_unsupported = tree_digest(classes_root)
         rejected = expect_status(client.post("/api/classes", json=unsupported), 422)
-        assert "NTG" in rejected["detail"]
-        assert not (classes_root / "chemie_8c_2026_27").exists()
+        require(
+            "NTG" in rejected["detail"],
+            "unsupported branch was not reported",
+        )
+        require(
+            not (classes_root / "chemie_8c_2026_27").exists(),
+            "unsupported class directory was created",
+        )
+        require(
+            tree_digest(classes_root) == before_unsupported,
+            "unsupported rejection mutated the class sandbox",
+        )
 
-        assert expect_status(
-            client.get(f"/api/classes/{seeded_9b}/snapshot"), 200
-        ) == seeded_snapshot
-        assert expect_status(
-            client.get(f"/api/classes/{seeded_9b}/timeline"), 200
-        ) == seeded_timeline
+        require(
+            expect_status(client.get(f"/api/classes/{seeded_9b}/snapshot"), 200)
+            == seeded_snapshot,
+            "seeded class snapshot changed",
+        )
+        require(
+            expect_status(client.get(f"/api/classes/{seeded_9b}/timeline"), 200)
+            == seeded_timeline,
+            "seeded class timeline changed",
+        )
 
         for suffix in ("brief", "memory/sweep/review"):
             expect_status(client.get(f"/api/classes/{class_8a}/{suffix}"), 200)
