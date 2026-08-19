@@ -8,9 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/layout/app-shell";
 import { client, type BetaIdentity } from "@/lib/api";
 
-vi.stubGlobal("React", React);
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
 const navigation = vi.hoisted(() => ({
   pathname: "/",
   router: {
@@ -43,15 +40,15 @@ const COMPLETE_BETA_IDENTITY: BetaIdentity = {
 
 let mountedRoots: Root[] = [];
 
-function shellElement(betaEnabled: boolean) {
+function shellElement(betaEnabled?: boolean) {
   const props = {
-    betaEnabled,
     children: createElement("p", null, "Class navigation"),
+    ...(betaEnabled === undefined ? {} : { betaEnabled }),
   } as ComponentProps<typeof AppShell> & { betaEnabled: boolean };
   return createElement(AppShell, props);
 }
 
-async function mountShell(betaEnabled: boolean): Promise<Root> {
+async function mountShell(betaEnabled?: boolean): Promise<Root> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -62,7 +59,7 @@ async function mountShell(betaEnabled: boolean): Promise<Root> {
   return root;
 }
 
-async function navigate(root: Root, betaEnabled: boolean): Promise<void> {
+async function navigate(root: Root, betaEnabled?: boolean): Promise<void> {
   navigation.pathname = "/classes/chemie_8a_2026_27";
   await act(async () => {
     root.render(shellElement(betaEnabled));
@@ -71,6 +68,8 @@ async function navigate(root: Root, betaEnabled: boolean): Promise<void> {
 
 describe("AppShell beta identity integration", () => {
   beforeEach(() => {
+    vi.stubGlobal("React", React);
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     mountedRoots = [];
     navigation.pathname = "/";
     navigation.router.push.mockReset();
@@ -85,6 +84,30 @@ describe("AppShell beta identity integration", () => {
     });
     document.body.replaceChildren();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    [undefined, 0],
+    ["false", 0],
+    ["FALSE", 0],
+    ["0", 0],
+    ["off", 0],
+    ["NO", 0],
+    ["true", 2],
+    ["TRUE", 2],
+    ["1", 2],
+    ["on", 2],
+    ["ON", 2],
+    ["yes", 2],
+    ["YeS", 2],
+  ] as const)("parses public beta setting %s at the AppShell default boundary", async (value, calls) => {
+    vi.stubEnv("NEXT_PUBLIC_BETA_ENABLED", value);
+
+    await mountShell();
+
+    expect(client.betaMe).toHaveBeenCalledTimes(calls);
   });
 
   it("never probes beta identity when non-beta navigation mounts or changes route", async () => {

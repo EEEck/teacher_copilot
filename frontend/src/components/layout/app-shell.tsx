@@ -8,6 +8,7 @@ import { BetaProfileGate } from "@/components/layout/beta-profile-gate";
 
 import { useShellLayout } from "@/components/layout/shell-layout";
 
+import { parseBetaEnabled } from "@/lib/beta-enabled";
 import { cn } from "@/lib/utils";
 
 
@@ -18,7 +19,7 @@ export function AppShell({
 
   className,
 
-  betaEnabled = process.env.NEXT_PUBLIC_BETA_ENABLED === "true",
+  betaEnabled = parseBetaEnabled(process.env.NEXT_PUBLIC_BETA_ENABLED),
 
 }: {
 
