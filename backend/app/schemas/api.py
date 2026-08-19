@@ -2,9 +2,25 @@ from __future__ import annotations
 
 from datetime import date
 from enum import Enum
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+CLASS_LABEL_MAX_LENGTH = 120
+CLASS_SUBJECT_MAX_LENGTH = 40
+CLASS_SECTION_MAX_LENGTH = 1
+CLASS_SCHOOL_YEAR_MAX_LENGTH = 20
+CLASS_BRANCH_MAX_LENGTH = 20
+CLASS_SCHOOL_TYPE_MAX_LENGTH = 80
+CLASS_STATE_MAX_LENGTH = 20
+CLASS_PRIOR_LEARNING_MAX_LENGTH = 4000
+CLASS_ROSTER_MAX_SIZE = 999
+CLASS_STUDENT_NAME_MAX_LENGTH = 120
+
+StudentName = Annotated[
+    str, Field(min_length=1, max_length=CLASS_STUDENT_NAME_MAX_LENGTH)
+]
 
 
 class HealthResponse(BaseModel):
@@ -68,16 +84,39 @@ class CurriculumRoutesResponse(BaseModel):
 
 
 class CreateClassRequest(BaseModel):
-    label: str
-    subject: str
-    grade: int
-    section: str = ""
-    school_year: str = ""
-    branch: str = "NTG"
-    school_type: str = "Gymnasium"
-    state: str = "BY"
-    prior_learning: str = ""
-    student_names: list[str] = Field(default_factory=list)
+    label: str = Field(min_length=1, max_length=CLASS_LABEL_MAX_LENGTH)
+    subject: str = Field(min_length=1, max_length=CLASS_SUBJECT_MAX_LENGTH)
+    grade: int = Field(ge=1, le=13)
+    section: str = Field(default="", max_length=CLASS_SECTION_MAX_LENGTH)
+    school_year: str = Field(default="", max_length=CLASS_SCHOOL_YEAR_MAX_LENGTH)
+    branch: str = Field(default="NTG", max_length=CLASS_BRANCH_MAX_LENGTH)
+    school_type: str = Field(
+        default="Gymnasium", max_length=CLASS_SCHOOL_TYPE_MAX_LENGTH
+    )
+    state: str = Field(default="BY", max_length=CLASS_STATE_MAX_LENGTH)
+    prior_learning: str = Field(default="", max_length=CLASS_PRIOR_LEARNING_MAX_LENGTH)
+    student_names: list[StudentName] = Field(
+        default_factory=list, max_length=CLASS_ROSTER_MAX_SIZE
+    )
+
+    @field_validator(
+        "label", "subject", "section", "school_year", "branch", "school_type", "state"
+    )
+    @classmethod
+    def _single_line_metadata(cls, value: str) -> str:
+        if "\n" in value or "\r" in value:
+            raise ValueError("class metadata must stay on one line")
+        return value
+
+    @field_validator("student_names")
+    @classmethod
+    def _markdown_safe_student_names(cls, names: list[str]) -> list[str]:
+        for name in names:
+            if not name.strip():
+                raise ValueError("student names cannot be blank")
+            if "|" in name or "\n" in name or "\r" in name:
+                raise ValueError("student names cannot contain pipes or newlines")
+        return names
 
 
 class WikiLintResponse(BaseModel):

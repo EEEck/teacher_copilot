@@ -58,10 +58,10 @@ def test_active_class_core_includes_class_memory_but_not_the_subject_layer(tmp_p
         "# Mathe\n\nThis subject guide must not be loaded for Chemie.",
         encoding="utf-8",
     )
-    extra_memory = (
-        tmp_path / "wiki" / "classes" / CLASS_ID / "memory" / "extra_note.md"
+    extra_memory = tmp_path / "wiki" / "classes" / CLASS_ID / "memory" / "extra_note.md"
+    extra_memory.write_text(
+        "# Extra Note\n\nActive class extra memory.", encoding="utf-8"
     )
-    extra_memory.write_text("# Extra Note\n\nActive class extra memory.", encoding="utf-8")
 
     trace = wiki.build_active_class_core_context_trace(CLASS_ID)
     included_sources = {
@@ -74,7 +74,9 @@ def test_active_class_core_includes_class_memory_but_not_the_subject_layer(tmp_p
     }
 
     assert expected_memory_sources <= included_sources
-    assert "Subject guide: chemie" not in [section["name"] for section in trace["sections"]]
+    assert "Subject guide: chemie" not in [
+        section["name"] for section in trace["sections"]
+    ]
     assert "This subject guide must not be loaded for Chemie." not in trace["text"]
 
 
@@ -137,6 +139,6 @@ def test_review_query_pack_is_available():
 def test_snapshot_last_committed_date_is_iso_not_bracketed():
     wiki = WikiStore(root=SEED_WIKI)
     snap = wiki.get_snapshot(CLASS_ID)
-    if snap.last_committed_date:
-        assert "[" not in snap.last_committed_date
-        assert len(snap.last_committed_date) == 10
+    assert snap.last_committed_date == "2026-06-01"
+    assert snap.last_committed_at == "2026-06-01T04:39:00"
+    assert snap.last_committed_title == "Compact class memory"

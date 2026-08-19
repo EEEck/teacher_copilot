@@ -37,8 +37,10 @@ def _latest_log_commit(store, class_id: Optional[str] = None) -> dict[str, str]:
         block = log_text[start:end]
         header_line = block.split("\n", 1)[0]
         meta = parsing.parse_log_entry(header_line, block)
-        if meta and meta.get("lesson_date") and (
-            class_id is None or meta.get("class_id") == class_id
+        if (
+            meta
+            and meta.get("lesson_date")
+            and (class_id is None or meta.get("class_id") == class_id)
         ):
             return {
                 "lesson_date": meta["lesson_date"],
@@ -140,9 +142,7 @@ def rebuild_index(store, class_id: Optional[str] = None) -> None:
         if profile_path.exists() or sources_path.exists():
             lines.extend(["", "### Curriculum & trusted sources"])
             if profile_path.exists():
-                lines.append(
-                    f"- [Curriculum profile]({store.rel_wiki(profile_path)})"
-                )
+                lines.append(f"- [Curriculum profile]({store.rel_wiki(profile_path)})")
             if sources_path.exists():
                 lines.append(
                     f"- [Trusted source index]({store.rel_wiki(sources_path)})"
@@ -185,7 +185,15 @@ def rebuild_index(store, class_id: Optional[str] = None) -> None:
             lines.append("_No raw diaries yet._")
         lines.append("")
 
-    store.write_text(store.index_path, "\n".join(lines))
+    content = "\n".join(lines)
+    temporary = store.index_path.with_name(
+        f".{store.index_path.name}.{uuid.uuid4().hex}.tmp"
+    )
+    try:
+        store.write_text(temporary, content)
+        temporary.replace(store.index_path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _update_index(store, class_id: str) -> None:

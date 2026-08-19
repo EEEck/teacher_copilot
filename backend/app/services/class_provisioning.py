@@ -2,10 +2,29 @@
 
 from __future__ import annotations
 
+import errno
+import os
 import re
+import shutil
+import tempfile
+import threading
+import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from app.schemas.api import ClassSummary
+from app.schemas.api import (
+    CLASS_BRANCH_MAX_LENGTH,
+    CLASS_LABEL_MAX_LENGTH,
+    CLASS_PRIOR_LEARNING_MAX_LENGTH,
+    CLASS_ROSTER_MAX_SIZE,
+    CLASS_SCHOOL_TYPE_MAX_LENGTH,
+    CLASS_SCHOOL_YEAR_MAX_LENGTH,
+    CLASS_STATE_MAX_LENGTH,
+    CLASS_STUDENT_NAME_MAX_LENGTH,
+    CLASS_SUBJECT_MAX_LENGTH,
+    ClassSummary,
+)
 from app.teacher_agent.wiki.constants import LESSON_RESULTS_SECTIONS
 from app.teacher_agent.wiki.subject_frameworks import load_framework_index
 from app.teacher_agent.wiki.trusted_sources import load_trusted_sources
@@ -17,6 +36,8 @@ SUPPORTED_STATE = "BY"
 
 _SECTION_RE = re.compile(r"^[a-z]$")
 _SLUG_RE = re.compile(r"^[a-z0-9_]+$")
+_PROCESS_LOCKS_GUARD = threading.Lock()
+_PROCESS_LOCKS: dict[str, threading.Lock] = {}
 
 
 class ClassProvisioningError(ValueError):
@@ -68,6 +89,23 @@ def class_id_for(spec: ClassSpec) -> str:
 
 def validate(store, spec: ClassSpec) -> str:
     """Return the class id, or raise ``ClassProvisioningError``."""
+    _validate_bounded_text("Class label", spec.label, CLASS_LABEL_MAX_LENGTH)
+    _validate_bounded_text("Subject", spec.subject, CLASS_SUBJECT_MAX_LENGTH)
+    _validate_bounded_text(
+        "School year", spec.school_year, CLASS_SCHOOL_YEAR_MAX_LENGTH
+    )
+    _validate_bounded_text("Branch", spec.branch, CLASS_BRANCH_MAX_LENGTH)
+    _validate_bounded_text(
+        "School type", spec.school_type, CLASS_SCHOOL_TYPE_MAX_LENGTH
+    )
+    _validate_bounded_text("State", spec.state, CLASS_STATE_MAX_LENGTH)
+    _validate_bounded_text(
+        "Prior learning",
+        spec.prior_learning,
+        CLASS_PRIOR_LEARNING_MAX_LENGTH,
+        allow_newlines=True,
+    )
+    _validate_student_names(spec.student_names)
     subject = spec.subject.strip().lower()
     if subject not in SUPPORTED_SUBJECTS:
         raise ClassProvisioningError(
@@ -106,23 +144,156 @@ def validate(store, spec: ClassSpec) -> str:
 
 
 def create_class(store, spec: ClassSpec) -> ClassSummary:
-    """Write the deterministic class skeleton and refresh the wiki index."""
+    """Stage, atomically publish, and index one deterministic class skeleton."""
     class_id = validate(store, spec)
     subject = spec.subject.strip().lower()
     label = spec.label.strip()
+    store.root.mkdir(parents=True, exist_ok=True)
+    staging_dir = Path(
+        tempfile.mkdtemp(prefix=f".class-provisioning-{class_id}-", dir=store.root)
+    )
+    try:
+        _write_staged_class(store, staging_dir, class_id, spec, subject, label)
+        with _wiki_creation_lock(store.root):
+            final_dir = store.class_dir(class_id)
+            if final_dir.exists():
+                raise ClassProvisioningError(f"Class '{class_id}' already exists.")
 
+            previous_index = (
+                store.index_path.read_bytes() if store.index_path.exists() else None
+            )
+            try:
+                staging_dir.rename(final_dir)
+            except OSError as exc:
+                if exc.errno in {errno.EEXIST, errno.ENOTEMPTY} or final_dir.exists():
+                    raise ClassProvisioningError(
+                        f"Class '{class_id}' already exists."
+                    ) from exc
+                raise
+
+            try:
+                store.rebuild_index()
+            except BaseException:
+                try:
+                    shutil.rmtree(final_dir)
+                    _restore_index(store.index_path, previous_index)
+                except Exception as rollback_exc:
+                    raise RuntimeError(
+                        f"Failed to roll back class '{class_id}' after index failure."
+                    ) from rollback_exc
+                raise
+        return ClassSummary(id=class_id, label=label, subject=subject)
+    finally:
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir)
+
+
+def _write_staged_class(
+    store,
+    staging_dir: Path,
+    class_id: str,
+    spec: ClassSpec,
+    subject: str,
+    label: str,
+) -> None:
     for name, body in _skeleton(store, class_id, spec, subject, label).items():
-        store.write_text(store.class_dir(class_id) / name, body)
+        store.write_text(staging_dir / name, body)
 
-    for index, student in enumerate(_clean_names(spec.student_names), start=1):
+    for index, _student in enumerate(_clean_names(spec.student_names), start=1):
         student_id = f"S-{index:03d}"
         store.write_text(
-            store.student_path(class_id, student_id),
+            staging_dir / "students" / f"{student_id}.md",
             f"# {student_id}\n\n## Student Summary\n\n_No observations recorded yet._\n",
         )
 
-    store.rebuild_index()
-    return ClassSummary(id=class_id, label=label, subject=subject)
+
+def _validate_bounded_text(
+    label: str, value: str, max_length: int, *, allow_newlines: bool = False
+) -> None:
+    if len(value) > max_length:
+        raise ClassProvisioningError(
+            f"{label} must be at most {max_length} characters."
+        )
+    if not allow_newlines and ("\n" in value or "\r" in value):
+        raise ClassProvisioningError(f"{label} must stay on one line.")
+
+
+def _validate_student_names(names) -> None:
+    if len(names) > CLASS_ROSTER_MAX_SIZE:
+        raise ClassProvisioningError(
+            f"A roster may contain at most {CLASS_ROSTER_MAX_SIZE} students."
+        )
+    for name in _clean_names(names):
+        if len(name) > CLASS_STUDENT_NAME_MAX_LENGTH:
+            raise ClassProvisioningError(
+                "Each student name must be at most "
+                f"{CLASS_STUDENT_NAME_MAX_LENGTH} characters."
+            )
+        if "|" in name or "\n" in name or "\r" in name:
+            raise ClassProvisioningError(
+                "Each student name must not contain Markdown pipes or newlines."
+            )
+
+
+def _process_lock_for(root: Path) -> threading.Lock:
+    key = os.path.normcase(str(root.resolve()))
+    with _PROCESS_LOCKS_GUARD:
+        return _PROCESS_LOCKS.setdefault(key, threading.Lock())
+
+
+@contextmanager
+def _wiki_creation_lock(root: Path):
+    """Serialize class publication across threads and OS processes for one wiki."""
+    process_lock = _process_lock_for(root)
+    lock_path = root / ".class-provisioning.lock"
+    with process_lock, lock_path.open("a+b") as lock_file:
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        _lock_file(lock_file)
+        try:
+            yield
+        finally:
+            _unlock_file(lock_file)
+
+
+def _lock_file(lock_file) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_file(lock_file) -> None:
+    lock_file.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _restore_index(index_path: Path, previous: bytes | None) -> None:
+    if previous is None:
+        index_path.unlink(missing_ok=True)
+        return
+    temporary = index_path.with_name(f".{index_path.name}.{uuid.uuid4().hex}.rollback")
+    try:
+        temporary.write_bytes(previous)
+        os.replace(temporary, index_path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _clean_names(names) -> list[str]:

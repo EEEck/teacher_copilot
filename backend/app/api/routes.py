@@ -22,6 +22,7 @@ from app.api.deps import (
     get_workflow_draft_store,
     get_wiki,
 )
+from app.api.errors import ErrorEnvelope
 from app.config import get_settings
 from app.openai_bootstrap import is_openai_configured
 from app.services.memory_v4_debug_capture import MemoryV4DebugRecorder
@@ -851,7 +852,12 @@ def list_curriculum_routes(
     )
 
 
-@router.post("/classes", response_model=ClassSummary, status_code=201)
+@router.post(
+    "/classes",
+    response_model=ClassSummary,
+    status_code=201,
+    responses={422: {"model": ErrorEnvelope, "description": "Class validation failed"}},
+)
 def create_class(
     body: CreateClassRequest,
     wiki: WikiStore = Depends(get_wiki),
@@ -873,10 +879,7 @@ def create_class(
             ),
         )
     except class_provisioning.ClassProvisioningError as exc:
-        # The global HTTP exception handler uses the application-wide error
-        # envelope. This creation contract intentionally exposes FastAPI's
-        # conventional ``detail`` field to the setup form.
-        return JSONResponse(status_code=422, content={"detail": str(exc)})
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/workflow/active", response_model=ActiveWorkResponse)

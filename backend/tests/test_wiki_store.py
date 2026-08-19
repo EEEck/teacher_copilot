@@ -1,6 +1,5 @@
 """Integration tests for WikiStore compile and read APIs."""
 
-import re
 from pathlib import Path
 
 from app.teacher_agent.wiki_store import WikiStore
@@ -27,13 +26,13 @@ def test_compile_from_diary_proposals_have_unique_wiki_paths():
     assert len(paths) == len(set(paths))
 
 
-def test_snapshot_last_committed_date_is_iso_date():
+def test_seeded_snapshot_retains_known_last_commit_metadata():
     root = Path(__file__).resolve().parent.parent / "teacher_wiki"
     wiki = WikiStore(root=root)
     snap = wiki.get_snapshot("chemie_9b_2026_27")
-    if snap.last_committed_date:
-        assert re.match(r"^\d{4}-\d{2}-\d{2}$", snap.last_committed_date)
-        assert "[" not in snap.last_committed_date
+    assert snap.last_committed_date == "2026-06-01"
+    assert snap.last_committed_at == "2026-06-01T04:39:00"
+    assert snap.last_committed_title == "Compact class memory"
 
 
 def test_timeline_has_seed_lessons():

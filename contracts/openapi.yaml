@@ -28,15 +28,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ClassSummary'
         '422':
-          description: The requested class cannot be created
+          description: The request or requested class failed validation
           content:
             application/json:
               schema:
-                type: object
-                required: [detail]
-                properties:
-                  detail:
-                    type: string
+                $ref: '#/components/schemas/ErrorEnvelope'
   /api/classes/curriculum-routes:
     get:
       summary: List reviewed curriculum routes
@@ -97,35 +93,67 @@ components:
       properties:
         label:
           type: string
+          minLength: 1
+          maxLength: 120
         subject:
           type: string
+          minLength: 1
+          maxLength: 40
           enum: [chemie]
         grade:
           type: integer
+          minimum: 1
+          maximum: 13
           enum: [8, 9]
         section:
           type: string
+          maxLength: 1
           default: ''
         school_year:
           type: string
+          maxLength: 20
           default: ''
         branch:
           type: string
+          maxLength: 20
           default: NTG
         school_type:
           type: string
+          maxLength: 80
           default: Gymnasium
         state:
           type: string
+          maxLength: 20
           default: BY
         prior_learning:
           type: string
+          maxLength: 4000
           default: ''
         student_names:
           type: array
+          maxItems: 999
           items:
             type: string
+            minLength: 1
+            maxLength: 120
+            pattern: '^[^|\r\n]+$'
           default: []
+    ErrorBody:
+      type: object
+      required: [type, message]
+      properties:
+        type:
+          type: string
+        message:
+          type: string
+        detail:
+          type: [string, 'null']
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
     ClassSummary:
       type: object
       required: [id, label, subject]

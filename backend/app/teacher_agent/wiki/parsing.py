@@ -255,6 +255,26 @@ def parse_log_entry(header: str, block: str) -> Optional[dict]:
             return None
         lesson_date, _kind, title, entry_id = m.groups()
     paths = re.findall(r"- Updated:\s*(.+)", block)
+    class_m = re.search(
+        r"^>\s*Class:\s*([a-z0-9_]+)\s*$",
+        block,
+        re.MULTILINE | re.IGNORECASE,
+    )
+    class_id = class_m.group(1).lower() if class_m else None
+    if class_id is None:
+        inferred_class_ids = {
+            match.group(1).lower()
+            for path in paths
+            if (
+                match := re.search(
+                    r"(?:^|/)(?:wiki|raw)/classes/([a-z0-9_]+)/",
+                    path.strip(),
+                    re.IGNORECASE,
+                )
+            )
+        }
+        if len(inferred_class_ids) == 1:
+            class_id = inferred_class_ids.pop()
     meta_m = re.search(r"> Lesson date:\s*(\d{4}-\d{2}-\d{2})", block)
     if meta_m:
         lesson_date = meta_m.group(1)
@@ -272,6 +292,7 @@ def parse_log_entry(header: str, block: str) -> Optional[dict]:
         "lesson_date": lesson_date,
         "title": title.strip(),
         "entry_id": entry_id,
+        "class_id": class_id,
         "wiki_paths": [p.strip() for p in paths],
         "committed_at": committed_at,
     }

@@ -7,7 +7,6 @@ from pathlib import Path
 
 import httpx
 
-
 SUPPORTED_ROUTES = [
     {"subject": "chemie", "grade": 8, "branch": "NTG"},
     {"subject": "chemie", "grade": 9, "branch": "NTG"},
@@ -49,6 +48,14 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+def error_message(body: dict) -> str:
+    error = body.get("error")
+    if isinstance(error, dict) and isinstance(error.get("message"), str):
+        return error["message"]
+    detail = body.get("detail")
+    return detail if isinstance(detail, str) else ""
+
+
 def run(api_base: str, wiki_root: Path) -> dict:
     class_8a = "chemie_8a_2026_27"
     seeded_9b = "chemie_9b_2026_27"
@@ -63,9 +70,9 @@ def run(api_base: str, wiki_root: Path) -> dict:
         require(seeded_9b in initial_ids, f"missing seeded class {seeded_9b}")
         require(class_8a not in initial_ids, f"class {class_8a} already exists")
 
-        routes = expect_status(
-            client.get("/api/classes/curriculum-routes"), 200
-        )["routes"]
+        routes = expect_status(client.get("/api/classes/curriculum-routes"), 200)[
+            "routes"
+        ]
         require(routes == SUPPORTED_ROUTES, "curriculum routes did not match")
 
         seeded_snapshot = expect_status(
@@ -73,6 +80,12 @@ def run(api_base: str, wiki_root: Path) -> dict:
         )
         seeded_timeline = expect_status(
             client.get(f"/api/classes/{seeded_9b}/timeline"), 200
+        )
+        require(
+            seeded_snapshot["last_committed_date"] == "2026-06-01"
+            and seeded_snapshot["last_committed_at"] == "2026-06-01T04:39:00"
+            and seeded_snapshot["last_committed_title"] == "Compact class memory",
+            "seeded class lost its known last-commit metadata",
         )
 
         created = expect_status(client.post("/api/classes", json=CREATE_8A), 201)
@@ -101,6 +114,11 @@ def run(api_base: str, wiki_root: Path) -> dict:
             "new class has a committed lesson date",
         )
         require(
+            fresh_snapshot["last_committed_at"] is None
+            and fresh_snapshot["last_committed_title"] is None,
+            "new class has committed lesson metadata",
+        )
+        require(
             fresh_snapshot["open_loop_count"] == 0,
             "new class has open loops",
         )
@@ -113,13 +131,21 @@ def run(api_base: str, wiki_root: Path) -> dict:
 
         class_root = classes_root / class_8a
         required = {
-            "class_config.md", "course_state.md", "curriculum_profile.md",
-            "misconceptions.md", "open_loops.md", "students.md",
-            "timeline.md", "trusted_sources.md",
-            "memory/planning_brief.md", "memory/teaching_patterns.md",
-            "memory/copilot_profile.md", "memory/session_summaries.md",
+            "class_config.md",
+            "course_state.md",
+            "curriculum_profile.md",
+            "misconceptions.md",
+            "open_loops.md",
+            "students.md",
+            "timeline.md",
+            "trusted_sources.md",
+            "memory/planning_brief.md",
+            "memory/teaching_patterns.md",
+            "memory/copilot_profile.md",
+            "memory/session_summaries.md",
             "memory/teaching_framework_adjustments.md",
-            "students/S-001.md", "students/S-002.md",
+            "students/S-001.md",
+            "students/S-002.md",
         }
         require(
             all((class_root / rel).is_file() for rel in required),
@@ -138,7 +164,7 @@ def run(api_base: str, wiki_root: Path) -> dict:
         before_duplicate = tree_digest(classes_root)
         duplicate = expect_status(client.post("/api/classes", json=CREATE_8A), 422)
         require(
-            "already exists" in duplicate["detail"],
+            "already exists" in error_message(duplicate),
             "duplicate was not reported",
         )
         require(
@@ -154,7 +180,7 @@ def run(api_base: str, wiki_root: Path) -> dict:
         before_unsupported = tree_digest(classes_root)
         rejected = expect_status(client.post("/api/classes", json=unsupported), 422)
         require(
-            "NTG" in rejected["detail"],
+            "NTG" in error_message(rejected),
             "unsupported branch was not reported",
         )
         require(
