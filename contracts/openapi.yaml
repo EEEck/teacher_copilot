@@ -9,6 +9,44 @@ paths:
   /api/classes:
     get:
       summary: List classes
+      responses:
+        '200':
+          description: Classes in the workspace
+    post:
+      summary: Create a class from a reviewed curriculum route
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClassRequest'
+      responses:
+        '201':
+          description: Class created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassSummary'
+        '422':
+          description: The requested class cannot be created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [detail]
+                properties:
+                  detail:
+                    type: string
+  /api/classes/curriculum-routes:
+    get:
+      summary: List reviewed curriculum routes
+      responses:
+        '200':
+          description: Reviewed routes available for class creation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurriculumRoutesResponse'
   /api/classes/{classId}/timeline:
     get:
       summary: Lesson timeline
@@ -30,3 +68,72 @@ paths:
   /api/classes/{classId}/plan-lesson:
     post:
       summary: Generate lesson plan
+components:
+  schemas:
+    CurriculumRouteOption:
+      type: object
+      required: [subject, grade, branch]
+      properties:
+        subject:
+          type: string
+          enum: [chemie]
+        grade:
+          type: integer
+          enum: [8, 9]
+        branch:
+          type: string
+          enum: [NTG]
+    CurriculumRoutesResponse:
+      type: object
+      required: [routes]
+      properties:
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/CurriculumRouteOption'
+    CreateClassRequest:
+      type: object
+      required: [label, subject, grade]
+      properties:
+        label:
+          type: string
+        subject:
+          type: string
+          enum: [chemie]
+        grade:
+          type: integer
+          enum: [8, 9]
+        section:
+          type: string
+          default: ''
+        school_year:
+          type: string
+          default: ''
+        branch:
+          type: string
+          default: NTG
+        school_type:
+          type: string
+          default: Gymnasium
+        state:
+          type: string
+          default: BY
+        prior_learning:
+          type: string
+          default: ''
+        student_names:
+          type: array
+          items:
+            type: string
+          default: []
+    ClassSummary:
+      type: object
+      required: [id, label, subject]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        subject:
+          type: string
+          enum: [chemie]

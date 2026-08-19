@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { CreateClassCard } from "@/components/klassenpilot/create-class-card";
 import { HomeLanding } from "@/components/klassenpilot/home-landing";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { client, type ClassSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -13,6 +15,7 @@ export default function HomePage() {
   const [classes, setClasses] = useState<ClassSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,20 +50,32 @@ export default function HomePage() {
       <div className="mx-auto w-full max-w-[58rem]">
         <HomeLanding />
 
-        <section
-          aria-labelledby="coming-soon-classes-heading"
-          className="mt-10 opacity-70 sm:mt-12"
-        >
-          <h2
-            id="coming-soon-classes-heading"
-            className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
-          >
-            Coming soon
-          </h2>
+        <section aria-labelledby="your-classes-heading" className="mt-10 sm:mt-12">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2
+              id="your-classes-heading"
+              className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+            >
+              Your classes
+            </h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCreating((open) => !open)}
+              aria-expanded={creating}
+            >
+              {creating ? "Cancel" : "New class"}
+            </Button>
+          </div>
           <p className="mb-4 max-w-lg text-sm leading-relaxed text-muted-foreground">
-            All classes in this workspace. The beta highlights Chemie 9b above; more classes will
-            land here over time.
+            All classes in this workspace.
           </p>
+
+          {creating && (
+            <div className="mb-4">
+              <CreateClassCard onCreated={() => setCreating(false)} />
+            </div>
+          )}
 
           {error && (
             <Alert className="mb-4 border-border/60 bg-muted/40 text-muted-foreground shadow-none">

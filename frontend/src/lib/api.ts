@@ -23,6 +23,22 @@ function redirectToBetaLoginIfNeeded(status: number): void {
 }
 
 export type ClassSummary = { id: string; label: string; subject: string };
+
+/** A subject, grade, and branch with a reviewed teaching framework. */
+export type CurriculumRoute = { subject: string; grade: number; branch: string };
+
+export type CreateClassRequest = {
+  label: string;
+  subject: string;
+  grade: number;
+  section?: string;
+  school_year?: string;
+  branch?: string;
+  school_type?: string;
+  state?: string;
+  prior_learning?: string;
+  student_names?: string[];
+};
 export type BetaProfileStats = {
   feedback_notes: number;
   workflow_sessions: number;
@@ -673,6 +689,13 @@ export const client = {
       body: JSON.stringify({ message, ...(page ? { page } : {}) }),
     }),
   getClasses: () => api<{ classes: ClassSummary[] }>("/api/classes"),
+  getCurriculumRoutes: () =>
+    api<{ routes: CurriculumRoute[] }>("/api/classes/curriculum-routes"),
+  createClass: (body: CreateClassRequest) =>
+    api<ClassSummary>("/api/classes", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   getTimeline: (classId: string) =>
     api<ClassTimeline>(`/api/classes/${classId}/timeline`),
   getSnapshot: (classId: string) => api<ClassMemorySnapshot>(`/api/classes/${classId}/snapshot`),
