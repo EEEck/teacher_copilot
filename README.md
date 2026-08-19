@@ -300,6 +300,7 @@ until the teacher saves the plan.
 | `BETA_SESSION_DAYS` | `backend/.env` | Session cookie/token lifetime in days. Default `30` |
 | `BETA_COOKIE_SECURE` | `backend/.env` | Set `true` behind HTTPS. Keep `false` for localhost |
 | `NEXT_PUBLIC_API_BASE_URL` | `frontend/.env.local` | Backend URL for browser (default `http://localhost:8010`) |
+| `NEXT_PUBLIC_BETA_ENABLED` | `frontend/.env.local` / Compose | Enables beta-only shell identity/profile probes. Must match backend `BETA_ENABLED`; public values are embedded by Next at dev/build time. Default `false` |
 | `APP_ENV` | `backend/.env` / Compose | `development` keeps raw local stream diagnostics; `production` strips streamed reasoning text, tool args, and tool outputs before they reach the browser. |
 | `INTERNAL_API_BASE_URL` | Docker / SSR only | Server-side fetches in frontend container (`http://backend:8010` in Compose) |
 

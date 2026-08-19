@@ -18,11 +18,15 @@ export function AppShell({
 
   className,
 
+  betaEnabled = process.env.NEXT_PUBLIC_BETA_ENABLED === "true",
+
 }: {
 
   children: React.ReactNode;
 
   className?: string;
+
+  betaEnabled?: boolean;
 
 }) {
 
@@ -78,15 +82,17 @@ export function AppShell({
 
           </Link>
 
-          <AppMenuSheet />
+          <AppMenuSheet betaEnabled={betaEnabled} />
 
         </div>
 
       </header>
 
-      <Suspense fallback={null}>
-        <BetaProfileGate />
-      </Suspense>
+      {betaEnabled && (
+        <Suspense fallback={null}>
+          <BetaProfileGate />
+        </Suspense>
+      )}
 
       <main
 

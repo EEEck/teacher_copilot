@@ -55,7 +55,7 @@ function MenuNavLink({
   );
 }
 
-export function AppMenuSheet() {
+export function AppMenuSheet({ betaEnabled }: { betaEnabled: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -67,6 +67,11 @@ export function AppMenuSheet() {
   }, [pathname]);
 
   useEffect(() => {
+    if (!betaEnabled) {
+      setIdentity(null);
+      return;
+    }
+
     let cancelled = false;
     client
       .betaMe()
@@ -79,7 +84,7 @@ export function AppMenuSheet() {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [betaEnabled, pathname]);
 
   const profileComplete = hasBetaHeaderIdentity(identity);
   const hasSession = identity !== null;

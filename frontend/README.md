@@ -14,7 +14,8 @@ npm run dev
 ```
 
 The app expects `NEXT_PUBLIC_API_BASE_URL` in `.env.local` or falls back to the
-local backend URL used by the repo scripts.
+local backend URL used by the repo scripts. Set `NEXT_PUBLIC_BETA_ENABLED=true`
+before `next dev` or `next build` only when the backend has beta mode enabled.
 
 Raw reasoning/tool panels are a backend-controlled diagnostic surface. The
 frontend renders the SSE events it receives; backend `APP_ENV=production`
