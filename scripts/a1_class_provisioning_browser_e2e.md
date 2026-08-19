@@ -5,7 +5,8 @@ Reuse its sandbox: do **not** run `down`, `up`, or `--fresh-wiki`.
 
 ## Target
 
-- Compose project: `kp_teacher_agent_v2_64977d`
+- Compose project: use `COMPOSE_PROJECT_NAME` printed by the same stack `up`
+  invocation.
 - Frontend: use `FRONTEND_URL` printed by the same stack `up` invocation
   (`http://localhost:3304` in the completed run).
 - Backend: use `API_HEALTH_URL` printed by that invocation
@@ -68,7 +69,7 @@ Inspect the bounded logs for the same Compose project; do not follow logs
 indefinitely:
 
 ```powershell
-$composeProject = 'kp_teacher_agent_v2_64977d'
+$composeProject = Read-Host "Paste COMPOSE_PROJECT_NAME printed by worktree-stack.cmd up"
 docker compose -p $composeProject logs --tail 300 backend frontend
 ```
 
