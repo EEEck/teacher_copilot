@@ -214,8 +214,11 @@ git add frontend/src/components/klassenpilot/create-class-card.tsx frontend/src/
 git commit -m "feat: add chemistry class setup form"
 ```
 
-PR A1 acceptance: create Chemie 8a and Chemie 9a, reject duplicates and unsupported
-routes, and confirm the pre-existing Chemie 9b remains isolated.
+PR A1 acceptance: execute
+`docs/superpowers/plans/2026-08-18-a1-class-provisioning-e2e.md`. The live API
+phase creates Chemie 8a; the browser phase creates Chemie 9a. Together they
+reject duplicates and unsupported routes, verify every required empty-class
+artifact, and prove the pre-existing Chemie 9b remains isolated.
 
 ---
 

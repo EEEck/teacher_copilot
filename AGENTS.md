@@ -227,6 +227,33 @@ needs explicit model routing. Otherwise leave it unset so the backend derives
 Do not assume the main repo's running Docker stack is serving worktree code. A
 Compose stack serves the files from the directory where it is started.
 
+### Docker Desktop recovery for Codex on Windows
+
+Run Docker commands with host permission and verify `whoami` is the normal
+Windows user before diagnosing the repository. Do not create an alternate
+`DOCKER_CONFIG`; that can select the wrong named-pipe context and obscure the
+real Docker Desktop state.
+
+If Docker Desktop shows Resource Saver and `docker version` or the worktree
+helper hangs without Compose output, treat it as a stuck Windows-to-Linux
+named-pipe bridge. First verify Docker Desktop has no running containers that
+must be preserved, then restart Docker Desktop. If its normal shutdown leaves
+the same stale `Docker Desktop.exe` and `com.docker.backend.exe` process IDs,
+verify their executable paths are under `C:\Program Files\Docker\Docker\`, stop
+only those verified processes, and relaunch Docker Desktop. Confirm recovery
+with `docker version` before rerunning the helper.
+
+For a preserved local wiki in development/economy mode, use:
+
+```powershell
+.\scripts\worktree-stack.cmd up --wiki sandbox --app-env development --model-profile economy
+```
+
+Use the URLs printed by that successful `up` invocation (or the published ports
+shown by `docker compose ps`). Do not infer health from the Resource Saver label
+alone, and do not add `--fresh-wiki`, `--beta`, or `--fresh-beta-data` unless the
+test explicitly requires them.
+
 When done, report the worktree/branch used, tests/evals run, whether a Docker
 stack was started, frontend URL if HITL testing was used, any wiki files
 changed, and known limitations or follow-up needed.
