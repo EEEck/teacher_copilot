@@ -6,8 +6,10 @@ Reuse its sandbox: do **not** run `down`, `up`, or `--fresh-wiki`.
 ## Target
 
 - Compose project: `kp_teacher_agent_v2_64977d`
-- Frontend: `http://localhost:3303`
-- Backend: `http://localhost:8578`
+- Frontend: use `FRONTEND_URL` printed by the same stack `up` invocation
+  (`http://localhost:3304` in the completed run).
+- Backend: use `API_HEALTH_URL` printed by that invocation
+  (`http://localhost:8579/api/health` in the completed run).
 - Precondition: the seeded **Chemie 9b** and API-created **Chemie 8a** exist.
 - Browser: use the Codex in-app browser and semantic locators/snapshots. Do not
   substitute APIs, curl, standalone Playwright, or another browser surface for
@@ -15,7 +17,7 @@ Reuse its sandbox: do **not** run `down`, `up`, or `--fresh-wiki`.
 
 ## Visible browser assertions
 
-1. Open `http://localhost:3303/`. Verify both **Chemie 9b** and **Chemie 8a**
+1. Open the printed `FRONTEND_URL`. Verify both **Chemie 9b** and **Chemie 8a**
    are visible.
 2. Click **New class** and inspect **Curriculum route**.
 3. Verify its only route options are **Chemie 8 NTG** and **Chemie 9 NTG**.
@@ -32,7 +34,11 @@ Reuse its sandbox: do **not** run `down`, `up`, or `--fresh-wiki`.
    zero logged lessons, and no timeline lessons.
 8. Verify seeded 9b content is absent: **Redox with ion**, **21 open loops**,
    and the seeded April/May lesson titles must not appear.
-9. Open **Browse class files**. Verify these files are discoverable:
+9. Open **Browse class files**. The initial **No wiki pages found for this
+   class yet** text may be a pre-hydration placeholder: wait for the catalog
+   request to complete and the file groups to render, up to a bounded 45
+   seconds in development. Treat the placeholder as final only after that wait
+   or a visible request error. Then verify these files are discoverable:
    `course_state.md`, `curriculum_profile.md`, `students.md`,
    `trusted_sources.md`, and the memory pages.
 10. Verify `course_network/network.json` is absent. A2 owns course-network
