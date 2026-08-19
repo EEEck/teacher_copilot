@@ -2,10 +2,12 @@ import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+import { ReviewBrief } from "./review-brief";
+
+Object.assign(globalThis, { React });
+
 describe("ReviewBrief", () => {
-  it("keeps the save action disabled and shows a spinner while saving", async () => {
-    Object.assign(globalThis, { React });
-    const { ReviewBrief } = await import("./review-brief");
+  it("keeps the save action disabled and shows a spinner while saving", () => {
     const html = renderToStaticMarkup(
       createElement(ReviewBrief, {
         items: [

@@ -2,10 +2,12 @@ import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { WorkflowActionNeededCard } from "./action-needed-card";
+
+Object.assign(globalThis, { React });
+
 describe("WorkflowActionNeededCard", () => {
-  it("renders action-needed copy with respond CTA by default", async () => {
-    Object.assign(globalThis, { React });
-    const { WorkflowActionNeededCard } = await import("./action-needed-card");
+  it("renders action-needed copy with respond CTA by default", () => {
     const html = renderToStaticMarkup(
       createElement(WorkflowActionNeededCard, {
         message: "I didn't save this yet; one detail needs your call.",
@@ -18,9 +20,7 @@ describe("WorkflowActionNeededCard", () => {
     expect(html).toContain("bg-[var(--error-bg)]");
   });
 
-  it("can omit the respond CTA", async () => {
-    Object.assign(globalThis, { React });
-    const { WorkflowActionNeededCard } = await import("./action-needed-card");
+  it("can omit the respond CTA", () => {
     const html = renderToStaticMarkup(
       createElement(WorkflowActionNeededCard, {
         message: "Needs a decision.",
