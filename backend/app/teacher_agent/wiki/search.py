@@ -370,7 +370,12 @@ def list_class_pages(
     if "rollups" in kinds:
         for key, path in store.roll_up_paths(class_id).items():
             pages.append({"kind": "rollup", "id": key, "path": store.rel_wiki(path)})
-        for name in ("timeline.md", "class_config.md"):
+        for name in (
+            "timeline.md",
+            "class_config.md",
+            "curriculum_profile.md",
+            "trusted_sources.md",
+        ):
             p = base / name
             if p.exists():
                 pages.append({"kind": "meta", "id": name, "path": store.rel_wiki(p)})

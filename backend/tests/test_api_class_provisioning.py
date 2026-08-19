@@ -68,6 +68,17 @@ def test_create_class_is_visible_and_starts_empty(client):
     assert timeline.json()["months"] == []
 
 
+def test_created_class_wiki_catalog_includes_profile_and_trusted_sources(client):
+    assert client.post("/api/classes", json=CREATE_8A).status_code == 201
+
+    response = client.get(f"/api/classes/{CLASS_8A}/wiki/pages")
+
+    assert response.status_code == 200
+    catalog = {item["path"]: item["kind"] for item in response.json()["pages"]}
+    assert catalog[f"wiki/classes/{CLASS_8A}/curriculum_profile.md"] == "meta"
+    assert catalog[f"wiki/classes/{CLASS_8A}/trusted_sources.md"] == "meta"
+
+
 def test_duplicate_and_unsupported_requests_do_not_mutate_wiki(client, wiki):
     assert client.post("/api/classes", json=CREATE_8A).status_code == 201
     created_root = wiki.class_dir(CLASS_8A)
