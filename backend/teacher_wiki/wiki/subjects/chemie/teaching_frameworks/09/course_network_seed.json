@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "class_id": "chemie_9_ntg_seed",
+  "route": {
+    "subject": "chemie",
+    "grade": 9,
+    "branch": "NTG"
+  },
+  "revision": 1,
+  "updated_at": "2026-08-18T00:00:00Z",
+  "nodes": [
+    {"id": "evidence-and-models", "title": "Chemische Erkenntnisgewinnung und Modelle", "description": "Hypothesengeleitete Untersuchungen planen, Daten deuten und Modellgrenzen reflektieren.", "learning_goal": "Chemische Erkenntnisse aus Daten und Modellen begründet darstellen.", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_methoden"}], "origin": "curriculum", "status": "proposed"},
+    {"id": "energy-level-model", "title": "Energiestufenmodell und Periodensystem", "description": "Energiestufen, Valenzelektronen und Ordnungsprinzipien des gekürzten Periodensystems verknüpfen.", "learning_goal": "Aus Periodensystemdaten Aussagen über den Feinbau von Atomen ableiten.", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_atombau"}], "origin": "curriculum", "status": "proposed"},
+    {"id": "ion-formation", "title": "Ionenbildung und Edelgasregel", "description": "Ionenladungen aus Valenzelektronenzahlen und Edelgaskonfiguration begründen.", "learning_goal": "Typische Kationen- und Anionenladungen modellhaft herleiten.", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_atombau"}], "origin": "curriculum", "status": "proposed"},
+    {"id": "redox-electron-transfer", "title": "Redox als Elektronenübergang", "description": "Oxidation und Reduktion als Elektronenabgabe und -aufnahme mit dem Donator-Akzeptor-Konzept erklären.", "learning_goal": "Redoxvorgänge auf Teilchenebene beschreiben und Teilgleichungen zuordnen.", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_ionen_redox"}], "origin": "curriculum", "status": "proposed"},
+    {"id": "electrolysis-and-cells", "title": "Elektrolyse und galvanische Zellen", "description": "Erzwungene und freiwillige Redoxreaktionen anhand von Elektrolyse und Stromerzeugung vergleichen.", "learning_goal": "Elektrolyse und elektrochemische Zellen als umkehrbare Redoxzusammenhänge erklären.", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_ionen_redox"}], "origin": "curriculum", "status": "proposed"},
+    {"id": "molecular-bonding", "title": "Elektronenpaarbindung und Valenzstrichschreibweise", "description": "Moleküle mit einem einfachen Orbitalmodell und Valenzstrichformeln darstellen.", "learning_goal": "Bindigkeit und Bindungsbildung für ausgewählte Moleküle begründen.", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_molekuele"}], "origin": "curriculum", "status": "proposed"},
+    {"id": "molecular-geometry", "title": "Molekülgeometrie und Elektronenpaarabstoßung", "description": "Den räumlichen Bau ausgewählter Moleküle mit dem Elektronenpaarabstoßungsmodell ableiten.", "learning_goal": "Molekülformen und ungefähre Bindungswinkel modellgestützt beschreiben.", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_molekuele"}], "origin": "curriculum", "status": "proposed"},
+    {"id": "particle-interactions", "title": "Zwischenmolekulare Wechselwirkungen", "description": "London-, Dipol-Dipol-, Wasserstoffbrücken- und Ion-Dipol-Wechselwirkungen zur Eigenschaftserklärung nutzen.", "learning_goal": "Eigenschaftsunterschiede molekularer Stoffe über zwischenmolekulare Anziehung erklären.", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_wechselwirkung"}], "origin": "curriculum", "status": "proposed"},
+    {"id": "water-and-solvents", "title": "Wasser, Lösungsmittel und Polarität", "description": "Molekülpolarität und Wechselwirkungen für Wasser und die Auswahl von Lösungsmitteln anwenden.", "learning_goal": "Die Eigenschaften von Wasser und Lösungsmittelwahl auf Teilchenebene begründen.", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_wechselwirkung"}], "origin": "curriculum", "status": "proposed"},
+    {"id": "salt-hydration", "title": "Hydratation und Lösen von Salzen", "description": "Das Lösen von Salzen als Wechselwirkungsvorgang mit Energiebeteiligung deuten.", "learning_goal": "Hydratation und Energieumsatz beim Lösen eines Salzes erklären.", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_wechselwirkung"}], "origin": "curriculum", "status": "proposed"}
+  ],
+  "edges": [
+    {"id": "ion-formation-builds-on-energy-level-model", "source_id": "ion-formation", "target_id": "energy-level-model", "relation": "builds_on", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_atombau"}], "origin": "curriculum"},
+    {"id": "redox-builds-on-ion-formation", "source_id": "redox-electron-transfer", "target_id": "ion-formation", "relation": "builds_on", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_ionen_redox"}], "origin": "curriculum"},
+    {"id": "electrolysis-builds-on-redox", "source_id": "electrolysis-and-cells", "target_id": "redox-electron-transfer", "relation": "builds_on", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_ionen_redox"}], "origin": "curriculum"},
+    {"id": "molecular-geometry-builds-on-molecular-bonding", "source_id": "molecular-geometry", "target_id": "molecular-bonding", "relation": "builds_on", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_molekuele"}], "origin": "curriculum"},
+    {"id": "water-and-solvents-build-on-particle-interactions", "source_id": "water-and-solvents", "target_id": "particle-interactions", "relation": "builds_on", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_wechselwirkung"}], "origin": "curriculum"},
+    {"id": "salt-hydration-builds-on-particle-interactions", "source_id": "salt-hydration", "target_id": "particle-interactions", "relation": "builds_on", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_wechselwirkung"}], "origin": "curriculum"},
+    {"id": "evidence-and-models-related-to-all-nodes", "source_id": "evidence-and-models", "target_id": "molecular-bonding", "relation": "related_to", "curriculum_refs": [{"source_id": "by-lehrplanplus-chemie-9-ntg", "section_id": "c9_methoden"}], "origin": "curriculum"}
+  ]
+}
