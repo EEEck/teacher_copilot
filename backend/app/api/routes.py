@@ -130,10 +130,12 @@ from app.teacher_agent.executive_verification import (
     executive_api_payload,
 )
 from app.teacher_agent.wiki_store import WikiStore
+from app.api.course_network_routes import router as course_network_router
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
+router.include_router(course_network_router)
 
 _COPILOT_PROFILE_LABELS = {
     "avoid",

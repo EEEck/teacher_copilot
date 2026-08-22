@@ -160,6 +160,14 @@ revision/hash metadata during draft and review.
 - Review and save actions must include the expected artifact revision/hash. If
   the artifact changed after review was prepared, the backend rejects the write
   with `draft_changed_since_review_created`.
+- Structured course-network seed drafts use the same `WorkflowDraft` database
+  and a compact canonical JSON artifact (`ensure_ascii=False`, sorted keys,
+  compact separators). A changed artifact clears the active completed review.
+- `POST /api/classes/{class_id}/course/network/drafts/{draft_id}/adopt` is the
+  sole course-network write boundary. It accepts only the exact reviewed
+  revision/hash with an `accept` review; opening, reading, and review never
+  write `course_network/`. Stale, duplicate-adoption, or non-accepted review
+  guards return HTTP 409 through the normal API error envelope.
 - Update Memory commit uses the backend-stored diary markdown when a draft id
   and revision/hash are present. Client-supplied markdown is legacy fallback,
   not the authoritative write source.

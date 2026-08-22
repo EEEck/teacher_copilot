@@ -65,6 +65,9 @@ scope in the teaching-pattern text when the teacher names an upcoming block.
 wiki/classes/{class_id}/
   class_config.md
   course_state.md
+  course_network/
+    network.json        # adopted structured network; teacher-approved adoption only
+    overview.md         # compiled readable view for wiki discovery
   misconceptions.md
   open_loops.md
   memory/
@@ -123,7 +126,20 @@ wiki/classes/{class_id}/
 3. Do not write wiki files unless the teacher saves via HITL commit, plan save
    (which may promote OCR packages into `materials/`), or explicit revise API.
    Class materials are a citation/source layer; OCR never writes course_state,
-   diary, or compact memory pages.
+    diary, or compact memory pages.
+
+### Course-network adoption
+
+1. `GET/POST /api/classes/{class_id}/course/network...` opens a proposed seed
+   only as a durable workflow draft; opening and review do not write the class
+   wiki network.
+2. Adoption requires the teacher to submit the active exact review
+   revision/hash. The service validates provenance/graph integrity, writes
+   `course_network/network.json` plus compiled `course_network/overview.md`,
+   appends a `course_network_adopt` log entry, and rebuilds the index.
+3. Do not manually create or mutate a canonical course network from normal
+   chat, planning, OCR, or a seed file. One adopted network is owned by one
+   class and must have `adopted` node status.
 
 ### Lint
 

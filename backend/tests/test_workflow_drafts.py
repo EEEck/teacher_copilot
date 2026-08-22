@@ -1,13 +1,65 @@
 from __future__ import annotations
 
+import json
+
 import anyio
 import pytest
 
+from app.course_network.seeds import load_seed_for_class
+from app.services.workflow_drafts import (
+    WorkflowDraftIdentity,
+    serialize_structured_artifact,
+)
 from app.schemas.api import ApprovedWikiUpdate, CommitIngestRequest, SavePlanRequest
 from app.services.ingest_service import IngestService
 from app.services.plan_service import PlanService
 from app.services.workflow_drafts import WorkflowDraftStore
 from tests.conftest import CLASS_ID, COMPLETE_DIARY, READY_PLAN, StubAgentRunner
+
+
+def test_structured_artifact_serialization_is_order_stable_and_invalidates_review(wiki):
+    store = WorkflowDraftStore(wiki.root / "workflow" / "workflow_drafts.sqlite")
+    store.initialize()
+    seed = load_seed_for_class(wiki, CLASS_ID)
+    artifact = serialize_structured_artifact(seed.model_dump(mode="json"))
+
+    assert artifact == serialize_structured_artifact(
+        dict(reversed(list(seed.model_dump(mode="json").items())))
+    )
+    assert ", \"" not in artifact
+
+    opened = store.open_structured_draft(
+        WorkflowDraftIdentity(
+            workspace_id="local",
+            class_id=CLASS_ID,
+            mode="course_network",
+            intent="seed_adoption",
+            target_kind="course_network",
+        ),
+        default_status="draft",
+        artifact=seed.model_dump(mode="json"),
+    ).row
+    reviewed = store.mark_review_snapshot(
+        opened.draft_id,
+        revision=opened.artifact_revision,
+        artifact_hash_value=opened.artifact_hash,
+        review_json={"decision": "accept", "summary": "Looks sound.", "findings": []},
+    )
+    changed_payload = json.loads(artifact)
+    changed_payload["nodes"][0]["title"] += " (angepasst)"
+    changed = store.save_from_session(
+        draft_id=opened.draft_id,
+        status="draft",
+        artifact_markdown=serialize_structured_artifact(changed_payload),
+        runtime_json={},
+        messages_json=[],
+        backend_session_id=opened.backend_session_id,
+    )
+
+    assert reviewed.active_review_json["decision"] == "accept"
+    assert changed.active_review_revision is None
+    assert changed.active_review_hash is None
+    assert changed.active_review_json == {}
 
 
 @pytest.mark.anyio

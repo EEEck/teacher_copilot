@@ -242,6 +242,10 @@ Canonical files include:
   plan-session scratch outside the wiki index. Promote copies the artifact
   trio only; debug OCR JSON stays in scratch.
 - `course_state.md`
+- `course_network/network.json` â€” class-owned canonical, structured adopted
+  course network; not injected by default and never a raw chat artifact
+- `course_network/overview.md` â€” compiled readable network overview available
+  to ordinary wiki discovery after adoption
 - `open_loops.md`
 - `misconceptions.md`
 - `students.md`
@@ -564,6 +568,11 @@ Examples:
 - Individual student facts stay pseudonymous in `students/S-###.md`, not broad
   profiles. Lesson updates capture dated evidence; Weekly Memory Sweep promotes
   approved trajectory summaries into each page's `## Student Summary`.
+- Course-network seeds remain shared framework source data until the teacher
+  explicitly adopts the exact reviewed draft. Only adoption writes
+  `wiki/classes/{class_id}/course_network/network.json` and its compiled
+  `overview.md`, then appends a `course_network_adopt` log entry and rebuilds
+  the index. Opening/reviewing a seed never writes these paths.
 
 ## Debugging
 

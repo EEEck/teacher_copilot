@@ -27,6 +27,11 @@ def default_workflow_draft_store_path(wiki_root: str | Path) -> Path:
     return Path(wiki_root) / "workflow" / "workflow_drafts.sqlite"
 
 
+def serialize_structured_artifact(value: Any) -> str:
+    """Return the one stable representation used for structured draft guards."""
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
 def draft_has_resumable_work(row: WorkflowDraftRow) -> bool:
     """True when a draft is more than an empty page-open shell.
 
@@ -87,6 +92,7 @@ class WorkflowDraftRow:
     pending_turn_json: dict[str, Any]
     active_review_revision: int | None
     active_review_hash: str | None
+    active_review_json: dict[str, Any]
     created_at: str
     updated_at: str
 
@@ -130,6 +136,11 @@ class WorkflowDraftRow:
                 else None
             ),
             active_review_hash=row["active_review_hash"],
+            active_review_json=(
+                _loads_dict(row["active_review_json"])
+                if "active_review_json" in row.keys()
+                else {}
+            ),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
@@ -176,6 +187,7 @@ class WorkflowDraftStore:
                   pending_turn_json TEXT NOT NULL DEFAULT '{}',
                   active_review_revision INTEGER,
                   active_review_hash TEXT,
+                  active_review_json TEXT NOT NULL DEFAULT '{}',
                   created_at TEXT NOT NULL,
                   updated_at TEXT NOT NULL
                 )
@@ -197,6 +209,7 @@ class WorkflowDraftStore:
             # they were added would lack them — migrate additively like the rest.
             self._ensure_column(conn, "active_review_revision", "INTEGER")
             self._ensure_column(conn, "active_review_hash", "TEXT")
+            self._ensure_column(conn, "active_review_json", "TEXT NOT NULL DEFAULT '{}'")
 
     def open_draft(
         self,
@@ -247,6 +260,22 @@ class WorkflowDraftStore:
             )
         row = self.get(draft_id)
         return OpenWorkflowDraftResult(row=row, created=True)
+
+    def open_structured_draft(
+        self,
+        identity: WorkflowDraftIdentity,
+        *,
+        default_status: str,
+        artifact: Any,
+        runtime_json: dict[str, Any] | None = None,
+    ) -> OpenWorkflowDraftResult:
+        """Open/resume a draft whose artifact is canonical compact JSON."""
+        return self.open_draft(
+            identity,
+            default_status=default_status,
+            artifact_markdown=serialize_structured_artifact(artifact),
+            runtime_json=runtime_json,
+        )
 
     def find_active(self, identity: WorkflowDraftIdentity) -> WorkflowDraftRow | None:
         with self._connect() as conn:
@@ -370,7 +399,8 @@ class WorkflowDraftStore:
         current = self.get(draft_id)
         new_hash = artifact_hash(artifact_markdown)
         revision = current.artifact_revision
-        if new_hash != current.artifact_hash:
+        artifact_changed = new_hash != current.artifact_hash
+        if artifact_changed:
             revision += 1
         now = _utc_now()
         with self._connect() as conn:
@@ -388,6 +418,9 @@ class WorkflowDraftStore:
                     turn_in_progress = ?,
                     latest_turn_complete = ?,
                     pending_turn_json = ?,
+                    active_review_revision = ?,
+                    active_review_hash = ?,
+                    active_review_json = ?,
                     updated_at = ?
                 WHERE draft_id = ?
                 """,
@@ -403,6 +436,9 @@ class WorkflowDraftStore:
                     int(turn_in_progress),
                     int(latest_turn_complete),
                     _dumps(pending_turn_json or {}),
+                    None if artifact_changed else current.active_review_revision,
+                    None if artifact_changed else current.active_review_hash,
+                    _dumps({} if artifact_changed else current.active_review_json),
                     now,
                     draft_id,
                 ),
@@ -410,7 +446,12 @@ class WorkflowDraftStore:
         return self.get(draft_id)
 
     def mark_review_snapshot(
-        self, draft_id: str, *, revision: int, artifact_hash_value: str
+        self,
+        draft_id: str,
+        *,
+        revision: int,
+        artifact_hash_value: str,
+        review_json: dict[str, Any] | None = None,
     ) -> WorkflowDraftRow:
         now = _utc_now()
         with self._connect() as conn:
@@ -419,10 +460,11 @@ class WorkflowDraftStore:
                 UPDATE workflow_draft
                 SET active_review_revision = ?,
                     active_review_hash = ?,
+                    active_review_json = ?,
                     updated_at = ?
                 WHERE draft_id = ?
                 """,
-                (revision, artifact_hash_value, now, draft_id),
+                (revision, artifact_hash_value, _dumps(review_json or {}), now, draft_id),
             )
         if cursor.rowcount != 1:
             raise KeyError(f"Unknown workflow draft: {draft_id}")

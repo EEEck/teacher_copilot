@@ -1,11 +1,13 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
 
 from app.config import get_settings
 from app.services.beta import BetaAuthService, RequestIdentity
 from app.services.class_brief_service import ClassBriefService
+from app.services.course_network_service import CourseNetworkService
 from app.services.discussion_service import DiscussionService
 from app.services.ingest_service import IngestService
 from app.services.memory_candidate_ledger import (
@@ -32,6 +34,7 @@ _INGEST_CACHE: dict[str, IngestService] = {}
 _PLAN_CACHE: dict[str, PlanService] = {}
 _DISCUSSION_CACHE: dict[str, DiscussionService] = {}
 _BRIEF_CACHE: dict[str, ClassBriefService] = {}
+_COURSE_NETWORK_CACHE: dict[str, CourseNetworkService] = {}
 
 
 def _resolved_wiki_root() -> Path:
@@ -135,6 +138,23 @@ def get_workflow_draft_store(
     store.initialize()
     _WORKFLOW_DRAFT_CACHE[key] = store
     return store
+
+
+def get_course_network_service(
+    identity: Annotated[RequestIdentity, Depends(get_request_identity)],
+    wiki: Annotated[WikiStore, Depends(get_wiki)],
+    workflow_drafts: Annotated[WorkflowDraftStore, Depends(get_workflow_draft_store)],
+) -> CourseNetworkService:
+    key = str(wiki.root.resolve())
+    if key in _COURSE_NETWORK_CACHE:
+        return _COURSE_NETWORK_CACHE[key]
+    service = CourseNetworkService(
+        wiki=wiki,
+        workflow_drafts=workflow_drafts,
+        workspace_id=identity.workspace_id,
+    )
+    _COURSE_NETWORK_CACHE[key] = service
+    return service
 
 
 def get_ingest_service(

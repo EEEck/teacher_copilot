@@ -6,6 +6,9 @@ from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.course_network.models import CourseNetworkDocument
+from app.course_network.review import CourseNetworkReviewResult
+
 
 CLASS_LABEL_MAX_LENGTH = 120
 CLASS_SUBJECT_MAX_LENGTH = 40
@@ -753,6 +756,37 @@ class WriteVerificationBlockedResponse(BaseModel):
     artifact_fingerprint: str
     executive_state: dict = Field(default_factory=dict)
     message: str
+
+
+class CourseNetworkResponse(BaseModel):
+    class_id: str
+    network: CourseNetworkDocument | None = None
+
+
+class CourseNetworkDraftResponse(BaseModel):
+    draft_id: str
+    class_id: str
+    status: str
+    artifact_markdown: str
+    artifact_revision: int
+    artifact_hash: str
+    backend_session_id: str
+    # Proposed seed nodes are intentionally not canonical yet, so this is a
+    # structured JSON object rather than the canonical-only document model.
+    network: dict
+    review: CourseNetworkReviewResult | None = None
+
+
+class AdoptCourseNetworkDraftRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    expected_hash: str = Field(min_length=1)
+
+
+class CourseNetworkAdoptionResponse(BaseModel):
+    class_id: str
+    draft_id: str
+    log_entry_id: str
+    network: CourseNetworkDocument
 
 
 class AgentTraceResponse(BaseModel):

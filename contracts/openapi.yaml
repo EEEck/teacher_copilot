@@ -64,6 +64,52 @@ paths:
   /api/classes/{classId}/plan-lesson:
     post:
       summary: Generate lesson plan
+  /api/classes/{classId}/course/network:
+    get:
+      summary: Get an adopted class course network
+      responses:
+        '200':
+          description: Adopted network or null when none has been adopted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNetworkResponse'
+  /api/classes/{classId}/course/network/drafts:
+    post:
+      summary: Open the matching reviewed course-network seed as a structured draft
+      responses:
+        '201':
+          description: Structured proposed seed draft
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNetworkDraftResponse'
+        '409':
+          description: A network was already adopted for this class
+  /api/classes/{classId}/course/network/drafts/{draftId}:
+    get:
+      summary: Get a structured course-network seed draft
+  /api/classes/{classId}/course/network/drafts/{draftId}/review:
+    post:
+      summary: Validate and no-tools review the exact structured seed draft
+  /api/classes/{classId}/course/network/drafts/{draftId}/adopt:
+    post:
+      summary: Teacher-approved adoption of the exact reviewed seed revision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdoptCourseNetworkDraftRequest'
+      responses:
+        '200':
+          description: Adopted canonical course network
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNetworkAdoptionResponse'
+        '409':
+          description: Stale review, non-accepted review, or duplicate adoption
 components:
   schemas:
     CurriculumRouteOption:
@@ -154,6 +200,80 @@ components:
       properties:
         error:
           $ref: '#/components/schemas/ErrorBody'
+    CourseNetworkResponse:
+      type: object
+      required: [class_id, network]
+      properties:
+        class_id:
+          type: string
+        network:
+          type: [object, 'null']
+          description: Canonical adopted course-network document, or null before adoption.
+    CourseNetworkReview:
+      type: object
+      required: [decision, summary, findings, artifact_revision, artifact_hash]
+      properties:
+        decision:
+          type: string
+          enum: [accept, revise, block]
+        summary:
+          type: string
+        findings:
+          type: array
+          items:
+            type: object
+        artifact_revision:
+          type: integer
+        artifact_hash:
+          type: string
+    CourseNetworkDraftResponse:
+      type: object
+      required: [draft_id, class_id, status, artifact_markdown, artifact_revision, artifact_hash, network]
+      properties:
+        draft_id:
+          type: string
+        class_id:
+          type: string
+        status:
+          type: string
+        artifact_markdown:
+          type: string
+          description: Compact, order-stable JSON for the proposed seed artifact.
+        artifact_revision:
+          type: integer
+        artifact_hash:
+          type: string
+        backend_session_id:
+          type: string
+        network:
+          type: object
+          description: Proposed structured seed; nodes remain proposed until adoption.
+        review:
+          oneOf:
+            - $ref: '#/components/schemas/CourseNetworkReview'
+            - type: 'null'
+    AdoptCourseNetworkDraftRequest:
+      type: object
+      required: [expected_revision, expected_hash]
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 0
+        expected_hash:
+          type: string
+          minLength: 1
+    CourseNetworkAdoptionResponse:
+      type: object
+      required: [class_id, draft_id, log_entry_id, network]
+      properties:
+        class_id:
+          type: string
+        draft_id:
+          type: string
+        log_entry_id:
+          type: string
+        network:
+          type: object
     ClassSummary:
       type: object
       required: [id, label, subject]
