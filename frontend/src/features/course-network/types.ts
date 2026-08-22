@@ -49,6 +49,11 @@ export type MaterialMapping = {
   origin: "agent" | "teacher";
 };
 
+/**
+ * Feature-local source of truth for the inner CourseNetwork API record.
+ * API clients should import or re-export this type instead of defining a
+ * parallel transport shape when they add the nullable response envelope.
+ */
 export type CourseNetwork = {
   schema_version: 1;
   class_id: string;

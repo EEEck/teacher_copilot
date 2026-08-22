@@ -13,18 +13,22 @@ const FINAL_GRID_COLUMNS = 3;
 const relationPresentation = {
   builds_on: {
     label: "builds on",
-    style: { stroke: "var(--primary)", strokeWidth: 2 },
+    style: { stroke: "hsl(var(--primary))", strokeWidth: 2 },
   },
   related_to: {
     label: "related to",
-    style: { stroke: "var(--muted-foreground)", strokeDasharray: "5 5" },
+    style: {
+      stroke: "hsl(var(--muted-foreground))",
+      strokeDasharray: "5 5",
+    },
   },
 } as const;
 
 function fallbackPositions(network: CourseNetwork): Map<string, CanvasPosition> {
   const missingIds = network.nodes
     .filter((node) => network.positions[node.id] === undefined)
-    .map((node) => node.id);
+    .map((node) => node.id)
+    .sort();
   const missingIdSet = new Set(missingIds);
   const outgoing = new Map(missingIds.map((id) => [id, [] as string[]]));
   const inDegree = new Map(missingIds.map((id) => [id, 0]));
@@ -43,6 +47,10 @@ function fallbackPositions(network: CourseNetwork): Map<string, CanvasPosition> 
     inDegree.set(edge.source_id, inDegree.get(edge.source_id)! + 1);
     connected.add(edge.source_id);
     connected.add(edge.target_id);
+  }
+
+  for (const dependentIds of outgoing.values()) {
+    dependentIds.sort();
   }
 
   const layerById = new Map<string, number>();

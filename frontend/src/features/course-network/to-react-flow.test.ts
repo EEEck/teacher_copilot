@@ -11,10 +11,19 @@ const networkWithoutPositions = {
     {
       id: "a",
       title: "Reaktionsgleichungen",
-      description: "",
-      learning_goal: "",
-      curriculum_refs: [],
-      material_refs: [],
+      description: "Reaktionsgleichungen mit dem Teilchenmodell begruenden.",
+      learning_goal: "Reaktionsgleichungen ausgleichen.",
+      curriculum_refs: [
+        { source_id: "lehrplan-chemie-8", section_id: "reaction-equations" },
+      ],
+      material_refs: [
+        {
+          material_id: "chemie-buch",
+          section_id: "gleichungen",
+          page_start: 42,
+          page_end: 43,
+        },
+      ],
       origin: "curriculum" as const,
       status: "adopted" as const,
     },
@@ -50,7 +59,7 @@ describe("toReactFlowModel", () => {
     const model = toReactFlowModel(networkWithoutPositions);
 
     expect(model.nodes.map((node) => node.id)).toEqual(["a", "b"]);
-    expect(model.nodes[0]?.data.learningBlock.id).toBe("a");
+    expect(model.nodes[0]?.data.learningBlock).toEqual(networkWithoutPositions.nodes[0]);
     expect(model.edges[0]?.data?.relation).toBe("builds_on");
     expect(model.nodes.every((node) => Number.isFinite(node.position.x))).toBe(true);
   });
@@ -116,11 +125,23 @@ describe("toReactFlowModel", () => {
 
     const first = toReactFlowModel(network);
     const second = toReactFlowModel(network);
+    const reordered = toReactFlowModel({
+      ...network,
+      nodes: [...network.nodes].reverse(),
+      edges: [...network.edges].reverse(),
+    });
 
     expect(first.nodes.map((node) => node.position)).toEqual(
       second.nodes.map((node) => node.position),
     );
-    expect(first.nodes.slice(2).every((node) => node.position.y > first.nodes[0]!.position.y)).toBe(true);
+    expect(Object.fromEntries(first.nodes.map((node) => [node.id, node.position]))).toEqual(
+      Object.fromEntries(reordered.nodes.map((node) => [node.id, node.position])),
+    );
+    expect(
+      first.nodes
+        .filter((node) => ["c", "d", "e"].includes(node.id))
+        .every((node) => node.position.y > first.nodes[0]!.position.y),
+    ).toBe(true);
   });
 
   it("does not mutate the API record", () => {
@@ -160,6 +181,12 @@ describe("toReactFlowModel", () => {
       "builds on",
       "related to",
     ]);
-    expect(model.edges[0]?.style).not.toEqual(model.edges[1]?.style);
+    expect(model.edges.map((edge) => edge.style)).toEqual([
+      { stroke: "hsl(var(--primary))", strokeWidth: 2 },
+      {
+        stroke: "hsl(var(--muted-foreground))",
+        strokeDasharray: "5 5",
+      },
+    ]);
   });
 });
