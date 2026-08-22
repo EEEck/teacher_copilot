@@ -7,7 +7,14 @@ import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    FiniteFloat,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
 
@@ -84,8 +91,8 @@ class MaterialSectionReference(BaseModel):
 
 
 class CanvasPosition(BaseModel):
-    x: float
-    y: float
+    x: FiniteFloat
+    y: FiniteFloat
 
 
 class LearningBlock(BaseModel):
@@ -232,4 +239,5 @@ def canonical_network_json(document: CourseNetworkDocument) -> str:
         ensure_ascii=False,
         indent=2,
         sort_keys=True,
+        allow_nan=False,
     )

@@ -132,6 +132,12 @@ def test_network_document_rejects_unknown_positions_and_invalid_page_ranges():
         )
 
 
+@pytest.mark.parametrize("coordinate", [float("nan"), float("inf"), float("-inf")])
+def test_canvas_position_rejects_non_finite_coordinates(coordinate):
+    with pytest.raises(ValueError, match="finite"):
+        CanvasPosition(x=coordinate, y=0)
+
+
 def test_canonical_network_json_is_deterministic_and_retains_unicode():
     document = _document(
         nodes=[
