@@ -37,10 +37,11 @@ def _grade(value: str) -> int | None:
     return int(match.group(0)) if match else None
 
 
-def _authorized_curriculum_refs(
+def route_authorized_curriculum_sections(
     wiki, expected_class_id: str, expected_route: CurriculumRouteRef
-) -> set[tuple[str, str]]:
-    authorized: set[tuple[str, str]] = set()
+) -> dict[tuple[str, str], tuple[object, object]]:
+    """Return the genuine trusted-source sections authorized for one route."""
+    authorized: dict[tuple[str, str], tuple[object, object]] = {}
     for source in wiki.list_trusted_sources(expected_class_id, scope="active"):
         if source.subject and source.subject.strip().lower() != expected_route.subject:
             continue
@@ -50,7 +51,12 @@ def _authorized_curriculum_refs(
             source_grade := _grade(source.grade)
         ) is not None and source_grade != expected_route.grade:
             continue
-        authorized.update((source.source_id, section.id) for section in source.sections)
+        authorized.update(
+            {
+                (source.source_id, section.id): (source, section)
+                for section in source.sections
+            }
+        )
     return authorized
 
 
@@ -109,7 +115,9 @@ def validate_course_network_draft(
         )
 
     registered = _registered_curriculum_refs(wiki)
-    authorized = _authorized_curriculum_refs(wiki, expected_class_id, expected_route)
+    authorized = route_authorized_curriculum_sections(
+        wiki, expected_class_id, expected_route
+    )
     for collection_name, items in (
         ("nodes", document.nodes),
         ("edges", document.edges),

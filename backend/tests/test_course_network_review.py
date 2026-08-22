@@ -5,6 +5,8 @@ import json
 import threading
 
 import pytest
+from pydantic import ValidationError
+
 from app.course_network.models import CourseNetworkDocument, NetworkEdge
 from app.course_network.review import CourseNetworkReviewJudgement
 from app.course_network.seeds import load_seed_for_class, load_seed_for_route
@@ -27,11 +29,11 @@ class StubReviewer:
     def __init__(self, decision: str = "accept") -> None:
         self.decision = decision
         self.calls = 0
+        self.packets: list[str] = []
 
-    async def review(
-        self, document: CourseNetworkDocument
-    ) -> CourseNetworkReviewJudgement:
+    async def review(self, packet: str) -> CourseNetworkReviewJudgement:
         self.calls += 1
+        self.packets.append(packet)
         return CourseNetworkReviewJudgement(
             decision=self.decision,
             summary=f"Reviewer decided {self.decision}.",
@@ -45,10 +47,9 @@ class WaitingReviewer(StubReviewer):
         self.started = asyncio.Event()
         self.release = asyncio.Event()
 
-    async def review(
-        self, document: CourseNetworkDocument
-    ) -> CourseNetworkReviewJudgement:
+    async def review(self, packet: str) -> CourseNetworkReviewJudgement:
         self.calls += 1
+        self.packets.append(packet)
         self.started.set()
         await self.release.wait()
         return CourseNetworkReviewJudgement(
@@ -60,6 +61,56 @@ def _service(wiki, reviewer: StubReviewer) -> CourseNetworkService:
     store = WorkflowDraftStore(wiki.root / "workflow" / "workflow_drafts.sqlite")
     store.initialize()
     return CourseNetworkService(wiki=wiki, workflow_drafts=store, reviewer=reviewer)
+
+
+@pytest.mark.anyio
+async def test_reviewer_receives_bounded_genuine_excerpt_for_every_citation(wiki):
+    reviewer = StubReviewer()
+    service = _service(wiki, reviewer)
+    draft = service.open_seed_draft(CLASS_ID)
+    document = load_seed_for_class(wiki, CLASS_ID)
+    cited = {
+        (reference.source_id, reference.section_id)
+        for items in (document.nodes, document.edges)
+        for item in items
+        for reference in item.curriculum_refs
+    }
+
+    await service.review_seed(CLASS_ID, draft.draft_id)
+
+    assert reviewer.calls == 1
+    packet = reviewer.packets[0]
+    packet_payload = json.loads(packet.split("```json\n", 1)[1].rsplit("\n```", 1)[0])
+    excerpts = {
+        (item["source_id"], item["section_id"]): item
+        for item in packet_payload["trusted_source_excerpts"]
+    }
+    active_sources = {
+        source.source_id: source
+        for source in wiki.list_trusted_sources(CLASS_ID, scope="active")
+    }
+
+    assert set(excerpts) == cited
+    assert sum(len(item["content_excerpt"]) for item in excerpts.values()) <= 12000
+    for source_id, section_id in cited:
+        source = active_sources[source_id]
+        section = next(item for item in source.sections if item.id == section_id)
+        assert excerpts[(source_id, section_id)]["content_excerpt"]
+        assert section.body.strip().startswith(
+            excerpts[(source_id, section_id)]["content_excerpt"]
+        )
+
+
+def test_review_judgement_rejects_artifact_rewrite_fields():
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        CourseNetworkReviewJudgement.model_validate(
+            {
+                "decision": "accept",
+                "summary": "Looks sound.",
+                "findings": [],
+                "rewritten_artifact": {"nodes": []},
+            }
+        )
 
 
 def test_deterministic_validation_rejects_builds_on_cycle_and_unknown_provenance(wiki):
@@ -160,6 +211,78 @@ async def test_non_accepting_llm_review_stops_adoption(wiki, decision):
         )
 
     assert service.get_network(CLASS_ID) is None
+
+
+@pytest.mark.anyio
+async def test_snapshot_io_failure_releases_reservation_and_exact_draft_can_retry(
+    wiki, monkeypatch
+):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    review = await service.review_seed(CLASS_ID, draft.draft_id)
+    original_snapshots = service._adoption_snapshots
+
+    def fail_snapshots(class_id):
+        raise OSError("injected snapshot read failure")
+
+    monkeypatch.setattr(service, "_adoption_snapshots", fail_snapshots)
+    with pytest.raises(OSError, match="snapshot read failure"):
+        service.adopt_seed(
+            CLASS_ID,
+            draft.draft_id,
+            review.artifact_revision,
+            review.artifact_hash,
+        )
+
+    assert service.get_draft(CLASS_ID, draft.draft_id).status == "draft"
+    monkeypatch.setattr(service, "_adoption_snapshots", original_snapshots)
+
+    adopted = service.adopt_seed(
+        CLASS_ID,
+        draft.draft_id,
+        review.artifact_revision,
+        review.artifact_hash,
+    )
+
+    assert adopted.draft.status == "committed"
+    assert adopted.network.class_id == CLASS_ID
+
+
+@pytest.mark.anyio
+async def test_snapshot_failure_with_release_failure_writes_recovery_marker(
+    wiki, monkeypatch
+):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    review = await service.review_seed(CLASS_ID, draft.draft_id)
+
+    def fail_snapshots(class_id):
+        raise OSError("injected snapshot read failure")
+
+    def fail_release(*args, **kwargs):
+        raise OSError("injected reservation release failure")
+
+    monkeypatch.setattr(service, "_adoption_snapshots", fail_snapshots)
+    monkeypatch.setattr(
+        service.workflow_drafts, "release_course_network_adoption", fail_release
+    )
+
+    with pytest.raises(
+        WorkflowDraftConflict, match="course_network_adoption_recovery_required"
+    ):
+        service.adopt_seed(
+            CLASS_ID,
+            draft.draft_id,
+            review.artifact_revision,
+            review.artifact_hash,
+        )
+
+    stored = service.get_draft(CLASS_ID, draft.draft_id)
+    assert stored.status == "adopting"
+    marker = stored.pending_turn_json["course_network_adoption_recovery"]
+    assert marker["expected_revision"] == review.artifact_revision
+    assert marker["expected_hash"] == review.artifact_hash
+    assert marker["operation_id"]
 
 
 @pytest.mark.anyio

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import yaml
+
 from app.api import deps
-from app.course_network.models import CourseNetworkDocument
 from app.course_network.review import CourseNetworkReviewJudgement
 from app.main import app
 from app.services.course_network_service import CourseNetworkService
@@ -9,10 +12,70 @@ from app.services.workflow_drafts import serialize_structured_artifact
 from tests.conftest import CLASS_ID
 
 
+def _resolved_error_response(spec, response):
+    if "$ref" in response:
+        response = spec["components"]["responses"][response["$ref"].rsplit("/", 1)[1]]
+    schema = response["content"]["application/json"]["schema"]
+    return response["description"], schema["$ref"]
+
+
+def test_runtime_openapi_matches_course_network_draft_and_error_contracts(client):
+    contract = yaml.safe_load(
+        (Path(__file__).resolve().parents[2] / "contracts" / "openapi.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    runtime = client.app.openapi()
+
+    assert runtime["components"]["schemas"]["CourseNetworkDraftResponse"]["properties"][
+        "network"
+    ] == {"$ref": "#/components/schemas/CourseNetworkDraftDocument"}
+
+    routes = [
+        (
+            "/api/classes/{classId}/course/network",
+            "/api/classes/{class_id}/course/network",
+            "get",
+        ),
+        (
+            "/api/classes/{classId}/course/network/drafts",
+            "/api/classes/{class_id}/course/network/drafts",
+            "post",
+        ),
+        (
+            "/api/classes/{classId}/course/network/drafts/{draftId}",
+            "/api/classes/{class_id}/course/network/drafts/{draft_id}",
+            "get",
+        ),
+        (
+            "/api/classes/{classId}/course/network/drafts/{draftId}/review",
+            "/api/classes/{class_id}/course/network/drafts/{draft_id}/review",
+            "post",
+        ),
+        (
+            "/api/classes/{classId}/course/network/drafts/{draftId}/adopt",
+            "/api/classes/{class_id}/course/network/drafts/{draft_id}/adopt",
+            "post",
+        ),
+    ]
+    for contract_path, runtime_path, method in routes:
+        contract_responses = contract["paths"][contract_path][method]["responses"]
+        expected_errors = {
+            status: _resolved_error_response(contract, response)
+            for status, response in contract_responses.items()
+            if status in {"404", "409", "422"}
+        }
+        runtime_responses = runtime["paths"][runtime_path][method]["responses"]
+        actual_errors = {
+            status: _resolved_error_response(runtime, runtime_responses[status])
+            for status in expected_errors
+            if status in runtime_responses
+        }
+        assert actual_errors == expected_errors, f"{method.upper()} {contract_path}"
+
+
 class AcceptingReviewer:
-    async def review(
-        self, document: CourseNetworkDocument
-    ) -> CourseNetworkReviewJudgement:
+    async def review(self, packet: str) -> CourseNetworkReviewJudgement:
         return CourseNetworkReviewJudgement(
             decision="accept", summary="The reviewed seed is suitable.", findings=[]
         )

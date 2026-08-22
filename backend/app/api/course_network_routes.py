@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps import get_course_network_service
+from app.api.errors import ErrorEnvelope
 from app.schemas.api import (
     AdoptCourseNetworkDraftRequest,
     CourseNetworkAdoptionResponse,
@@ -24,6 +25,21 @@ router = APIRouter(tags=["course-network"])
 CourseNetworkServiceDep = Annotated[
     CourseNetworkService, Depends(get_course_network_service)
 ]
+_NOT_FOUND_RESPONSE = {
+    "model": ErrorEnvelope,
+    "description": "Class or course-network draft was not found.",
+}
+_CONFLICT_RESPONSE = {
+    "model": ErrorEnvelope,
+    "description": (
+        "Draft is terminal, adoption is in progress, or review/artifact snapshot "
+        "is stale."
+    ),
+}
+_VALIDATION_RESPONSE = {
+    "model": ErrorEnvelope,
+    "description": "Request or structured draft validation failed.",
+}
 
 
 def _network_from_draft(row):
@@ -72,7 +88,11 @@ def _raise_service_error(exc: Exception) -> None:
     raise exc
 
 
-@router.get("/classes/{class_id}/course/network", response_model=CourseNetworkResponse)
+@router.get(
+    "/classes/{class_id}/course/network",
+    response_model=CourseNetworkResponse,
+    responses={404: _NOT_FOUND_RESPONSE, 422: _VALIDATION_RESPONSE},
+)
 def get_course_network(
     class_id: str, service: CourseNetworkServiceDep
 ) -> CourseNetworkResponse:
@@ -88,6 +108,14 @@ def get_course_network(
     "/classes/{class_id}/course/network/drafts",
     response_model=CourseNetworkDraftResponse,
     status_code=201,
+    responses={
+        404: _NOT_FOUND_RESPONSE,
+        409: {
+            "model": ErrorEnvelope,
+            "description": "A network was already adopted for this class",
+        },
+        422: _VALIDATION_RESPONSE,
+    },
 )
 def open_course_network_seed_draft(
     class_id: str, service: CourseNetworkServiceDep
@@ -101,6 +129,7 @@ def open_course_network_seed_draft(
 @router.get(
     "/classes/{class_id}/course/network/drafts/{draft_id}",
     response_model=CourseNetworkDraftResponse,
+    responses={404: _NOT_FOUND_RESPONSE, 422: _VALIDATION_RESPONSE},
 )
 def get_course_network_draft(
     class_id: str, draft_id: str, service: CourseNetworkServiceDep
@@ -114,6 +143,11 @@ def get_course_network_draft(
 @router.post(
     "/classes/{class_id}/course/network/drafts/{draft_id}/review",
     response_model=CourseNetworkDraftResponse,
+    responses={
+        404: _NOT_FOUND_RESPONSE,
+        409: _CONFLICT_RESPONSE,
+        422: _VALIDATION_RESPONSE,
+    },
 )
 async def review_course_network_seed(
     class_id: str, draft_id: str, service: CourseNetworkServiceDep
@@ -128,6 +162,14 @@ async def review_course_network_seed(
 @router.post(
     "/classes/{class_id}/course/network/drafts/{draft_id}/adopt",
     response_model=CourseNetworkAdoptionResponse,
+    responses={
+        404: _NOT_FOUND_RESPONSE,
+        409: {
+            "model": ErrorEnvelope,
+            "description": "Stale review, non-accepted review, or duplicate adoption",
+        },
+        422: _VALIDATION_RESPONSE,
+    },
 )
 def adopt_course_network_seed(
     class_id: str,

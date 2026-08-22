@@ -146,6 +146,55 @@ def test_catalog_and_corpus_include_only_compiled_network_overview(wiki):
     assert raw_path not in {doc["path"] for doc in corpus["docs"]}
 
 
+def test_later_write_cleans_only_stale_target_class_transaction_artifacts(
+    wiki, monkeypatch
+):
+    wiki.write_course_network(CLASS_ID, _document())
+    network_dir = wiki.class_dir(CLASS_ID) / "course_network"
+    stale_id = "a" * 32
+    active_id = "b" * 32
+    stale_paths = [
+        network_dir / f".network.json.{stale_id}.new.tmp",
+        network_dir / f".overview.md.{stale_id}.backup.tmp",
+    ]
+    for path in stale_paths:
+        path.write_text("stale", encoding="utf-8")
+    unrelated = network_dir / f".teacher-note.{stale_id}.new.tmp"
+    unrelated.write_text("keep", encoding="utf-8")
+    other_class_artifact = (
+        wiki.root
+        / "wiki"
+        / "classes"
+        / "other-class"
+        / "course_network"
+        / f".network.json.{stale_id}.new.tmp"
+    )
+    other_class_artifact.parent.mkdir(parents=True)
+    other_class_artifact.write_text("keep", encoding="utf-8")
+    current_temporary = network_dir / f".network.json.{active_id}.new.tmp"
+    current_temporary.write_text("active", encoding="utf-8")
+    saw_current_before_write = []
+    original_write_text = wiki.write_text
+
+    class FixedUuid:
+        hex = active_id
+
+    def observe_current_temporary(path: Path, content: str) -> None:
+        if path == current_temporary:
+            saw_current_before_write.append(path.read_text(encoding="utf-8"))
+        original_write_text(path, content)
+
+    monkeypatch.setattr(course_network.uuid, "uuid4", lambda: FixedUuid())
+    monkeypatch.setattr(wiki, "write_text", observe_current_temporary)
+
+    wiki.write_course_network(CLASS_ID, _document(revision=2))
+
+    assert saw_current_before_write == ["active"]
+    assert all(not path.exists() for path in stale_paths)
+    assert unrelated.read_text(encoding="utf-8") == "keep"
+    assert other_class_artifact.read_text(encoding="utf-8") == "keep"
+
+
 def test_second_replace_failure_restores_existing_network_and_removes_temporaries(
     wiki, monkeypatch
 ):

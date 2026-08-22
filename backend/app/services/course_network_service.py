@@ -17,6 +17,7 @@ from app.course_network.review import (
     CourseNetworkReviewFinding,
     CourseNetworkReviewResult,
     OpenAICourseNetworkReviewer,
+    build_course_network_review_packet,
 )
 from app.course_network.seeds import load_seed_for_class
 from app.course_network.validation import validate_course_network_draft
@@ -194,7 +195,8 @@ class CourseNetworkService:
                 deterministic=True,
             )
         else:
-            judgement = await self.reviewer.review(document)
+            packet = build_course_network_review_packet(self.wiki, class_id, document)
+            judgement = await self.reviewer.review(packet)
             result = CourseNetworkReviewResult(
                 **judgement.model_dump(),
                 artifact_revision=row.artifact_revision,
@@ -221,9 +223,18 @@ class CourseNetworkService:
                 expected_revision=expected_revision,
                 expected_hash=expected_hash,
             )
-            snapshots = self._adoption_snapshots(class_id)
-            index_publication: indexing.IndexPublication | None = None
             log_entry_id = uuid.uuid4().hex
+            try:
+                snapshots = self._adoption_snapshots(class_id)
+            except Exception:
+                self._release_adoption_or_mark_recovery(
+                    draft_id,
+                    expected_revision=expected_revision,
+                    expected_hash=expected_hash,
+                    operation_id=log_entry_id,
+                )
+                raise
+            index_publication: indexing.IndexPublication | None = None
             try:
                 review = CourseNetworkReviewResult.model_validate(
                     row.active_review_json
@@ -295,10 +306,11 @@ class CourseNetworkService:
                         "course_network_adoption_recovery_required"
                     ) from recovery_error
                 else:
-                    self.workflow_drafts.release_course_network_adoption(
+                    self._release_adoption_or_mark_recovery(
                         draft_id,
                         expected_revision=expected_revision,
                         expected_hash=expected_hash,
+                        operation_id=log_entry_id,
                     )
                 raise
             return CourseNetworkAdoption(
@@ -324,3 +336,28 @@ class CourseNetworkService:
                 self.wiki.write_text(snapshot.path, snapshot.content)
             else:
                 snapshot.path.unlink(missing_ok=True)
+
+    def _release_adoption_or_mark_recovery(
+        self,
+        draft_id: str,
+        *,
+        expected_revision: int,
+        expected_hash: str,
+        operation_id: str,
+    ) -> None:
+        try:
+            self.workflow_drafts.release_course_network_adoption(
+                draft_id,
+                expected_revision=expected_revision,
+                expected_hash=expected_hash,
+            )
+        except Exception as release_error:
+            self.workflow_drafts.record_course_network_adoption_recovery(
+                draft_id,
+                expected_revision=expected_revision,
+                expected_hash=expected_hash,
+                operation_id=operation_id,
+            )
+            raise WorkflowDraftConflict(
+                "course_network_adoption_recovery_required"
+            ) from release_error

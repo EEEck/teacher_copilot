@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
 from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.course_network.models import CourseNetworkDocument
+from app.course_network.models import (
+    CanvasPosition,
+    CourseNetworkDocument,
+    CurriculumRouteRef,
+    LearningBlock,
+    MaterialMapping,
+    NetworkEdge,
+)
 from app.course_network.review import CourseNetworkReviewResult
-
 
 CLASS_LABEL_MAX_LENGTH = 120
 CLASS_SUBJECT_MAX_LENGTH = 40
@@ -763,6 +769,20 @@ class CourseNetworkResponse(BaseModel):
     network: CourseNetworkDocument | None = None
 
 
+class CourseNetworkDraftDocument(BaseModel):
+    """Typed transport view of a proposed course-network seed."""
+
+    schema_version: Literal[1]
+    class_id: str
+    route: CurriculumRouteRef
+    revision: int = Field(ge=0)
+    nodes: list[LearningBlock]
+    edges: list[NetworkEdge]
+    material_mappings: list[MaterialMapping]
+    positions: dict[str, CanvasPosition]
+    updated_at: datetime
+
+
 class CourseNetworkDraftResponse(BaseModel):
     draft_id: str
     class_id: str
@@ -771,9 +791,7 @@ class CourseNetworkDraftResponse(BaseModel):
     artifact_revision: int
     artifact_hash: str
     backend_session_id: str
-    # Proposed seed nodes are intentionally not canonical yet, so this is a
-    # structured JSON object rather than the canonical-only document model.
-    network: dict
+    network: CourseNetworkDraftDocument
     review: CourseNetworkReviewResult | None = None
 
 

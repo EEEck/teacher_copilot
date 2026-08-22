@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import anyio
 import pytest
@@ -15,6 +17,45 @@ from app.services.ingest_service import IngestService
 from app.services.plan_service import PlanService
 from app.services.workflow_drafts import WorkflowDraftStore
 from tests.conftest import CLASS_ID, COMPLETE_DIARY, READY_PLAN, StubAgentRunner
+
+
+def test_concurrent_structured_open_resumes_one_active_draft(wiki, monkeypatch):
+    db_path = wiki.root / "workflow" / "workflow_drafts.sqlite"
+    stores = [WorkflowDraftStore(db_path), WorkflowDraftStore(db_path)]
+    stores[0].initialize()
+    identity = WorkflowDraftIdentity(
+        workspace_id="local",
+        class_id=CLASS_ID,
+        mode="course_network",
+        intent="seed_adoption",
+        target_kind="course_network",
+    )
+    seed = load_seed_for_class(wiki, CLASS_ID).model_dump(mode="json")
+    barrier = threading.Barrier(2)
+
+    for store in stores:
+        original_find_active = store.find_active
+
+        def synchronized_find_active(identity, *, _find=original_find_active):
+            row = _find(identity)
+            barrier.wait(timeout=5)
+            return row
+
+        monkeypatch.setattr(store, "find_active", synchronized_find_active)
+
+    def open_with(store):
+        return store.open_structured_draft(
+            identity,
+            default_status="draft",
+            artifact=seed,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(open_with, stores))
+
+    assert len({result.row.draft_id for result in results}) == 1
+    assert sorted(result.created for result in results) == [False, True]
+    assert len(stores[0].list_active_for_class(CLASS_ID, mode="course_network")) == 1
 
 
 def test_structured_artifact_serialization_is_order_stable_and_invalidates_review(wiki):

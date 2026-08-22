@@ -238,14 +238,37 @@ class WorkflowDraftStore:
         messages_json: list[dict[str, Any]] | None = None,
         backend_session_id: str | None = None,
     ) -> OpenWorkflowDraftResult:
-        existing = self.find_active(identity)
-        if existing is not None:
-            return OpenWorkflowDraftResult(row=existing, created=False)
-
         now = _utc_now()
         draft_id = str(uuid.uuid4())
         session_id = backend_session_id or str(uuid.uuid4())
         with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            existing = conn.execute(
+                """
+                SELECT * FROM workflow_draft
+                WHERE workspace_id = ?
+                  AND class_id = ?
+                  AND mode = ?
+                  AND intent = ?
+                  AND target_kind = ?
+                  AND lesson_date = ?
+                  AND status NOT IN ('committed', 'saved', 'discarded')
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT 1
+                """,
+                (
+                    identity.workspace_id,
+                    identity.class_id,
+                    identity.mode,
+                    identity.intent,
+                    identity.target_kind,
+                    identity.lesson_date,
+                ),
+            ).fetchone()
+            if existing is not None:
+                return OpenWorkflowDraftResult(
+                    row=WorkflowDraftRow.from_sqlite(existing), created=False
+                )
             conn.execute(
                 """
                 INSERT INTO workflow_draft (
@@ -275,8 +298,14 @@ class WorkflowDraftStore:
                     now,
                 ),
             )
-        row = self.get(draft_id)
-        return OpenWorkflowDraftResult(row=row, created=True)
+            inserted = conn.execute(
+                "SELECT * FROM workflow_draft WHERE draft_id = ?", (draft_id,)
+            ).fetchone()
+            if inserted is None:  # pragma: no cover - guarded by the same transaction
+                raise RuntimeError("workflow draft insert was not visible")
+            return OpenWorkflowDraftResult(
+                row=WorkflowDraftRow.from_sqlite(inserted), created=True
+            )
 
     def open_structured_draft(
         self,

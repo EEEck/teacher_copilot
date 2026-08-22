@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+import threading
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from app.course_network.models import CourseNetworkDocument, canonical_network_json
+
+_TRANSACTION_ARTIFACT_RE = re.compile(
+    r"^\.(?:network\.json|overview\.md)\.([0-9a-f]{32})\.(?:new|backup)\.tmp$"
+)
+_WRITE_LOCKS: dict[str, threading.RLock] = {}
+_WRITE_LOCKS_GUARD = threading.Lock()
 
 
 def course_network_dir(store, class_id: str) -> Path:
@@ -137,6 +147,62 @@ def _temporary_path(destination: Path, transaction_id: str, label: str) -> Path:
     return destination.with_name(f".{destination.name}.{transaction_id}.{label}.tmp")
 
 
+@contextmanager
+def _course_network_write_lock(store, class_id: str):
+    key = f"{store.root.resolve()}::{class_id}"
+    with _WRITE_LOCKS_GUARD:
+        process_lock = _WRITE_LOCKS.setdefault(key, threading.RLock())
+    lock_path = store.root / "workflow" / f".course-network-write-{class_id}.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with process_lock, lock_path.open("a+b") as lock_file:
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        _lock_file(lock_file)
+        try:
+            yield
+        finally:
+            _unlock_file(lock_file)
+
+
+def _lock_file(lock_file) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        return
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_file(lock_file) -> None:
+    lock_file.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _cleanup_stale_transaction_artifacts(
+    directory: Path, *, current_transaction_id: str
+) -> None:
+    for path in directory.iterdir():
+        match = _TRANSACTION_ARTIFACT_RE.fullmatch(path.name)
+        if (
+            path.is_file()
+            and match is not None
+            and match.group(1) != current_transaction_id
+        ):
+            path.unlink()
+
+
 def _write_temporary(
     store, destination: Path, content: str, transaction_id: str
 ) -> Path:
@@ -209,39 +275,43 @@ def write_course_network(
     overview_backup: Path | None = None
     published_network = False
     published_overview = False
-    try:
-        network_temporary = _write_temporary(
-            store, network_path, network_json, transaction_id
+    with _course_network_write_lock(store, class_id):
+        _cleanup_stale_transaction_artifacts(
+            directory, current_transaction_id=transaction_id
         )
-        overview_temporary = _write_temporary(
-            store, overview_path, overview, transaction_id
-        )
-        network_backup = _backup_existing(store, network_path, transaction_id)
-        overview_backup = _backup_existing(store, overview_path, transaction_id)
-        _replace_file(network_temporary, network_path)
-        published_network = True
-        _replace_file(overview_temporary, overview_path)
-        published_overview = True
-    except Exception:
         try:
-            if published_network:
-                _restore_file(network_path, network_backup)
-            if published_overview:
-                _restore_file(overview_path, overview_backup)
-        finally:
-            for temporary in (
-                network_temporary,
-                overview_temporary,
-                network_backup,
-                overview_backup,
-            ):
+            network_temporary = _write_temporary(
+                store, network_path, network_json, transaction_id
+            )
+            overview_temporary = _write_temporary(
+                store, overview_path, overview, transaction_id
+            )
+            network_backup = _backup_existing(store, network_path, transaction_id)
+            overview_backup = _backup_existing(store, overview_path, transaction_id)
+            _replace_file(network_temporary, network_path)
+            published_network = True
+            _replace_file(overview_temporary, overview_path)
+            published_overview = True
+        except Exception:
+            try:
+                if published_network:
+                    _restore_file(network_path, network_backup)
+                if published_overview:
+                    _restore_file(overview_path, overview_backup)
+            finally:
+                for temporary in (
+                    network_temporary,
+                    overview_temporary,
+                    network_backup,
+                    overview_backup,
+                ):
+                    if temporary is not None:
+                        temporary.unlink(missing_ok=True)
+            raise
+        else:
+            for temporary in (network_backup, overview_backup):
                 if temporary is not None:
                     temporary.unlink(missing_ok=True)
-        raise
-    else:
-        for temporary in (network_backup, overview_backup):
-            if temporary is not None:
-                temporary.unlink(missing_ok=True)
     return canonical_document
 
 
