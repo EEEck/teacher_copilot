@@ -6,7 +6,7 @@ import asyncio
 from typing import Literal, Protocol
 
 from agents import Agent, Runner
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.config import Settings, get_settings
 from app.course_network.models import CourseNetworkDocument
@@ -31,10 +31,18 @@ class CourseNetworkReviewJudgement(BaseModel):
     summary: str
     findings: list[CourseNetworkReviewFinding] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def accepted_reviews_cannot_contain_blocking_findings(self):
+        if self.decision == "accept" and any(
+            finding.severity == "block" for finding in self.findings
+        ):
+            raise ValueError("accept review cannot contain blocking findings")
+        return self
+
 
 class CourseNetworkReviewResult(CourseNetworkReviewJudgement):
-    artifact_revision: int
-    artifact_hash: str
+    artifact_revision: int = Field(ge=0)
+    artifact_hash: str = Field(min_length=1)
     deterministic: bool = False
 
 

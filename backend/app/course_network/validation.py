@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from app.course_network.models import CourseNetworkDocument, CurriculumRouteRef
@@ -31,6 +32,28 @@ def _registered_curriculum_refs(wiki) -> set[tuple[str, str]]:
     return registered
 
 
+def _grade(value: str) -> int | None:
+    match = re.search(r"\d+", value or "")
+    return int(match.group(0)) if match else None
+
+
+def _authorized_curriculum_refs(
+    wiki, expected_class_id: str, expected_route: CurriculumRouteRef
+) -> set[tuple[str, str]]:
+    authorized: set[tuple[str, str]] = set()
+    for source in wiki.list_trusted_sources(expected_class_id, scope="active"):
+        if source.subject and source.subject.strip().lower() != expected_route.subject:
+            continue
+        if source.branch and source.branch.strip().upper() != expected_route.branch:
+            continue
+        if (
+            source_grade := _grade(source.grade)
+        ) is not None and source_grade != expected_route.grade:
+            continue
+        authorized.update((source.source_id, section.id) for section in source.sections)
+    return authorized
+
+
 def _has_builds_on_cycle(document: CourseNetworkDocument) -> bool:
     adjacency: dict[str, list[str]] = {node.id: [] for node in document.nodes}
     for edge in document.edges:
@@ -55,11 +78,20 @@ def _has_builds_on_cycle(document: CourseNetworkDocument) -> bool:
 
 
 def validate_course_network_draft(
-    wiki, document: CourseNetworkDocument
+    wiki, document: CourseNetworkDocument, *, expected_class_id: str
 ) -> list[CourseNetworkValidationFinding]:
     """Return the stable findings that must block an LLM review or adoption."""
     findings: list[CourseNetworkValidationFinding] = []
-    if document.route != _expected_route(wiki, document.class_id):
+    expected_route = _expected_route(wiki, expected_class_id)
+    if document.class_id != expected_class_id:
+        findings.append(
+            CourseNetworkValidationFinding(
+                "class_mismatch",
+                "Draft class_id does not match the requested class.",
+                "class_id",
+            )
+        )
+    if document.route != expected_route:
         findings.append(
             CourseNetworkValidationFinding(
                 "route_mismatch",
@@ -77,6 +109,7 @@ def validate_course_network_draft(
         )
 
     registered = _registered_curriculum_refs(wiki)
+    authorized = _authorized_curriculum_refs(wiki, expected_class_id, expected_route)
     for collection_name, items in (
         ("nodes", document.nodes),
         ("edges", document.edges),
@@ -96,6 +129,14 @@ def validate_course_network_draft(
                         CourseNetworkValidationFinding(
                             "unknown_curriculum_reference",
                             "Curriculum reference is not registered for this wiki.",
+                            f"{collection_name}.{item.id}",
+                        )
+                    )
+                elif (reference.source_id, reference.section_id) not in authorized:
+                    findings.append(
+                        CourseNetworkValidationFinding(
+                            "unauthorized_curriculum_reference",
+                            "Curriculum reference is not authorized for this class route.",
                             f"{collection_name}.{item.id}",
                         )
                     )

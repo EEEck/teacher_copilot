@@ -67,6 +67,8 @@ paths:
   /api/classes/{classId}/course/network:
     get:
       summary: Get an adopted class course network
+      parameters:
+        - $ref: '#/components/parameters/ClassId'
       responses:
         '200':
           description: Adopted network or null when none has been adopted
@@ -74,9 +76,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CourseNetworkResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/classes/{classId}/course/network/drafts:
     post:
       summary: Open the matching reviewed course-network seed as a structured draft
+      parameters:
+        - $ref: '#/components/parameters/ClassId'
       responses:
         '201':
           description: Structured proposed seed draft
@@ -86,15 +94,56 @@ paths:
                 $ref: '#/components/schemas/CourseNetworkDraftResponse'
         '409':
           description: A network was already adopted for this class
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/classes/{classId}/course/network/drafts/{draftId}:
     get:
       summary: Get a structured course-network seed draft
+      parameters:
+        - $ref: '#/components/parameters/ClassId'
+        - $ref: '#/components/parameters/DraftId'
+      responses:
+        '200':
+          description: The persisted draft artifact and its latest review snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNetworkDraftResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/classes/{classId}/course/network/drafts/{draftId}/review:
     post:
       summary: Validate and no-tools review the exact structured seed draft
+      parameters:
+        - $ref: '#/components/parameters/ClassId'
+        - $ref: '#/components/parameters/DraftId'
+      responses:
+        '200':
+          description: Completed deterministic and no-tools review bound to this artifact revision/hash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNetworkDraftResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/classes/{classId}/course/network/drafts/{draftId}/adopt:
     post:
       summary: Teacher-approved adoption of the exact reviewed seed revision
+      parameters:
+        - $ref: '#/components/parameters/ClassId'
+        - $ref: '#/components/parameters/DraftId'
       requestBody:
         required: true
         content:
@@ -110,7 +159,49 @@ paths:
                 $ref: '#/components/schemas/CourseNetworkAdoptionResponse'
         '409':
           description: Stale review, non-accepted review, or duplicate adoption
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 components:
+  parameters:
+    ClassId:
+      name: classId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Stable class identifier.
+    DraftId:
+      name: draftId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Durable structured course-network workflow draft identifier.
+  responses:
+    NotFoundError:
+      description: Class or course-network draft was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ConflictError:
+      description: Draft is terminal, adoption is in progress, or review/artifact snapshot is stale.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ValidationError:
+      description: Request or structured draft validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
     CurriculumRouteOption:
       type: object
@@ -207,11 +298,216 @@ components:
         class_id:
           type: string
         network:
-          type: [object, 'null']
-          description: Canonical adopted course-network document, or null before adoption.
+          oneOf:
+            - $ref: '#/components/schemas/CourseNetworkDocument'
+            - type: 'null'
+          description: Canonical adopted document, or null before adoption.
+    CourseNetworkRoute:
+      type: object
+      required: [subject, grade, branch]
+      properties:
+        subject:
+          type: string
+          enum: [chemie]
+        grade:
+          type: integer
+          enum: [8, 9]
+        branch:
+          type: string
+          enum: [NTG]
+    CurriculumReference:
+      type: object
+      required: [source_id, section_id]
+      properties:
+        source_id:
+          type: string
+        section_id:
+          type: string
+    MaterialSectionReference:
+      type: object
+      required: [material_id, section_id]
+      properties:
+        material_id:
+          type: string
+        section_id:
+          type: string
+        page_start:
+          type: [integer, 'null']
+          minimum: 1
+        page_end:
+          type: [integer, 'null']
+          minimum: 1
+    LearningBlock:
+      type: object
+      required: [id, title, origin, status]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        learning_goal:
+          type: string
+        curriculum_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/CurriculumReference'
+        material_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaterialSectionReference'
+        origin:
+          type: string
+          enum: [curriculum, teacher, material]
+        status:
+          type: string
+          enum: [proposed, adopted, retired]
+    NetworkEdge:
+      type: object
+      required: [id, source_id, target_id, relation, origin]
+      properties:
+        id:
+          type: string
+        source_id:
+          type: string
+        target_id:
+          type: string
+        relation:
+          type: string
+          enum: [builds_on, related_to]
+        curriculum_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/CurriculumReference'
+        material_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaterialSectionReference'
+        origin:
+          type: string
+          enum: [curriculum, teacher, material]
+    MaterialMapping:
+      type: object
+      required: [id, material_id, section_id, node_id, relation, origin]
+      properties:
+        id:
+          type: string
+        material_id:
+          type: string
+        section_id:
+          type: string
+        node_id:
+          type: string
+        relation:
+          type: string
+          enum: [explains, practices, assesses, extends]
+        confidence:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+        teacher_note:
+          type: string
+        origin:
+          type: string
+          enum: [agent, teacher]
+    CanvasPosition:
+      type: object
+      required: [x, y]
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+    CourseNetworkDocument:
+      type: object
+      required: [schema_version, class_id, route, revision, nodes, edges, material_mappings, positions, updated_at]
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+        class_id:
+          type: string
+        route:
+          $ref: '#/components/schemas/CourseNetworkRoute'
+        revision:
+          type: integer
+          minimum: 1
+        nodes:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/LearningBlock'
+              - type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [adopted, retired]
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkEdge'
+        material_mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaterialMapping'
+        positions:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CanvasPosition'
+        updated_at:
+          type: string
+          format: date-time
+    CourseNetworkDraftDocument:
+      type: object
+      description: Proposed seed document; nodes have proposed status before teacher adoption.
+      required: [schema_version, class_id, route, revision, nodes, edges, material_mappings, positions, updated_at]
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+        class_id:
+          type: string
+        route:
+          $ref: '#/components/schemas/CourseNetworkRoute'
+        revision:
+          type: integer
+          minimum: 0
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearningBlock'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkEdge'
+        material_mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaterialMapping'
+        positions:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CanvasPosition'
+        updated_at:
+          type: string
+          format: date-time
+    CourseNetworkReviewFinding:
+      type: object
+      required: [code, message, severity, path]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        severity:
+          type: string
+          enum: [note, block]
+        path:
+          type: string
     CourseNetworkReview:
       type: object
-      required: [decision, summary, findings, artifact_revision, artifact_hash]
+      required: [decision, summary, findings, artifact_revision, artifact_hash, deterministic]
       properties:
         decision:
           type: string
@@ -221,14 +517,16 @@ components:
         findings:
           type: array
           items:
-            type: object
+            $ref: '#/components/schemas/CourseNetworkReviewFinding'
         artifact_revision:
           type: integer
         artifact_hash:
           type: string
+        deterministic:
+          type: boolean
     CourseNetworkDraftResponse:
       type: object
-      required: [draft_id, class_id, status, artifact_markdown, artifact_revision, artifact_hash, network]
+      required: [draft_id, class_id, status, artifact_markdown, artifact_revision, artifact_hash, backend_session_id, network, review]
       properties:
         draft_id:
           type: string
@@ -246,8 +544,7 @@ components:
         backend_session_id:
           type: string
         network:
-          type: object
-          description: Proposed structured seed; nodes remain proposed until adoption.
+          $ref: '#/components/schemas/CourseNetworkDraftDocument'
         review:
           oneOf:
             - $ref: '#/components/schemas/CourseNetworkReview'
@@ -273,7 +570,7 @@ components:
         log_entry_id:
           type: string
         network:
-          type: object
+          $ref: '#/components/schemas/CourseNetworkDocument'
     ClassSummary:
       type: object
       required: [id, label, subject]

@@ -16,9 +16,12 @@ from pathlib import Path
 from typing import Any
 
 from app.services.sqlite_util import connect as sqlite_connect
-from app.teacher_agent.executive_verification import artifact_fingerprint as artifact_hash
+from app.teacher_agent.executive_verification import (
+    artifact_fingerprint as artifact_hash,
+)
 
 TERMINAL_STATUSES = {"committed", "saved", "discarded"}
+_ADOPTING_STATUS = "adopting"
 # Ingest review phase always means the teacher has compiled wiki proposals.
 _TOUCHED_STATUSES = frozenset({"reviewing"})
 
@@ -93,11 +96,13 @@ class WorkflowDraftRow:
     active_review_revision: int | None
     active_review_hash: str | None
     active_review_json: dict[str, Any]
+    review_generation: int
     created_at: str
     updated_at: str
 
     @classmethod
-    def from_sqlite(cls, row: sqlite3.Row) -> "WorkflowDraftRow":
+    def from_sqlite(cls, row: sqlite3.Row) -> WorkflowDraftRow:
+        columns = row.keys()
         return cls(
             draft_id=row["draft_id"],
             workspace_id=row["workspace_id"],
@@ -110,24 +115,27 @@ class WorkflowDraftRow:
             status=row["status"],
             artifact_markdown=row["artifact_markdown"] or "",
             artifact_revision=int(row["artifact_revision"] or 0),
-            artifact_hash=row["artifact_hash"] or artifact_hash(row["artifact_markdown"] or ""),
+            artifact_hash=row["artifact_hash"]
+            or artifact_hash(row["artifact_markdown"] or ""),
             runtime_json=_loads_dict(row["runtime_json"]),
             executive_json=(
                 _loads_dict(row["executive_json"])
-                if "executive_json" in row.keys()
+                if "executive_json" in columns
                 else {}
             ),
             messages_json=_loads_list(row["messages_json"]),
             backend_session_id=row["backend_session_id"] or "",
-            turn_in_progress=bool(row["turn_in_progress"]) if "turn_in_progress" in row.keys() else False,
+            turn_in_progress=bool(row["turn_in_progress"])
+            if "turn_in_progress" in columns
+            else False,
             latest_turn_complete=(
                 bool(row["latest_turn_complete"])
-                if "latest_turn_complete" in row.keys()
+                if "latest_turn_complete" in columns
                 else True
             ),
             pending_turn_json=(
                 _loads_dict(row["pending_turn_json"])
-                if "pending_turn_json" in row.keys()
+                if "pending_turn_json" in columns
                 else {}
             ),
             active_review_revision=(
@@ -138,8 +146,11 @@ class WorkflowDraftRow:
             active_review_hash=row["active_review_hash"],
             active_review_json=(
                 _loads_dict(row["active_review_json"])
-                if "active_review_json" in row.keys()
+                if "active_review_json" in columns
                 else {}
+            ),
+            review_generation=(
+                int(row["review_generation"]) if "review_generation" in columns else 0
             ),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
@@ -188,6 +199,7 @@ class WorkflowDraftStore:
                   active_review_revision INTEGER,
                   active_review_hash TEXT,
                   active_review_json TEXT NOT NULL DEFAULT '{}',
+                  review_generation INTEGER NOT NULL DEFAULT 0,
                   created_at TEXT NOT NULL,
                   updated_at TEXT NOT NULL
                 )
@@ -202,14 +214,19 @@ class WorkflowDraftStore:
                 """
             )
             self._ensure_column(conn, "turn_in_progress", "INTEGER NOT NULL DEFAULT 0")
-            self._ensure_column(conn, "latest_turn_complete", "INTEGER NOT NULL DEFAULT 1")
+            self._ensure_column(
+                conn, "latest_turn_complete", "INTEGER NOT NULL DEFAULT 1"
+            )
             self._ensure_column(conn, "pending_turn_json", "TEXT NOT NULL DEFAULT '{}'")
             self._ensure_column(conn, "executive_json", "TEXT NOT NULL DEFAULT '{}'")
             # These two are in the CREATE TABLE above, but a DB created before
             # they were added would lack them — migrate additively like the rest.
             self._ensure_column(conn, "active_review_revision", "INTEGER")
             self._ensure_column(conn, "active_review_hash", "TEXT")
-            self._ensure_column(conn, "active_review_json", "TEXT NOT NULL DEFAULT '{}'")
+            self._ensure_column(
+                conn, "active_review_json", "TEXT NOT NULL DEFAULT '{}'"
+            )
+            self._ensure_column(conn, "review_generation", "INTEGER NOT NULL DEFAULT 0")
 
     def open_draft(
         self,
@@ -397,6 +414,8 @@ class WorkflowDraftStore:
         executive_json: dict[str, Any] | None = None,
     ) -> WorkflowDraftRow:
         current = self.get(draft_id)
+        if current.status == _ADOPTING_STATUS:
+            raise WorkflowDraftConflict("draft_adoption_in_progress")
         new_hash = artifact_hash(artifact_markdown)
         revision = current.artifact_revision
         artifact_changed = new_hash != current.artifact_hash
@@ -421,6 +440,7 @@ class WorkflowDraftStore:
                     active_review_revision = ?,
                     active_review_hash = ?,
                     active_review_json = ?,
+                    review_generation = ?,
                     updated_at = ?
                 WHERE draft_id = ?
                 """,
@@ -439,6 +459,7 @@ class WorkflowDraftStore:
                     None if artifact_changed else current.active_review_revision,
                     None if artifact_changed else current.active_review_hash,
                     _dumps({} if artifact_changed else current.active_review_json),
+                    current.review_generation + int(artifact_changed),
                     now,
                     draft_id,
                 ),
@@ -452,7 +473,12 @@ class WorkflowDraftStore:
         revision: int,
         artifact_hash_value: str,
         review_json: dict[str, Any] | None = None,
+        review_generation: int | None = None,
     ) -> WorkflowDraftRow:
+        if review_json:
+            self._validate_review_snapshot_json(
+                review_json, revision=revision, artifact_hash_value=artifact_hash_value
+            )
         now = _utc_now()
         with self._connect() as conn:
             cursor = conn.execute(
@@ -463,11 +489,151 @@ class WorkflowDraftStore:
                     active_review_json = ?,
                     updated_at = ?
                 WHERE draft_id = ?
+                  AND artifact_revision = ?
+                  AND artifact_hash = ?
+                  AND status NOT IN ('committed', 'saved', 'discarded', 'adopting')
+                  AND (? IS NULL OR review_generation = ?)
                 """,
-                (revision, artifact_hash_value, _dumps(review_json or {}), now, draft_id),
+                (
+                    revision,
+                    artifact_hash_value,
+                    _dumps(review_json or {}),
+                    now,
+                    draft_id,
+                    revision,
+                    artifact_hash_value,
+                    review_generation,
+                    review_generation,
+                ),
             )
         if cursor.rowcount != 1:
-            raise KeyError(f"Unknown workflow draft: {draft_id}")
+            self.get(draft_id)
+            raise WorkflowDraftConflict("draft_changed_since_review_created")
+        return self.get(draft_id)
+
+    def begin_course_network_review(
+        self,
+        draft_id: str,
+        *,
+        expected_revision: int,
+        expected_hash: str,
+    ) -> WorkflowDraftRow:
+        """Invalidate prior review state and reserve a generation for one review.
+
+        Completion must present this generation, preventing an older in-flight
+        reviewer from replacing a newer review for the same artifact.
+        """
+        now = _utc_now()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE workflow_draft
+                SET active_review_revision = NULL,
+                    active_review_hash = NULL,
+                    active_review_json = '{}',
+                    review_generation = review_generation + 1,
+                    updated_at = ?
+                WHERE draft_id = ?
+                  AND status = 'draft'
+                  AND artifact_revision = ?
+                  AND artifact_hash = ?
+                """,
+                (now, draft_id, expected_revision, expected_hash),
+            )
+        if cursor.rowcount != 1:
+            row = self.get(draft_id)
+            if row.status in TERMINAL_STATUSES or row.status == _ADOPTING_STATUS:
+                raise WorkflowDraftConflict("course_network_draft_not_active")
+            raise WorkflowDraftConflict("draft_changed_since_review_created")
+        return self.get(draft_id)
+
+    def reserve_course_network_adoption(
+        self,
+        draft_id: str,
+        *,
+        expected_revision: int,
+        expected_hash: str,
+    ) -> WorkflowDraftRow:
+        """Atomically claim one exact reviewed course-network draft for adoption."""
+        now = _utc_now()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE workflow_draft
+                SET status = ?, updated_at = ?
+                WHERE draft_id = ?
+                  AND status = 'draft'
+                  AND artifact_revision = ?
+                  AND artifact_hash = ?
+                  AND active_review_revision = ?
+                  AND active_review_hash = ?
+                """,
+                (
+                    _ADOPTING_STATUS,
+                    now,
+                    draft_id,
+                    expected_revision,
+                    expected_hash,
+                    expected_revision,
+                    expected_hash,
+                ),
+            )
+        if cursor.rowcount != 1:
+            row = self.get(draft_id)
+            if row.status == _ADOPTING_STATUS:
+                raise WorkflowDraftConflict("draft_adoption_in_progress")
+            if row.status in TERMINAL_STATUSES:
+                raise WorkflowDraftConflict("course_network_draft_not_active")
+            raise WorkflowDraftConflict("draft_changed_since_review_created")
+        return self.get(draft_id)
+
+    def release_course_network_adoption(
+        self, draft_id: str, *, expected_revision: int, expected_hash: str
+    ) -> WorkflowDraftRow:
+        now = _utc_now()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE workflow_draft
+                SET status = 'draft', updated_at = ?
+                WHERE draft_id = ?
+                  AND status = 'adopting'
+                  AND artifact_revision = ?
+                  AND artifact_hash = ?
+                """,
+                (now, draft_id, expected_revision, expected_hash),
+            )
+        if cursor.rowcount != 1:
+            raise WorkflowDraftConflict("draft_adoption_state_lost")
+        return self.get(draft_id)
+
+    def complete_course_network_adoption(
+        self, draft_id: str, *, expected_revision: int, expected_hash: str
+    ) -> WorkflowDraftRow:
+        now = _utc_now()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE workflow_draft
+                SET status = 'committed', updated_at = ?
+                WHERE draft_id = ?
+                  AND status = 'adopting'
+                  AND artifact_revision = ?
+                  AND artifact_hash = ?
+                  AND active_review_revision = ?
+                  AND active_review_hash = ?
+                """,
+                (
+                    now,
+                    draft_id,
+                    expected_revision,
+                    expected_hash,
+                    expected_revision,
+                    expected_hash,
+                ),
+            )
+        if cursor.rowcount != 1:
+            raise WorkflowDraftConflict("draft_adoption_state_lost")
         return self.get(draft_id)
 
     def validate_review_snapshot(
@@ -496,7 +662,10 @@ class WorkflowDraftStore:
         expected_hash: str,
     ) -> WorkflowDraftRow:
         row = self.get(draft_id)
-        if row.artifact_revision != expected_revision or row.artifact_hash != expected_hash:
+        if (
+            row.artifact_revision != expected_revision
+            or row.artifact_hash != expected_hash
+        ):
             raise WorkflowDraftConflict("draft_changed_since_review_created")
         return row
 
@@ -517,11 +686,14 @@ class WorkflowDraftStore:
                 UPDATE workflow_draft
                 SET status = ?,
                     updated_at = ?
-                WHERE draft_id = ?
+                WHERE draft_id = ? AND status != 'adopting'
                 """,
                 (status, now, draft_id),
             )
         if cursor.rowcount != 1:
+            row = self.get(draft_id)
+            if row.status == _ADOPTING_STATUS:
+                raise WorkflowDraftConflict("draft_adoption_in_progress")
             raise KeyError(f"Unknown workflow draft: {draft_id}")
         return self.get(draft_id)
 
@@ -530,9 +702,31 @@ class WorkflowDraftStore:
 
     @staticmethod
     def _ensure_column(conn: sqlite3.Connection, name: str, definition: str) -> None:
-        columns = {row["name"] for row in conn.execute("PRAGMA table_info(workflow_draft)")}
+        columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(workflow_draft)")
+        }
         if name not in columns:
             conn.execute(f"ALTER TABLE workflow_draft ADD COLUMN {name} {definition}")
+
+    @staticmethod
+    def _validate_review_snapshot_json(
+        review_json: dict[str, Any], *, revision: int, artifact_hash_value: str
+    ) -> None:
+        has_artifact_binding = (
+            "artifact_revision" in review_json or "artifact_hash" in review_json
+        )
+        if has_artifact_binding and review_json.get("artifact_revision") != revision:
+            raise ValueError("review snapshot revision does not match artifact")
+        if (
+            has_artifact_binding
+            and review_json.get("artifact_hash") != artifact_hash_value
+        ):
+            raise ValueError("review snapshot hash does not match artifact")
+        if review_json.get("decision") == "accept" and any(
+            isinstance(finding, dict) and finding.get("severity") == "block"
+            for finding in review_json.get("findings", [])
+        ):
+            raise ValueError("accept review cannot contain blocking findings")
 
 
 def _dumps(value: Any) -> str:

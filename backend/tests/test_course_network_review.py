@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import threading
+
 import pytest
 
 from app.course_network.models import CourseNetworkDocument, NetworkEdge
 from app.course_network.review import CourseNetworkReviewJudgement
-from app.course_network.seeds import load_seed_for_class
+from app.course_network.seeds import load_seed_for_class, load_seed_for_route
 from app.course_network.validation import validate_course_network_draft
-from app.services.course_network_service import CourseNetworkService
+from app.services.course_network_service import (
+    CourseNetworkConflict,
+    CourseNetworkService,
+)
 from app.services.workflow_drafts import (
+    WorkflowDraftConflict,
     WorkflowDraftStore,
     serialize_structured_artifact,
 )
@@ -27,6 +35,23 @@ class StubReviewer:
             decision=self.decision,
             summary=f"Reviewer decided {self.decision}.",
             findings=[],
+        )
+
+
+class WaitingReviewer(StubReviewer):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def review(
+        self, document: CourseNetworkDocument
+    ) -> CourseNetworkReviewJudgement:
+        self.calls += 1
+        self.started.set()
+        await self.release.wait()
+        return CourseNetworkReviewJudgement(
+            decision="accept", summary="Reviewed after waiting.", findings=[]
         )
 
 
@@ -53,12 +78,42 @@ def test_deterministic_validation_rejects_builds_on_cycle_and_unknown_provenance
     ]
     invalid = CourseNetworkDocument.for_draft_seed(**payload)
 
-    errors = validate_course_network_draft(wiki, invalid)
+    errors = validate_course_network_draft(wiki, invalid, expected_class_id=CLASS_ID)
 
     assert {error.code for error in errors} >= {
         "builds_on_cycle",
         "route_mismatch",
         "unknown_curriculum_reference",
+    }
+
+
+@pytest.mark.anyio
+async def test_review_blocks_class_mismatch_and_prior_route_provenance(wiki):
+    reviewer = StubReviewer()
+    service = _service(wiki, reviewer)
+    draft = service.open_seed_draft(CLASS_ID)
+    grade_8 = load_seed_for_route(wiki, "chemie", 8, "NTG")
+    payload = load_seed_for_class(wiki, CLASS_ID).model_dump(mode="json")
+    payload["class_id"] = "another-class"
+    payload["nodes"][0]["curriculum_refs"] = [
+        grade_8.nodes[0].curriculum_refs[0].model_dump(mode="json")
+    ]
+    service.workflow_drafts.save_from_session(
+        draft_id=draft.draft_id,
+        status="draft",
+        artifact_markdown=serialize_structured_artifact(payload),
+        runtime_json={},
+        messages_json=[],
+        backend_session_id=draft.backend_session_id,
+    )
+
+    result = await service.review_seed(CLASS_ID, draft.draft_id)
+
+    assert result.decision == "block"
+    assert reviewer.calls == 0
+    assert {finding.code for finding in result.findings} >= {
+        "class_mismatch",
+        "unauthorized_curriculum_reference",
     }
 
 
@@ -104,3 +159,210 @@ async def test_non_accepting_llm_review_stops_adoption(wiki, decision):
         )
 
     assert service.get_network(CLASS_ID) is None
+
+
+@pytest.mark.anyio
+async def test_stale_reviewer_completion_cannot_restore_invalidated_snapshot(wiki):
+    reviewer = WaitingReviewer()
+    service = _service(wiki, reviewer)
+    draft = service.open_seed_draft(CLASS_ID)
+    reviewing = asyncio.create_task(service.review_seed(CLASS_ID, draft.draft_id))
+    await reviewer.started.wait()
+    changed = service.workflow_drafts.save_from_session(
+        draft_id=draft.draft_id,
+        status="draft",
+        artifact_markdown=draft.artifact_markdown.replace(
+            "Chemische", "Chemische (spät)"
+        ),
+        runtime_json={},
+        messages_json=[],
+        backend_session_id=draft.backend_session_id,
+    )
+    reviewer.release.set()
+
+    with pytest.raises(
+        WorkflowDraftConflict, match="draft_changed_since_review_created"
+    ):
+        await reviewing
+
+    assert changed.active_review_json == {}
+    assert service.get_draft(CLASS_ID, draft.draft_id).active_review_json == {}
+
+
+@pytest.mark.anyio
+async def test_older_concurrent_review_cannot_replace_newer_review_snapshot(wiki):
+    reviewer = WaitingReviewer()
+    service = _service(wiki, reviewer)
+    draft = service.open_seed_draft(CLASS_ID)
+    first = asyncio.create_task(service.review_seed(CLASS_ID, draft.draft_id))
+    await reviewer.started.wait()
+    second = asyncio.create_task(service.review_seed(CLASS_ID, draft.draft_id))
+    for _ in range(100):
+        if reviewer.calls == 2:
+            break
+        await asyncio.sleep(0)
+    assert reviewer.calls == 2
+    reviewer.release.set()
+
+    results = await asyncio.gather(first, second, return_exceptions=True)
+
+    assert sum(not isinstance(result, Exception) for result in results) == 1
+    assert any(
+        isinstance(result, WorkflowDraftConflict)
+        and "draft_changed_since_review_created" in str(result)
+        for result in results
+    )
+    stored = service.get_draft(CLASS_ID, draft.draft_id)
+    assert stored.active_review_revision == draft.artifact_revision
+    assert stored.active_review_hash == draft.artifact_hash
+
+
+def test_review_snapshot_rejects_contradictory_accept_report(wiki):
+    store = WorkflowDraftStore(wiki.root / "workflow" / "workflow_drafts.sqlite")
+    store.initialize()
+    service = CourseNetworkService(
+        wiki=wiki, workflow_drafts=store, reviewer=StubReviewer()
+    )
+    draft = service.open_seed_draft(CLASS_ID)
+    contradictory = {
+        "decision": "accept",
+        "summary": "Contradictory.",
+        "findings": [{"code": "unsafe", "message": "Unsafe", "severity": "block"}],
+        "artifact_revision": draft.artifact_revision,
+        "artifact_hash": draft.artifact_hash,
+    }
+
+    with pytest.raises(ValueError, match="accept"):
+        store.mark_review_snapshot(
+            draft.draft_id,
+            revision=draft.artifact_revision,
+            artifact_hash_value=draft.artifact_hash,
+            review_json=contradictory,
+        )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("terminal", ["discarded", "committed"])
+async def test_terminal_course_network_drafts_cannot_reenter_review_or_adoption(
+    wiki, terminal
+):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    if terminal == "committed":
+        service.workflow_drafts.mark_committed(draft.draft_id)
+    else:
+        service.workflow_drafts.discard(draft.draft_id)
+
+    with pytest.raises(WorkflowDraftConflict, match="course_network_draft_not_active"):
+        await service.review_seed(CLASS_ID, draft.draft_id)
+    with pytest.raises(WorkflowDraftConflict, match="course_network_draft_not_active"):
+        service.adopt_seed(CLASS_ID, draft.draft_id, 0, draft.artifact_hash)
+
+
+@pytest.mark.anyio
+async def test_adoption_rejects_tampered_review_snapshot_and_releases_reservation(wiki):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    review = await service.review_seed(CLASS_ID, draft.draft_id)
+    tampered = {
+        **review.model_dump(mode="json"),
+        "artifact_hash": "not-the-reviewed-artifact",
+    }
+    with service.workflow_drafts._connect() as conn:
+        conn.execute(
+            "UPDATE workflow_draft SET active_review_json = ? WHERE draft_id = ?",
+            (json.dumps(tampered), draft.draft_id),
+        )
+
+    with pytest.raises(
+        WorkflowDraftConflict, match="course_network_review_snapshot_invalid"
+    ):
+        service.adopt_seed(
+            CLASS_ID, draft.draft_id, review.artifact_revision, review.artifact_hash
+        )
+
+    assert service.get_network(CLASS_ID) is None
+    assert service.get_draft(CLASS_ID, draft.draft_id).status == "draft"
+
+
+@pytest.mark.anyio
+async def test_adoption_rolls_back_network_log_index_and_reservation_on_failure(
+    wiki, monkeypatch
+):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    review = await service.review_seed(CLASS_ID, draft.draft_id)
+    log_before = wiki.read_text(wiki.log_path)
+    index_before = wiki.read_text(wiki.index_path)
+
+    def fail_rebuild_index(*args, **kwargs):
+        raise OSError("injected index failure")
+
+    monkeypatch.setattr(wiki, "rebuild_index", fail_rebuild_index)
+
+    with pytest.raises(OSError, match="injected index failure"):
+        service.adopt_seed(
+            CLASS_ID, draft.draft_id, review.artifact_revision, review.artifact_hash
+        )
+
+    assert wiki.load_course_network(CLASS_ID) is None
+    assert wiki.read_text(wiki.log_path) == log_before
+    assert wiki.read_text(wiki.index_path) == index_before
+    assert service.get_draft(CLASS_ID, draft.draft_id).status == "draft"
+
+
+@pytest.mark.anyio
+async def test_concurrent_adoption_has_one_winner_and_rejects_mutation(
+    wiki, monkeypatch
+):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    review = await service.review_seed(CLASS_ID, draft.draft_id)
+    entered_write = threading.Event()
+    release_write = threading.Event()
+    original_write = wiki.write_course_network
+
+    def pause_write(*args, **kwargs):
+        entered_write.set()
+        assert release_write.wait(timeout=5)
+        return original_write(*args, **kwargs)
+
+    monkeypatch.setattr(wiki, "write_course_network", pause_write)
+    outcomes = []
+
+    def adopt() -> None:
+        try:
+            outcomes.append(
+                service.adopt_seed(
+                    CLASS_ID,
+                    draft.draft_id,
+                    review.artifact_revision,
+                    review.artifact_hash,
+                )
+            )
+        except (CourseNetworkConflict, WorkflowDraftConflict) as exc:
+            outcomes.append(exc)
+
+    first = threading.Thread(target=adopt)
+    second = threading.Thread(target=adopt)
+    first.start()
+    assert entered_write.wait(timeout=5)
+    with pytest.raises(WorkflowDraftConflict, match="draft_adoption_in_progress"):
+        service.workflow_drafts.save_from_session(
+            draft_id=draft.draft_id,
+            status="draft",
+            artifact_markdown=draft.artifact_markdown.replace("Chemische", "Late"),
+            runtime_json={},
+            messages_json=[],
+            backend_session_id=draft.backend_session_id,
+        )
+    second.start()
+    release_write.set()
+    first.join(timeout=5)
+    second.join(timeout=5)
+
+    assert (
+        len([outcome for outcome in outcomes if not isinstance(outcome, Exception)])
+        == 1
+    )
+    assert any(isinstance(outcome, CourseNetworkConflict) for outcome in outcomes)
