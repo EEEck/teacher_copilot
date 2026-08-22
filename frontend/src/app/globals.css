@@ -1,6 +1,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "tw-shimmer";
+@import "@xyflow/react/dist/style.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -77,6 +78,48 @@
 }
 
 @layer utilities {
+  .course-network-flow .react-flow {
+    --xy-background-color-default: hsl(var(--background));
+    --xy-background-pattern-dots-color-default: hsl(var(--border));
+    --xy-edge-stroke-default: hsl(var(--muted-foreground));
+    --xy-edge-stroke-selected-default: hsl(var(--primary));
+    --xy-handle-background-color-default: hsl(var(--primary));
+    --xy-handle-border-color-default: hsl(var(--background));
+    --xy-controls-button-background-color-default: hsl(var(--background));
+    --xy-controls-button-background-color-hover-default: hsl(var(--muted));
+    --xy-controls-button-color-default: hsl(var(--foreground));
+    --xy-controls-button-color-hover-default: hsl(var(--primary));
+    --xy-controls-button-border-color-default: hsl(var(--border));
+    --xy-controls-box-shadow-default: 0 1px 2px hsl(var(--foreground) / 0.08);
+    --xy-edge-label-background-color-default: hsl(var(--background));
+    --xy-edge-label-color-default: hsl(var(--muted-foreground));
+  }
+
+  .course-network-flow .react-flow__controls {
+    overflow: hidden;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+  }
+
+  .course-network-flow .react-flow__controls-button:last-child {
+    border-bottom: 0;
+  }
+
+  .course-network-flow .react-flow__edge-text {
+    font-size: 11px;
+    fill: hsl(var(--muted-foreground));
+  }
+
+  .course-network-flow .react-flow__edge-textbg {
+    fill: hsl(var(--background));
+  }
+
+  @media (max-width: 767px) {
+    .course-network-handle {
+      display: none !important;
+    }
+  }
+
   .docs-canvas {
     background-color: hsl(var(--background));
     background-image:

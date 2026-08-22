@@ -1,3 +1,11 @@
+import type { CourseNetwork } from "@/features/course-network/types";
+
+export type {
+  CourseNetwork,
+  LearningBlock,
+  NetworkEdge,
+} from "@/features/course-network/types";
+
 /** Browser uses localhost; SSR in Docker uses INTERNAL_API_BASE_URL (backend service). */
 function getApiBase(): string {
   if (typeof window === "undefined") {
@@ -23,6 +31,51 @@ function redirectToBetaLoginIfNeeded(status: number): void {
 }
 
 export type ClassSummary = { id: string; label: string; subject: string };
+
+export type CourseNetworkResponse = {
+  class_id: string;
+  network: CourseNetwork | null;
+};
+
+export type CourseNetworkReviewFinding = {
+  code: string;
+  message: string;
+  severity: "note" | "block";
+  path: string;
+};
+
+export type CourseNetworkReview = {
+  decision: "accept" | "revise" | "block";
+  summary: string;
+  findings: CourseNetworkReviewFinding[];
+  artifact_revision: number;
+  artifact_hash: string;
+  deterministic: boolean;
+};
+
+export type CourseNetworkDraftResponse = {
+  draft_id: string;
+  class_id: string;
+  status: string;
+  artifact_markdown: string;
+  artifact_revision: number;
+  artifact_hash: string;
+  backend_session_id: string;
+  network: CourseNetwork;
+  review: CourseNetworkReview | null;
+};
+
+export type AdoptCourseNetworkSeedRequest = {
+  expected_revision: number;
+  expected_hash: string;
+};
+
+export type CourseNetworkAdoptionResponse = {
+  class_id: string;
+  draft_id: string;
+  log_entry_id: string;
+  network: CourseNetwork;
+};
 
 /** A subject, grade, and branch with a reviewed teaching framework. */
 export type CurriculumRoute = { subject: string; grade: number; branch: string };
@@ -696,6 +749,33 @@ export const client = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  getCourseNetwork: (classId: string) =>
+    api<CourseNetworkResponse>(
+      `/api/classes/${encodeURIComponent(classId)}/course/network`,
+    ),
+  openCourseNetworkSeedDraft: (classId: string) =>
+    api<CourseNetworkDraftResponse>(
+      `/api/classes/${encodeURIComponent(classId)}/course/network/drafts`,
+      { method: "POST" },
+    ),
+  getCourseNetworkDraft: (classId: string, draftId: string) =>
+    api<CourseNetworkDraftResponse>(
+      `/api/classes/${encodeURIComponent(classId)}/course/network/drafts/${encodeURIComponent(draftId)}`,
+    ),
+  reviewCourseNetworkSeed: (classId: string, draftId: string) =>
+    api<CourseNetworkDraftResponse>(
+      `/api/classes/${encodeURIComponent(classId)}/course/network/drafts/${encodeURIComponent(draftId)}/review`,
+      { method: "POST" },
+    ),
+  adoptCourseNetworkSeed: (
+    classId: string,
+    draftId: string,
+    body: AdoptCourseNetworkSeedRequest,
+  ) =>
+    api<CourseNetworkAdoptionResponse>(
+      `/api/classes/${encodeURIComponent(classId)}/course/network/drafts/${encodeURIComponent(draftId)}/adopt`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
   getTimeline: (classId: string) =>
     api<ClassTimeline>(`/api/classes/${classId}/timeline`),
   getSnapshot: (classId: string) => api<ClassMemorySnapshot>(`/api/classes/${classId}/snapshot`),
