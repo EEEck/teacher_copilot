@@ -3,8 +3,8 @@
 from datetime import date
 from pathlib import Path
 
-from app.teacher_agent.wiki_store import WikiStore
 from app.teacher_agent.tools import _list_lessons_payload
+from app.teacher_agent.wiki_store import WikiStore
 
 CLASS_ID = "chemie_9b_2026_27"
 _WIKI_ROOT = Path(__file__).resolve().parent.parent / "teacher_wiki"
@@ -60,6 +60,44 @@ def test_list_class_pages_includes_compact_memory():
     paths = {page["path"] for page in pages}
     assert f"wiki/classes/{CLASS_ID}/memory/teaching_patterns.md" in paths
     assert all(page["kind"] == "memory" for page in pages)
+
+
+def test_find_in_memory_retrieves_compiled_course_network_overview(wiki):
+    from datetime import UTC, datetime
+
+    from app.course_network.models import (
+        CourseNetworkDocument,
+        CurriculumReference,
+        CurriculumRouteRef,
+        LearningBlock,
+    )
+
+    wiki.write_course_network(
+        CLASS_ID,
+        CourseNetworkDocument(
+            class_id=CLASS_ID,
+            route=CurriculumRouteRef(subject="chemie", grade=9, branch="NTG"),
+            updated_at=datetime(2026, 8, 18, tzinfo=UTC),
+            nodes=[
+                LearningBlock(
+                    id="activation-energy",
+                    title="Aktivierungsenergie",
+                    curriculum_refs=[
+                        CurriculumReference(
+                            source_id="lehrplanplus", section_id="reaction-rates"
+                        )
+                    ],
+                )
+            ],
+        ),
+    )
+
+    hits = wiki.find_in_memory(CLASS_ID, "Aktivierungsenergie", max_results=5)
+
+    assert any(
+        hit["path"] == f"wiki/classes/{CLASS_ID}/course_network/overview.md"
+        for hit in hits
+    )
 
 
 def test_find_in_memory_body_fallback_when_index_misses():

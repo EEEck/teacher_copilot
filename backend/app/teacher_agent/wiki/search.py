@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import re
 import math
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from app.teacher_agent.wiki.constants import (
-    INDEX_WIKI_PATH_RE,
-)
-
+from app.teacher_agent.wiki.constants import INDEX_WIKI_PATH_RE
 
 _SEARCH_STOPWORDS = {
     "about",
@@ -229,6 +226,7 @@ def _doc_kind_boost(kind: str) -> float:
         "rollup": 1.2,
         "meta": 1.0,
         "student": 0.5,
+        "course_network": 1.2,
         "raw": -2.0,
     }.get(kind, 0.0)
 
@@ -364,7 +362,15 @@ def list_class_pages(
     kinds = (
         {kind}
         if kind
-        else {"rollups", "lessons", "students", "timeline", "memory", "raw"}
+        else {
+            "rollups",
+            "lessons",
+            "students",
+            "timeline",
+            "memory",
+            "course_network",
+            "raw",
+        }
     )
 
     if "rollups" in kinds:
@@ -420,6 +426,11 @@ def list_class_pages(
                         "path": store.rel_wiki(p),
                     }
                 )
+
+    if "course_network" in kinds:
+        from app.teacher_agent.wiki import course_network
+
+        pages.extend(course_network.list_course_network_pages(store, class_id))
 
     if "raw" in kinds:
         raw_root = store.root / "raw" / "classes" / class_id

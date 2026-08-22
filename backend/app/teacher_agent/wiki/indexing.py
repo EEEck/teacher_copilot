@@ -7,8 +7,8 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from app.teacher_agent.wiki.constants import ROLLUP_LABELS
 from app.teacher_agent.wiki import parsing
+from app.teacher_agent.wiki.constants import ROLLUP_LABELS
 
 
 def _parse_log_by_date(store) -> dict[str, dict]:
@@ -147,6 +147,12 @@ def rebuild_index(store, class_id: Optional[str] = None) -> None:
                 lines.append(
                     f"- [Trusted source index]({store.rel_wiki(sources_path)})"
                 )
+        overview_path = store.class_dir(cid) / "course_network" / "overview.md"
+        if overview_path.exists():
+            lines.extend(["", "### Course network"])
+            lines.append(
+                f"- [Course network overview]({store.rel_wiki(overview_path)})"
+            )
         lines.extend(["", "### Lessons", ""])
         if timeline.entries:
             lines.append("| Date | Title | Summary | Plan | Path |")

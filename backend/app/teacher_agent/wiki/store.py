@@ -8,8 +8,10 @@ from pathlib import Path
 from . import (
     commit,
     context_packs,
+    course_network,
     diary,
     indexing,
+    materials,
     memory,
     parsing,
     paths_io,
@@ -18,7 +20,6 @@ from . import (
     rollups,
     search,
     subject_frameworks,
-    materials,
     trusted_sources,
 )
 
@@ -80,6 +81,12 @@ class WikiStore:
 
     def search_wiki(self, class_id, query, max_results=15):
         return search.search_wiki(self, class_id, query, max_results)
+
+    def load_course_network(self, class_id):
+        return course_network.load_course_network(self, class_id)
+
+    def write_course_network(self, class_id, document):
+        return course_network.write_course_network(self, class_id, document)
 
     def load_trusted_sources(self):
         return trusted_sources.load_trusted_sources(self.root)
