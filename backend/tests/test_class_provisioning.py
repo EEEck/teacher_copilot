@@ -4,7 +4,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
-
 from app.services import class_provisioning as cp
 from app.teacher_agent.wiki.context_packs import (
     build_active_subject_expert_context_trace,
@@ -311,6 +310,37 @@ def test_failed_index_rebuild_rolls_back_publication_and_allows_clean_retry(
 
     monkeypatch.setattr(wiki, "rebuild_index", original_rebuild)
     assert cp.create_class(wiki, _spec()).id == class_id
+
+
+def test_failed_class_publication_rebuild_preserves_newer_unrelated_index(
+    wiki, monkeypatch
+):
+    failed_class_id = "chemie_9c_2026_27"
+    existing_class_id = wiki.list_classes()[0].id
+    overview_path = wiki.class_dir(existing_class_id) / "course_network" / "overview.md"
+    original_rebuild = wiki.rebuild_index
+    first_rebuild = True
+
+    def publish_unrelated_update_then_fail(*args, **kwargs):
+        nonlocal first_rebuild
+        publication = original_rebuild(*args, **kwargs)
+        if first_rebuild:
+            first_rebuild = False
+            wiki.write_text(overview_path, "# Independently published course network\n")
+            original_rebuild()
+            raise OSError("injected provisioning completion failure")
+        return publication
+
+    monkeypatch.setattr(wiki, "rebuild_index", publish_unrelated_update_then_fail)
+
+    with pytest.raises(OSError, match="injected provisioning completion failure"):
+        cp.create_class(wiki, _spec())
+
+    index = wiki.index_path.read_text(encoding="utf-8")
+    assert not wiki.class_dir(failed_class_id).exists()
+    assert overview_path.exists()
+    assert f"wiki/classes/{existing_class_id}/course_network/overview.md" in index
+    assert f"## Class: {failed_class_id}" not in index
 
 
 def test_service_accepts_exactly_999_roster_entries(wiki):

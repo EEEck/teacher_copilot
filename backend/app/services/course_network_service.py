@@ -47,12 +47,6 @@ class _FileSnapshot:
     content: str
 
 
-@dataclass(frozen=True)
-class _IndexSnapshot:
-    existed: bool
-    content: str
-
-
 _ADOPTION_LOCKS: dict[str, threading.RLock] = {}
 _ADOPTION_LOCKS_GUARD = threading.Lock()
 
@@ -228,8 +222,7 @@ class CourseNetworkService:
                 expected_hash=expected_hash,
             )
             snapshots = self._adoption_snapshots(class_id)
-            index_before = self._index_snapshot()
-            index_after: str | None = None
+            index_publication: indexing.IndexPublication | None = None
             log_entry_id = uuid.uuid4().hex
             try:
                 review = CourseNetworkReviewResult.model_validate(
@@ -275,8 +268,7 @@ class CourseNetworkService:
                     kind="course_network_adopt",
                     entry_id=log_entry_id,
                 )
-                self.wiki.rebuild_index()
-                index_after = self.wiki.read_text(self.wiki.index_path)
+                index_publication = self.wiki.rebuild_index()
                 draft = self.workflow_drafts.complete_course_network_adoption(
                     draft_id,
                     expected_revision=expected_revision,
@@ -291,7 +283,7 @@ class CourseNetworkService:
                         class_id=class_id,
                         kind="course_network_adopt",
                     )
-                    self._restore_index_after_rollback(index_before, index_after)
+                    indexing.compensate_index(self.wiki, index_publication)
                 except Exception as recovery_error:
                     self.workflow_drafts.record_course_network_adoption_recovery(
                         draft_id,
@@ -332,32 +324,3 @@ class CourseNetworkService:
                 self.wiki.write_text(snapshot.path, snapshot.content)
             else:
                 snapshot.path.unlink(missing_ok=True)
-
-    def _index_snapshot(self) -> _IndexSnapshot:
-        path = self.wiki.index_path
-        return _IndexSnapshot(existed=path.exists(), content=self.wiki.read_text(path))
-
-    def _restore_index_after_rollback(
-        self, before: _IndexSnapshot, after: str | None
-    ) -> None:
-        """Restore only an index version known to have been written by this adoption."""
-        if after is None:
-            # `rebuild_index` publishes through an atomic replace. A failure
-            # before returning therefore leaves the prior index intact.
-            return
-        if self.wiki.read_text(self.wiki.index_path) == after:
-            self._write_index_atomically(before)
-            return
-        self.wiki.rebuild_index()
-
-    def _write_index_atomically(self, snapshot: _IndexSnapshot) -> None:
-        path = self.wiki.index_path
-        if not snapshot.existed:
-            path.unlink(missing_ok=True)
-            return
-        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.rollback")
-        try:
-            self.wiki.write_text(temporary, snapshot.content)
-            os.replace(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import threading
 import uuid
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +17,16 @@ from app.teacher_agent.wiki.constants import ROLLUP_LABELS
 
 _LOG_LOCKS: dict[str, threading.RLock] = {}
 _LOG_LOCKS_GUARD = threading.Lock()
+_INDEX_LOCKS: dict[str, threading.RLock] = {}
+_INDEX_LOCKS_GUARD = threading.Lock()
+
+
+@dataclass(frozen=True)
+class IndexPublication:
+    """Exact content version installed by one atomic index publication."""
+
+    version: str
+    compensated_version: str | None = None
 
 
 @contextmanager
@@ -24,6 +36,28 @@ def _log_mutation_lock(store):
     with _LOG_LOCKS_GUARD:
         process_lock = _LOG_LOCKS.setdefault(key, threading.RLock())
     lock_path = root / "workflow" / ".wiki-log.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with process_lock, lock_path.open("a+b") as lock_file:
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        _lock_file(lock_file)
+        try:
+            yield
+        finally:
+            _unlock_file(lock_file)
+
+
+@contextmanager
+def _index_publication_lock(store):
+    """Serialize index rendering and replacement for one wiki."""
+    root = store.root.resolve()
+    key = str(root)
+    with _INDEX_LOCKS_GUARD:
+        process_lock = _INDEX_LOCKS.setdefault(key, threading.RLock())
+    lock_path = root / "workflow" / ".wiki-index.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with process_lock, lock_path.open("a+b") as lock_file:
         lock_file.seek(0, os.SEEK_END)
@@ -160,8 +194,37 @@ def remove_log_entry(store, *, entry_id: str, class_id: str, kind: str) -> None:
         )
 
 
-def rebuild_index(store, class_id: str | None = None) -> None:
-    """Regenerate index.md for all classes (or verify one class exists)."""
+def rebuild_index(store, class_id: str | None = None) -> IndexPublication:
+    """Atomically publish a complete index and return its exact content version."""
+    with _index_publication_lock(store):
+        return _rebuild_index_locked(store, class_id=class_id)
+
+
+def compensate_index(
+    store, failed_publication: IndexPublication | None
+) -> IndexPublication:
+    """Rebuild from surviving state without restoring a shared old snapshot.
+
+    A missing token means the failed caller cannot know whether its prior rebuild
+    published before raising. Compensation still rebuilds, which is safe under
+    the shared publication lock and removes any uncertain stale links.
+    """
+    compensated_version = (
+        failed_publication.version if failed_publication is not None else None
+    )
+    with _index_publication_lock(store):
+        return _rebuild_index_locked(
+            store,
+            compensated_version=compensated_version,
+        )
+
+
+def _rebuild_index_locked(
+    store,
+    *,
+    class_id: str | None = None,
+    compensated_version: str | None = None,
+) -> IndexPublication:
     if class_id:
         store.get_class(class_id)
     classes = [store.get_class(c.id) for c in store.list_classes()]
@@ -277,14 +340,12 @@ def rebuild_index(store, class_id: str | None = None) -> None:
         lines.append("")
 
     content = "\n".join(lines)
-    temporary = store.index_path.with_name(
-        f".{store.index_path.name}.{uuid.uuid4().hex}.tmp"
+    publication = IndexPublication(
+        version=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        compensated_version=compensated_version,
     )
-    try:
-        store.write_text(temporary, content)
-        temporary.replace(store.index_path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    _write_text_atomically(store, store.index_path, content)
+    return publication
 
 
 def _update_index(store, class_id: str) -> None:

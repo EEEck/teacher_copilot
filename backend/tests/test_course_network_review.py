@@ -5,7 +5,6 @@ import json
 import threading
 
 import pytest
-
 from app.course_network.models import CourseNetworkDocument, NetworkEdge
 from app.course_network.review import CourseNetworkReviewJudgement
 from app.course_network.seeds import load_seed_for_class, load_seed_for_route
@@ -500,6 +499,49 @@ async def test_log_compensation_failure_leaves_a_durable_recovery_marker(
 
 
 @pytest.mark.anyio
+async def test_index_compensation_failure_leaves_a_durable_recovery_marker(
+    wiki, monkeypatch
+):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    review = await service.review_seed(CLASS_ID, draft.draft_id)
+    original_atomic_write = indexing._write_text_atomically
+    index_writes = 0
+
+    def fail_completion(*args, **kwargs):
+        raise WorkflowDraftConflict("injected completion failure")
+
+    def fail_compensating_index(store, path, content):
+        nonlocal index_writes
+        if path == wiki.index_path:
+            index_writes += 1
+            if index_writes == 2:
+                raise OSError("injected index compensation failure")
+        return original_atomic_write(store, path, content)
+
+    monkeypatch.setattr(
+        service.workflow_drafts, "complete_course_network_adoption", fail_completion
+    )
+    monkeypatch.setattr(indexing, "_write_text_atomically", fail_compensating_index)
+
+    with pytest.raises(
+        WorkflowDraftConflict, match="course_network_adoption_recovery_required"
+    ):
+        service.adopt_seed(
+            CLASS_ID, draft.draft_id, review.artifact_revision, review.artifact_hash
+        )
+
+    stored = service.get_draft(CLASS_ID, draft.draft_id)
+    assert index_writes == 2
+    assert stored.status == "adopting"
+    marker = stored.pending_turn_json["course_network_adoption_recovery"]
+    assert marker["expected_revision"] == review.artifact_revision
+    assert marker["expected_hash"] == review.artifact_hash
+    assert marker["operation_id"]
+    assert service.get_network(CLASS_ID) is None
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("terminal", ["discarded", "committed"])
 async def test_terminal_course_network_drafts_cannot_reenter_review_or_adoption(
     wiki, terminal
@@ -570,7 +612,7 @@ async def test_adoption_rolls_back_network_log_index_and_reservation_on_failure(
 
 
 @pytest.mark.anyio
-async def test_completion_failure_restores_prior_index_without_second_rebuild(
+async def test_post_publication_index_read_failure_cannot_leave_failed_adoption_link(
     wiki, monkeypatch
 ):
     service = _service(wiki, StubReviewer())
@@ -578,30 +620,165 @@ async def test_completion_failure_restores_prior_index_without_second_rebuild(
     review = await service.review_seed(CLASS_ID, draft.draft_id)
     index_before = wiki.read_text(wiki.index_path)
     original_rebuild = wiki.rebuild_index
-    rebuild_calls = 0
+    original_read = wiki.read_text
+    adoption_published = False
 
     def fail_completion(*args, **kwargs):
         raise WorkflowDraftConflict("injected completion failure")
 
-    def fail_if_rebuilt_twice(*args, **kwargs):
-        nonlocal rebuild_calls
-        rebuild_calls += 1
-        if rebuild_calls > 1:
-            raise OSError("compensating rebuild must not run")
-        return original_rebuild(*args, **kwargs)
+    def publish_then_arm_read_failure(*args, **kwargs):
+        nonlocal adoption_published
+        publication = original_rebuild(*args, **kwargs)
+        adoption_published = True
+        return publication
+
+    def fail_post_publication_index_read(path):
+        if path == wiki.index_path and adoption_published:
+            raise OSError("injected post-publication index read failure")
+        return original_read(path)
 
     monkeypatch.setattr(
         service.workflow_drafts, "complete_course_network_adoption", fail_completion
     )
-    monkeypatch.setattr(wiki, "rebuild_index", fail_if_rebuilt_twice)
+    monkeypatch.setattr(wiki, "rebuild_index", publish_then_arm_read_failure)
+    monkeypatch.setattr(wiki, "read_text", fail_post_publication_index_read)
 
     with pytest.raises(WorkflowDraftConflict, match="injected completion failure"):
         service.adopt_seed(
             CLASS_ID, draft.draft_id, review.artifact_revision, review.artifact_hash
         )
 
-    assert rebuild_calls == 1
-    assert wiki.read_text(wiki.index_path) == index_before
+    assert wiki.index_path.read_text(encoding="utf-8") == index_before
+    assert "Course network overview" not in index_before
+    assert service.get_network(CLASS_ID) is None
+    assert service.get_draft(CLASS_ID, draft.draft_id).status == "draft"
+
+
+@pytest.mark.anyio
+async def test_newer_class_publication_between_adoption_and_rollback_is_preserved(
+    wiki, monkeypatch
+):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    review = await service.review_seed(CLASS_ID, draft.draft_id)
+    original_rebuild = wiki.rebuild_index
+    interleaved_class_id = ""
+    adoption_rebuilt = False
+
+    def fail_completion(*args, **kwargs):
+        raise WorkflowDraftConflict("injected completion failure")
+
+    def publish_other_class_after_adoption(*args, **kwargs):
+        nonlocal adoption_rebuilt, interleaved_class_id
+        publication = original_rebuild(*args, **kwargs)
+        if not adoption_rebuilt:
+            adoption_rebuilt = True
+            interleaved_class_id = create_class(
+                wiki,
+                ClassSpec(
+                    label="Chemie 8a — 2026/27",
+                    subject="chemie",
+                    grade=8,
+                    section="a",
+                    school_year="2026_27",
+                ),
+            ).id
+        return publication
+
+    monkeypatch.setattr(
+        service.workflow_drafts, "complete_course_network_adoption", fail_completion
+    )
+    monkeypatch.setattr(wiki, "rebuild_index", publish_other_class_after_adoption)
+
+    with pytest.raises(WorkflowDraftConflict, match="injected completion failure"):
+        service.adopt_seed(
+            CLASS_ID, draft.draft_id, review.artifact_revision, review.artifact_hash
+        )
+
+    index = wiki.index_path.read_text(encoding="utf-8")
+    assert interleaved_class_id
+    assert f"## Class: {interleaved_class_id}" in index
+    assert "Course network overview" not in index
+    assert service.get_network(CLASS_ID) is None
+    assert service.get_draft(CLASS_ID, draft.draft_id).status == "draft"
+
+
+@pytest.mark.anyio
+async def test_publication_during_compensation_cannot_be_overwritten(wiki, monkeypatch):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    review = await service.review_seed(CLASS_ID, draft.draft_id)
+    publish_other = threading.Event()
+    other_published = threading.Event()
+    original_read = wiki.read_text
+    original_atomic_write = indexing._write_text_atomically
+    index_reads = 0
+    index_writes = 0
+    publisher_outcome = []
+
+    def fail_completion(*args, **kwargs):
+        raise WorkflowDraftConflict("injected completion failure")
+
+    def expose_old_read_then_replace_race(path):
+        nonlocal index_reads
+        if path == wiki.index_path:
+            index_reads += 1
+            if index_reads == 3:
+                stale = original_read(path)
+                publish_other.set()
+                assert other_published.wait(timeout=5)
+                return stale
+        return original_read(path)
+
+    def expose_compensating_publication(store, path, content):
+        nonlocal index_writes
+        if path == wiki.index_path:
+            index_writes += 1
+            if index_writes == 2:
+                publish_other.set()
+        return original_atomic_write(store, path, content)
+
+    def create_other_class() -> None:
+        assert publish_other.wait(timeout=5)
+        try:
+            publisher_outcome.append(
+                create_class(
+                    wiki,
+                    ClassSpec(
+                        label="Chemie 8a — 2026/27",
+                        subject="chemie",
+                        grade=8,
+                        section="a",
+                        school_year="2026_27",
+                    ),
+                ).id
+            )
+        except Exception as exc:  # noqa: BLE001 - surface thread failures to this test
+            publisher_outcome.append(exc)
+        finally:
+            other_published.set()
+
+    monkeypatch.setattr(
+        service.workflow_drafts, "complete_course_network_adoption", fail_completion
+    )
+    monkeypatch.setattr(wiki, "read_text", expose_old_read_then_replace_race)
+    monkeypatch.setattr(
+        indexing, "_write_text_atomically", expose_compensating_publication
+    )
+    publisher = threading.Thread(target=create_other_class)
+    publisher.start()
+
+    with pytest.raises(WorkflowDraftConflict, match="injected completion failure"):
+        service.adopt_seed(
+            CLASS_ID, draft.draft_id, review.artifact_revision, review.artifact_hash
+        )
+
+    publisher.join(timeout=5)
+    assert not publisher.is_alive()
+    assert publisher_outcome == ["chemie_8a_2026_27"]
+    assert f"## Class: {publisher_outcome[0]}" in wiki.index_path.read_text(
+        encoding="utf-8"
+    )
     assert service.get_network(CLASS_ID) is None
     assert service.get_draft(CLASS_ID, draft.draft_id).status == "draft"
 

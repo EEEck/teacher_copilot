@@ -8,7 +8,6 @@ import re
 import shutil
 import tempfile
 import threading
-import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,6 +24,7 @@ from app.schemas.api import (
     CLASS_SUBJECT_MAX_LENGTH,
     ClassSummary,
 )
+from app.teacher_agent.wiki import indexing
 from app.teacher_agent.wiki.constants import LESSON_RESULTS_SECTIONS
 from app.teacher_agent.wiki.subject_frameworks import load_framework_index
 from app.teacher_agent.wiki.trusted_sources import load_trusted_sources
@@ -159,9 +159,6 @@ def create_class(store, spec: ClassSpec) -> ClassSummary:
             if final_dir.exists():
                 raise ClassProvisioningError(f"Class '{class_id}' already exists.")
 
-            previous_index = (
-                store.index_path.read_bytes() if store.index_path.exists() else None
-            )
             try:
                 staging_dir.rename(final_dir)
             except OSError as exc:
@@ -176,7 +173,7 @@ def create_class(store, spec: ClassSpec) -> ClassSummary:
             except BaseException:
                 try:
                     shutil.rmtree(final_dir)
-                    _restore_index(store.index_path, previous_index)
+                    indexing.compensate_index(store, None)
                 except Exception as rollback_exc:
                     raise RuntimeError(
                         f"Failed to roll back class '{class_id}' after index failure."
@@ -282,18 +279,6 @@ def _unlock_file(lock_file) -> None:
     import fcntl
 
     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-
-
-def _restore_index(index_path: Path, previous: bytes | None) -> None:
-    if previous is None:
-        index_path.unlink(missing_ok=True)
-        return
-    temporary = index_path.with_name(f".{index_path.name}.{uuid.uuid4().hex}.rollback")
-    try:
-        temporary.write_bytes(previous)
-        os.replace(temporary, index_path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def _clean_names(names) -> list[str]:

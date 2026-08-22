@@ -1,5 +1,6 @@
 """Tests for wiki index and log."""
 
+import hashlib
 import re
 import shutil
 from pathlib import Path
@@ -12,8 +13,9 @@ def test_rebuild_index_includes_sections(tmp_path: Path):
     root = tmp_path / "teacher_wiki"
     shutil.copytree(seed, root)
     wiki = WikiStore(root=root)
-    wiki.rebuild_index()
+    publication = wiki.rebuild_index()
     index = wiki.read_text(wiki.index_path)
+    assert publication.version == hashlib.sha256(index.encode("utf-8")).hexdigest()
     assert "## Classes" in index
     assert "### Lessons" in index
     assert "### Students" in index
