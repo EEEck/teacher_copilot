@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -79,6 +80,17 @@ def test_write_course_network_round_trips_canonical_adopted_document(wiki):
 
     assert persisted == document
     assert wiki.load_course_network(CLASS_ID) == document
+
+
+def test_load_course_network_rejects_durable_data_owned_by_another_class(wiki):
+    wiki.write_course_network(CLASS_ID, _document())
+    path = wiki.class_dir(CLASS_ID) / "course_network" / "network.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["class_id"] = "other-class"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="does not match requested class"):
+        wiki.load_course_network(CLASS_ID)
 
 
 def test_write_course_network_uses_canonical_json_with_one_trailing_newline(wiki):
@@ -188,6 +200,41 @@ def test_temporary_write_failure_preserves_existing_network_and_removes_temporar
     monkeypatch.setattr(wiki, "write_text", fail_overview_temporary)
 
     with pytest.raises(OSError, match="injected overview temporary"):
+        wiki.write_course_network(CLASS_ID, _document(revision=2))
+
+    after = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in network_dir.iterdir()
+        if path.is_file()
+    }
+    assert after == before
+    assert not list(network_dir.glob("*.tmp"))
+
+
+@pytest.mark.parametrize("temporary_label", ["new", "backup"])
+def test_partial_temporary_or_backup_write_failure_removes_the_written_artifact(
+    wiki, monkeypatch, temporary_label
+):
+    original = _document(revision=1)
+    wiki.write_course_network(CLASS_ID, original)
+    network_dir = wiki.class_dir(CLASS_ID) / "course_network"
+    before = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in network_dir.iterdir()
+        if path.is_file()
+    }
+    write_text = wiki.write_text
+
+    def write_then_fail(path: Path, content: str) -> None:
+        write_text(path, content)
+        if path.name.startswith(".overview.md.") and path.name.endswith(
+            f".{temporary_label}.tmp"
+        ):
+            raise OSError(f"injected partial {temporary_label} write failure")
+
+    monkeypatch.setattr(wiki, "write_text", write_then_fail)
+
+    with pytest.raises(OSError, match=f"injected partial {temporary_label}"):
         wiki.write_course_network(CLASS_ID, _document(revision=2))
 
     after = {

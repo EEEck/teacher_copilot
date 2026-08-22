@@ -141,7 +141,11 @@ def _write_temporary(
     store, destination: Path, content: str, transaction_id: str
 ) -> Path:
     temporary = _temporary_path(destination, transaction_id, "new")
-    store.write_text(temporary, content)
+    try:
+        store.write_text(temporary, content)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
     return temporary
 
 
@@ -149,7 +153,11 @@ def _backup_existing(store, destination: Path, transaction_id: str) -> Path | No
     if not destination.exists():
         return None
     backup = _temporary_path(destination, transaction_id, "backup")
-    store.write_text(backup, destination.read_text(encoding="utf-8"))
+    try:
+        store.write_text(backup, destination.read_text(encoding="utf-8"))
+    except Exception:
+        backup.unlink(missing_ok=True)
+        raise
     return backup
 
 
@@ -167,7 +175,13 @@ def load_course_network(store, class_id: str) -> CourseNetworkDocument | None:
         return None
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-        return CourseNetworkDocument.model_validate(payload)
+        document = CourseNetworkDocument.model_validate(payload)
+        if document.class_id != class_id:
+            raise ValueError(
+                "Stored course network does not match requested class "
+                f"{class_id}: {document.class_id}"
+            )
+        return document
     except (json.JSONDecodeError, ValidationError, ValueError) as exc:
         raise ValueError(
             f"Invalid stored course network for class {class_id}: {exc}"

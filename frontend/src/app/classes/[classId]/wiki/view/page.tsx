@@ -30,6 +30,7 @@ const KIND_ORDER = [
   "rollup",
   "memory",
   "timeline",
+  "course_network",
   "lesson",
   "student",
   "raw",
@@ -53,6 +54,8 @@ function kindLabel(kind: string): string {
       return "Raw notes";
     case "timeline":
       return "Timeline";
+    case "course_network":
+      return "Course network";
     default:
       return kind.charAt(0).toUpperCase() + kind.slice(1);
   }
