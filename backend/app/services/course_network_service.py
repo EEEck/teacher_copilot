@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
-import re
 import threading
+import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -27,6 +26,7 @@ from app.services.workflow_drafts import (
     WorkflowDraftRow,
     WorkflowDraftStore,
 )
+from app.teacher_agent.wiki import indexing
 
 
 class CourseNetworkConflict(ValueError):
@@ -47,9 +47,14 @@ class _FileSnapshot:
     content: str
 
 
+@dataclass(frozen=True)
+class _IndexSnapshot:
+    existed: bool
+    content: str
+
+
 _ADOPTION_LOCKS: dict[str, threading.RLock] = {}
 _ADOPTION_LOCKS_GUARD = threading.Lock()
-logger = logging.getLogger(__name__)
 
 
 def _adoption_lock(wiki_root: Path) -> threading.RLock:
@@ -223,7 +228,9 @@ class CourseNetworkService:
                 expected_hash=expected_hash,
             )
             snapshots = self._adoption_snapshots(class_id)
-            log_entry_id: str | None = None
+            index_before = self._index_snapshot()
+            index_after: str | None = None
+            log_entry_id = uuid.uuid4().hex
             try:
                 review = CourseNetworkReviewResult.model_validate(
                     row.active_review_json
@@ -266,8 +273,10 @@ class CourseNetworkService:
                         self.wiki.rel_wiki(network_dir / "overview.md"),
                     ],
                     kind="course_network_adopt",
+                    entry_id=log_entry_id,
                 )
                 self.wiki.rebuild_index()
+                index_after = self.wiki.read_text(self.wiki.index_path)
                 draft = self.workflow_drafts.complete_course_network_adoption(
                     draft_id,
                     expected_revision=expected_revision,
@@ -276,10 +285,24 @@ class CourseNetworkService:
             except Exception:
                 try:
                     self._restore_snapshots(snapshots)
-                    if log_entry_id is not None:
-                        self._remove_log_entry(log_entry_id)
-                    self._rebuild_index_after_rollback()
-                finally:
+                    indexing.remove_log_entry(
+                        self.wiki,
+                        entry_id=log_entry_id,
+                        class_id=class_id,
+                        kind="course_network_adopt",
+                    )
+                    self._restore_index_after_rollback(index_before, index_after)
+                except Exception as recovery_error:
+                    self.workflow_drafts.record_course_network_adoption_recovery(
+                        draft_id,
+                        expected_revision=expected_revision,
+                        expected_hash=expected_hash,
+                        operation_id=log_entry_id,
+                    )
+                    raise WorkflowDraftConflict(
+                        "course_network_adoption_recovery_required"
+                    ) from recovery_error
+                else:
                     self.workflow_drafts.release_course_network_adoption(
                         draft_id,
                         expected_revision=expected_revision,
@@ -310,24 +333,31 @@ class CourseNetworkService:
             else:
                 snapshot.path.unlink(missing_ok=True)
 
-    def _remove_log_entry(self, entry_id: str) -> None:
-        """Compensate only this adoption's log block, retaining all other entries."""
-        current = self.wiki.read_text(self.wiki.log_path)
-        marker = re.escape(f"(id:{entry_id})")
-        match = re.search(rf"(?ms)^## [^\n]*{marker}[^\n]*\n.*?(?=^## |\Z)", current)
-        if match is not None:
-            start = match.start()
-            if current[:start].endswith("\n\n"):
-                start -= 1
-            self.wiki.write_text(
-                self.wiki.log_path, current[:start] + current[match.end() :]
-            )
+    def _index_snapshot(self) -> _IndexSnapshot:
+        path = self.wiki.index_path
+        return _IndexSnapshot(existed=path.exists(), content=self.wiki.read_text(path))
 
-    def _rebuild_index_after_rollback(self) -> None:
-        """Reconcile the global index from surviving wiki state after compensation."""
+    def _restore_index_after_rollback(
+        self, before: _IndexSnapshot, after: str | None
+    ) -> None:
+        """Restore only an index version known to have been written by this adoption."""
+        if after is None:
+            # `rebuild_index` publishes through an atomic replace. A failure
+            # before returning therefore leaves the prior index intact.
+            return
+        if self.wiki.read_text(self.wiki.index_path) == after:
+            self._write_index_atomically(before)
+            return
+        self.wiki.rebuild_index()
+
+    def _write_index_atomically(self, snapshot: _IndexSnapshot) -> None:
+        path = self.wiki.index_path
+        if not snapshot.existed:
+            path.unlink(missing_ok=True)
+            return
+        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.rollback")
         try:
-            self.wiki.rebuild_index()
-        except Exception:  # noqa: BLE001 - never mask the failed adoption
-            # The original exception remains authoritative. A failed normal
-            # rebuild is atomic, so it leaves the pre-existing index in place.
-            logger.warning("Could not rebuild wiki index after adoption rollback")
+            self.wiki.write_text(temporary, snapshot.content)
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)

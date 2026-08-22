@@ -117,7 +117,9 @@ class WikiStore:
             materials_list, query, max_results=max_results
         )
 
-    def read_class_material(self, materials_list, material_id, section_id="", max_chars=12000):
+    def read_class_material(
+        self, materials_list, material_id, section_id="", max_chars=12000
+    ):
         return materials.read_class_material(
             materials_list, material_id, section_id, max_chars=max_chars
         )
@@ -245,12 +247,12 @@ class WikiStore:
         )
 
     def list_plan_class_core_items(self, class_id, exclude=None):
-        return context_packs.list_plan_class_core_items(
-            self, class_id, exclude=exclude
-        )
+        return context_packs.list_plan_class_core_items(self, class_id, exclude=exclude)
 
     def build_subject_knowledge_trace(self, class_id, *, purpose):
-        return context_packs.build_subject_knowledge_trace(self, class_id, purpose=purpose)
+        return context_packs.build_subject_knowledge_trace(
+            self, class_id, purpose=purpose
+        )
 
     def build_active_subject_expert_context_trace(self, class_id, *, purpose):
         return context_packs.build_active_subject_expert_context_trace(
@@ -422,8 +424,10 @@ class WikiStore:
     def _latest_log_commit(self, class_id=None):
         return indexing._latest_log_commit(self, class_id)
 
-    def _append_log(self, class_id, lesson_date, title, applied, kind):
-        return indexing._append_log(self, class_id, lesson_date, title, applied, kind)
+    def _append_log(self, class_id, lesson_date, title, applied, kind, entry_id=None):
+        return indexing._append_log(
+            self, class_id, lesson_date, title, applied, kind, entry_id
+        )
 
     def rebuild_index(self, class_id=None):
         return indexing.rebuild_index(self, class_id)

@@ -2,20 +2,79 @@
 
 from __future__ import annotations
 
+import os
 import re
+import threading
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
-from typing import Optional
+from pathlib import Path
 
 from app.teacher_agent.wiki import parsing
 from app.teacher_agent.wiki.constants import ROLLUP_LABELS
+
+_LOG_LOCKS: dict[str, threading.RLock] = {}
+_LOG_LOCKS_GUARD = threading.Lock()
+
+
+@contextmanager
+def _log_mutation_lock(store):
+    root = store.root.resolve()
+    key = str(root)
+    with _LOG_LOCKS_GUARD:
+        process_lock = _LOG_LOCKS.setdefault(key, threading.RLock())
+    lock_path = root / "workflow" / ".wiki-log.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with process_lock, lock_path.open("a+b") as lock_file:
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        _lock_file(lock_file)
+        try:
+            yield
+        finally:
+            _unlock_file(lock_file)
+
+
+def _lock_file(lock_file) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        return
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_file(lock_file) -> None:
+    lock_file.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _write_text_atomically(store, path: Path, content: str) -> None:
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        store.write_text(temporary, content)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _parse_log_by_date(store) -> dict[str, dict]:
     """Map lesson_date -> latest log metadata."""
     log_text = store.read_text(store.log_path)
     by_date: dict[str, dict] = {}
-    headers = list(re.finditer(r"^##\s*\[", log_text, re.M))
+    headers = list(re.finditer(r"^##\s*\[", log_text, re.MULTILINE))
     for i, hm in enumerate(headers):
         start = hm.start()
         end = headers[i + 1].start() if i + 1 < len(headers) else len(log_text)
@@ -27,10 +86,10 @@ def _parse_log_by_date(store) -> dict[str, dict]:
     return by_date
 
 
-def _latest_log_commit(store, class_id: Optional[str] = None) -> dict[str, str]:
+def _latest_log_commit(store, class_id: str | None = None) -> dict[str, str]:
     """Newest valid log entry, optionally limited to one class."""
     log_text = store.read_text(store.log_path)
-    headers = list(re.finditer(r"^##\s*\[", log_text, re.M))
+    headers = list(re.finditer(r"^##\s*\[", log_text, re.MULTILINE))
     for i in range(len(headers) - 1, -1, -1):
         start = headers[i].start()
         end = headers[i + 1].start() if i + 1 < len(headers) else len(log_text)
@@ -57,10 +116,11 @@ def _append_log(
     title: str,
     applied: list[str],
     kind: str = "ingest",
+    entry_id: str | None = None,
 ) -> str:
     log_path = store.log_path
-    entry_id = str(uuid.uuid4())[:8]
-    ts = datetime.now().isoformat(timespec="seconds")
+    entry_id = entry_id or uuid.uuid4().hex
+    ts = datetime.now().isoformat(timespec="seconds")  # noqa: DTZ005
     lines = [
         f"\n## [{ts}] {kind} | {lesson_date} — {title} (id:{entry_id})",
         f"> Class: {class_id}",
@@ -68,14 +128,39 @@ def _append_log(
     ]
     for path in applied:
         lines.append(f"- Updated: {path}")
-    existing = store.read_text(log_path)
-    if not existing.strip():
-        existing = "# Wiki Log\n"
-    store.write_text(log_path, existing.rstrip() + "\n" + "\n".join(lines) + "\n")
+    with _log_mutation_lock(store):
+        existing = store.read_text(log_path)
+        if not existing.strip():
+            existing = "# Wiki Log\n"
+        _write_text_atomically(
+            store, log_path, existing.rstrip() + "\n" + "\n".join(lines) + "\n"
+        )
     return entry_id
 
 
-def rebuild_index(store, class_id: Optional[str] = None) -> None:
+def remove_log_entry(store, *, entry_id: str, class_id: str, kind: str) -> None:
+    """Atomically remove exactly one class/kind/UUID-bound log block."""
+    with _log_mutation_lock(store):
+        current = store.read_text(store.log_path)
+        marker = re.escape(f"(id:{entry_id})")
+        class_line = re.escape(f"> Class: {class_id}")
+        kind_text = re.escape(kind)
+        match = re.search(
+            rf"(?ms)^## [^\n]*\b{kind_text}\b[^\n]*{marker}[^\n]*\n"
+            rf"{class_line}\n.*?(?=^## |\Z)",
+            current,
+        )
+        if match is None:
+            return
+        start = match.start()
+        if current[:start].endswith("\n\n"):
+            start -= 1
+        _write_text_atomically(
+            store, store.log_path, current[:start] + current[match.end() :]
+        )
+
+
+def rebuild_index(store, class_id: str | None = None) -> None:
     """Regenerate index.md for all classes (or verify one class exists)."""
     if class_id:
         store.get_class(class_id)

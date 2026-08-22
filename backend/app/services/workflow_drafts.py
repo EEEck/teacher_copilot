@@ -553,12 +553,22 @@ class WorkflowDraftStore:
                 """,
                 (now, draft_id, expected_revision, expected_hash),
             )
+            claimed = (
+                WorkflowDraftRow.from_sqlite(
+                    conn.execute(
+                        "SELECT * FROM workflow_draft WHERE draft_id = ?", (draft_id,)
+                    ).fetchone()
+                )
+                if cursor.rowcount == 1
+                else None
+            )
         if cursor.rowcount != 1:
             row = self.get(draft_id)
             if row.status in TERMINAL_STATUSES or row.status == _ADOPTING_STATUS:
                 raise WorkflowDraftConflict("course_network_draft_not_active")
             raise WorkflowDraftConflict("draft_changed_since_review_created")
-        return self.get(draft_id)
+        assert claimed is not None
+        return claimed
 
     def reserve_course_network_adoption(
         self,
@@ -615,6 +625,45 @@ class WorkflowDraftStore:
                   AND artifact_hash = ?
                 """,
                 (now, draft_id, expected_revision, expected_hash),
+            )
+        if cursor.rowcount != 1:
+            raise WorkflowDraftConflict("draft_adoption_state_lost")
+        return self.get(draft_id)
+
+    def record_course_network_adoption_recovery(
+        self,
+        draft_id: str,
+        *,
+        expected_revision: int,
+        expected_hash: str,
+        operation_id: str,
+    ) -> WorkflowDraftRow:
+        """Retain a durable repair marker instead of silently reopening a draft."""
+        row = self.get(draft_id)
+        recovery = {
+            "course_network_adoption_recovery": {
+                "operation_id": operation_id,
+                "expected_revision": expected_revision,
+                "expected_hash": expected_hash,
+            }
+        }
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE workflow_draft
+                SET pending_turn_json = ?, updated_at = ?
+                WHERE draft_id = ?
+                  AND status = 'adopting'
+                  AND artifact_revision = ?
+                  AND artifact_hash = ?
+                """,
+                (
+                    _dumps({**row.pending_turn_json, **recovery}),
+                    _utc_now(),
+                    draft_id,
+                    expected_revision,
+                    expected_hash,
+                ),
             )
         if cursor.rowcount != 1:
             raise WorkflowDraftConflict("draft_adoption_state_lost")

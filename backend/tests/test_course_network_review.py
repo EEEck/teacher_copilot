@@ -20,6 +20,7 @@ from app.services.workflow_drafts import (
     WorkflowDraftStore,
     serialize_structured_artifact,
 )
+from app.teacher_agent.wiki import indexing
 from tests.conftest import CLASS_ID
 
 
@@ -374,6 +375,130 @@ def test_review_snapshot_rejects_contradictory_accept_report(wiki):
         )
 
 
+def test_concurrent_review_reservations_claim_distinct_generations(wiki):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    barrier = threading.Barrier(2)
+    claimed = []
+
+    def reserve() -> None:
+        barrier.wait(timeout=5)
+        claimed.append(
+            service.workflow_drafts.begin_course_network_review(
+                draft.draft_id,
+                expected_revision=draft.artifact_revision,
+                expected_hash=draft.artifact_hash,
+            ).review_generation
+        )
+
+    first = threading.Thread(target=reserve)
+    second = threading.Thread(target=reserve)
+    first.start()
+    second.start()
+    first.join(timeout=5)
+    second.join(timeout=5)
+
+    assert sorted(claimed) == [1, 2]
+
+
+@pytest.mark.anyio
+async def test_failed_log_append_before_return_preserves_existing_log_entries(
+    wiki, monkeypatch
+):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    review = await service.review_seed(CLASS_ID, draft.draft_id)
+    wiki._append_log(
+        "other-class", "2026-01-01", "Other completed work", ["wiki/other.md"], "ingest"
+    )
+    log_before = wiki.read_text(wiki.log_path)
+
+    def partial_then_fail(class_id, lesson_date, title, applied, kind, entry_id=None):
+        wiki.log_path.write_text(
+            wiki.read_text(wiki.log_path)
+            + "\n## [2026-01-01T00:00:00] course_network_adopt | 2026-01-01"
+            + f" â€” {title} (id:{entry_id})\n> Class: {class_id}\n",
+            encoding="utf-8",
+        )
+        raise OSError("injected partial log append failure")
+
+    monkeypatch.setattr(wiki, "_append_log", partial_then_fail)
+
+    with pytest.raises(OSError, match="partial log append failure"):
+        service.adopt_seed(
+            CLASS_ID, draft.draft_id, review.artifact_revision, review.artifact_hash
+        )
+
+    assert wiki.read_text(wiki.log_path) == log_before
+    assert service.get_network(CLASS_ID) is None
+    assert service.get_draft(CLASS_ID, draft.draft_id).status == "draft"
+
+
+def test_atomic_log_removal_is_bound_to_class_kind_and_full_operation_id(wiki):
+    shared_id = "a" * 32
+    wiki.write_text(
+        wiki.log_path,
+        "# Wiki Log\n\n"
+        f"## [2026-01-01T00:00:00] course_network_adopt | x (id:{shared_id})\n"
+        "> Class: first-class\n\n"
+        f"## [2026-01-01T00:00:01] course_network_adopt | x (id:{shared_id})\n"
+        "> Class: second-class\n",
+    )
+
+    indexing.remove_log_entry(
+        wiki,
+        entry_id=shared_id,
+        class_id="first-class",
+        kind="course_network_adopt",
+    )
+
+    log = wiki.read_text(wiki.log_path)
+    assert "> Class: first-class" not in log
+    assert "> Class: second-class" in log
+
+
+@pytest.mark.anyio
+async def test_log_compensation_failure_leaves_a_durable_recovery_marker(
+    wiki, monkeypatch
+):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    review = await service.review_seed(CLASS_ID, draft.draft_id)
+    original_atomic_write = indexing._write_text_atomically
+    log_writes = 0
+
+    def fail_completion(*args, **kwargs):
+        raise WorkflowDraftConflict("injected completion failure")
+
+    def fail_log_removal(store, path, content):
+        nonlocal log_writes
+        if path == wiki.log_path:
+            log_writes += 1
+            if log_writes == 2:
+                raise OSError("injected log compensation failure")
+        return original_atomic_write(store, path, content)
+
+    monkeypatch.setattr(
+        service.workflow_drafts, "complete_course_network_adoption", fail_completion
+    )
+    monkeypatch.setattr(indexing, "_write_text_atomically", fail_log_removal)
+
+    with pytest.raises(
+        WorkflowDraftConflict, match="course_network_adoption_recovery_required"
+    ):
+        service.adopt_seed(
+            CLASS_ID, draft.draft_id, review.artifact_revision, review.artifact_hash
+        )
+
+    stored = service.get_draft(CLASS_ID, draft.draft_id)
+    assert stored.status == "adopting"
+    marker = stored.pending_turn_json["course_network_adoption_recovery"]
+    assert marker["expected_revision"] == review.artifact_revision
+    assert marker["expected_hash"] == review.artifact_hash
+    assert marker["operation_id"]
+    assert service.get_network(CLASS_ID) is None
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize("terminal", ["discarded", "committed"])
 async def test_terminal_course_network_drafts_cannot_reenter_review_or_adoption(
@@ -441,6 +566,43 @@ async def test_adoption_rolls_back_network_log_index_and_reservation_on_failure(
     assert wiki.load_course_network(CLASS_ID) is None
     assert wiki.read_text(wiki.log_path) == log_before
     assert wiki.read_text(wiki.index_path) == index_before
+    assert service.get_draft(CLASS_ID, draft.draft_id).status == "draft"
+
+
+@pytest.mark.anyio
+async def test_completion_failure_restores_prior_index_without_second_rebuild(
+    wiki, monkeypatch
+):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    review = await service.review_seed(CLASS_ID, draft.draft_id)
+    index_before = wiki.read_text(wiki.index_path)
+    original_rebuild = wiki.rebuild_index
+    rebuild_calls = 0
+
+    def fail_completion(*args, **kwargs):
+        raise WorkflowDraftConflict("injected completion failure")
+
+    def fail_if_rebuilt_twice(*args, **kwargs):
+        nonlocal rebuild_calls
+        rebuild_calls += 1
+        if rebuild_calls > 1:
+            raise OSError("compensating rebuild must not run")
+        return original_rebuild(*args, **kwargs)
+
+    monkeypatch.setattr(
+        service.workflow_drafts, "complete_course_network_adoption", fail_completion
+    )
+    monkeypatch.setattr(wiki, "rebuild_index", fail_if_rebuilt_twice)
+
+    with pytest.raises(WorkflowDraftConflict, match="injected completion failure"):
+        service.adopt_seed(
+            CLASS_ID, draft.draft_id, review.artifact_revision, review.artifact_hash
+        )
+
+    assert rebuild_calls == 1
+    assert wiki.read_text(wiki.index_path) == index_before
+    assert service.get_network(CLASS_ID) is None
     assert service.get_draft(CLASS_ID, draft.draft_id).status == "draft"
 
 
