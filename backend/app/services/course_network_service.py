@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
+import re
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -45,12 +49,61 @@ class _FileSnapshot:
 
 _ADOPTION_LOCKS: dict[str, threading.RLock] = {}
 _ADOPTION_LOCKS_GUARD = threading.Lock()
+logger = logging.getLogger(__name__)
 
 
-def _adoption_lock(wiki_root: Path, class_id: str) -> threading.RLock:
-    key = f"{wiki_root.resolve()}::{class_id}"
+def _adoption_lock(wiki_root: Path) -> threading.RLock:
+    """Serialize all course-network publication for one wiki across processes.
+
+    The log and index are wiki-global, so a class-keyed lock is insufficient:
+    two classes could otherwise interleave their shared side effects.
+    """
+    key = str(wiki_root.resolve())
     with _ADOPTION_LOCKS_GUARD:
         return _ADOPTION_LOCKS.setdefault(key, threading.RLock())
+
+
+@contextmanager
+def _wiki_adoption_lock(wiki_root: Path):
+    process_lock = _adoption_lock(wiki_root)
+    lock_path = wiki_root / "workflow" / ".course-network-adoption.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with process_lock, lock_path.open("a+b") as lock_file:
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        _lock_file(lock_file)
+        try:
+            yield
+        finally:
+            _unlock_file(lock_file)
+
+
+def _lock_file(lock_file) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_file(lock_file) -> None:
+    lock_file.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 class CourseNetworkService:
@@ -160,7 +213,7 @@ class CourseNetworkService:
     def adopt_seed(
         self, class_id: str, draft_id: str, expected_revision: int, expected_hash: str
     ) -> CourseNetworkAdoption:
-        with _adoption_lock(self.wiki.root, class_id):
+        with _wiki_adoption_lock(self.wiki.root):
             if self.get_network(class_id) is not None:
                 raise CourseNetworkConflict("course_network_already_adopted")
             self._active_draft(class_id, draft_id)
@@ -170,6 +223,7 @@ class CourseNetworkService:
                 expected_hash=expected_hash,
             )
             snapshots = self._adoption_snapshots(class_id)
+            log_entry_id: str | None = None
             try:
                 review = CourseNetworkReviewResult.model_validate(
                     row.active_review_json
@@ -222,6 +276,9 @@ class CourseNetworkService:
             except Exception:
                 try:
                     self._restore_snapshots(snapshots)
+                    if log_entry_id is not None:
+                        self._remove_log_entry(log_entry_id)
+                    self._rebuild_index_after_rollback()
                 finally:
                     self.workflow_drafts.release_course_network_adoption(
                         draft_id,
@@ -238,8 +295,6 @@ class CourseNetworkService:
         paths = [
             network_dir / "network.json",
             network_dir / "overview.md",
-            self.wiki.log_path,
-            self.wiki.index_path,
         ]
         return [
             _FileSnapshot(
@@ -254,3 +309,25 @@ class CourseNetworkService:
                 self.wiki.write_text(snapshot.path, snapshot.content)
             else:
                 snapshot.path.unlink(missing_ok=True)
+
+    def _remove_log_entry(self, entry_id: str) -> None:
+        """Compensate only this adoption's log block, retaining all other entries."""
+        current = self.wiki.read_text(self.wiki.log_path)
+        marker = re.escape(f"(id:{entry_id})")
+        match = re.search(rf"(?ms)^## [^\n]*{marker}[^\n]*\n.*?(?=^## |\Z)", current)
+        if match is not None:
+            start = match.start()
+            if current[:start].endswith("\n\n"):
+                start -= 1
+            self.wiki.write_text(
+                self.wiki.log_path, current[:start] + current[match.end() :]
+            )
+
+    def _rebuild_index_after_rollback(self) -> None:
+        """Reconcile the global index from surviving wiki state after compensation."""
+        try:
+            self.wiki.rebuild_index()
+        except Exception:  # noqa: BLE001 - never mask the failed adoption
+            # The original exception remains authoritative. A failed normal
+            # rebuild is atomic, so it leaves the pre-existing index in place.
+            logger.warning("Could not rebuild wiki index after adoption rollback")

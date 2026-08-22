@@ -423,7 +423,7 @@ class WorkflowDraftStore:
             revision += 1
         now = _utc_now()
         with self._connect() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 """
                 UPDATE workflow_draft
                 SET status = ?,
@@ -443,6 +443,10 @@ class WorkflowDraftStore:
                     review_generation = ?,
                     updated_at = ?
                 WHERE draft_id = ?
+                  AND status = ?
+                  AND artifact_revision = ?
+                  AND artifact_hash = ?
+                  AND review_generation = ?
                 """,
                 (
                     status,
@@ -462,8 +466,17 @@ class WorkflowDraftStore:
                     current.review_generation + int(artifact_changed),
                     now,
                     draft_id,
+                    current.status,
+                    current.artifact_revision,
+                    current.artifact_hash,
+                    current.review_generation,
                 ),
             )
+        if cursor.rowcount != 1:
+            row = self.get(draft_id)
+            if row.status == _ADOPTING_STATUS:
+                raise WorkflowDraftConflict("draft_adoption_in_progress")
+            raise WorkflowDraftConflict("draft_changed_since_save_started")
         return self.get(draft_id)
 
     def mark_review_snapshot(

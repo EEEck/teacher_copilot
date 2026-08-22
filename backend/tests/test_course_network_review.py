@@ -10,6 +10,7 @@ from app.course_network.models import CourseNetworkDocument, NetworkEdge
 from app.course_network.review import CourseNetworkReviewJudgement
 from app.course_network.seeds import load_seed_for_class, load_seed_for_route
 from app.course_network.validation import validate_course_network_draft
+from app.services.class_provisioning import ClassSpec, create_class
 from app.services.course_network_service import (
     CourseNetworkConflict,
     CourseNetworkService,
@@ -217,6 +218,138 @@ async def test_older_concurrent_review_cannot_replace_newer_review_snapshot(wiki
     assert stored.active_review_hash == draft.artifact_hash
 
 
+@pytest.mark.anyio
+async def test_unchanged_stale_save_cannot_decrease_review_generation(
+    wiki, monkeypatch
+):
+    reviewer = WaitingReviewer()
+    service = _service(wiki, reviewer)
+    draft = service.open_seed_draft(CLASS_ID)
+    first = asyncio.create_task(service.review_seed(CLASS_ID, draft.draft_id))
+    await reviewer.started.wait()
+
+    save_read = threading.Event()
+    release_save = threading.Event()
+    save_outcome = []
+    original_get = service.workflow_drafts.get
+
+    def pause_stale_save(draft_id):
+        row = original_get(draft_id)
+        if threading.current_thread().name == "stale-save" and not save_read.is_set():
+            save_read.set()
+            assert release_save.wait(timeout=5)
+        return row
+
+    monkeypatch.setattr(service.workflow_drafts, "get", pause_stale_save)
+
+    def save_unchanged() -> None:
+        try:
+            service.workflow_drafts.save_from_session(
+                draft_id=draft.draft_id,
+                status="draft",
+                artifact_markdown=draft.artifact_markdown,
+                runtime_json={},
+                messages_json=[],
+                backend_session_id=draft.backend_session_id,
+            )
+        except WorkflowDraftConflict as exc:
+            save_outcome.append(exc)
+
+    save_thread = threading.Thread(target=save_unchanged, name="stale-save")
+    save_thread.start()
+    assert save_read.wait(timeout=5)
+    second = asyncio.create_task(service.review_seed(CLASS_ID, draft.draft_id))
+    for _ in range(100):
+        if reviewer.calls == 2:
+            break
+        await asyncio.sleep(0)
+    assert reviewer.calls == 2
+    release_save.set()
+    save_thread.join(timeout=5)
+    reviewer.release.set()
+
+    results = await asyncio.gather(first, second, return_exceptions=True)
+
+    assert len(save_outcome) == 1
+    assert "draft_changed_since_save_started" in str(save_outcome[0])
+    assert sum(not isinstance(result, Exception) for result in results) == 1
+    stored = service.get_draft(CLASS_ID, draft.draft_id)
+    assert stored.review_generation == 2
+    assert stored.active_review_revision == draft.artifact_revision
+
+
+@pytest.mark.anyio
+async def test_save_read_before_adoption_reservation_cannot_cancel_adoption(
+    wiki, monkeypatch
+):
+    service = _service(wiki, StubReviewer())
+    draft = service.open_seed_draft(CLASS_ID)
+    review = await service.review_seed(CLASS_ID, draft.draft_id)
+    save_read = threading.Event()
+    release_save = threading.Event()
+    adoption_reserved = threading.Event()
+    release_adoption = threading.Event()
+    save_outcome = []
+    original_get = service.workflow_drafts.get
+    original_write = wiki.write_course_network
+
+    def pause_stale_save(draft_id):
+        row = original_get(draft_id)
+        if threading.current_thread().name == "stale-save" and not save_read.is_set():
+            save_read.set()
+            assert release_save.wait(timeout=5)
+        return row
+
+    def pause_adoption_write(*args, **kwargs):
+        adoption_reserved.set()
+        assert release_adoption.wait(timeout=5)
+        return original_write(*args, **kwargs)
+
+    monkeypatch.setattr(service.workflow_drafts, "get", pause_stale_save)
+    monkeypatch.setattr(wiki, "write_course_network", pause_adoption_write)
+
+    def save_changed() -> None:
+        try:
+            service.workflow_drafts.save_from_session(
+                draft_id=draft.draft_id,
+                status="draft",
+                artifact_markdown=draft.artifact_markdown.replace("Chemische", "Late"),
+                runtime_json={},
+                messages_json=[],
+                backend_session_id=draft.backend_session_id,
+            )
+        except WorkflowDraftConflict as exc:
+            save_outcome.append(exc)
+
+    save_thread = threading.Thread(target=save_changed, name="stale-save")
+    adoption_outcome = []
+    save_thread.start()
+    assert save_read.wait(timeout=5)
+
+    def adopt() -> None:
+        adoption_outcome.append(
+            service.adopt_seed(
+                CLASS_ID,
+                draft.draft_id,
+                review.artifact_revision,
+                review.artifact_hash,
+            )
+        )
+
+    adoption_thread = threading.Thread(target=adopt)
+    adoption_thread.start()
+    assert adoption_reserved.wait(timeout=5)
+    release_save.set()
+    save_thread.join(timeout=5)
+    release_adoption.set()
+    adoption_thread.join(timeout=5)
+
+    assert len(save_outcome) == 1
+    assert "draft_adoption_in_progress" in str(save_outcome[0])
+    assert len(adoption_outcome) == 1
+    assert service.get_draft(CLASS_ID, draft.draft_id).status == "committed"
+
+
 def test_review_snapshot_rejects_contradictory_accept_report(wiki):
     store = WorkflowDraftStore(wiki.root / "workflow" / "workflow_drafts.sqlite")
     store.initialize()
@@ -309,6 +442,82 @@ async def test_adoption_rolls_back_network_log_index_and_reservation_on_failure(
     assert wiki.read_text(wiki.log_path) == log_before
     assert wiki.read_text(wiki.index_path) == index_before
     assert service.get_draft(CLASS_ID, draft.draft_id).status == "draft"
+
+
+@pytest.mark.anyio
+async def test_failed_adoption_preserves_other_class_global_log_and_index(
+    wiki, monkeypatch
+):
+    other_class_id = create_class(
+        wiki,
+        ClassSpec(
+            label="Chemie 8a â€” 2026/27",
+            subject="chemie",
+            grade=8,
+            section="a",
+            school_year="2026_27",
+        ),
+    ).id
+    first = _service(wiki, StubReviewer())
+    second = _service(wiki, StubReviewer())
+    first_draft = first.open_seed_draft(CLASS_ID)
+    second_draft = second.open_seed_draft(other_class_id)
+    first_review = await first.review_seed(CLASS_ID, first_draft.draft_id)
+    second_review = await second.review_seed(other_class_id, second_draft.draft_id)
+    first_rebuild_started = threading.Event()
+    second_started = threading.Event()
+    outcomes = []
+    original_rebuild = wiki.rebuild_index
+    calls = 0
+
+    def fail_first_rebuild(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            first_rebuild_started.set()
+            assert second_started.wait(timeout=5)
+            raise OSError("first adoption index failure")
+        return original_rebuild(*args, **kwargs)
+
+    monkeypatch.setattr(wiki, "rebuild_index", fail_first_rebuild)
+
+    def adopt_first() -> None:
+        with pytest.raises(OSError, match="first adoption index failure"):
+            first.adopt_seed(
+                CLASS_ID,
+                first_draft.draft_id,
+                first_review.artifact_revision,
+                first_review.artifact_hash,
+            )
+        outcomes.append("first_failed")
+
+    def adopt_second() -> None:
+        second_started.set()
+        adoption = second.adopt_seed(
+            other_class_id,
+            second_draft.draft_id,
+            second_review.artifact_revision,
+            second_review.artifact_hash,
+        )
+        outcomes.append(adoption)
+
+    first_thread = threading.Thread(target=adopt_first)
+    second_thread = threading.Thread(target=adopt_second)
+    first_thread.start()
+    assert first_rebuild_started.wait(timeout=5)
+    second_thread.start()
+    first_thread.join(timeout=5)
+    second_thread.join(timeout=5)
+
+    assert "first_failed" in outcomes
+    assert len([outcome for outcome in outcomes if outcome != "first_failed"]) == 1
+    assert first.get_network(CLASS_ID) is None
+    assert second.get_network(other_class_id) is not None
+    log_text = wiki.read_text(wiki.log_path)
+    assert f"> Class: {other_class_id}" in log_text
+    assert log_text.count("Course network adoption") == 1
+    assert f"wiki/classes/{other_class_id}/course_network/network.json" in log_text
+    assert f"## Class: {other_class_id}" in wiki.read_text(wiki.index_path)
 
 
 @pytest.mark.anyio
