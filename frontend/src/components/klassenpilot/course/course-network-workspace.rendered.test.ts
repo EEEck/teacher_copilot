@@ -6,7 +6,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CourseNetworkWorkspace } from "./course-network-workspace";
-import { CurriculumSourceLinks } from "./learning-block-inspector";
+import {
+  CurriculumSourceLinks,
+  LearningBlockInspector,
+} from "./learning-block-inspector";
 import type { CourseNetwork } from "@/features/course-network/types";
 import {
   client,
@@ -103,6 +106,14 @@ const SOURCE_SECTION: CourseNetworkSourceSectionResponse = {
     version_label: "current_snapshot",
     content_hash: "sha256:genuine",
   },
+};
+
+const CATALYSIS_NODE = {
+  ...PROPOSED_NETWORK.nodes[0]!,
+  id: "catalysis",
+  title: "Katalyse",
+  description: "Compare catalyzed and uncatalyzed reaction pathways.",
+  learning_goal: "Explain how catalysts change activation energy.",
 };
 
 let mountedRoots: Root[] = [];
@@ -216,6 +227,63 @@ describe("course network source evidence", () => {
 
     expect(container.textContent).toContain("Source service unavailable");
     expect(buttonNamed(container, "Try again").disabled).toBe(false);
+  });
+});
+
+describe("learning block inspector selection", () => {
+  beforeEach(() => {
+    vi.stubGlobal("React", React);
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mountedRoots = [];
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      for (const root of mountedRoots) root.unmount();
+    });
+    document.body.replaceChildren();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("selects a node and renders its content in a native bounded scroller", async () => {
+    function InspectorSelectionHarness() {
+      const [selectedId, setSelectedId] = React.useState<string | null>(null);
+      return createElement(
+        React.Fragment,
+        null,
+        createElement(
+          "button",
+          { type: "button", onClick: () => setSelectedId(CATALYSIS_NODE.id) },
+          "Select Katalyse",
+        ),
+        createElement(LearningBlockInspector, {
+          classId: CLASS_ID,
+          nodes: [CATALYSIS_NODE],
+          edges: [],
+          selectedId,
+          onSelect: setSelectedId,
+        }),
+      );
+    }
+
+    const container = await mount(createElement(InspectorSelectionHarness));
+    expect(container.textContent).toContain("Select a learning block");
+
+    await click(buttonNamed(container, "Select Katalyse"));
+
+    expect(container.textContent).toContain("Katalyse");
+    expect(container.textContent).toContain(
+      "Explain how catalysts change activation energy.",
+    );
+    const scroller = container.querySelector(
+      '[data-slot="learning-block-inspector-scroll"]',
+    );
+    expect(scroller?.tagName).toBe("DIV");
+    expect(scroller?.classList.contains("overflow-y-auto")).toBe(true);
+    expect(
+      scroller?.querySelector("[data-radix-scroll-area-viewport]"),
+    ).toBeNull();
   });
 });
 
