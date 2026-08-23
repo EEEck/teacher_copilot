@@ -42,22 +42,6 @@ yet. Those belong to the later Epic B–D plans.
 | A3 Task 8 — workspace | Complete and reviewed | `/classes/{classId}/course` loads an adopted graph or guides seed review/adoption. It provides a desktop canvas, narrow-screen searchable outline, node inspector, relationship navigation, and class-authorized curriculum-source evidence. |
 | A3 Task 9 | Next | Add the single `Course` action on class home, reconcile frontend/product/backlog docs, then close Epic A through the full acceptance gate. |
 
-## Promoted execution plans
-
-The following task briefs were promoted from the detailed `.superpowers` work
-ledger so later agents can read their original scoped requirements without
-depending on ignored files:
-
-- [A2 Task 3 — canonical network models](execution/a2-task-3-canonical-models.md)
-- [A2 Task 4 — atomic wiki storage](execution/a2-task-4-atomic-storage.md)
-- [A2 Task 5 — Chemie 8/9 seeds](execution/a2-task-5-chemie-seeds.md)
-- [A2 Task 6 — reviewed adoption API](execution/a2-task-6-adoption-api.md)
-- [A3 Task 7 — React Flow adapter](execution/a3-task-7-canvas-adapter.md)
-- [A3 Task 8 — read-only course workspace](execution/a3-task-8-workspace.md)
-
-They describe completed work and its original boundaries; use the current code,
-this handoff, and the main delivery plan as the authority for the next task.
-
 ## A3 browser behavior verified
 
 The current course workspace is intentionally read-only.
