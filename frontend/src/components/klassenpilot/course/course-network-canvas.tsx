@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -19,7 +19,6 @@ const nodeTypes: NodeTypes = {
 
 export function CourseNetworkCanvas({
   network,
-  selectedId,
   onSelect,
 }: {
   network: CourseNetwork;
@@ -38,7 +37,6 @@ export function CourseNetworkCanvas({
         connectable: false,
         focusable: true,
         selectable: true,
-        selected: node.id === selectedId,
       })),
       edges: flow.edges.map((edge) => ({
         ...edge,
@@ -47,13 +45,29 @@ export function CourseNetworkCanvas({
         reconnectable: false,
       })),
     };
-  }, [network, selectedId]);
+  }, [network]);
+
+  const handleGraphKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof Element)) return;
+
+    const nodeId = event.target
+      .closest<HTMLElement>(".react-flow__node[data-id]")
+      ?.getAttribute("data-id");
+    if (!nodeId) return;
+
+    if (event.key === "Enter" || event.key === " ") {
+      onSelect(nodeId);
+    } else if (event.key === "Escape") {
+      onSelect(null);
+    }
+  };
 
   return (
     <div
       role="region"
       aria-label="Course network graph"
       className="course-network-flow h-full min-h-[32rem] overflow-hidden rounded-xl border border-border bg-background shadow-sm"
+      onKeyDownCapture={handleGraphKeyDown}
     >
       <ReactFlow
         nodes={model.nodes}
@@ -72,7 +86,6 @@ export function CourseNetworkCanvas({
         deleteKeyCode={null}
         multiSelectionKeyCode={null}
         onNodeClick={(_, node) => onSelect(node.id)}
-        onSelectionChange={({ nodes }) => onSelect(nodes.at(-1)?.id ?? null)}
         onPaneClick={() => onSelect(null)}
         proOptions={{ hideAttribution: true }}
         aria-label="Read-only course network"
