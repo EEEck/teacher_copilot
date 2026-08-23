@@ -114,6 +114,37 @@ changes the baseline fixture. The supported command for a clean isolated stack
 is `./scripts/worktree-stack.cmd up --fresh-wiki`; add `--beta --fresh-beta-data`
 only for beta/HITL coverage.
 
+### Default local test profile
+
+Use this profile for normal development and course-network HITL checks. It is
+local-only and must stay in the ignored `backend/.env`, never in Git:
+
+```dotenv
+APP_ENV=development
+MODEL_PROFILE=economy
+BETA_ENABLED=false
+MISTRAL_OCR_MODEL=mistral-ocr-latest
+MISTRAL_API_KEY=<local Mistral API key>
+```
+
+Start an isolated local wiki with the explicit economy profile and **without**
+beta data:
+
+```powershell
+.\scripts\worktree-stack.cmd up --fresh-wiki --model-profile economy
+```
+
+Do not add `--beta` or `--fresh-beta-data` for this default path. The helper
+prints the worktree-specific frontend and backend ports; use those URLs rather
+than assuming another worktree's stack is serving this branch. Beta remains an
+intentional, separate acceptance mode.
+
+`MISTRAL_API_KEY` enables the product's live PDF OCR path. Obtain or rotate it
+in the Mistral workspace/API-key console, then paste it only into the local
+`backend/.env`. Do not paste it into a chat, a plan, a test fixture, or a
+committed `.env` file. `RUN_LIVE_MISTRAL_OCR=1` is needed only for the opt-in
+live pytest cases; it is not a default development setting.
+
 ## Evidence and commit landmarks
 
 - A1 final verification: `57b9150` (with prior remediation `75d0c8e`).
