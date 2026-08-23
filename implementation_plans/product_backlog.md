@@ -210,6 +210,11 @@ Track progress through the A1-A3, B1-B2, C1-C3, and D1-D3 PR boundaries in the
 delivery program. Move individual capabilities into Shipped only when their PR
 and focused documentation updates merge.
 
+Current branch handoff and verified in-progress status:
+[`course_network/README.md`](course_network/README.md). This is deliberately
+separate from Shipped until the relevant PRs merge and their final acceptance
+gates pass.
+
 ### Shipped (in-plan slice)
 
 - Plan-session PDF upload (Textbook / Personal), optimistic composer tile,

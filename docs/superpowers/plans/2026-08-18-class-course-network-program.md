@@ -10,6 +10,25 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-17-class-course-network-design.md`
 
+## Delivery status — 2026-08-22
+
+This is an in-progress branch status, not a claim that the feature has merged
+or shipped. The durable agent handoff is
+[`implementation_plans/course_network/README.md`](../../../implementation_plans/course_network/README.md).
+
+- **A1 — complete and verified:** deterministic Chemie 8/9 NTG class
+  provisioning, including fresh-sandbox API and browser acceptance.
+- **A2 — complete and verified:** canonical class-owned network, reviewed
+  Chemie 8/9 seed adoption, atomic persistence, index/overview compilation,
+  and API acceptance.
+- **A3 Tasks 7–8 — complete and reviewed:** read-only React Flow workspace,
+  outline fallback, inspector, adoption surface, and class-authorized
+  curriculum-source evidence. The desktop graph interaction was live-browser
+  tested after the React Flow selection fix.
+- **A3 Task 9 and the Epic A final gate remain:** add the class-home Course
+  entry and documentation, then run the full Epic A deterministic and fresh
+  HITL acceptance before starting Epic B.
+
 ## Global Constraints
 
 - The network is class-owned in the MVP; cross-class inheritance, export, and import are excluded.
