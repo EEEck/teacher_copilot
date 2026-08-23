@@ -151,7 +151,7 @@ export function CourseNetworkAdoption({
               Curriculum sources
             </h2>
             <p className="mb-2 mt-1 text-xs text-muted-foreground">
-              Open a cited source in the read-only wiki viewer.
+              Inspect the exact class-authorized section and its provenance.
             </p>
             <CurriculumSourceLinks
               classId={classId}

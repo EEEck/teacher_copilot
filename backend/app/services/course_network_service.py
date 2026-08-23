@@ -20,7 +20,11 @@ from app.course_network.review import (
     build_course_network_review_packet,
 )
 from app.course_network.seeds import load_seed_for_class
-from app.course_network.validation import validate_course_network_draft
+from app.course_network.validation import (
+    expected_course_network_route,
+    route_authorized_curriculum_sections,
+    validate_course_network_draft,
+)
 from app.services.workflow_drafts import (
     WorkflowDraftConflict,
     WorkflowDraftIdentity,
@@ -122,6 +126,20 @@ class CourseNetworkService:
 
     def get_network(self, class_id: str) -> CourseNetworkDocument | None:
         return self.wiki.load_course_network(class_id)
+
+    def get_source_section(
+        self, class_id: str, source_id: str, section_id: str
+    ) -> dict[str, object]:
+        """Read one exact source section authorized for this class course route."""
+        route = expected_course_network_route(self.wiki, class_id)
+        authorized = route_authorized_curriculum_sections(self.wiki, class_id, route)
+        if (source_id, section_id) not in authorized:
+            raise KeyError("course_network_source_section_not_found")
+        try:
+            return self.wiki.read_trusted_source(class_id, source_id, section_id)
+        except ValueError as exc:
+            # Do not disclose whether an unlinked global source or section exists.
+            raise KeyError("course_network_source_section_not_found") from exc
 
     def open_seed_draft(self, class_id: str) -> WorkflowDraftRow:
         if self.get_network(class_id) is not None:

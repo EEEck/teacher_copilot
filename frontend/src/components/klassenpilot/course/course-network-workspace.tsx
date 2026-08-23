@@ -78,7 +78,6 @@ function CourseWorkspaceHeader({
   classId: string;
   status: string;
 }) {
-  const router = useRouter();
   return (
     <div className="shrink-0">
       <PageHeader
@@ -90,16 +89,20 @@ function CourseWorkspaceHeader({
         trailing={
           <SegmentedToggle
             value="network"
-            onValueChange={(value) => {
-              if (value === "materials") {
-                router.push(
-                  `/classes/${encodeURIComponent(classId)}/course/materials`,
-                );
-              }
-            }}
+            onValueChange={() => {}}
             options={[
               { value: "network", label: "Network" },
-              { value: "materials", label: "Materials" },
+              {
+                value: "materials",
+                label: (
+                  <span className="inline-flex items-center gap-1">
+                    Materials
+                    <span className="text-[10px] font-normal">Coming soon</span>
+                  </span>
+                ),
+                disabled: true,
+                disabledReason: "Materials workspace coming soon",
+              },
             ]}
             aria-label="Course workspace section"
           />
@@ -152,6 +155,19 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
 
   useArtifactSessionShell(true);
 
+  const transitionToAdoptedNetwork = useCallback(
+    (adoptedNetwork: CourseNetwork, refreshRoute = false) => {
+      setNetwork(adoptedNetwork);
+      setDraft(null);
+      setSelectedId((current) => selectedOrFirst(adoptedNetwork, current));
+      if (refreshRoute) {
+        router.replace(`/classes/${encodeURIComponent(classId)}/course`);
+        router.refresh();
+      }
+    },
+    [classId, router],
+  );
+
   const loadWorkspace = useCallback(async () => {
     const requestId = ++requestIdRef.current;
     setLoading(true);
@@ -161,9 +177,7 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
       const response = await client.getCourseNetwork(classId);
       if (requestId !== requestIdRef.current) return;
       if (response.network) {
-        setNetwork(response.network);
-        setDraft(null);
-        setSelectedId((current) => selectedOrFirst(response.network!, current));
+        transitionToAdoptedNetwork(response.network);
         return;
       }
 
@@ -178,9 +192,7 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
         const latest = await client.getCourseNetwork(classId);
         if (requestId !== requestIdRef.current) return;
         if (!latest.network) throw openError;
-        setNetwork(latest.network);
-        setDraft(null);
-        setSelectedId((current) => selectedOrFirst(latest.network!, current));
+        transitionToAdoptedNetwork(latest.network);
       }
     } catch (loadError) {
       if (requestId !== requestIdRef.current) return;
@@ -192,7 +204,7 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [classId]);
+  }, [classId, transitionToAdoptedNetwork]);
 
   useEffect(() => {
     void loadWorkspace();
@@ -247,21 +259,44 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
           "Adoption requires a passing review for this exact proposal revision and hash.",
         );
       }
-      const adopted = await client.adoptCourseNetworkSeed(
-        classId,
-        draft.draft_id,
-        {
-          expected_revision: draft.artifact_revision,
-          expected_hash: draft.artifact_hash,
-        },
-      );
-      setNetwork(adopted.network);
-      setDraft(null);
-      setSelectedId((current) => selectedOrFirst(adopted.network, current));
-      router.replace(`/classes/${encodeURIComponent(classId)}/course`);
-      router.refresh();
+      try {
+        const adopted = await client.adoptCourseNetworkSeed(
+          classId,
+          draft.draft_id,
+          {
+            expected_revision: draft.artifact_revision,
+            expected_hash: draft.artifact_hash,
+          },
+        );
+        transitionToAdoptedNetwork(adopted.network, true);
+      } catch (adoptError) {
+        // The server may have committed before a timeout or stale response arrived.
+        try {
+          const latest = await client.getCourseNetwork(classId);
+          if (latest.network) {
+            transitionToAdoptedNetwork(latest.network, true);
+            return;
+          }
+        } catch {
+          // Preserve the original adoption failure if reconciliation is unavailable.
+        }
+
+        try {
+          const latestDraft = await client.getCourseNetworkDraft(
+            classId,
+            draft.draft_id,
+          );
+          setDraft(latestDraft);
+          setSelectedId((current) =>
+            selectedOrFirst(latestDraft.network, current),
+          );
+        } catch {
+          // The explicit refresh action remains available if the draft changed.
+        }
+        throw adoptError;
+      }
     });
-  }, [classId, draft, router, runAction]);
+  }, [classId, draft, runAction, transitionToAdoptedNetwork]);
 
   const discardProposal = useCallback(async () => {
     if (!draft) return;
@@ -339,7 +374,17 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
       {error ? (
         <Alert variant="destructive" className="mb-3 shrink-0">
           <AlertTitle>Action not completed</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="space-y-3">
+            <p>{error}</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void loadWorkspace()}
+            >
+              Refresh state
+            </Button>
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -363,12 +408,21 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
               onSelect={setSelectedId}
             />
           </div>
-          <CourseNetworkOutline
-            nodes={network.nodes}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            className="min-h-[24rem] md:hidden"
-          />
+          <div className="space-y-3 md:hidden">
+            <Alert className="border-border bg-muted">
+              <AlertTitle>Outline view on smaller screens</AlertTitle>
+              <AlertDescription>
+                The searchable outline is the graph view on smaller screens. The
+                canvas appears on wider screens.
+              </AlertDescription>
+            </Alert>
+            <CourseNetworkOutline
+              nodes={network.nodes}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              className="min-h-[24rem]"
+            />
+          </div>
           <LearningBlockInspector
             classId={classId}
             nodes={network.nodes}

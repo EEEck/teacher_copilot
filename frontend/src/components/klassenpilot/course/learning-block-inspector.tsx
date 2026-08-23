@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { ArrowRight, BookOpen, ExternalLink } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -20,13 +22,17 @@ import {
 } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import type {
   CurriculumReference,
   LearningBlock,
   NetworkEdge,
 } from "@/features/course-network/types";
 import { cn } from "@/lib/utils";
-import { wikiViewerHref } from "@/lib/wiki-viewer-links";
+import {
+  client,
+  type CourseNetworkSourceSectionResponse,
+} from "@/lib/api";
 
 const originLabels = {
   curriculum: "Curriculum",
@@ -40,15 +46,6 @@ const statusLabels = {
   retired: "Retired",
 } as const;
 
-function curriculumWikiPath(sourceId: string): string | null {
-  const match = sourceId.match(
-    /^by-lehrplanplus-([a-z0-9-]+)-(\d+)-([a-z0-9-]+)$/i,
-  );
-  if (!match) return null;
-  const [, subject, grade, branch] = match;
-  return `wiki/sources/bayern/lehrplanplus/${subject!.replaceAll("-", "_")}_${grade}_${branch!.toLocaleLowerCase().replaceAll("-", "_")}.md`;
-}
-
 export function CurriculumSourceLinks({
   classId,
   references,
@@ -58,6 +55,13 @@ export function CurriculumSourceLinks({
   references: CurriculumReference[];
   className?: string;
 }) {
+  const requestIdRef = useRef(0);
+  const [activeReference, setActiveReference] =
+    useState<CurriculumReference | null>(null);
+  const [sourceSection, setSourceSection] =
+    useState<CourseNetworkSourceSectionResponse | null>(null);
+  const [loadingSource, setLoadingSource] = useState(false);
+  const [sourceError, setSourceError] = useState<string | null>(null);
   const uniqueReferences = [
     ...new Map(
       references.map((reference) => [
@@ -67,32 +71,178 @@ export function CurriculumSourceLinks({
     ).values(),
   ];
 
+  useEffect(
+    () => () => {
+      requestIdRef.current += 1;
+    },
+    [],
+  );
+
+  const inspectSource = useCallback(
+    async (reference: CurriculumReference) => {
+      const requestId = ++requestIdRef.current;
+      setActiveReference(reference);
+      setSourceSection(null);
+      setSourceError(null);
+      setLoadingSource(true);
+      try {
+        const response = await client.getCourseNetworkSourceSection(
+          classId,
+          reference.source_id,
+          reference.section_id,
+        );
+        if (requestId === requestIdRef.current) setSourceSection(response);
+      } catch (error) {
+        if (requestId !== requestIdRef.current) return;
+        setSourceError(
+          error instanceof Error && error.message
+            ? error.message
+            : "This curriculum source could not be loaded.",
+        );
+      } finally {
+        if (requestId === requestIdRef.current) setLoadingSource(false);
+      }
+    },
+    [classId],
+  );
+
+  const closeSource = useCallback(() => {
+    requestIdRef.current += 1;
+    setActiveReference(null);
+    setSourceSection(null);
+    setSourceError(null);
+    setLoadingSource(false);
+  }, []);
+
   if (!uniqueReferences.length) {
     return <p className="text-sm text-muted-foreground">No curriculum sources cited.</p>;
   }
 
   return (
-    <ul className={cn("space-y-1.5", className)}>
-      {uniqueReferences.map((reference) => {
-        const path = curriculumWikiPath(reference.source_id);
-        const label = `${reference.source_id} · ${reference.section_id}`;
-        return (
-          <li key={`${reference.source_id}:${reference.section_id}`}>
-            {path ? (
-              <Link
-                href={wikiViewerHref(classId, path)}
-                className="inline-flex items-start gap-1 text-sm text-primary underline-offset-4 hover:underline"
+    <div>
+      <ul className={cn("space-y-1.5", className)}>
+        {uniqueReferences.map((reference) => {
+          const label = `${reference.source_id} · ${reference.section_id}`;
+          const active =
+            reference.source_id === activeReference?.source_id &&
+            reference.section_id === activeReference.section_id;
+          return (
+            <li key={`${reference.source_id}:${reference.section_id}`}>
+              <button
+                type="button"
+                aria-expanded={active}
+                onClick={() => void inspectSource(reference)}
+                className="inline-flex items-start gap-1 text-left text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <span className="break-all">{label}</span>
-                <ExternalLink aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-              </Link>
-            ) : (
-              <span className="break-all text-sm text-muted-foreground">{label}</span>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+                <BookOpen aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {activeReference ? (
+        <Card
+          className="mt-3 gap-0 overflow-hidden py-0"
+          aria-label="Curriculum source evidence"
+        >
+          {loadingSource ? (
+            <CardContent className="space-y-3 py-4" aria-busy="true">
+              <Skeleton className="h-5 w-3/4" />
+              <Skeleton className="h-20 w-full" />
+              <p className="sr-only" role="status">
+                Loading curriculum source section
+              </p>
+            </CardContent>
+          ) : sourceError ? (
+            <CardContent className="py-4">
+              <Alert variant="destructive">
+                <AlertTitle>Source unavailable</AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <p>{sourceError}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void inspectSource(activeReference)}
+                    >
+                      Try again
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={closeSource}
+                    >
+                      Close
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            </CardContent>
+          ) : sourceSection ? (
+            <>
+              <CardHeader className="border-b border-border py-4">
+                <CardTitle className="pr-8 text-base">
+                  {sourceSection.section_title}
+                </CardTitle>
+                <CardDescription>{sourceSection.source_title}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 py-4">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                  {sourceSection.content}
+                </p>
+                <Separator />
+                <dl className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                  <div>
+                    <dt className="font-medium text-foreground">Authority</dt>
+                    <dd>{sourceSection.provenance.authority}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-foreground">Jurisdiction</dt>
+                    <dd>{sourceSection.provenance.jurisdiction || "Not specified"}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-foreground">Retrieved</dt>
+                    <dd>{sourceSection.provenance.retrieved_at || "Not specified"}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-foreground">Version</dt>
+                    <dd>{sourceSection.provenance.version_label || "Not specified"}</dd>
+                  </div>
+                </dl>
+                <p className="break-all font-mono text-[11px] text-muted-foreground">
+                  {sourceSection.source_id} · {sourceSection.section_id} ·{" "}
+                  {sourceSection.provenance.content_hash}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <a
+                      href={sourceSection.provenance.canonical_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Official source
+                      <ExternalLink aria-hidden="true" />
+                    </a>
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={closeSource}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </CardContent>
+            </>
+          ) : null}
+        </Card>
+      ) : null}
+    </div>
   );
 }
 

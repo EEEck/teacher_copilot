@@ -37,6 +37,22 @@ export type CourseNetworkResponse = {
   network: CourseNetwork | null;
 };
 
+export type CourseNetworkSourceSectionResponse = {
+  source_id: string;
+  source_title: string;
+  section_id: string;
+  section_title: string;
+  content: string;
+  provenance: {
+    authority: string;
+    jurisdiction: string;
+    canonical_url: string;
+    retrieved_at: string;
+    version_label: string;
+    content_hash: string;
+  };
+};
+
 export type CourseNetworkReviewFinding = {
   code: string;
   message: string;
@@ -752,6 +768,14 @@ export const client = {
   getCourseNetwork: (classId: string) =>
     api<CourseNetworkResponse>(
       `/api/classes/${encodeURIComponent(classId)}/course/network`,
+    ),
+  getCourseNetworkSourceSection: (
+    classId: string,
+    sourceId: string,
+    sectionId: string,
+  ) =>
+    api<CourseNetworkSourceSectionResponse>(
+      `/api/classes/${encodeURIComponent(classId)}/course/network/sources/${encodeURIComponent(sourceId)}/sections/${encodeURIComponent(sectionId)}`,
     ),
   openCourseNetworkSeedDraft: (classId: string) =>
     api<CourseNetworkDraftResponse>(

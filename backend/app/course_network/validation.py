@@ -15,7 +15,7 @@ class CourseNetworkValidationFinding:
     path: str = ""
 
 
-def _expected_route(wiki, class_id: str) -> CurriculumRouteRef:
+def expected_course_network_route(wiki, class_id: str) -> CurriculumRouteRef:
     class_config = wiki.get_class(class_id)
     curriculum = wiki.get_curriculum_profile(class_id)
     return CurriculumRouteRef(
@@ -88,7 +88,7 @@ def validate_course_network_draft(
 ) -> list[CourseNetworkValidationFinding]:
     """Return the stable findings that must block an LLM review or adoption."""
     findings: list[CourseNetworkValidationFinding] = []
-    expected_route = _expected_route(wiki, expected_class_id)
+    expected_route = expected_course_network_route(wiki, expected_class_id)
     if document.class_id != expected_class_id:
         findings.append(
             CourseNetworkValidationFinding(

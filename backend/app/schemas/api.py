@@ -769,6 +769,24 @@ class CourseNetworkResponse(BaseModel):
     network: CourseNetworkDocument | None = None
 
 
+class CourseNetworkSourceProvenance(BaseModel):
+    authority: str
+    jurisdiction: str
+    canonical_url: str
+    retrieved_at: str
+    version_label: str
+    content_hash: str
+
+
+class CourseNetworkSourceSectionResponse(BaseModel):
+    source_id: str
+    source_title: str
+    section_id: str
+    section_title: str
+    content: str
+    provenance: CourseNetworkSourceProvenance
+
+
 class CourseNetworkDraftDocument(BaseModel):
     """Typed transport view of a proposed course-network seed."""
 

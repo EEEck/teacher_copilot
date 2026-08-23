@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 
@@ -30,11 +31,31 @@ def test_runtime_openapi_matches_course_network_draft_and_error_contracts(client
     assert runtime["components"]["schemas"]["CourseNetworkDraftResponse"]["properties"][
         "network"
     ] == {"$ref": "#/components/schemas/CourseNetworkDraftDocument"}
+    source_contract_path = (
+        "/api/classes/{classId}/course/network/sources/{sourceId}/sections/{sectionId}"
+    )
+    source_runtime_path = (
+        "/api/classes/{class_id}/course/network/sources/"
+        "{source_id}/sections/{section_id}"
+    )
+    assert contract["paths"][source_contract_path]["get"]["responses"]["200"][
+        "content"
+    ]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/CourseNetworkSourceSectionResponse"
+    }
+    assert runtime["paths"][source_runtime_path]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"] == {"$ref": "#/components/schemas/CourseNetworkSourceSectionResponse"}
 
     routes = [
         (
             "/api/classes/{classId}/course/network",
             "/api/classes/{class_id}/course/network",
+            "get",
+        ),
+        (
+            "/api/classes/{classId}/course/network/sources/{sourceId}/sections/{sectionId}",
+            "/api/classes/{class_id}/course/network/sources/{source_id}/sections/{section_id}",
             "get",
         ),
         (
@@ -72,6 +93,84 @@ def test_runtime_openapi_matches_course_network_draft_and_error_contracts(client
             if status in runtime_responses
         }
         assert actual_errors == expected_errors, f"{method.upper()} {contract_path}"
+
+
+def test_course_network_source_section_returns_exact_class_authorized_evidence(
+    client, wiki, workflow_drafts
+):
+    _service_override(wiki, workflow_drafts)
+    expected = wiki.read_trusted_source(
+        CLASS_ID,
+        "by-lehrplanplus-chemie-9-ntg",
+        "c9_ionen_redox",
+    )
+
+    with patch.object(
+        wiki, "read_trusted_source", wraps=wiki.read_trusted_source
+    ) as read_source:
+        response = client.get(
+            f"/api/classes/{CLASS_ID}/course/network/sources/"
+            "by-lehrplanplus-chemie-9-ntg/sections/c9_ionen_redox"
+        )
+
+    read_source.assert_called_once_with(
+        CLASS_ID,
+        "by-lehrplanplus-chemie-9-ntg",
+        "c9_ionen_redox",
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "source_id": "by-lehrplanplus-chemie-9-ntg",
+        "source_title": "LehrplanPLUS Chemie 9 NTG",
+        "section_id": "c9_ionen_redox",
+        "section_title": "Donator-Akzeptor-Konzept (Ionen und Redox)",
+        "content": (
+            "Students explain ion formation and electron transfer with the "
+            "donor\u2013acceptor\nconcept, including salt formation, electrolysis of "
+            "solutions or melts, redox\nhalf-equations, and everyday links such as "
+            "batteries and rechargeable cells.\nThey connect forced and spontaneous "
+            "redox processes and interpret metal\nbehaviour in metal-salt solutions at "
+            "the particle level."
+        ),
+        "provenance": {
+            "authority": "official_curriculum",
+            "jurisdiction": "BY",
+            "canonical_url": (
+                "https://www.lehrplanplus.bayern.de/"
+                "fachlehrplan/gymnasium/9/chemie/ch-ntg"
+            ),
+            "retrieved_at": "2026-07-18",
+            "version_label": "current_snapshot",
+            "content_hash": expected["content_hash"],
+        },
+    }
+    assert "path" not in response.text
+
+
+def test_course_network_source_section_hides_linked_but_route_unauthorized_evidence(
+    client, wiki, workflow_drafts
+):
+    _service_override(wiki, workflow_drafts)
+
+    response = client.get(
+        f"/api/classes/{CLASS_ID}/course/network/sources/"
+        "by-lehrplanplus-chemie-8-ntg/sections/c8_reactions"
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["error"]["message"] == (
+        "course_network_source_section_not_found"
+    )
+
+    unknown_section = client.get(
+        f"/api/classes/{CLASS_ID}/course/network/sources/"
+        "by-lehrplanplus-chemie-9-ntg/sections/not-a-real-section"
+    )
+    assert unknown_section.status_code == 404, unknown_section.text
+    assert unknown_section.json()["error"]["message"] == (
+        "course_network_source_section_not_found"
+    )
 
 
 class AcceptingReviewer:

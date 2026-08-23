@@ -14,6 +14,8 @@ from app.schemas.api import (
     CourseNetworkAdoptionResponse,
     CourseNetworkDraftResponse,
     CourseNetworkResponse,
+    CourseNetworkSourceProvenance,
+    CourseNetworkSourceSectionResponse,
 )
 from app.services.course_network_service import (
     CourseNetworkConflict,
@@ -27,7 +29,7 @@ CourseNetworkServiceDep = Annotated[
 ]
 _NOT_FOUND_RESPONSE = {
     "model": ErrorEnvelope,
-    "description": "Class or course-network draft was not found.",
+    "description": "Class, course-network draft, or authorized evidence was not found.",
 }
 _CONFLICT_RESPONSE = {
     "model": ErrorEnvelope,
@@ -82,7 +84,8 @@ def _raise_service_error(exc: Exception) -> None:
     if isinstance(exc, (CourseNetworkConflict, WorkflowDraftConflict)):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if isinstance(exc, KeyError):
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        detail = exc.args[0] if exc.args else "not_found"
+        raise HTTPException(status_code=404, detail=str(detail)) from exc
     if isinstance(exc, ValueError):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     raise exc
@@ -99,6 +102,38 @@ def get_course_network(
     try:
         return CourseNetworkResponse(
             class_id=class_id, network=service.get_network(class_id)
+        )
+    except (CourseNetworkConflict, WorkflowDraftConflict, KeyError, ValueError) as exc:
+        _raise_service_error(exc)
+
+
+@router.get(
+    "/classes/{class_id}/course/network/sources/{source_id}/sections/{section_id}",
+    response_model=CourseNetworkSourceSectionResponse,
+    responses={404: _NOT_FOUND_RESPONSE, 422: _VALIDATION_RESPONSE},
+)
+def get_course_network_source_section(
+    class_id: str,
+    source_id: str,
+    section_id: str,
+    service: CourseNetworkServiceDep,
+) -> CourseNetworkSourceSectionResponse:
+    try:
+        payload = service.get_source_section(class_id, source_id, section_id)
+        return CourseNetworkSourceSectionResponse(
+            source_id=str(payload["source_id"]),
+            source_title=str(payload["title"]),
+            section_id=str(payload["section_id"]),
+            section_title=str(payload["section_title"]),
+            content=str(payload["content"]),
+            provenance=CourseNetworkSourceProvenance(
+                authority=str(payload["authority"]),
+                jurisdiction=str(payload["jurisdiction"]),
+                canonical_url=str(payload["canonical_url"]),
+                retrieved_at=str(payload["retrieved_at"]),
+                version_label=str(payload["version_label"]),
+                content_hash=str(payload["content_hash"]),
+            ),
         )
     except (CourseNetworkConflict, WorkflowDraftConflict, KeyError, ValueError) as exc:
         _raise_service_error(exc)

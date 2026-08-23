@@ -76,6 +76,11 @@ describe("course network API client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await client.getCourseNetwork("chemie_8a");
+    await client.getCourseNetworkSourceSection(
+      "chemie_8a",
+      "source/with spaces",
+      "section#exact",
+    );
     await client.openCourseNetworkSeedDraft("chemie_8a");
     await client.getCourseNetworkDraft("chemie_8a", "draft-8a");
     await client.reviewCourseNetworkSeed("chemie_8a", "draft-8a");
@@ -92,6 +97,12 @@ describe("course network API client", () => {
       })),
     ).toEqual([
       { path: "/api/classes/chemie_8a/course/network", method: "GET", body: null },
+      {
+        path:
+          "/api/classes/chemie_8a/course/network/sources/source%2Fwith%20spaces/sections/section%23exact",
+        method: "GET",
+        body: null,
+      },
       { path: "/api/classes/chemie_8a/course/network/drafts", method: "POST", body: null },
       {
         path: "/api/classes/chemie_8a/course/network/drafts/draft-8a",
