@@ -17,12 +17,13 @@ export function LearningBlockNode({
   selected,
 }: NodeProps<CourseNetworkNode>) {
   const block = data.learningBlock;
+  const emphasized = selected || data.inspectorSelected;
   return (
     <article
       aria-label={`Lernbaustein: ${block.title}`}
       className={cn(
         "w-[250px] rounded-xl border bg-card p-3 text-left shadow-sm transition-colors",
-        selected
+        emphasized
           ? "border-primary ring-2 ring-ring/20"
           : "border-border hover:border-primary/40",
       )}

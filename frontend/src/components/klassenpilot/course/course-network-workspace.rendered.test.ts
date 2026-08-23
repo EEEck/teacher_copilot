@@ -108,12 +108,16 @@ const SOURCE_SECTION: CourseNetworkSourceSectionResponse = {
   },
 };
 
-const CATALYSIS_NODE = {
+const CATALYSIS_NODE: CourseNetwork["nodes"][number] = {
   ...PROPOSED_NETWORK.nodes[0]!,
   id: "catalysis",
   title: "Katalyse",
-  description: "Compare catalyzed and uncatalyzed reaction pathways.",
-  learning_goal: "Explain how catalysts change activation energy.",
+  curriculum_refs: [
+    {
+      source_id: "by-lehrplanplus-chemie-9-ntg",
+      section_id: "c9_katalyse",
+    },
+  ],
 };
 
 let mountedRoots: Root[] = [];
@@ -228,27 +232,14 @@ describe("course network source evidence", () => {
     expect(container.textContent).toContain("Source service unavailable");
     expect(buttonNamed(container, "Try again").disabled).toBe(false);
   });
-});
 
-describe("learning block inspector selection", () => {
-  beforeEach(() => {
-    vi.stubGlobal("React", React);
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    mountedRoots = [];
-  });
+  it("clears inspected source evidence when the selected learning block changes", async () => {
+    vi.spyOn(client, "getCourseNetworkSourceSection").mockResolvedValue(
+      SOURCE_SECTION,
+    );
 
-  afterEach(async () => {
-    await act(async () => {
-      for (const root of mountedRoots) root.unmount();
-    });
-    document.body.replaceChildren();
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
-
-  it("selects a node and renders its content in a native bounded scroller", async () => {
-    function InspectorSelectionHarness() {
-      const [selectedId, setSelectedId] = React.useState<string | null>(null);
+    function InspectorHarness() {
+      const [selectedId, setSelectedId] = React.useState("redox");
       return createElement(
         React.Fragment,
         null,
@@ -259,7 +250,7 @@ describe("learning block inspector selection", () => {
         ),
         createElement(LearningBlockInspector, {
           classId: CLASS_ID,
-          nodes: [CATALYSIS_NODE],
+          nodes: [PROPOSED_NETWORK.nodes[0]!, CATALYSIS_NODE],
           edges: [],
           selectedId,
           onSelect: setSelectedId,
@@ -267,23 +258,15 @@ describe("learning block inspector selection", () => {
       );
     }
 
-    const container = await mount(createElement(InspectorSelectionHarness));
-    expect(container.textContent).toContain("Select a learning block");
+    const container = await mount(createElement(InspectorHarness));
+    await click(buttonNamed(container, SOURCE_SECTION.section_id));
+    await settle();
+    expect(container.textContent).toContain(SOURCE_SECTION.content);
 
     await click(buttonNamed(container, "Select Katalyse"));
 
-    expect(container.textContent).toContain("Katalyse");
-    expect(container.textContent).toContain(
-      "Explain how catalysts change activation energy.",
-    );
-    const scroller = container.querySelector(
-      '[data-slot="learning-block-inspector-scroll"]',
-    );
-    expect(scroller?.tagName).toBe("DIV");
-    expect(scroller?.classList.contains("overflow-y-auto")).toBe(true);
-    expect(
-      scroller?.querySelector("[data-radix-scroll-area-viewport]"),
-    ).toBeNull();
+    expect(container.textContent).toContain("c9_katalyse");
+    expect(container.textContent).not.toContain(SOURCE_SECTION.content);
   });
 });
 

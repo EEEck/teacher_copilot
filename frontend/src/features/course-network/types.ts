@@ -70,7 +70,10 @@ export type CourseNetwork = {
   updated_at: string;
 };
 
-export type CourseNetworkNode = Node<{ learningBlock: LearningBlock }>;
+export type CourseNetworkNode = Node<{
+  learningBlock: LearningBlock;
+  inspectorSelected?: boolean;
+}>;
 export type CourseNetworkEdge = Edge<{ relation: NetworkEdge["relation"] }>;
 
 export type ReactFlowModel = {

@@ -19,6 +19,7 @@ const nodeTypes: NodeTypes = {
 
 export function CourseNetworkCanvas({
   network,
+  selectedId,
   onSelect,
 }: {
   network: CourseNetwork;
@@ -30,6 +31,10 @@ export function CourseNetworkCanvas({
     return {
       nodes: flow.nodes.map((node) => ({
         ...node,
+        data: {
+          ...node.data,
+          inspectorSelected: node.id === selectedId,
+        },
         type: "learningBlock",
         ariaLabel: `Lernbaustein: ${node.data.learningBlock.title}`,
         draggable: false,
@@ -45,7 +50,7 @@ export function CourseNetworkCanvas({
         reconnectable: false,
       })),
     };
-  }, [network]);
+  }, [network, selectedId]);
 
   const handleGraphKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (!(event.target instanceof Element)) return;

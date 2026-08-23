@@ -20,6 +20,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import type {
@@ -307,10 +308,7 @@ export function LearningBlockInspector({
             <CardTitle className="mt-2 text-lg">{selected.title}</CardTitle>
             <CardDescription>Read-only learning block details</CardDescription>
           </CardHeader>
-          <div
-            data-slot="learning-block-inspector-scroll"
-            className="min-h-0 flex-1 overflow-y-auto"
-          >
+          <ScrollArea className="min-h-0 flex-1">
             <CardContent className="space-y-5 py-4">
               <section>
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -337,6 +335,7 @@ export function LearningBlockInspector({
                   Curriculum sources
                 </h3>
                 <CurriculumSourceLinks
+                  key={selected.id}
                   classId={classId}
                   references={selected.curriculum_refs}
                 />
@@ -403,7 +402,7 @@ export function LearningBlockInspector({
                 )}
               </section>
             </CardContent>
-          </div>
+          </ScrollArea>
         </>
       ) : (
         <Empty className="h-full border-0">

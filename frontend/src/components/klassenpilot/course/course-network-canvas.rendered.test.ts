@@ -98,6 +98,11 @@ function selectionHarness(onSelection: (nodeId: string | null) => void) {
     return createElement(
       React.Fragment,
       null,
+      createElement(
+        "button",
+        { type: "button", onClick: () => setSelectedId("catalysis") },
+        "Select Katalyse from inspector",
+      ),
       createElement("output", null, selectedId ?? "none"),
       createElement(CourseNetworkCanvas, {
         network: NETWORK,
@@ -162,5 +167,23 @@ describe("CourseNetworkCanvas selection", () => {
 
     expect(container.querySelector("output")?.textContent).toBe("catalysis");
     expect(selections.mock.calls).toEqual([["catalysis"]]);
+  });
+
+  it("emphasizes the node selected by the parent inspector without a Flow selection callback", async () => {
+    const selections = vi.fn<(nodeId: string | null) => void>();
+    const container = await mount(selectionHarness(selections));
+    const catalysis = container.querySelector(
+      'article[aria-label="Lernbaustein: Katalyse"]',
+    );
+    const inspectorSelection = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Select Katalyse from inspector",
+    );
+
+    expect(catalysis?.className).not.toContain("ring-2");
+    expect(inspectorSelection).toBeInstanceOf(HTMLButtonElement);
+    await click(inspectorSelection!);
+
+    expect(catalysis?.className).toContain("ring-2");
+    expect(selections).not.toHaveBeenCalled();
   });
 });
