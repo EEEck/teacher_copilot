@@ -9,6 +9,17 @@ program. Detailed implementation plans remain in
 [`docs/superpowers/plans/`](../../docs/superpowers/plans/); ephemeral review and
 test evidence remains ignored under `.superpowers/sdd/`.
 
+## Source documents
+
+These are verbatim promoted copies of the original planning documents. The
+source locations remain canonical while this branch is active; copies make the
+complete handoff portable for future agents.
+
+- [01 — approved product design](01_product_design.md)
+- [02 — delivery program, Epic A–D](02_delivery_program.md)
+- [03 — detailed A1–A3 foundation implementation plan](03_foundation_implementation.md)
+- [04 — current handoff and verified progress](README.md)
+
 ## Product boundary
 
 The MVP is a **class-owned** Chemie 8/9 NTG course network. It has one
