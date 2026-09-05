@@ -43,6 +43,10 @@ _VALIDATION_RESPONSE = {
     "model": ErrorEnvelope,
     "description": "Request or structured draft validation failed.",
 }
+_GENERATION_UNAVAILABLE_RESPONSE = {
+    "model": ErrorEnvelope,
+    "description": "Unusable or timed-out model response; retry without changing memory.",
+}
 
 
 def _network_from_draft(row):
@@ -82,6 +86,10 @@ def _draft_response(row) -> CourseNetworkDraftResponse:
 
 
 def _raise_service_error(exc: Exception) -> None:
+    from app.course_network.generation import CourseGenerationError
+
+    if isinstance(exc, CourseGenerationError):
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     if isinstance(exc, (CourseNetworkConflict, WorkflowDraftConflict)):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if isinstance(exc, KeyError):
@@ -104,7 +112,8 @@ class ReviseSeedRequest(BaseModel):
 @router.post(
     "/classes/{class_id}/course/network/drafts/{draft_id}/revise",
     response_model=CourseNetworkDraftResponse,
-    responses={404: _NOT_FOUND_RESPONSE, 409: _CONFLICT_RESPONSE, 422: _VALIDATION_RESPONSE},
+    responses={404: _NOT_FOUND_RESPONSE, 409: _CONFLICT_RESPONSE, 422: _VALIDATION_RESPONSE,
+               502: _GENERATION_UNAVAILABLE_RESPONSE},
 )
 async def revise_seed(
     class_id: str,

@@ -1178,6 +1178,13 @@ Teachers can inspect class wiki markdown without editing it.
   the full learning goal, not a simpler interpretation of the title. The review
   packet includes a deterministic prerequisite index derived from all `builds_on`
   edges, so multiple prerequisites are visible together. It adds no durable state.
+- Unusable generation responses (invalid model JSON/schema or timeout) return a
+  retryable 502 message without raw provider details. No proposal is saved and no
+  canonical memory is changed by the failed attempt, including seed revision.
+- The map review screen computes its summary from the editable operations and
+  chapter-mapping differences, including mappings removed by retiring a concept.
+  It does not present model-written summaries/coverage claims as the actual change
+  inventory. Model metadata remains available in the draft for inspection.
 - Ordinary planning retains full subject teaching guidance and automatically adds
   up to six concepts and four linked excerpts. It also sees the approved library
   through existing material tools. Library material is not the same set as current

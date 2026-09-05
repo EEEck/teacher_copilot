@@ -42,6 +42,9 @@ Under **Materials**, upload a chapter PDF. Check extracted text, formulas, page
 bounds and section titles. Save corrections, run the document review, and approve
 the chapter. Then **Connect to course map** proposes concepts and section mappings.
 Review the proposal, save any edits, rerun review, then approve the changes.
+The summary counts the actual proposed changes and updates when you reject a row.
+Check that the remaining rows satisfy your request. If generation cannot produce
+a usable proposal, the app asks you to try again; your adopted map stays unchanged.
 
 For each proposal check: does this reuse an existing idea, does the section really
 explain/practise/assess/extend that idea, and does any new prerequisite pass the

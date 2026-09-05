@@ -10,7 +10,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.api.course_network_routes import _raise_service_error
+from app.api.course_network_routes import (
+    _GENERATION_UNAVAILABLE_RESPONSE,
+    _raise_service_error,
+)
 from app.api.errors import ErrorEnvelope
 from app.api.deps import get_request_identity, get_wiki, get_workflow_draft_store
 from app.course_materials.import_service import CourseMaterialImportService
@@ -284,7 +287,10 @@ def asset(class_id: str, material_id: str, asset: str, service=Depends(import_se
         _raise_service_error(exc)
 
 
-@router.post("/classes/{class_id}/course/changes/generate")
+@router.post(
+    "/classes/{class_id}/course/changes/generate",
+    responses={502: _GENERATION_UNAVAILABLE_RESPONSE},
+)
 async def generate_changes(
     class_id: str, body: CourseGenerationRequest, service=Depends(edit_service)
 ):

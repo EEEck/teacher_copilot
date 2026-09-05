@@ -129,8 +129,8 @@ JSON (HTTP 500, no draft/write); a single retry succeeded. That response claimed
 section mappings were included but omitted their typed operations. The prepared
 teacher correction replaced the incomplete proposal through its revision/hash
 update API before review. Generation error presentation and summary/operation
-agreement remain follow-up quality work; this is not evidence of reliable fully
-automatic correction generation.
+agreement prompted the release fixes recorded below; this is not evidence of
+reliable fully automatic correction generation.
 
 The reviewer found a real hydration/polarity gap but also repeatedly claimed
 existing links were absent. Added a deterministic prerequisite index to its packet,
@@ -154,3 +154,32 @@ baseline failures listed in 06 excluded; exit status 0. The frontend suite passe
 225 tests across 50 files, TypeScript passed, and the staged diff passed whitespace
 checks. The commit contains feature source, tests, OpenAPI and documentation only;
 environment files, temporary test directories and the live sandbox wiki are excluded.
+
+## Release fixes after the first push — 2026-09-05
+
+Feature checkpoint `d3e5638` was pushed to `codex/class-course-network-design`.
+The follow-up handles invalid model JSON, invalid output schemas and timeouts with
+a safe retryable 502 response. Offline API tests exercise both adopted-map proposals
+and seed revision: failure publishes nothing, preserves the existing graph/draft
+snapshot, omits provider details from the response, and permits a successful retry.
+The runtime and checked-in OpenAPI error contracts agree.
+
+The review screen now derives concept/connection counts from its editable proposal
+and current graph. Chapter links distinguish additions, edits and removals; unchanged
+links are not counted as additions. Retirement includes implicit removals without
+double-counting explicit ones. Model summary/coverage claims and stale per-mapping
+rationales are no longer presented as the actual change inventory. This does not
+verify that every teacher request was fulfilled or replace chemistry review.
+
+Browser verification used a disposable proposal through the normal draft service
+with an intentionally false model summary. The live UI correctly showed one concept
+edit and zero chapter-link additions. Rejecting the edit immediately updated the
+count to zero and disabled review/approval until saving. The proposal was discarded
+through the browser; canonical revision 4 and its 13 concepts remained unchanged.
+The browser was returned to the course map. No additional model calls were needed.
+
+Validation: course API/generation/review/edit/operation regressions passed; all
+231 frontend tests across 51 files passed, TypeScript passed, and diff checks passed.
+Reused the existing isolated Docker stack and worktree `849f`. Baseline wiki fixtures
+and canonical sandbox wiki files were unchanged during this follow-up; only the
+disposable workflow draft was created and discarded.

@@ -47,4 +47,42 @@ it("shows removals even when a replacement proposal has no mappings", async () =
   await act(async () => root.render(createElement(CourseMaterialLibrary, { classId: "chemie-refreshed" })));
   expect(container.textContent).toContain("These existing connections will be removed");
   expect(container.textContent).toContain("Existing concept (explains)");
+  expect(container.querySelector('[aria-label="Proposed changes"]')?.textContent).toContain("Chapter connections: 0 added, 0 edited, 1 removed");
+});
+
+it("summarizes actual changes and updates after rejection instead of repeating model claims", async () => {
+  vi.mocked(courseApi.changes).mockResolvedValue({ drafts: [{ ...row, draft_id: "changes-1",
+    artifact: { class_id: "chemie", base_revision: 1, summary: "Added three chapter links successfully",
+      operations: [{ op: "update_node", node_id: "existing", changes: { title: "Clearer concept" } }],
+      material_id: "mat_chapter", replacement_mappings: null },
+    runtime: { generation: { coverage_notes: ["Every requested mapping is included"], rationales: [], warnings: [] } },
+  }] });
+  await act(async () => root.render(createElement(CourseMaterialLibrary, { classId: "chemie-summary" })));
+  const summary = () => container.querySelector('[aria-label="Proposed changes"]')?.textContent;
+  expect(summary()).toContain("Concepts: 0 added, 1 edited, 0 retired");
+  expect(summary()).toContain("Chapter connections: 0 added, 0 edited, 0 removed");
+  expect(container.textContent).not.toContain("Added three chapter links successfully");
+  expect(container.textContent).not.toContain("Every requested mapping is included");
+  await act(async () => button("Reject this change").click());
+  expect(summary()).toContain("Concepts: 0 added, 0 edited, 0 retired");
+  expect(button("Approve map changes").disabled).toBe(true);
+});
+
+it("lets the teacher retry a failed generation without losing the approved chapter", async () => {
+  vi.mocked(courseApi.list).mockResolvedValue({ materials: [row.artifact] });
+  vi.spyOn(courseApi, "generate").mockRejectedValueOnce(new Error("Could not generate a usable map proposal. Try again. Your course map has not changed."));
+  await act(async () => root.render(createElement(CourseMaterialLibrary, { classId: "chemie-retry" })));
+  await act(async () => button("Connect to course map").click());
+  expect(container.textContent).toContain("Try again. Your course map has not changed.");
+  expect(button("Connect to course map").disabled).toBe(false);
+  expect(container.textContent).toContain("Catalysis");
+  vi.mocked(courseApi.generate).mockResolvedValue({ ...row, artifact: { class_id: "chemie", base_revision: 1,
+    summary: "Clarify", operations: [], material_id: "mat_chapter", replacement_mappings: [] } });
+  vi.mocked(client.getCourseNetwork).mockResolvedValue({ class_id: "chemie", network: { schema_version: 1,
+    class_id: "chemie", revision: 1, route: { subject: "chemie", grade: 9, branch: "NTG" },
+    nodes: [], edges: [], material_mappings: [], positions: {}, updated_at: "2026-09-05" } });
+  await act(async () => button("Connect to course map").click());
+  expect(container.textContent).toContain("Review map changes");
+  expect(container.textContent).not.toContain("Try again. Your course map has not changed.");
+  expect(button("Approve map changes").disabled).toBe(true);
 });

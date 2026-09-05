@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { LearningBlock, MaterialMapping } from "@/features/course-network/types";
+import type { LearningBlock, MaterialMapping, NetworkEdge } from "@/features/course-network/types";
 import { courseApi } from "@/features/course-network/material-api";
+import { summarizeGraphChanges } from "@/features/course-network/change-summary";
 import { client } from "@/lib/api";
 import { passingReview, type CourseDraft, type CourseMaterial, type GraphChanges, type ImportArtifact } from "@/features/course-network/material-types";
 
@@ -19,6 +20,7 @@ export function CourseMaterialLibrary({ classId }: { classId: string }) {
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
   const [nodes, setNodes] = useState<LearningBlock[]>([]);
   const [existingMappings, setExistingMappings] = useState<MaterialMapping[]>([]);
+  const [existingEdges, setExistingEdges] = useState<NetworkEdge[]>([]);
   const [imports, setImports] = useState<CourseDraft<ImportArtifact>[]>([]);
   const [draft, setDraft] = useState<CourseDraft<ImportArtifact> | null>(null);
   const [artifact, setArtifact] = useState<ImportArtifact | null>(null);
@@ -32,6 +34,7 @@ export function CourseMaterialLibrary({ classId }: { classId: string }) {
     const [library, active, proposals, network] = await Promise.all([courseApi.list(classId), courseApi.imports(classId), courseApi.changes(classId), client.getCourseNetwork(classId)]);
     setNodes(network.network?.nodes.filter(n => n.status !== "retired") || []);
     setExistingMappings(network.network?.material_mappings || []);
+    setExistingEdges(network.network?.edges || []);
     setMaterials(library.materials); setImports(active.drafts);
     if (proposals.drafts[0]) { setChange(proposals.drafts[0]); setChanges(proposals.drafts[0].artifact); }
   }, [classId]);
@@ -101,13 +104,12 @@ export function CourseMaterialLibrary({ classId }: { classId: string }) {
         <h3 className="font-medium">{material.title}</h3>
         <a className="text-sm text-primary underline" href={courseApi.sourceUrl(classId, material.material_id)} target="_blank" rel="noreferrer">Open source PDF</a>
         <div className="flex flex-wrap gap-2">{material.sections.map(section => <Button variant="ghost" key={section.id} onClick={() => void run(async () => { const result = await courseApi.section(classId, material.material_id, section.id); setSectionText(`${material.title} · pages ${result.page_start}–${result.page_end}\n\n${result.content}`); })}>{section.title} · p. {section.page_start}–{section.page_end}</Button>)}</div>
-        <Button variant="outline" disabled={busy} onClick={() => void run(async () => { const row = await courseApi.generate(classId, material.material_id); const current = await client.getCourseNetwork(classId); setNodes(current.network?.nodes.filter(n => n.status !== "retired") || []); setExistingMappings(current.network?.material_mappings || []); setChange(row); setChanges(row.artifact); if (current.network?.revision !== row.artifact.base_revision) throw new Error("The course map changed. Discard this stale proposal and generate it again."); })}>Connect to course map</Button>
+        <Button variant="outline" disabled={busy} onClick={() => void run(async () => { const row = await courseApi.generate(classId, material.material_id); const current = await client.getCourseNetwork(classId); setNodes(current.network?.nodes.filter(n => n.status !== "retired") || []); setExistingMappings(current.network?.material_mappings || []); setExistingEdges(current.network?.edges || []); setChange(row); setChanges(row.artifact); if (current.network?.revision !== row.artifact.base_revision) throw new Error("The course map changed. Discard this stale proposal and generate it again."); })}>Connect to course map</Button>
       </div>)}
       {sectionText && <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-muted p-3 text-sm">{sectionText}</pre>}
     </CardContent></Card>
     {change && changes && <Card><CardHeader><CardTitle>Review map changes</CardTitle></CardHeader><CardContent className="space-y-3">
-      <p>{changes.summary}</p>
-      {change.runtime.generation?.coverage_notes.map((note, i) => <p className="text-sm text-muted-foreground" key={i}>{note}</p>)}
+      <p aria-label="Proposed changes">{summarizeGraphChanges(changes, existingMappings, existingEdges)}</p>
       <p className="text-sm text-muted-foreground">Review each proposed concept and connection. Saving a correction requires a fresh review.</p>
       {!!removedMappings.length && <Alert variant="destructive"><AlertDescription><p>These existing connections will be removed:</p><ul>{removedMappings.map(mapping => <li key={mapping.id}>{materials.find(m => m.material_id === mapping.material_id)?.sections.find(s => s.id === mapping.section_id)?.title || mapping.section_id} → {nodes.find(n => n.id === mapping.node_id)?.title || mapping.node_id} ({mapping.relation})</li>)}</ul></AlertDescription></Alert>}
       {changes.operations.map((operation, index) => <div key={index} className="rounded-lg border border-border p-3"><p>{operation.op.replaceAll("_", " ")}: {"node" in operation ? operation.node.title : "node_id" in operation ? operation.node_id : "edge" in operation ? `${operation.edge.source_id} ${operation.edge.relation} ${operation.edge.target_id}` : operation.edge_id}</p>
@@ -117,7 +119,6 @@ export function CourseMaterialLibrary({ classId }: { classId: string }) {
         {operation.op === "add_node" && <><Label htmlFor={`node-title-${index}`}>Concept title</Label><Input id={`node-title-${index}`} value={operation.node.title} onChange={e => setChanges({ ...changes, operations: changes.operations.map((op, i) => i === index ? { ...operation, node: { ...operation.node, title: e.target.value } } : op) })} /></>}
         <Button variant="ghost" onClick={() => setChanges({ ...changes, operations: changes.operations.filter((_, i) => i !== index) })}>Reject this change</Button></div>)}
       {changes.replacement_mappings?.map((mapping, index) => <div key={mapping.id} className="space-y-2 rounded-lg border border-border p-3"><p>{materials.find(m => m.material_id === mapping.material_id)?.sections.find(s => s.id === mapping.section_id)?.title || mapping.section_id}</p>
-        <p className="text-sm text-muted-foreground">{change.runtime.generation?.rationales.find(r => r.item_id === mapping.id)?.reason}</p>
         <Label>Connect to concept</Label><Select value={mapping.node_id} onValueChange={node_id => setChanges({ ...changes, replacement_mappings: changes.replacement_mappings!.map((m, i) => i === index ? { ...m, node_id, origin: "teacher" } : m) })}><SelectTrigger aria-label="Connect to concept"><SelectValue /></SelectTrigger><SelectContent>{mappingNodes.map(node => <SelectItem key={node.id} value={node.id}>{node.title}</SelectItem>)}</SelectContent></Select>
         <Label>How this section helps</Label><Select value={mapping.relation} onValueChange={relation => setChanges({ ...changes, replacement_mappings: changes.replacement_mappings!.map((m, i) => i === index ? { ...m, relation: relation as MaterialMapping["relation"], origin: "teacher" } : m) })}><SelectTrigger aria-label="How this section helps"><SelectValue /></SelectTrigger><SelectContent>{["explains", "practices", "assesses", "extends"].map(relation => <SelectItem key={relation} value={relation}>{relation}</SelectItem>)}</SelectContent></Select>
         <Label htmlFor={`mapping-${mapping.id}`}>Teacher note</Label><Input id={`mapping-${mapping.id}`} value={mapping.teacher_note} onChange={e => setChanges({ ...changes, replacement_mappings: changes.replacement_mappings!.map((m, i) => i === index ? { ...m, teacher_note: e.target.value, origin: "teacher" } : m) })} />
@@ -125,7 +126,7 @@ export function CourseMaterialLibrary({ classId }: { classId: string }) {
       {change.review && <div><p>{change.review.summary}</p>{change.review.findings.map((finding, i) => <p key={i}>{finding.message}</p>)}</div>}
       <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy || !changesDirty} onClick={() => void run(async () => { const row = await courseApi.saveChanges(classId, change, changes); setChange(row); setChanges(row.artifact); })}>Save map corrections</Button>
         <Button variant="outline" disabled={busy || changesDirty} onClick={() => void run(async () => setChange(await courseApi.reviewChanges(classId, change)))}>Review map proposal</Button>
-        <Button disabled={busy || changesDirty || !passingReview(change)} onClick={() => void run(async () => { const published = await courseApi.commitChanges(classId, change); setNodes(published.nodes.filter(n => n.status !== "retired")); setExistingMappings(published.material_mappings); setChange(null); setChanges(null); setNotice("Course map updated. Your next lesson plan can use these connections."); })}>Approve map changes</Button>
+        <Button disabled={busy || changesDirty || !passingReview(change)} onClick={() => void run(async () => { const published = await courseApi.commitChanges(classId, change); setNodes(published.nodes.filter(n => n.status !== "retired")); setExistingMappings(published.material_mappings); setExistingEdges(published.edges); setChange(null); setChanges(null); setNotice("Course map updated. Your next lesson plan can use these connections."); })}>Approve map changes</Button>
         <ActionLink href={`/classes/${encodeURIComponent(classId)}/course`} variant="outline">View course map</ActionLink>
         <Button variant="ghost" disabled={busy} onClick={() => void run(async () => { await client.discardWorkflowDraft(classId, change.draft_id); setChange(null); setChanges(null); })}>Discard proposal</Button>
       </div>

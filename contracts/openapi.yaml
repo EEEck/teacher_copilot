@@ -235,6 +235,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '502':
+          description: Unusable or timed-out model response; retry without changing memory.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /api/classes/{class_id}/course/network:
     get:
       tags:
@@ -960,6 +966,12 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '422':
           description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '502':
+          description: Unusable or timed-out model response; retry without changing memory.
           content:
             application/json:
               schema:

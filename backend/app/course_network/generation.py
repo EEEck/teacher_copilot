@@ -6,7 +6,8 @@ import asyncio
 from typing import Literal
 
 from agents import Agent, Runner
-from pydantic import BaseModel, ConfigDict, Field
+from agents.exceptions import ModelBehaviorError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.config import get_settings
 from app.course_materials.store import get_course_material, read_course_material_section
@@ -36,6 +37,10 @@ class CourseGenerationResult(BaseModel):
     rationales: list[ChangeRationale] = Field(default_factory=list)
     coverage_notes: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class CourseGenerationError(RuntimeError):
+    """A retryable model response failure, with no proposal or memory publication."""
 
 
 async def generate_course_changes(
@@ -77,28 +82,34 @@ async def generate_course_changes(
         raise ValueError(
             "This material is too large for one proposal; import a smaller chapter"
         )
-    if model_runner:
-        raw = await model_runner(packet)
-    else:
-        from app.teacher_agent.agent import chat_model_settings
+    try:
+        if model_runner:
+            raw = await model_runner(packet)
+        else:
+            from app.teacher_agent.agent import chat_model_settings
 
-        model = settings.resolved_utility_model()
-        agent = Agent(
-            name="Course concept map proposal",
-            model=model,
-            model_settings=chat_model_settings(
-                settings.resolved_utility_effort(), model=model
-            ),
-            instructions=load_skill("course_network"),
-            tools=[],
-            output_type=CourseGenerationResult,
-        )
-        result = await asyncio.wait_for(
-            Runner.run(agent, packet, max_turns=1),
-            timeout=settings.agent_timeout_seconds,
-        )
-        raw = result.final_output
-    result = CourseGenerationResult.model_validate(raw)
+            model = settings.resolved_utility_model()
+            agent = Agent(
+                name="Course concept map proposal",
+                model=model,
+                model_settings=chat_model_settings(
+                    settings.resolved_utility_effort(), model=model
+                ),
+                instructions=load_skill("course_network"),
+                tools=[],
+                output_type=CourseGenerationResult,
+            )
+            result = await asyncio.wait_for(
+                Runner.run(agent, packet, max_turns=1),
+                timeout=settings.agent_timeout_seconds,
+            )
+            raw = result.final_output
+        result = CourseGenerationResult.model_validate(raw)
+    except (ModelBehaviorError, ValidationError, TimeoutError) as exc:
+        raise CourseGenerationError(
+            "Could not generate a usable map proposal. Try again. "
+            "Your course map has not changed."
+        ) from exc
     if result.changes.class_id != class_id:
         raise ValueError("Generated changes cross class scope")
     if result.changes.material_id and result.changes.material_id != request.material_id:
