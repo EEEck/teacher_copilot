@@ -1,24 +1,30 @@
 # Course Network Delivery Handoff
 
-**Updated:** 2026-08-22
+**Updated:** 2026-09-04
 
 **Branch:** `codex/class-course-network-design`
 
-**Purpose:** a concise, tracked handoff for the class-owned course-network
-program. Detailed implementation plans remain in
+**Purpose:** a tracked handoff and shipping entry point for the class-owned course-network
+program. The active shipping scope and implementation plan are linked below.
+Original detailed plans remain in
 [`docs/superpowers/plans/`](../../docs/superpowers/plans/); ephemeral review and
 test evidence remains ignored under `.superpowers/sdd/`.
 
 ## Source documents
 
-These are verbatim promoted copies of the original planning documents. The
-source locations remain canonical while this branch is active; copies make the
-complete handoff portable for future agents.
+Documents 01–03 are promoted copies of the original planning documents.
+Documents 04–05 define the refined scope and execution plan for the next
+end-to-end release. Where the delivery scope or order differs, follow 04–05.
 
 - [01 — approved product design](01_product_design.md)
 - [02 — delivery program, Epic A–D](02_delivery_program.md)
 - [03 — detailed A1–A3 foundation implementation plan](03_foundation_implementation.md)
-- [04 — current handoff and verified progress](README.md)
+- [04 — optimized end-to-end shipping scope](04_shipping_scope.md)
+- [05 — optimized implementation plan](05_shipping_implementation.md)
+- [06 — implementation and validation record](06_shipping_validation.md)
+- [07 — realistic browser acceptance](07_browser_acceptance.md)
+- [Teacher guide — use and review the map](../../docs/course_graph_guide.md)
+- [Current handoff and historical verified progress](README.md)
 
 ## Product boundary
 
@@ -28,9 +34,11 @@ relationships. The class wiki owns the canonical graph at
 `course_network/network.json`; `overview.md` is regenerated for inspection and
 retrieval. React Flow is only a view layer.
 
-This foundation does not add graph editing, a durable materials library,
-question extraction, cross-class reuse, a graph database, or planner retrieval
-yet. Those belong to the later Epic B–D plans.
+The implementation now includes reviewed concept changes, standalone chapter
+imports and mappings, automatic planning context, and saved lesson references.
+Deterministic/live API validation is recorded in 06; realistic browser acceptance
+and the integration fix found during it are recorded in 07.
+Question extraction, cross-class reuse, and graph databases remain excluded.
 
 ## Current progress
 
@@ -40,11 +48,13 @@ yet. Those belong to the later Epic B–D plans.
 | A2 — network/adoption API | Complete and verified | Class-owned canonical network models, reviewed Chemie 8/9 seeds, exact-revision review/adoption, atomic JSON + overview/index publication, and legacy-framework fallback are implemented. |
 | A3 Task 7 — canvas adapter | Complete and reviewed | `@xyflow/react` renders an immutable API view model. Canonical graph data never uses React Flow JSON; missing positions receive deterministic fallback coordinates. |
 | A3 Task 8 — workspace | Complete and reviewed | `/classes/{classId}/course` loads an adopted graph or guides seed review/adoption. It provides a desktop canvas, narrow-screen searchable outline, node inspector, relationship navigation, and class-authorized curriculum-source evidence. |
-| A3 Task 9 | Next | Add the single `Course` action on class home, reconcile frontend/product/backlog docs, then close Epic A through the full acceptance gate. |
+| A3 Task 9 | Browser verified | Class home has the Course action. Materials opens the standalone chapter workspace. |
+| Reviewed materials and changes | Implemented; live API and browser verified | PDF extraction, stable editable sections, exact document approval, generated mappings/concepts, exact map review/publication and recovery. |
+| Planning integration | Implemented; live API and browser verified | Existing planning automatically receives bounded map/material context; plan save records explicit concept/material citations, including exact formatted concept IDs. |
 
-## A3 browser behavior verified
+## Historical A3 browser evidence (before this change)
 
-The current course workspace is intentionally read-only.
+The earlier foundation workspace was intentionally read-only.
 
 - On a wide view, the teacher can pan/zoom/fit the network and select a node.
   The inspector shows its learning goal, description, curriculum evidence, and
@@ -55,43 +65,55 @@ The current course workspace is intentionally read-only.
 - Selecting a related node updates the inspector and canvas emphasis. Opening a
   curriculum source reveals the exact class-authorized source section and its
   provenance; switching nodes clears the prior source panel.
-- `Materials` is visibly disabled as “Coming soon”; the future route is not
-  linked and therefore cannot produce a 404.
+- At that stage `Materials` was disabled. The current implementation enables it;
+  the new route has rendered tests and browser acceptance recorded in 07.
 
 The React Flow selection bug found in browser testing is fixed: React Flow owns
 its own selected state, while the workspace passes only a presentation flag for
 inspector/outline-driven selection. The former feedback loop (`selected` node
 props plus `onSelectionChange`) is not used.
 
-Fresh Task 8 evidence: actual React Flow renderer and workspace tests passed
+Historical Task 8 evidence: actual React Flow renderer and workspace tests passed
 10/10; full frontend suite passed 49 files / 223 tests; TypeScript typecheck
 and diff checks passed. A live browser check selected `Katalyse`, opened its
 curriculum evidence, followed `Builds on Aktivierungsenergie`, confirmed the
 new inspector content and canvas emphasis, and confirmed old source evidence
 was cleared. Final Task 8 re-review: PASS, no findings.
 
-## Immediate next steps
+## Active shipping plan — 2026-09-04
 
-1. Execute A3 Task 9 only: add one class-home `Course` action beside Browse
-   class files; document the route, view-only canvas boundary, and narrow
-   outline behavior. Do not add editing or materials UI in this task.
-2. Run the full Epic A deterministic gate from the worktree:
+The next release is the connected course-knowledge workflow: curriculum map,
+standalone course-material upload, reviewed section-to-concept mappings,
+automatic use in ordinary lesson planning, and saved plan/result references.
+The map serves both teacher inspection and source-grounded agent retrieval.
+A standalone graph-generation chat or viewer is not the release goal.
 
-   ```powershell
-   .\scripts\test.ps1
-   ```
+Read [04 — shipping scope](04_shipping_scope.md), then execute
+[05 — implementation plan](05_shipping_implementation.md). These supersede
+the old sequential B → C → D execution order for the first end-to-end release.
+The original documents remain design references and historical evidence.
 
-3. Run a fresh-sandbox HITL test before Epic B. Start with
-   `./scripts/worktree-stack.cmd up --beta --fresh-wiki --fresh-beta-data`,
-   create Chemie 8a, confirm pre-adoption has no canonical network, review and
-   adopt the seed, inspect desktop canvas/keyboard selection/narrow outline,
-   and verify `course_network/overview.md` in Browse class files. Preserve the
-   tracked baseline wiki and stop only the worktree-scoped Compose project when
-   done.
-4. Only after that acceptance is green, begin Epic B (reviewed graph editing)
-   using `docs/superpowers/plans/2026-08-18-course-network-editing.md`.
+1. Close the foundation: Course entry, relationship semantics, source-scope
+   labels, and fresh acceptance of the existing adoption/viewer implementation.
+2. Add the small reviewed graph-change boundary required by corrections and
+   enrichment, using forms and proposal rows.
+3. Add standalone chapter-sized material imports with stable section references.
+4. Add the backend-owned curriculum-generation/material-enrichment procedure.
+5. Connect document review, mapping review, and source/material inspection.
+6. Add bounded graph/material retrieval to the existing lesson planner.
+7. Persist lesson references and evidence-grounded result associations.
+8. Run the full upload → map → plan → results → next-plan acceptance scenario.
 
-## Later-program order
+The new scope/plan are documentation only. No implementation task or release
+acceptance has been completed under this revised plan. Historical checks here
+must not be presented as fresh verification of the end-to-end feature.
+
+## Original program reference
+
+The original Epic B–D plans retain useful technical detail. Use only the parts
+selected by the optimized plan; a complete canvas editor and whole-book
+structure editor are deferred. Material mappings, automatic planning retrieval,
+and saved lesson references remain required for the first release.
 
 | Epic | Scope | Do not pull forward |
 | --- | --- | --- |
@@ -101,7 +123,8 @@ was cleared. Final Task 8 re-review: PASS, no findings.
 
 ## Local development handoff
 
-The current local stack for browser work is worktree-scoped:
+The previously recorded local stack for browser work is worktree-scoped.
+These addresses were not reverified during the 2026-09-04 planning review:
 
 - Frontend: `http://localhost:3303`
 - Backend health: `http://localhost:8578/api/health`

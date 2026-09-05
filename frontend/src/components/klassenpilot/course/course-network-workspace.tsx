@@ -78,18 +78,19 @@ function CourseWorkspaceHeader({
   classId: string;
   status: string;
 }) {
+  const router = useRouter();
   return (
     <div className="shrink-0">
       <PageHeader
         backHref={`/classes/${encodeURIComponent(classId)}`}
         backLabel="Class"
         title="Course network"
-        description="Inspect the class learning structure and its curriculum evidence. Editing comes later."
+        description="Explore class concepts, curriculum evidence and approved course materials."
         variant="compact"
         trailing={
           <SegmentedToggle
             value="network"
-            onValueChange={() => {}}
+            onValueChange={(value) => { if (value === "materials") router.push(`/classes/${encodeURIComponent(classId)}/course/materials`); }}
             options={[
               { value: "network", label: "Network" },
               {
@@ -97,11 +98,8 @@ function CourseWorkspaceHeader({
                 label: (
                   <span className="inline-flex items-center gap-1">
                     Materials
-                    <span className="text-[10px] font-normal">Coming soon</span>
                   </span>
                 ),
-                disabled: true,
-                disabledReason: "Materials workspace coming soon",
               },
             ]}
             aria-label="Course workspace section"
@@ -113,7 +111,7 @@ function CourseWorkspaceHeader({
           {status}
         </Badge>
         <span className="text-xs text-muted-foreground">
-          Read-only · view state is not saved
+          Partial curriculum scope · canvas positions are not saved
         </span>
       </div>
     </div>
@@ -396,6 +394,7 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
           onSelect={setSelectedId}
           busyAction={busyAction}
           onReview={reviewProposal}
+          onRevise={async () => { if (draft) await runAction("revise", async () => setDraft(await client.reviseCourseNetworkSeed(classId, draft.draft_id, { expected_revision: draft.artifact_revision, expected_hash: draft.artifact_hash }))); }}
           onAdopt={adoptProposal}
           onDiscard={discardProposal}
         />
@@ -425,6 +424,7 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
           </div>
           <LearningBlockInspector
             classId={classId}
+            mappings={network.material_mappings}
             nodes={network.nodes}
             edges={network.edges}
             selectedId={selectedId}

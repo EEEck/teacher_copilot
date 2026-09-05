@@ -528,6 +528,11 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
               ) : null}
             </ActionLink>
           </WorkflowHover>
+          <WorkflowHover label="Explore course concepts, curriculum, and teaching materials.">
+            <ActionLink href={`/classes/${classId}/course`} variant="outline" size="lg" className="w-full justify-center px-3">
+              Course
+            </ActionLink>
+          </WorkflowHover>
           <WorkflowHover label={CLASS_HOME_HOVER.wiki}>
             <ActionLink
               href={`/classes/${classId}/wiki/view`}

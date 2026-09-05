@@ -134,7 +134,7 @@ not part of the pedagogical node contract.
 Relationships are separate records rather than embedded prose. The MVP uses a
 small controlled set, initially:
 
-- `builds_on`: the target depends on or meaningfully builds on the source;
+- `builds_on`: the source depends on or meaningfully builds on the target;
 - `related_to`: the two Lernbausteine have a useful non-prerequisite relation.
 
 The technical plan may choose directed storage for both while rendering

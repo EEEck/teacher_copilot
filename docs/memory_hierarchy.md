@@ -574,6 +574,25 @@ Examples:
   `overview.md`, then appends a `course_network_adopt` log entry and rebuilds
   the index. Opening/reviewing a seed never writes these paths.
 
+## Course content navigation
+
+`wiki/classes/{class_id}/course_network/network.json` owns stable concepts,
+curriculum references and approved material mappings. `overview.md` is derived.
+The graph is a content map, not a second taught-sequence or mastery store.
+
+Standalone reviewed chapters live under `materials/textbooks|personal/{material_id}/`:
+`material.json` contains approval/source metadata and stable section IDs/page spans;
+`document.agent.md` holds the section bodies once, between stable anchors;
+`source.pdf` and `assets/` retain the evidence. Draft OCR remains under workflow
+storage until explicit chapter approval. The existing planner material registry
+includes this approved library alongside current uploads and lesson-linked packages.
+
+`lessons/{date}/course_refs.json` records explicit valid plan citations, the graph
+revision and the actual saved plan hash. It is ignored if the plan hash differs.
+Actual outcomes still live only in teacher-approved `lesson_results.md`. Result
+context is derived at read time; no new mastery, graph-progress or duplicate
+lesson-results store is introduced.
+
 ## Debugging
 
 Use the trace bundle script:

@@ -24,6 +24,7 @@ function lessonSubject({
 }
 
 export function chatRunningTaskLabel(ctx: WorkflowTaskLabelContext): string {
+  if (ctx.mode === "course_material") return "Extracting course material…";
   if (ctx.mode === "memory_sweep") {
     return "Generating memory sweep…";
   }

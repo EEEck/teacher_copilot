@@ -40,6 +40,7 @@ export function PendingTurnNotifier() {
   const drafts = useWorkflowDraftStore((s) => s.draftsById);
 
   const resolveStopped = useCallback(async (item: ActiveWorkItem) => {
+    if (item.kind === "draft_turn" && item.mode === "course_material") return;
     if (item.kind === "memory_sweep") {
       try {
         const review = await client.getMemorySweepReview(item.class_id);

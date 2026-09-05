@@ -29,6 +29,8 @@ import type {
   NetworkEdge,
 } from "@/features/course-network/types";
 import { cn } from "@/lib/utils";
+import { CourseMaterialEvidence } from "./course-material-evidence";
+import type { MaterialMapping } from "@/features/course-network/types";
 import {
   client,
   type CourseNetworkSourceSectionResponse,
@@ -258,6 +260,7 @@ export function LearningBlockInspector({
   selectedId,
   onSelect,
   className,
+  mappings = [],
 }: {
   classId: string;
   nodes: LearningBlock[];
@@ -265,6 +268,7 @@ export function LearningBlockInspector({
   selectedId: string | null;
   onSelect: (nodeId: string) => void;
   className?: string;
+  mappings?: MaterialMapping[];
 }) {
   const selected = nodes.find((node) => node.id === selectedId) ?? null;
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
@@ -341,7 +345,7 @@ export function LearningBlockInspector({
                 />
               </section>
 
-              {selected.material_refs.length ? (
+              {selected.material_refs.length || mappings.some(m => m.node_id === selected.id) ? (
                 <section>
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Material references
@@ -357,11 +361,13 @@ export function LearningBlockInspector({
                             : ` · pp. ${reference.page_start}–${reference.page_end}`;
                       return (
                         <li key={`${reference.material_id}:${reference.section_id}`}>
-                          {reference.material_id} · {reference.section_id}
-                          {pages}
+                          <CourseMaterialEvidence classId={classId} materialId={reference.material_id} sectionId={reference.section_id} label={`${reference.material_id} · ${reference.section_id}${pages}`} />
                         </li>
                       );
                     })}
+                    {mappings.filter(m => m.node_id === selected.id && !selected.material_refs.some(r => r.material_id === m.material_id && r.section_id === m.section_id)).map(mapping => <li key={mapping.id}>
+                      <CourseMaterialEvidence classId={classId} materialId={mapping.material_id} sectionId={mapping.section_id} label={`${mapping.relation}: ${mapping.material_id} · ${mapping.section_id}`} />
+                    </li>)}
                   </ul>
                 </section>
               ) : null}

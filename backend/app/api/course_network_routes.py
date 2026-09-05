@@ -6,6 +6,7 @@ import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from app.api.deps import get_course_network_service
 from app.api.errors import ErrorEnvelope
@@ -89,6 +90,75 @@ def _raise_service_error(exc: Exception) -> None:
     if isinstance(exc, ValueError):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     raise exc
+
+
+class ReviseSeedRequest(BaseModel):
+    teacher_request: str = Field(
+        default="Resolve the current review findings with minimal changes.",
+        max_length=6000,
+    )
+    expected_revision: int
+    expected_hash: str
+
+
+@router.post(
+    "/classes/{class_id}/course/network/drafts/{draft_id}/revise",
+    response_model=CourseNetworkDraftResponse,
+    responses={404: _NOT_FOUND_RESPONSE, 409: _CONFLICT_RESPONSE, 422: _VALIDATION_RESPONSE},
+)
+async def revise_seed(
+    class_id: str,
+    draft_id: str,
+    body: ReviseSeedRequest,
+    service: CourseNetworkServiceDep,
+):
+    from app.course_network.generation import (
+        CourseGenerationRequest,
+        generate_course_changes,
+    )
+    from app.course_network.operations import apply_change_set
+    from app.course_network.edit_service import save_structured_row
+    from app.services.course_network_service import _wiki_adoption_lock
+
+    try:
+        row = service.get_draft(class_id, draft_id)
+        if row.status != "draft":
+            raise WorkflowDraftConflict("Seed is no longer editable")
+        service.workflow_drafts.validate_current_snapshot(
+            draft_id,
+            expected_revision=body.expected_revision,
+            expected_hash=body.expected_hash,
+        )
+        request = CourseGenerationRequest(
+            purpose="curriculum_draft",
+            teacher_request=body.teacher_request
+            + "\nReview findings: "
+            + json.dumps(row.active_review_json),
+        )
+        current = _network_from_draft(row)
+        generated = await generate_course_changes(
+            service.wiki, class_id, request, current
+        )
+        preview = apply_change_set(current, generated.changes, draft=True)
+        with _wiki_adoption_lock(service.wiki.root):
+            row = service._active_draft(class_id, draft_id)
+            service.workflow_drafts.validate_current_snapshot(
+                draft_id,
+                expected_revision=body.expected_revision,
+                expected_hash=body.expected_hash,
+            )
+            if service.wiki.load_course_network(class_id) is not None:
+                raise WorkflowDraftConflict("A network is already adopted")
+            row = save_structured_row(
+                service.workflow_drafts,
+                row,
+                preview.model_dump(mode="json"),
+                runtime=row.runtime_json
+                | {"generation": generated.model_dump(mode="json")},
+            )
+        return _draft_response(row)
+    except Exception as exc:
+        _raise_service_error(exc)
 
 
 @router.get(

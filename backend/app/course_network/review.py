@@ -91,6 +91,16 @@ def build_course_network_review_packet(
         )
     payload = {
         "course_network": document.model_dump(mode="json"),
+        # Keep the complete dependency set adjacent, so review need not reconstruct
+        # multiple prerequisites from a long interleaved edge/source list.
+        "prerequisite_index": {
+            node.id: sorted(
+                edge.target_id
+                for edge in document.edges
+                if edge.source_id == node.id and edge.relation == "builds_on"
+            )
+            for node in document.nodes
+        },
         "trusted_source_excerpts": excerpts,
     }
     return (

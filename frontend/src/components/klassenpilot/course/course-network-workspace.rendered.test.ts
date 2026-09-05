@@ -347,7 +347,7 @@ describe("course network workspace live states", () => {
     expect(buttonNamed(container, "Adopt course network").disabled).toBe(false);
   });
 
-  it("keeps Materials visibly coming soon and non-navigating", async () => {
+  it("opens the class materials workspace", async () => {
     vi.spyOn(client, "getCourseNetwork").mockResolvedValue({
       class_id: CLASS_ID,
       network: ADOPTED_NETWORK,
@@ -358,10 +358,9 @@ describe("course network workspace live states", () => {
     await settle();
 
     const materials = buttonNamed(container, "Materials");
-    expect(materials.textContent).toContain("Coming soon");
-    expect(materials.disabled).toBe(true);
+    expect(materials.disabled).toBe(false);
     await click(materials);
-    expect(navigation.router.push).not.toHaveBeenCalled();
+    expect(navigation.router.push).toHaveBeenCalledWith(`/classes/${CLASS_ID}/course/materials`);
   });
 
   it("renders narrow-screen graph guidance, searchable outline, and inspector together", async () => {

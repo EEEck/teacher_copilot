@@ -659,6 +659,35 @@ class WorkflowDraftStore:
             raise WorkflowDraftConflict("draft_adoption_state_lost")
         return self.get(draft_id)
 
+    def complete_course_material_approval(
+        self,
+        draft_id: str,
+        *,
+        expected_revision: int,
+        expected_hash: str,
+        runtime_json: dict,
+    ) -> WorkflowDraftRow:
+        """Finish an exact reserved publication while preserving the mapping-review draft."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """UPDATE workflow_draft SET status = 'draft', runtime_json = ?, updated_at = ?
+                   WHERE draft_id = ? AND status = 'adopting'
+                     AND artifact_revision = ? AND artifact_hash = ?
+                     AND active_review_revision = ? AND active_review_hash = ?""",
+                (
+                    _dumps(runtime_json),
+                    _utc_now(),
+                    draft_id,
+                    expected_revision,
+                    expected_hash,
+                    expected_revision,
+                    expected_hash,
+                ),
+            )
+        if cursor.rowcount != 1:
+            raise WorkflowDraftConflict("draft_adoption_state_lost")
+        return self.get(draft_id)
+
     def record_course_network_adoption_recovery(
         self,
         draft_id: str,

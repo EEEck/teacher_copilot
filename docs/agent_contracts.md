@@ -1142,6 +1142,60 @@ Teachers can inspect class wiki markdown without editing it.
   in the preview panel.
 - The viewer is read-only; no wiki writes from this surface.
 
+## Course concept map and approved chapter contract
+
+- The class-owned map is a concept/navigation layer over curriculum and materials,
+  not a record of mastery or automatic lesson completion. Its canonical JSON and
+  generated overview remain separate from React Flow view state.
+- The backend-owned `course_network_procedure.md` skill generates bounded typed
+  proposals from route-authorized curriculum, the current graph and approved
+  material sections. Initial seed revision, enrichment and correction calls have
+  no wiki-write tools. Maximum initial graph: 20 nodes; enrichment: eight new nodes.
+- `builds_on` means source depends on target; it is acyclic. `related_to` is
+  symmetric and reversed duplicates are rejected. IDs stay stable; retirement
+  keeps a tombstone and removes active incident edges/mappings.
+- Standalone imports accept a PDF up to 40 MB and 30 selected pages. OCR runs in
+  workflow storage and is not planner-visible. The teacher can correct text and
+  section titles, split/merge sections and exclude sections before review.
+- Document review is pinned to artifact revision/hash. Explicit chapter approval
+  publishes a manifest, one reviewed Markdown body with stable section anchors,
+  original PDF and assets into the class materials library. A failed or discarded
+  import cannot publish a previous review. Approved material is immutable in this
+  first release; another extraction is a new material identity.
+- Mapping/concept proposals are a separate review and teacher approval. They pin
+  the base network revision plus approved material evidence hashes. Edits invalidate
+  review. Publication uses a receipt for retry without incrementing twice or
+  duplicating its audit entry. Class/workspace/source boundaries are checked by
+  the backend, including file reads.
+- Generation and review test each `builds_on` relation against the stated learning
+  goals: the source concept requires the target at this level. Chapter order or
+  a shared curriculum citation alone is insufficient. Basic ideas must not inherit
+  prerequisites from their advanced explanations (for example ionic conductivity
+  does not require hydration energetics). Useful associations use `related_to`.
+  Review checks explanatory gaps within the represented scope without demanding
+  complete annual coverage from a partial map. Missing-link findings must check
+  the supplied edges and indirect paths first; prerequisites are evaluated against
+  the full learning goal, not a simpler interpretation of the title. The review
+  packet includes a deterministic prerequisite index derived from all `builds_on`
+  edges, so multiple prerequisites are visible together. It adds no durable state.
+- Ordinary planning retains full subject teaching guidance and automatically adds
+  up to six concepts and four linked excerpts. It also sees the approved library
+  through existing material tools. Library material is not the same set as current
+  session uploads: a request to summarize an upload does not select the whole library.
+- Plan save records valid explicit `Course: node_id` and `Material: material_id`
+  citations (including Markdown code formatting). Exact canonical concept IDs
+  named as standalone bold or inline-code tokens also count; titles, partial IDs,
+  unknown IDs and retired concepts do not. `course_refs.json` pins the saved
+  plan hash and network revision; a stale sidecar is ignored. Its kind is `planned`.
+  Repeating a failed save rewrites references idempotently. No graph revision changes.
+- Next-lesson context can quote actual approved `lesson_results.md` passages that
+  name a concept, or quote results for a lesson whose saved plan cited that concept.
+  These two relationships are labelled separately. A planned association never
+  establishes coverage. No model-derived mastery/status sidecar is written.
+- OCR work can be resumed after navigation; interrupted extraction has an explicit
+  retry. Completed model proposals/reviews are durable. In-flight generation and
+  review use bounded HTTP calls, not a new general job orchestration system.
+
 ## Deferred Contracts
 
 These are intentionally not part of the MVP contract:

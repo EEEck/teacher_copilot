@@ -495,6 +495,9 @@ def build_plan_chat_prompt_assembly(
         class_id, purpose="plan"
     )
     materials_trace = wiki.build_materials_context_trace(materials_list)
+    from app.course_network.planning import build_course_planning_context
+    course_trace = build_course_planning_context(wiki, class_id,
+        " ".join([rt.lesson_planning_state.lesson_topic or "", *[m.content for m in messages[-3:] if m.role == "user"]]), rt)
     session_state = render_session_state(rt.session_state)
     lesson_state = render_lesson_planning_state(rt.lesson_planning_state)
     current_plan_text = (
@@ -516,7 +519,7 @@ def build_plan_chat_prompt_assembly(
         teacher_context=teacher_trace["text"],
         active_class_core=class_trace["text"],
         active_subject_expert=subject_trace["text"],
-        class_materials=materials_trace["text"]
+        class_materials="\n\n".join(filter(None, [course_trace["text"], materials_trace["text"]]))
         or "- (no uploaded class materials in this plan session)",
         session_state=session_state,
         lesson_state=lesson_state,
@@ -630,12 +633,14 @@ def build_plan_chat_prompt_assembly(
         "user_input_chars": len(user_input["text"]),
         "instructions": rendered_instructions,
         "user_input": user_input["text"],
-        "sections": sections,
+        "sections": sections + [_section(name="Course concept map evidence", function="build_course_planning_context",
+            source=f"wiki/classes/{class_id}/course_network/network.json + approved material sections", text=course_trace["text"])],
         "nested": {
             "teacher_context": teacher_trace,
             "active_class_core": class_trace,
             "active_subject_expert": subject_trace,
             "class_materials": materials_trace,
+            "course_network": course_trace,
             "user_input": user_input,
         },
     }

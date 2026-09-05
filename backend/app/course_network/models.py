@@ -200,7 +200,10 @@ class CourseNetworkDocument(BaseModel):
                 raise ValueError("edge references an unknown node")
             if edge.source_id == edge.target_id:
                 raise ValueError("self-edge is not allowed")
-            semantic_edge = (edge.source_id, edge.target_id, edge.relation)
+            endpoints = (edge.source_id, edge.target_id)
+            if edge.relation == "related_to":
+                endpoints = tuple(sorted(endpoints))
+            semantic_edge = (*endpoints, edge.relation)
             if semantic_edge in semantic_edges:
                 raise ValueError("duplicate semantic edge")
             semantic_edges.add(semantic_edge)

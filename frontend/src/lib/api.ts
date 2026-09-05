@@ -7,7 +7,7 @@ export type {
 } from "@/features/course-network/types";
 
 /** Browser uses localhost; SSR in Docker uses INTERNAL_API_BASE_URL (backend service). */
-function getApiBase(): string {
+export function getApiBase(): string {
   if (typeof window === "undefined") {
     return (
       process.env.INTERNAL_API_BASE_URL ??
@@ -653,7 +653,7 @@ async function raiseApiError(res: Response, options?: ApiOptions): Promise<never
   throw new Error(`API ${res.status}: ${message}`);
 }
 
-async function api<T>(
+export async function api<T>(
   path: string,
   init?: RequestInit,
   options?: ApiOptions,
@@ -680,7 +680,7 @@ async function api<T>(
   return res.json() as Promise<T>;
 }
 
-async function apiForm<T>(
+export async function apiForm<T>(
   path: string,
   form: FormData,
   options?: ApiOptions,
@@ -739,6 +739,8 @@ async function apiStreamPost(path: string, body: object, signal?: AbortSignal): 
 }
 
 export const client = {
+  reviseCourseNetworkSeed: (classId: string, draftId: string, body: { expected_revision: number; expected_hash: string }) =>
+    api<CourseNetworkDraftResponse>(`/api/classes/${encodeURIComponent(classId)}/course/network/drafts/${encodeURIComponent(draftId)}/revise`, { method: "POST", body: JSON.stringify(body) }),
   betaLogin: (inviteCode: string) =>
     api<BetaIdentity>("/api/beta/login", {
       method: "POST",

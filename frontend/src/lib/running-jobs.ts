@@ -1,7 +1,7 @@
 import type { ArtifactMode } from "@/components/assistant-ui/artifact-runtime-config";
 import type { ActiveWorkItem } from "@/lib/api";
 
-export type RunningJobMode = ArtifactMode | "memory_sweep";
+export type RunningJobMode = ArtifactMode | "memory_sweep" | "course_material";
 
 export type RunningJob = {
   /** Stable identity for React keys and dismissal. */
@@ -14,6 +14,7 @@ export type RunningJob = {
 
 /** Where clicking a running job should take the teacher. */
 export function runningJobHref(job: RunningJob): string {
+  if (job.mode === "course_material") return `/classes/${job.classId}/course/materials`;
   if (job.mode === "memory_sweep") return `/classes/${job.classId}/memory-sweep`;
   // Discuss lives in a dock on class home; force it open on arrival.
   if (job.mode === "discuss") return `/classes/${job.classId}?discuss=open`;

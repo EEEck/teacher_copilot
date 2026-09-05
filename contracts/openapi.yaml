@@ -68,7 +68,7 @@ paths:
     get:
       summary: Get an adopted class course network
       parameters:
-        - $ref: '#/components/parameters/ClassId'
+      - $ref: '#/components/parameters/ClassId'
       responses:
         '200':
           description: Adopted network or null when none has been adopted
@@ -84,9 +84,9 @@ paths:
     get:
       summary: Read exact class-authorized curriculum evidence for a course network
       parameters:
-        - $ref: '#/components/parameters/ClassId'
-        - $ref: '#/components/parameters/SourceId'
-        - $ref: '#/components/parameters/SectionId'
+      - $ref: '#/components/parameters/ClassId'
+      - $ref: '#/components/parameters/SourceId'
+      - $ref: '#/components/parameters/SectionId'
       responses:
         '200':
           description: Genuine source section and provenance authorized for the class route
@@ -102,7 +102,7 @@ paths:
     post:
       summary: Open the matching reviewed course-network seed as a structured draft
       parameters:
-        - $ref: '#/components/parameters/ClassId'
+      - $ref: '#/components/parameters/ClassId'
       responses:
         '201':
           description: Structured proposed seed draft
@@ -124,8 +124,8 @@ paths:
     get:
       summary: Get a structured course-network seed draft
       parameters:
-        - $ref: '#/components/parameters/ClassId'
-        - $ref: '#/components/parameters/DraftId'
+      - $ref: '#/components/parameters/ClassId'
+      - $ref: '#/components/parameters/DraftId'
       responses:
         '200':
           description: The persisted draft artifact and its latest review snapshot
@@ -141,8 +141,8 @@ paths:
     post:
       summary: Validate and no-tools review the exact structured seed draft
       parameters:
-        - $ref: '#/components/parameters/ClassId'
-        - $ref: '#/components/parameters/DraftId'
+      - $ref: '#/components/parameters/ClassId'
+      - $ref: '#/components/parameters/DraftId'
       responses:
         '200':
           description: Completed deterministic and no-tools review bound to this artifact revision/hash
@@ -160,8 +160,8 @@ paths:
     post:
       summary: Teacher-approved adoption of the exact reviewed seed revision
       parameters:
-        - $ref: '#/components/parameters/ClassId'
-        - $ref: '#/components/parameters/DraftId'
+      - $ref: '#/components/parameters/ClassId'
+      - $ref: '#/components/parameters/DraftId'
       requestBody:
         required: true
         content:
@@ -185,6 +185,1005 @@ paths:
           $ref: '#/components/responses/NotFoundError'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /api/classes/{class_id}/course/network/drafts/{draft_id}/revise:
+    post:
+      tags:
+      - course-network
+      summary: Revise Seed
+      operationId: revise_seed_api_classes__class_id__course_network_drafts__draft_id__revise_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviseSeedRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNetworkDraftResponse'
+        '404':
+          description: Class, course-network draft, or authorized evidence was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Draft is terminal, adoption is in progress, or review/artifact snapshot is stale.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Request or structured draft validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/network:
+    get:
+      tags:
+      - course-network
+      summary: Get Course Network
+      operationId: get_course_network_api_classes__class_id__course_network_get
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNetworkResponse'
+        '404':
+          description: Class, course-network draft, or authorized evidence was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Request or structured draft validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/network/sources/{source_id}/sections/{section_id}:
+    get:
+      tags:
+      - course-network
+      summary: Get Course Network Source Section
+      operationId: get_course_network_source_section_api_classes__class_id__course_network_sources__source_id__sections__section_id__get
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: source_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Source Id
+      - name: section_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Section Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNetworkSourceSectionResponse'
+        '404':
+          description: Class, course-network draft, or authorized evidence was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Request or structured draft validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/network/drafts:
+    post:
+      tags:
+      - course-network
+      summary: Open Course Network Seed Draft
+      operationId: open_course_network_seed_draft_api_classes__class_id__course_network_drafts_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNetworkDraftResponse'
+        '404':
+          description: Class, course-network draft, or authorized evidence was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: A network was already adopted for this class
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Request or structured draft validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/network/drafts/{draft_id}:
+    get:
+      tags:
+      - course-network
+      summary: Get Course Network Draft
+      operationId: get_course_network_draft_api_classes__class_id__course_network_drafts__draft_id__get
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNetworkDraftResponse'
+        '404':
+          description: Class, course-network draft, or authorized evidence was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Request or structured draft validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/network/drafts/{draft_id}/review:
+    post:
+      tags:
+      - course-network
+      summary: Review Course Network Seed
+      operationId: review_course_network_seed_api_classes__class_id__course_network_drafts__draft_id__review_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNetworkDraftResponse'
+        '404':
+          description: Class, course-network draft, or authorized evidence was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Draft is terminal, adoption is in progress, or review/artifact snapshot is stale.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Request or structured draft validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/network/drafts/{draft_id}/adopt:
+    post:
+      tags:
+      - course-network
+      summary: Adopt Course Network Seed
+      operationId: adopt_course_network_seed_api_classes__class_id__course_network_drafts__draft_id__adopt_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdoptCourseNetworkDraftRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNetworkAdoptionResponse'
+        '404':
+          description: Class, course-network draft, or authorized evidence was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, non-accepted review, or duplicate adoption
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Request or structured draft validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/materials:
+    get:
+      tags:
+      - course-materials
+      summary: Materials
+      operationId: materials_api_classes__class_id__course_materials_get
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/material-imports:
+    get:
+      tags:
+      - course-materials
+      summary: Imports
+      operationId: imports_api_classes__class_id__course_material_imports_get
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      tags:
+      - course-materials
+      summary: Upload
+      operationId: upload_api_classes__class_id__course_material_imports_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_api_classes__class_id__course_material_imports_post'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/material-imports/{draft_id}:
+    get:
+      tags:
+      - course-materials
+      summary: Import Status
+      operationId: import_status_api_classes__class_id__course_material_imports__draft_id__get
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    put:
+      tags:
+      - course-materials
+      summary: Update Import
+      operationId: update_import_api_classes__class_id__course_material_imports__draft_id__put
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterialEdit'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/material-imports/{draft_id}/retry:
+    post:
+      tags:
+      - course-materials
+      summary: Retry Import
+      operationId: retry_import_api_classes__class_id__course_material_imports__draft_id__retry_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/material-imports/{draft_id}/review:
+    post:
+      tags:
+      - course-materials
+      summary: Review Import
+      operationId: review_import_api_classes__class_id__course_material_imports__draft_id__review_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/material-imports/{draft_id}/approve:
+    post:
+      tags:
+      - course-materials
+      summary: Approve Import
+      operationId: approve_import_api_classes__class_id__course_material_imports__draft_id__approve_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Snapshot'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/materials/{material_id}/sections/{section_id}:
+    get:
+      tags:
+      - course-materials
+      summary: Section
+      operationId: section_api_classes__class_id__course_materials__material_id__sections__section_id__get
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Material Id
+      - name: section_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Section Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/materials/{material_id}/files/{asset}:
+    get:
+      tags:
+      - course-materials
+      summary: Asset
+      operationId: asset_api_classes__class_id__course_materials__material_id__files__asset__get
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Material Id
+      - name: asset
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Asset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/changes/generate:
+    post:
+      tags:
+      - course-materials
+      summary: Generate Changes
+      operationId: generate_changes_api_classes__class_id__course_changes_generate_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseGenerationRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/changes:
+    get:
+      tags:
+      - course-materials
+      summary: List Changes
+      operationId: list_changes_api_classes__class_id__course_changes_get
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/changes/{draft_id}:
+    get:
+      tags:
+      - course-materials
+      summary: Get Changes
+      operationId: get_changes_api_classes__class_id__course_changes__draft_id__get
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    put:
+      tags:
+      - course-materials
+      summary: Update Changes
+      operationId: update_changes_api_classes__class_id__course_changes__draft_id__put
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphEdit'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/changes/{draft_id}/review:
+    post:
+      tags:
+      - course-materials
+      summary: Review Changes
+      operationId: review_changes_api_classes__class_id__course_changes__draft_id__review_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/changes/{draft_id}/commit:
+    post:
+      tags:
+      - course-materials
+      summary: Commit Changes
+      operationId: commit_changes_api_classes__class_id__course_changes__draft_id__commit_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Snapshot'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 components:
   parameters:
     ClassId:
@@ -237,20 +1236,28 @@ components:
   schemas:
     CurriculumRouteOption:
       type: object
-      required: [subject, grade, branch]
+      required:
+      - subject
+      - grade
+      - branch
       properties:
         subject:
           type: string
-          enum: [chemie]
+          enum:
+          - chemie
         grade:
           type: integer
-          enum: [8, 9]
+          enum:
+          - 8
+          - 9
         branch:
           type: string
-          enum: [NTG]
+          enum:
+          - NTG
     CurriculumRoutesResponse:
       type: object
-      required: [routes]
+      required:
+      - routes
       properties:
         routes:
           type: array
@@ -258,7 +1265,10 @@ components:
             $ref: '#/components/schemas/CurriculumRouteOption'
     CreateClassRequest:
       type: object
-      required: [label, subject, grade]
+      required:
+      - label
+      - subject
+      - grade
       properties:
         label:
           type: string
@@ -268,12 +1278,15 @@ components:
           type: string
           minLength: 1
           maxLength: 40
-          enum: [chemie]
+          enum:
+          - chemie
         grade:
           type: integer
           minimum: 1
           maximum: 13
-          enum: [8, 9]
+          enum:
+          - 8
+          - 9
         section:
           type: string
           maxLength: 1
@@ -305,278 +1318,460 @@ components:
             type: string
             minLength: 1
             maxLength: 120
-            pattern: '^[^|\r\n]+$'
+            pattern: ^[^|\r\n]+$
           default: []
     ErrorBody:
-      type: object
-      required: [type, message]
       properties:
         type:
           type: string
+          title: Type
         message:
           type: string
+          title: Message
         detail:
-          type: [string, 'null']
-    ErrorEnvelope:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Detail
       type: object
-      required: [error]
+      required:
+      - type
+      - message
+      title: ErrorBody
+    ErrorEnvelope:
       properties:
         error:
           $ref: '#/components/schemas/ErrorBody'
-    CourseNetworkResponse:
       type: object
-      required: [class_id, network]
+      required:
+      - error
+      title: ErrorEnvelope
+    CourseNetworkResponse:
       properties:
         class_id:
           type: string
+          title: Class Id
         network:
-          oneOf:
-            - $ref: '#/components/schemas/CourseNetworkDocument'
-            - type: 'null'
-          description: Canonical adopted document, or null before adoption.
+          anyOf:
+          - $ref: '#/components/schemas/CourseNetworkDocument'
+          - type: 'null'
+      type: object
+      required:
+      - class_id
+      title: CourseNetworkResponse
     CourseNetworkRoute:
       type: object
-      required: [subject, grade, branch]
+      required:
+      - subject
+      - grade
+      - branch
       properties:
         subject:
           type: string
-          enum: [chemie]
+          enum:
+          - chemie
         grade:
           type: integer
-          enum: [8, 9]
+          enum:
+          - 8
+          - 9
         branch:
           type: string
-          enum: [NTG]
+          enum:
+          - NTG
     CurriculumReference:
-      type: object
-      required: [source_id, section_id]
       properties:
         source_id:
           type: string
+          title: Source Id
         section_id:
           type: string
-    CourseNetworkSourceProvenance:
+          title: Section Id
       type: object
-      required: [authority, jurisdiction, canonical_url, retrieved_at, version_label, content_hash]
+      required:
+      - source_id
+      - section_id
+      title: CurriculumReference
+    CourseNetworkSourceProvenance:
       properties:
         authority:
           type: string
+          title: Authority
         jurisdiction:
           type: string
+          title: Jurisdiction
         canonical_url:
           type: string
-          format: uri
+          title: Canonical Url
         retrieved_at:
           type: string
+          title: Retrieved At
         version_label:
           type: string
+          title: Version Label
         content_hash:
           type: string
-    CourseNetworkSourceSectionResponse:
+          title: Content Hash
       type: object
-      required: [source_id, source_title, section_id, section_title, content, provenance]
+      required:
+      - authority
+      - jurisdiction
+      - canonical_url
+      - retrieved_at
+      - version_label
+      - content_hash
+      title: CourseNetworkSourceProvenance
+    CourseNetworkSourceSectionResponse:
       properties:
         source_id:
           type: string
+          title: Source Id
         source_title:
           type: string
+          title: Source Title
         section_id:
           type: string
+          title: Section Id
         section_title:
           type: string
+          title: Section Title
         content:
           type: string
+          title: Content
         provenance:
           $ref: '#/components/schemas/CourseNetworkSourceProvenance'
-    MaterialSectionReference:
       type: object
-      required: [material_id, section_id]
+      required:
+      - source_id
+      - source_title
+      - section_id
+      - section_title
+      - content
+      - provenance
+      title: CourseNetworkSourceSectionResponse
+    MaterialSectionReference:
       properties:
         material_id:
           type: string
+          title: Material Id
         section_id:
           type: string
+          title: Section Id
         page_start:
-          type: [integer, 'null']
-          minimum: 1
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Page Start
         page_end:
-          type: [integer, 'null']
-          minimum: 1
-    LearningBlock:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Page End
       type: object
-      required: [id, title, origin, status]
+      required:
+      - material_id
+      - section_id
+      title: MaterialSectionReference
+    LearningBlock:
       properties:
         id:
           type: string
+          title: Id
         title:
           type: string
+          title: Title
         description:
           type: string
+          title: Description
+          default: ''
         learning_goal:
           type: string
+          title: Learning Goal
+          default: ''
         curriculum_refs:
-          type: array
           items:
             $ref: '#/components/schemas/CurriculumReference'
-        material_refs:
           type: array
+          title: Curriculum Refs
+        material_refs:
           items:
             $ref: '#/components/schemas/MaterialSectionReference'
+          type: array
+          title: Material Refs
         origin:
           type: string
-          enum: [curriculum, teacher, material]
+          enum:
+          - curriculum
+          - teacher
+          - material
+          title: Origin
+          default: teacher
         status:
           type: string
-          enum: [proposed, adopted, retired]
-    NetworkEdge:
+          enum:
+          - proposed
+          - adopted
+          - retired
+          title: Status
+          default: adopted
       type: object
-      required: [id, source_id, target_id, relation, origin]
+      required:
+      - id
+      - title
+      title: LearningBlock
+      description: One teacher-facing Lernbaustein in a class course network.
+    NetworkEdge:
       properties:
         id:
           type: string
+          title: Id
         source_id:
           type: string
+          title: Source Id
         target_id:
           type: string
+          title: Target Id
         relation:
           type: string
-          enum: [builds_on, related_to]
+          enum:
+          - builds_on
+          - related_to
+          title: Relation
         curriculum_refs:
-          type: array
           items:
             $ref: '#/components/schemas/CurriculumReference'
-        material_refs:
           type: array
+          title: Curriculum Refs
+        material_refs:
           items:
             $ref: '#/components/schemas/MaterialSectionReference'
+          type: array
+          title: Material Refs
         origin:
           type: string
-          enum: [curriculum, teacher, material]
-    MaterialMapping:
+          enum:
+          - curriculum
+          - teacher
+          - material
+          title: Origin
+          default: teacher
       type: object
-      required: [id, material_id, section_id, node_id, relation, origin]
+      required:
+      - id
+      - source_id
+      - target_id
+      - relation
+      title: NetworkEdge
+    MaterialMapping:
       properties:
         id:
           type: string
+          title: Id
         material_id:
           type: string
+          title: Material Id
         section_id:
           type: string
+          title: Section Id
         node_id:
           type: string
+          title: Node Id
         relation:
           type: string
-          enum: [explains, practices, assesses, extends]
+          enum:
+          - explains
+          - practices
+          - assesses
+          - extends
+          title: Relation
         confidence:
-          type: [number, 'null']
-          minimum: 0
-          maximum: 1
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Confidence
         teacher_note:
           type: string
+          title: Teacher Note
+          default: ''
         origin:
           type: string
-          enum: [agent, teacher]
-    CanvasPosition:
+          enum:
+          - agent
+          - teacher
+          title: Origin
       type: object
-      required: [x, y]
+      required:
+      - id
+      - material_id
+      - section_id
+      - node_id
+      - relation
+      - origin
+      title: MaterialMapping
+    CanvasPosition:
       properties:
         x:
           type: number
+          title: X
         y:
           type: number
+          title: Y
+      type: object
+      required:
+      - x
+      - y
+      title: CanvasPosition
     CourseNetworkDocument:
-      type: object
-      required: [schema_version, class_id, route, revision, nodes, edges, material_mappings, positions, updated_at]
       properties:
         schema_version:
           type: integer
           const: 1
+          title: Schema Version
+          default: 1
         class_id:
           type: string
+          title: Class Id
         route:
-          $ref: '#/components/schemas/CourseNetworkRoute'
+          $ref: '#/components/schemas/CurriculumRouteRef'
         revision:
           type: integer
-          minimum: 1
+          minimum: 1.0
+          title: Revision
+          default: 1
         nodes:
-          type: array
-          items:
-            allOf:
-              - $ref: '#/components/schemas/LearningBlock'
-              - type: object
-                properties:
-                  status:
-                    type: string
-                    enum: [adopted, retired]
-        edges:
-          type: array
-          items:
-            $ref: '#/components/schemas/NetworkEdge'
-        material_mappings:
-          type: array
-          items:
-            $ref: '#/components/schemas/MaterialMapping'
-        positions:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/CanvasPosition'
-        updated_at:
-          type: string
-          format: date-time
-    CourseNetworkDraftDocument:
-      type: object
-      description: Proposed seed document; nodes have proposed status before teacher adoption.
-      required: [schema_version, class_id, route, revision, nodes, edges, material_mappings, positions, updated_at]
-      properties:
-        schema_version:
-          type: integer
-          const: 1
-        class_id:
-          type: string
-        route:
-          $ref: '#/components/schemas/CourseNetworkRoute'
-        revision:
-          type: integer
-          minimum: 0
-        nodes:
-          type: array
           items:
             $ref: '#/components/schemas/LearningBlock'
-        edges:
           type: array
+          title: Nodes
+        edges:
           items:
             $ref: '#/components/schemas/NetworkEdge'
-        material_mappings:
           type: array
+          title: Edges
+        material_mappings:
           items:
             $ref: '#/components/schemas/MaterialMapping'
+          type: array
+          title: Material Mappings
         positions:
-          type: object
           additionalProperties:
             $ref: '#/components/schemas/CanvasPosition'
+          type: object
+          title: Positions
         updated_at:
           type: string
           format: date-time
-    CourseNetworkReviewFinding:
+          title: Updated At
       type: object
-      required: [code, message, severity, path]
+      required:
+      - class_id
+      - route
+      - updated_at
+      title: CourseNetworkDocument
+      description: 'Canonical course-network data for one class.
+
+
+        ``for_draft_seed`` is the sole construction path that permits proposed
+
+        nodes. Ordinary construction represents a canonical document and rejects
+
+        them before any durable write can occur.'
+    CourseNetworkDraftDocument:
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+          title: Schema Version
+        class_id:
+          type: string
+          title: Class Id
+        route:
+          $ref: '#/components/schemas/CurriculumRouteRef'
+        revision:
+          type: integer
+          minimum: 0.0
+          title: Revision
+        nodes:
+          items:
+            $ref: '#/components/schemas/LearningBlock'
+          type: array
+          title: Nodes
+        edges:
+          items:
+            $ref: '#/components/schemas/NetworkEdge'
+          type: array
+          title: Edges
+        material_mappings:
+          items:
+            $ref: '#/components/schemas/MaterialMapping'
+          type: array
+          title: Material Mappings
+        positions:
+          additionalProperties:
+            $ref: '#/components/schemas/CanvasPosition'
+          type: object
+          title: Positions
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+      - schema_version
+      - class_id
+      - route
+      - revision
+      - nodes
+      - edges
+      - material_mappings
+      - positions
+      - updated_at
+      title: CourseNetworkDraftDocument
+      description: Typed transport view of a proposed course-network seed.
+    CourseNetworkReviewFinding:
       properties:
         code:
           type: string
+          title: Code
         message:
           type: string
+          title: Message
         severity:
           type: string
-          enum: [note, block]
+          enum:
+          - note
+          - block
+          title: Severity
+          default: note
         path:
           type: string
+          title: Path
+          default: ''
+      type: object
+      required:
+      - code
+      - message
+      title: CourseNetworkReviewFinding
     CourseNetworkReview:
       type: object
-      required: [decision, summary, findings, artifact_revision, artifact_hash, deterministic]
+      required:
+      - decision
+      - summary
+      - findings
+      - artifact_revision
+      - artifact_hash
+      - deterministic
       properties:
         decision:
           type: string
-          enum: [accept, revise, block]
+          enum:
+          - accept
+          - revise
+          - block
         summary:
           type: string
         findings:
@@ -590,55 +1785,86 @@ components:
         deterministic:
           type: boolean
     CourseNetworkDraftResponse:
-      type: object
-      required: [draft_id, class_id, status, artifact_markdown, artifact_revision, artifact_hash, backend_session_id, network, review]
       properties:
         draft_id:
           type: string
+          title: Draft Id
         class_id:
           type: string
+          title: Class Id
         status:
           type: string
+          title: Status
         artifact_markdown:
           type: string
-          description: Compact, order-stable JSON for the proposed seed artifact.
+          title: Artifact Markdown
         artifact_revision:
           type: integer
+          title: Artifact Revision
         artifact_hash:
           type: string
+          title: Artifact Hash
         backend_session_id:
           type: string
+          title: Backend Session Id
         network:
           $ref: '#/components/schemas/CourseNetworkDraftDocument'
         review:
-          oneOf:
-            - $ref: '#/components/schemas/CourseNetworkReview'
-            - type: 'null'
-    AdoptCourseNetworkDraftRequest:
+          anyOf:
+          - $ref: '#/components/schemas/CourseNetworkReviewResult'
+          - type: 'null'
       type: object
-      required: [expected_revision, expected_hash]
+      required:
+      - draft_id
+      - class_id
+      - status
+      - artifact_markdown
+      - artifact_revision
+      - artifact_hash
+      - backend_session_id
+      - network
+      title: CourseNetworkDraftResponse
+    AdoptCourseNetworkDraftRequest:
       properties:
         expected_revision:
           type: integer
-          minimum: 0
+          minimum: 0.0
+          title: Expected Revision
         expected_hash:
           type: string
           minLength: 1
-    CourseNetworkAdoptionResponse:
+          title: Expected Hash
       type: object
-      required: [class_id, draft_id, log_entry_id, network]
+      required:
+      - expected_revision
+      - expected_hash
+      title: AdoptCourseNetworkDraftRequest
+    CourseNetworkAdoptionResponse:
       properties:
         class_id:
           type: string
+          title: Class Id
         draft_id:
           type: string
+          title: Draft Id
         log_entry_id:
           type: string
+          title: Log Entry Id
         network:
           $ref: '#/components/schemas/CourseNetworkDocument'
+      type: object
+      required:
+      - class_id
+      - draft_id
+      - log_entry_id
+      - network
+      title: CourseNetworkAdoptionResponse
     ClassSummary:
       type: object
-      required: [id, label, subject]
+      required:
+      - id
+      - label
+      - subject
       properties:
         id:
           type: string
@@ -646,4 +1872,439 @@ components:
           type: string
         subject:
           type: string
-          enum: [chemie]
+          enum:
+          - chemie
+    Snapshot:
+      properties:
+        expected_revision:
+          type: integer
+          title: Expected Revision
+        expected_hash:
+          type: string
+          title: Expected Hash
+      type: object
+      required:
+      - expected_revision
+      - expected_hash
+      title: Snapshot
+    GraphEdit:
+      properties:
+        expected_revision:
+          type: integer
+          title: Expected Revision
+        expected_hash:
+          type: string
+          title: Expected Hash
+        changes:
+          $ref: '#/components/schemas/NetworkChangeSet'
+      type: object
+      required:
+      - expected_revision
+      - expected_hash
+      - changes
+      title: GraphEdit
+    NetworkChangeSet:
+      properties:
+        class_id:
+          type: string
+          title: Class Id
+        base_revision:
+          type: integer
+          minimum: 1.0
+          title: Base Revision
+        summary:
+          type: string
+          title: Summary
+        operations:
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/AddNode'
+            - $ref: '#/components/schemas/UpdateNode'
+            - $ref: '#/components/schemas/RetireNode'
+            - $ref: '#/components/schemas/AddEdge'
+            - $ref: '#/components/schemas/RemoveEdge'
+            discriminator:
+              propertyName: op
+              mapping:
+                add_edge: '#/components/schemas/AddEdge'
+                add_node: '#/components/schemas/AddNode'
+                remove_edge: '#/components/schemas/RemoveEdge'
+                retire_node: '#/components/schemas/RetireNode'
+                update_node: '#/components/schemas/UpdateNode'
+          type: array
+          title: Operations
+        material_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Material Id
+        replacement_mappings:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/MaterialMapping'
+            type: array
+          - type: 'null'
+          title: Replacement Mappings
+      additionalProperties: false
+      type: object
+      required:
+      - class_id
+      - base_revision
+      - summary
+      title: NetworkChangeSet
+    RemoveEdge:
+      properties:
+        op:
+          type: string
+          const: remove_edge
+          title: Op
+        edge_id:
+          type: string
+          title: Edge Id
+      type: object
+      required:
+      - op
+      - edge_id
+      title: RemoveEdge
+    AddEdge:
+      properties:
+        op:
+          type: string
+          const: add_edge
+          title: Op
+        edge:
+          $ref: '#/components/schemas/NetworkEdge'
+      type: object
+      required:
+      - op
+      - edge
+      title: AddEdge
+    RetireNode:
+      properties:
+        op:
+          type: string
+          const: retire_node
+          title: Op
+        node_id:
+          type: string
+          title: Node Id
+      type: object
+      required:
+      - op
+      - node_id
+      title: RetireNode
+    UpdateNode:
+      properties:
+        op:
+          type: string
+          const: update_node
+          title: Op
+        node_id:
+          type: string
+          title: Node Id
+        changes:
+          $ref: '#/components/schemas/LearningBlockPatch'
+      type: object
+      required:
+      - op
+      - node_id
+      - changes
+      title: UpdateNode
+    LearningBlockPatch:
+      properties:
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        learning_goal:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Learning Goal
+        curriculum_refs:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/CurriculumReference'
+            type: array
+          - type: 'null'
+          title: Curriculum Refs
+        material_refs:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/MaterialSectionReference'
+            type: array
+          - type: 'null'
+          title: Material Refs
+      additionalProperties: false
+      type: object
+      title: LearningBlockPatch
+    AddNode:
+      properties:
+        op:
+          type: string
+          const: add_node
+          title: Op
+        node:
+          $ref: '#/components/schemas/LearningBlock'
+      type: object
+      required:
+      - op
+      - node
+      title: AddNode
+    CourseGenerationRequest:
+      properties:
+        purpose:
+          type: string
+          enum:
+          - curriculum_draft
+          - material_enrichment
+          - correction
+          title: Purpose
+        teacher_request:
+          type: string
+          maxLength: 6000
+          title: Teacher Request
+          default: ''
+        material_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Material Id
+      additionalProperties: false
+      type: object
+      required:
+      - purpose
+      title: CourseGenerationRequest
+    MaterialEdit:
+      properties:
+        expected_revision:
+          type: integer
+          title: Expected Revision
+        expected_hash:
+          type: string
+          title: Expected Hash
+        artifact:
+          $ref: '#/components/schemas/MaterialImportArtifact'
+      type: object
+      required:
+      - expected_revision
+      - expected_hash
+      - artifact
+      title: MaterialEdit
+    MaterialImportArtifact:
+      properties:
+        class_id:
+          type: string
+          title: Class Id
+        material_id:
+          type: string
+          title: Material Id
+        title:
+          type: string
+          maxLength: 300
+          minLength: 1
+          title: Title
+        arm:
+          type: string
+          enum:
+          - textbook
+          - personal
+          title: Arm
+        source_filename:
+          type: string
+          title: Source Filename
+        source_hash:
+          type: string
+          title: Source Hash
+          default: ''
+        sections:
+          items:
+            $ref: '#/components/schemas/SectionDraft'
+          type: array
+          title: Sections
+      additionalProperties: false
+      type: object
+      required:
+      - class_id
+      - material_id
+      - title
+      - arm
+      - source_filename
+      title: MaterialImportArtifact
+    SectionDraft:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          maxLength: 300
+          minLength: 1
+          title: Title
+        page_start:
+          type: integer
+          minimum: 1.0
+          title: Page Start
+        page_end:
+          type: integer
+          minimum: 1.0
+          title: Page End
+        summary:
+          type: string
+          maxLength: 1200
+          title: Summary
+          default: ''
+        content:
+          type: string
+          maxLength: 60000
+          minLength: 1
+          title: Content
+        included:
+          type: boolean
+          title: Included
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - title
+      - page_start
+      - page_end
+      - content
+      title: SectionDraft
+    Body_upload_api_classes__class_id__course_material_imports_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+        title:
+          type: string
+          title: Title
+          default: ''
+        arm:
+          type: string
+          title: Arm
+          default: personal
+        pages:
+          type: string
+          title: Pages
+          default: ''
+      type: object
+      required:
+      - file
+      title: Body_upload_api_classes__class_id__course_material_imports_post
+    CurriculumRouteRef:
+      properties:
+        subject:
+          type: string
+          title: Subject
+        grade:
+          type: integer
+          title: Grade
+        branch:
+          type: string
+          title: Branch
+      type: object
+      required:
+      - subject
+      - grade
+      - branch
+      title: CurriculumRouteRef
+      description: The reviewed Chemie 8/9 NTG route owned by the network contract.
+    CourseNetworkReviewResult:
+      properties:
+        decision:
+          type: string
+          enum:
+          - accept
+          - revise
+          - block
+          title: Decision
+        summary:
+          type: string
+          title: Summary
+        findings:
+          items:
+            $ref: '#/components/schemas/CourseNetworkReviewFinding'
+          type: array
+          title: Findings
+        artifact_revision:
+          type: integer
+          minimum: 0.0
+          title: Artifact Revision
+        artifact_hash:
+          type: string
+          minLength: 1
+          title: Artifact Hash
+        deterministic:
+          type: boolean
+          title: Deterministic
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - decision
+      - summary
+      - artifact_revision
+      - artifact_hash
+      title: CourseNetworkReviewResult
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ReviseSeedRequest:
+      properties:
+        teacher_request:
+          type: string
+          maxLength: 6000
+          title: Teacher Request
+          default: Resolve the current review findings with minimal changes.
+        expected_revision:
+          type: integer
+          title: Expected Revision
+        expected_hash:
+          type: string
+          title: Expected Hash
+      type: object
+      required:
+      - expected_revision
+      - expected_hash
+      title: ReviseSeedRequest

@@ -158,6 +158,7 @@ class PlanRuntime:
     raw_store: dict[str, str] = field(default_factory=dict)
     memory_candidates: list[MemoryCandidate] = field(default_factory=list)
     materials: list[SessionMaterialEntry] = field(default_factory=list)
+    course_context: dict[str, Any] = field(default_factory=dict)
     excluded_core_keys: list[str] = field(default_factory=list)
     plan_version: int = 0
     last_change_summary: str = ""

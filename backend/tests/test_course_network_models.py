@@ -82,6 +82,13 @@ def test_network_document_rejects_duplicate_semantic_edges():
         _document(nodes=[_node(), _node("c8-rate")], edges=[edge, duplicate])
 
 
+def test_related_relationship_rejects_reversed_duplicate():
+    first = NetworkEdge(id="related-1", source_id="c8-energy", target_id="c8-rate", relation="related_to")
+    reverse = NetworkEdge(id="related-2", source_id="c8-rate", target_id="c8-energy", relation="related_to")
+    with pytest.raises(ValueError, match="duplicate semantic edge"):
+        _document(nodes=[_node(), _node("c8-rate")], edges=[first, reverse])
+
+
 def test_network_document_rejects_duplicate_material_mappings():
     mapping = MaterialMapping(
         id="map-textbook-energy",

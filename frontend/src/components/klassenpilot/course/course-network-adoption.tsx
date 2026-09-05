@@ -21,7 +21,7 @@ import { Spinner } from "@/components/ui/spinner";
 import type { CourseNetworkDraftResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-export type CourseNetworkAdoptionAction = "review" | "adopt" | "discard";
+export type CourseNetworkAdoptionAction = "review" | "revise" | "adopt" | "discard";
 
 export function isExactCourseNetworkReview(
   draft: CourseNetworkDraftResponse,
@@ -69,7 +69,7 @@ function decisionPresentation(draft: CourseNetworkDraftResponse) {
   if (draft.review.decision === "revise") {
     return {
       label: "Revision needed",
-      description: "The reviewer found changes that are outside this read-only seed flow.",
+      description: "Revise the proposal to address these findings, then review it again.",
       variant: "outline" as const,
     };
   }
@@ -87,6 +87,7 @@ export function CourseNetworkAdoption({
   onSelect,
   busyAction,
   onReview,
+  onRevise,
   onAdopt,
   onDiscard,
 }: {
@@ -96,6 +97,7 @@ export function CourseNetworkAdoption({
   onSelect: (nodeId: string) => void;
   busyAction: CourseNetworkAdoptionAction | null;
   onReview: () => Promise<void>;
+  onRevise?: () => Promise<void>;
   onAdopt: () => Promise<void>;
   onDiscard: () => Promise<void>;
 }) {
@@ -288,6 +290,7 @@ export function CourseNetworkAdoption({
               {busyAction === "review" ? <Spinner aria-label="Reviewing proposal" /> : null}
               {draft.review && !exactReview ? "Review again" : "Review proposal"}
             </Button>
+            {onRevise && draft.review?.decision !== "accept" && <Button variant="outline" disabled={busy} onClick={() => void onRevise()}>Revise proposal</Button>}
             <Button
               type="button"
               variant={exactPassingReview ? "default" : "outline"}

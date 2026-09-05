@@ -41,6 +41,29 @@ class StubReviewer:
         )
 
 
+def test_review_packet_lists_all_prerequisites_in_dependency_direction(wiki):
+    from app.course_network.review import build_course_network_review_packet
+
+    document = load_seed_for_class(wiki, CLASS_ID)
+    document.edges.append(NetworkEdge(
+        id="hydration-builds-on-water", source_id="salt-hydration",
+        target_id="water-and-solvents", relation="builds_on",
+    ))
+    # One concept has two real prerequisites; an association is not a third.
+    document.edges.append(NetworkEdge(
+        id="hydration-related-to-models", source_id="salt-hydration",
+        target_id="evidence-and-models", relation="related_to",
+    ))
+    packet = build_course_network_review_packet(wiki, CLASS_ID, document)
+    payload = json.loads(packet.split("```json\n", 1)[1].rsplit("\n```", 1)[0])
+    index = payload["prerequisite_index"]
+    assert index["salt-hydration"] == ["particle-interactions", "water-and-solvents"]
+    assert "salt-hydration" not in index["water-and-solvents"]
+    assert index["particle-interactions"] == []
+    assert set(index) == {node.id for node in document.nodes}
+    assert payload["course_network"] == document.model_dump(mode="json")
+
+
 class WaitingReviewer(StubReviewer):
     def __init__(self) -> None:
         super().__init__()

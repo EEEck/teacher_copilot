@@ -26,3 +26,11 @@ When this plan session has uploaded class materials (textbook or personal):
 8. Materials are separate from trusted curriculum sources (`search_trusted_sources`).
    Use materials tools for textbook/worksheet content; trusted-source tools for official
    Bavaria/KMK claims.
+# Approved course library
+
+Items marked `course library` are previously approved class materials, available
+without a new upload. Use relevant sections for the current topic; the rule to
+cover every remaining session upload does not mean summarize the entire library.
+Course concept-map evidence can supply a few relevant sections automatically.
+Read more through the existing material tools when needed. Preserve precise
+material IDs and section IDs, and cite the material actually used in the plan.

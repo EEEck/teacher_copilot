@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Mistral Document OCR for class materials (v1.2). Empty = OCR disabled.
     mistral_api_key: SecretStr = SecretStr("")
     mistral_ocr_model: str = "mistral-ocr-latest"
+    course_import_max_pages: int = 30
+    course_generation_max_nodes: int = 20
+    course_enrichment_max_nodes: int = 8
     # Two model ids. STRONG is the newest/best model; CHEAP is the small model.
     # Set the ids here when a newer model ships. Which call class uses which, and
     # at what reasoning effort, is decided by MODEL_PROFILE below.

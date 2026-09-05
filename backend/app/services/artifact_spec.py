@@ -420,6 +420,7 @@ def _plan_runtime_dump(runtime: Any) -> dict:
         "raw_store": dict(runtime.raw_store),
         "memory_candidates": [candidate.model_dump() for candidate in runtime.memory_candidates],
         "materials": runtime.materials_payload(),
+        "course_context": dict(runtime.course_context),
         "excluded_core_keys": list(runtime.excluded_core_keys),
         "plan_version": runtime.plan_version,
         "last_change_summary": runtime.last_change_summary,
@@ -431,6 +432,7 @@ def _plan_runtime_load(data: dict) -> PlanRuntime:
     runtime = PlanRuntime()
     if not isinstance(data, dict):
         return runtime
+    runtime.course_context = _dict_field(data, "course_context")
     runtime.session_state = SessionState(**_dict_field(data, "session_state"))
     runtime.lesson_planning_state = LessonPlanningState(
         **_dict_field(data, "lesson_planning_state")

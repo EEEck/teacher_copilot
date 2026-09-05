@@ -10,6 +10,7 @@ from app.teacher_agent.skills.loader import (
 
 def test_local_skill_filenames_are_product_neutral():
     assert loader._SKILL_FILES == {
+        "course_network": "course_network_procedure.md",
         "lesson_planning": "lesson_planning_procedure.md",
         "differentiation": "lesson_differentiation_procedure.md",
         "materials_use": "materials_use_procedure.md",

@@ -237,6 +237,27 @@ scenario design in
 Incident write-up (races, stuck Still-working, fixes):  
 [`docs/chat_message_issue.md`](../docs/chat_message_issue.md).
 
+## Course workspace
+
+The class-home Course action opens `/classes/{classId}/course`. Existing canvas,
+outline and inspector remain the map view. A seed can be reviewed, revised through
+the backend procedure, reviewed again and adopted. Materials navigation opens
+`/classes/{classId}/course/materials` independently of a plan session.
+
+`components/klassenpilot/course/course-material-library.tsx` composes shared UI
+primitives for upload, resumable extraction, section corrections and approval,
+the approved library, and separate map-proposal review. Typed transport helpers
+live in `features/course-network/material-{types,api}.ts`; they reuse the existing
+authenticated API/error helpers. Local edits disable approval until saved and
+reviewed at their exact revision/hash. The node inspector uses shared material
+evidence controls to read an authorized section and open its original PDF.
+
+Extraction is registered as `course_material` in the existing Running display
+and resumes from the materials workspace. It does not hydrate an ingest chat.
+Generation/review actions show local busy state and persist completed drafts.
+Rendered tests exercise exact-review approval gating and enabled navigation;
+browser validation of the new workspace is tracked separately in the course plan.
+
 ## Design system
 
 See [`DESIGN.md`](DESIGN.md). Prefer `components/ui/` and shared klassenpilot

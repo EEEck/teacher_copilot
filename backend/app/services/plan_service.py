@@ -445,7 +445,10 @@ class PlanService:
         # draft stays undated.
         stamped_markdown = self.wiki.normalize_plan_target_date(plan_markdown, lesson_date)
         title = self.wiki.extract_title(stamped_markdown) or "Lesson plan"
+        from app.course_network.lesson_refs import build_plan_course_refs, write_plan_course_refs
+        course_refs = build_plan_course_refs(self.wiki, class_id, stamped_markdown)
         path = self.wiki.save_lesson_plan(class_id, lesson_date, stamped_markdown)
+        write_plan_course_refs(self.wiki, class_id, lesson_date, stamped_markdown, course_refs)
         promoted_ids: list[str] = []
         if session.runtime and session.runtime.materials:
             for entry in list(session.runtime.materials):
@@ -466,6 +469,12 @@ class PlanService:
                     material_ids=promoted_ids,
                 )
             self.core._persist_session(session)
+        if course_refs and course_refs["material_ids"]:
+            from app.services.materials_scratch import load_lesson_material_ids
+            promoted_ids = sorted(set(promoted_ids) | set(course_refs["material_ids"]) |
+                set(load_lesson_material_ids(self.wiki.root, class_id, lesson_date)))
+            write_lesson_materials_json(wiki_root=self.wiki.root, class_id=class_id,
+                lesson_date=lesson_date, material_ids=promoted_ids)
         self.core.set_status(req.session_id, PlanSessionStatus.saved.value)
         if self.workflow_drafts is not None and session.draft_id:
             self.workflow_drafts.mark_saved(session.draft_id)

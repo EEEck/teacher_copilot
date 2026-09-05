@@ -131,11 +131,13 @@ from app.teacher_agent.executive_verification import (
 )
 from app.teacher_agent.wiki_store import WikiStore
 from app.api.course_network_routes import router as course_network_router
+from app.api.course_material_routes import router as course_material_router
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 router.include_router(course_network_router)
+router.include_router(course_material_router)
 
 _COPILOT_PROFILE_LABELS = {
     "avoid",
