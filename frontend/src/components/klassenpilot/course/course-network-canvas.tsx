@@ -1,11 +1,19 @@
 "use client";
 
-import { useMemo, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
+} from "react";
 import {
   Background,
   BackgroundVariant,
   Controls,
   ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
   type NodeTypes,
 } from "@xyflow/react";
 
@@ -17,6 +25,36 @@ const nodeTypes: NodeTypes = {
   learningBlock: LearningBlockNode,
 };
 
+const FIT_VIEW = { padding: 0.16, maxZoom: 1 } as const;
+
+function FitViewOnResize({
+  target,
+}: {
+  target: RefObject<HTMLElement | null>;
+}) {
+  const { fitView } = useReactFlow();
+
+  useLayoutEffect(() => {
+    const pane = target.current;
+    if (!pane) return;
+
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        void fitView(FIT_VIEW);
+      });
+    });
+    observer.observe(pane);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [fitView, target]);
+
+  return null;
+}
+
 export function CourseNetworkCanvas({
   network,
   selectedId,
@@ -26,6 +64,7 @@ export function CourseNetworkCanvas({
   selectedId: string | null;
   onSelect: (nodeId: string | null) => void;
 }) {
+  const frameRef = useRef<HTMLDivElement>(null);
   const model = useMemo(() => {
     const flow = toReactFlowModel(network);
     return {
@@ -68,36 +107,42 @@ export function CourseNetworkCanvas({
   };
 
   return (
-    <div
-      role="region"
-      aria-label="Course network graph"
-      className="course-network-flow h-full min-h-[32rem] overflow-hidden rounded-xl border border-border bg-background shadow-sm"
-      onKeyDownCapture={handleGraphKeyDown}
-    >
-      <ReactFlow
-        nodes={model.nodes}
-        edges={model.edges}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
-        minZoom={0.25}
-        maxZoom={1.5}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        nodesFocusable
-        edgesFocusable={false}
-        edgesReconnectable={false}
-        elementsSelectable
-        deleteKeyCode={null}
-        multiSelectionKeyCode={null}
-        onNodeClick={(_, node) => onSelect(node.id)}
-        onPaneClick={() => onSelect(null)}
-        proOptions={{ hideAttribution: true }}
-        aria-label="Read-only course network"
+    <ReactFlowProvider>
+      <div
+        ref={frameRef}
+        role="region"
+        aria-label="Course network graph"
+        className="course-network-flow h-full min-h-0 overflow-hidden rounded-xl border border-border bg-background shadow-sm"
+        onKeyDownCapture={handleGraphKeyDown}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-        <Controls showInteractive={false} aria-label="Graph view controls" />
-      </ReactFlow>
-    </div>
+        <ReactFlow
+          nodes={model.nodes}
+          edges={model.edges}
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={FIT_VIEW}
+          minZoom={0.1}
+          maxZoom={1.5}
+          zoomOnScroll={false}
+          preventScrolling={false}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          nodesFocusable
+          edgesFocusable={false}
+          edgesReconnectable={false}
+          elementsSelectable
+          deleteKeyCode={null}
+          multiSelectionKeyCode={null}
+          onNodeClick={(_, node) => onSelect(node.id)}
+          onPaneClick={() => onSelect(null)}
+          proOptions={{ hideAttribution: true }}
+          aria-label="Read-only course network"
+        >
+          <FitViewOnResize target={frameRef} />
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+          <Controls showInteractive={false} aria-label="Graph view controls" />
+        </ReactFlow>
+      </div>
+    </ReactFlowProvider>
   );
 }

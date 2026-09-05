@@ -1,8 +1,8 @@
 # Course Network Delivery Handoff
 
-**Updated:** 2026-08-22
+**Updated:** 2026-09-04
 
-**Branch:** `codex/class-course-network-design`
+**Branch:** `cursor/5c01f259` (continues `codex/class-course-network-design`)
 
 **Purpose:** a concise, tracked handoff for the class-owned course-network
 program. Detailed implementation plans remain in
@@ -39,8 +39,8 @@ yet. Those belong to the later Epic B–D plans.
 | A1 — class provisioning | Complete and verified | A teacher can create a deterministic Chemie 8/9 NTG class. Provisioning creates the expected class wiki shell, rejects duplicates with the canonical error envelope, and does not call an LLM or external service. |
 | A2 — network/adoption API | Complete and verified | Class-owned canonical network models, reviewed Chemie 8/9 seeds, exact-revision review/adoption, atomic JSON + overview/index publication, and legacy-framework fallback are implemented. |
 | A3 Task 7 — canvas adapter | Complete and reviewed | `@xyflow/react` renders an immutable API view model. Canonical graph data never uses React Flow JSON; missing positions receive deterministic fallback coordinates. |
-| A3 Task 8 — workspace | Complete and reviewed | `/classes/{classId}/course` loads an adopted graph or guides seed review/adoption. It provides a desktop canvas, narrow-screen searchable outline, node inspector, relationship navigation, and class-authorized curriculum-source evidence. |
-| A3 Task 9 | Next | Add the single `Course` action on class home, reconcile frontend/product/backlog docs, then close Epic A through the full acceptance gate. |
+| A3 Task 8 — workspace | Complete, with 2026-09-04 HITL layout follow-up | `/classes/{classId}/course` loads an adopted graph or guides seed review/adoption. It provides a canvas from `sm` (640px), a narrower-than-`sm` searchable outline, node inspector, relationship navigation, and class-authorized curriculum-source evidence. The page scrolls; connection cards are the last inspector section. |
+| A3 Task 9 | Next — not started | Add the single `Course` action on class home, reconcile frontend/product/backlog docs, then close Epic A through the full acceptance gate. |
 
 ## A3 browser behavior verified
 
@@ -48,15 +48,39 @@ The current course workspace is intentionally read-only.
 
 - On a wide view, the teacher can pan/zoom/fit the network and select a node.
   The inspector shows its learning goal, description, curriculum evidence, and
-  graph relationships.
-- On a narrow view, the app deliberately substitutes a searchable outline plus
-  the same inspector rather than forcing an imprecise graph canvas into a small
-  window.
+  graph relationships. For a selected block, **Connections** is the last
+  inspector section; there is no hidden panel under those cards.
+- From `sm` (640px) the canvas stays visible. Below `sm` the app substitutes a
+  searchable outline plus the same inspector.
 - Selecting a related node updates the inspector and canvas emphasis. Opening a
   curriculum source reveals the exact class-authorized source section and its
   provenance; switching nodes clears the prior source panel.
 - `Materials` is visibly disabled as “Coming soon”; the future route is not
   linked and therefore cannot produce a 404.
+
+### HITL layout follow-up (2026-09-04)
+
+Verified in a ~667×710 Cursor browser pane on adopted Chemie 8a:
+
+- Flush `main` and the course workspace allow page scroll so the inspector is
+  not clipped at the window edge.
+- Graph handles stay in layout at every canvas breakpoint. A previous
+  `display: none` rule below 768px collapsed every React Flow edge to a point.
+- Fit-view reruns on canvas resize; wheel over the graph does not steal page
+  scroll (`zoomOnScroll={false}`, `preventScrolling={false}`).
+
+This follow-up does **not** close Task 9 or Epic A. Known leftovers from the
+same HITL pass:
+
+- There is still no class-home `Course` button; the workspace is URL-only.
+- Seed review can return `revise` with notes only, which disables both Review
+  and Adopt and leaves the teacher with Discard. Chemie 8a in the local
+  sandbox was operator-accepted; that is not a product fix.
+- Browse class files still does not show `course_network/overview.md`
+  (`kind: course_network` is omitted from the wiki viewer).
+- Full `.\scripts\test.ps1` and the fresh-sandbox Epic A HITL gate have not
+  been rerun after this layout follow-up. Focused course-network Vitest files
+  in the frontend container passed.
 
 The React Flow selection bug found in browser testing is fixed: React Flow owns
 its own selected state, while the workspace passes only a presentation flag for
@@ -103,9 +127,9 @@ was cleared. Final Task 8 re-review: PASS, no findings.
 
 The current local stack for browser work is worktree-scoped:
 
-- Frontend: `http://localhost:3303`
-- Backend health: `http://localhost:8578/api/health`
-- Compose project: `kp_teacher_agent_v2_64977d`
+- Frontend: `http://localhost:3228`
+- Backend health: `http://localhost:8830/api/health`
+- Compose project: `kp_9bv6_54edd4`
 - Mutable test wiki: `backend/teacher_wiki_sandbox/`
 
 The user’s manually created/adopted Chemie 8a lives only in that sandbox and is
@@ -153,6 +177,8 @@ live pytest cases; it is not a default development setting.
 - A3 adapter: `b11d9db`, corrected by `29ed293`.
 - A3 workspace and review fixes: `b37a051`, `8202124`.
 - A3 React Flow selection stabilization and coherence: `00b7c40`, `2d21263`.
+- A3 HITL layout follow-up (narrow-pane edges + page scroll): `cursor/5c01f259`
+  after `9e4df80`.
 
 Before completing A3, make the final Epic A verification report explicit about
 the exact commits tested and whether the sandbox wiki changed. Do not treat

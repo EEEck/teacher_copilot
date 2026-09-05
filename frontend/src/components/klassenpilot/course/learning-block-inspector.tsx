@@ -20,7 +20,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import type {
@@ -289,7 +288,7 @@ export function LearningBlockInspector({
 
   return (
     <Card
-      className={cn("h-full min-h-[20rem] min-w-0 gap-0 py-0", className)}
+      className={cn("min-w-0 gap-0 overflow-visible py-0", className)}
       aria-label="Learning block inspector"
     >
       {selected ? (
@@ -308,8 +307,7 @@ export function LearningBlockInspector({
             <CardTitle className="mt-2 text-lg">{selected.title}</CardTitle>
             <CardDescription>Read-only learning block details</CardDescription>
           </CardHeader>
-          <ScrollArea className="min-h-0 flex-1">
-            <CardContent className="space-y-5 py-4">
+          <CardContent className="space-y-5 py-4 pb-8">
               <section>
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Learning goal
@@ -401,8 +399,7 @@ export function LearningBlockInspector({
                   </p>
                 )}
               </section>
-            </CardContent>
-          </ScrollArea>
+          </CardContent>
         </>
       ) : (
         <Empty className="h-full border-0">

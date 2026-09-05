@@ -16,14 +16,41 @@ describe("course network workspace composition", () => {
     expect(workspace).toContain("CourseNetworkCanvas");
     expect(workspace).toContain("CourseNetworkOutline");
     expect(workspace).toContain("LearningBlockInspector");
+    expect(workspace).toContain("sm:grid-cols-");
+    expect(readFileSync(new URL("../../layout/app-shell.tsx", import.meta.url), "utf8")).toContain(
+      'flush ? "overflow-y-auto px-3 py-2"',
+    );
   });
 
   it("keeps the React Flow canvas affordances together", () => {
     const canvas = source("course-network-canvas.tsx");
 
     expect(canvas).toContain("ReactFlow");
+    expect(canvas).toContain("ReactFlowProvider");
     expect(canvas).toContain("Background");
     expect(canvas).toContain("Controls");
+    expect(canvas).toContain("minZoom={0.1}");
+    expect(canvas).toContain("FitViewOnResize");
+    expect(canvas).toContain("preventScrolling={false}");
+    expect(canvas).toContain("zoomOnScroll={false}");
+  });
+
+  it("lets inspector details grow with the page instead of a nested pane", () => {
+    const inspector = source("learning-block-inspector.tsx");
+
+    expect(inspector).not.toContain("overflow-y-auto");
+    expect(inspector).not.toContain("min-h-[20rem]");
+  });
+
+  it("does not hide graph handles with display none", () => {
+    const styles = readFileSync(
+      new URL("../../../app/globals.css", import.meta.url),
+      "utf8",
+    );
+    const handleBlock = styles.slice(styles.indexOf(".course-network-handle"));
+
+    expect(handleBlock).toContain("pointer-events: none");
+    expect(handleBlock).not.toMatch(/display:\s*none/);
   });
 });
 

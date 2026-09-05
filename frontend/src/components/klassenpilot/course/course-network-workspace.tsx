@@ -51,7 +51,7 @@ const CourseNetworkCanvas = dynamic(
     ssr: false,
     loading: () => (
       <Skeleton
-        className="h-full min-h-[32rem] rounded-xl border border-border"
+        className="h-full min-h-0 rounded-xl border border-border"
         aria-label="Loading course network graph"
       />
     ),
@@ -122,10 +122,10 @@ function CourseWorkspaceHeader({
 
 function CourseNetworkLoading({ classId }: { classId: string }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col" aria-busy="true">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden" aria-busy="true">
       <CourseWorkspaceHeader classId={classId} status="Loading" />
-      <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[minmax(0,1fr)_360px]">
-        <Skeleton className="min-h-[32rem] rounded-xl" />
+      <div className="grid min-h-0 flex-1 overflow-hidden sm:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:grid-cols-[minmax(0,1fr)_360px]">
+        <Skeleton className="h-full min-h-0 rounded-xl" />
         <div className="space-y-3 rounded-xl border border-border p-4">
           <Skeleton className="h-5 w-32" />
           <Skeleton className="h-8 w-full" />
@@ -368,7 +368,7 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-col">
       <CourseWorkspaceHeader classId={classId} status={status} />
 
       {error ? (
@@ -400,15 +400,15 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
           onDiscard={discardProposal}
         />
       ) : network && network.nodes.length ? (
-        <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="hidden min-h-0 md:block">
+        <div className="grid items-start gap-3 pb-4 sm:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] sm:gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="hidden min-h-[24rem] overflow-hidden sm:sticky sm:top-0 sm:block sm:h-[min(70dvh,36rem)]">
             <CourseNetworkCanvas
               network={network}
               selectedId={selectedId}
               onSelect={setSelectedId}
             />
           </div>
-          <div className="space-y-3 md:hidden">
+          <div className="flex flex-col gap-3 sm:hidden">
             <Alert className="border-border bg-muted">
               <AlertTitle>Outline view on smaller screens</AlertTitle>
               <AlertDescription>
@@ -420,7 +420,6 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
               nodes={network.nodes}
               selectedId={selectedId}
               onSelect={setSelectedId}
-              className="min-h-[24rem]"
             />
           </div>
           <LearningBlockInspector
@@ -429,7 +428,6 @@ export function CourseNetworkWorkspace({ classId }: { classId: string }) {
             edges={network.edges}
             selectedId={selectedId}
             onSelect={setSelectedId}
-            className="min-h-[24rem] md:min-h-0"
           />
         </div>
       ) : network ? (

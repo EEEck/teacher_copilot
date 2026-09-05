@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-17-class-course-network-design.md`
 
-## Delivery status — 2026-08-22
+## Delivery status — 2026-09-04
 
 This is an in-progress branch status, not a claim that the feature has merged
 or shipped. The durable agent handoff is
@@ -21,13 +21,15 @@ or shipped. The durable agent handoff is
 - **A2 — complete and verified:** canonical class-owned network, reviewed
   Chemie 8/9 seed adoption, atomic persistence, index/overview compilation,
   and API acceptance.
-- **A3 Tasks 7–8 — complete and reviewed:** read-only React Flow workspace,
-  outline fallback, inspector, adoption surface, and class-authorized
-  curriculum-source evidence. The desktop graph interaction was live-browser
-  tested after the React Flow selection fix.
+- **A3 Tasks 7–8 — complete and reviewed, plus a 2026-09-04 HITL layout
+  follow-up:** read-only React Flow workspace, outline below `sm`, inspector,
+  adoption surface, and class-authorized curriculum-source evidence. A narrow
+  Cursor pane now keeps graph edges visible and lets the page scroll to the
+  last connection cards. This does not close Task 9.
 - **A3 Task 9 and the Epic A final gate remain:** add the class-home Course
   entry and documentation, then run the full Epic A deterministic and fresh
-  HITL acceptance before starting Epic B.
+  HITL acceptance before starting Epic B. Seed-review `revise`+notes can still
+  trap adoption; the wiki viewer still omits `course_network` pages.
 
 ## Global Constraints
 

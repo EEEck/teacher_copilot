@@ -114,10 +114,11 @@
     fill: hsl(var(--background));
   }
 
-  @media (max-width: 767px) {
-    .course-network-handle {
-      display: none !important;
-    }
+  /* Keep handles in layout. `display: none` makes React Flow collapse every
+     edge to a point. The canvas is visible from `sm` (640px); hiding handles
+     below `md` broke connections in the 640–767px pane. */
+  .course-network-handle {
+    pointer-events: none;
   }
 
   .docs-canvas {

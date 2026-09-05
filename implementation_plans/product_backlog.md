@@ -211,7 +211,9 @@ delivery program. Move individual capabilities into Shipped only when their PR
 and focused documentation updates merge.
 
 Current branch handoff and verified in-progress status:
-[`course_network/README.md`](course_network/README.md). This is deliberately
+[`course_network/README.md`](course_network/README.md) (updated 2026-09-04).
+A1–A2 and A3 Tasks 7–8 are on `cursor/5c01f259`; A3 Task 9 (class-home
+`Course` action + docs) and the Epic A gate are not done. This is deliberately
 separate from Shipped until the relevant PRs merge and their final acceptance
 gates pass.
 
