@@ -29,7 +29,10 @@ or shipped. The durable agent handoff is
 - **A3 Task 9 and the Epic A final gate remain:** add the class-home Course
   entry and documentation, then run the full Epic A deterministic and fresh
   HITL acceptance before starting Epic B. Seed-review `revise`+notes can still
-  trap adoption; the wiki viewer still omits `course_network` pages.
+  trap adoption; the wiki viewer still omits `course_network` pages. The
+  adopted Chemie 8a graph used for HITL is tracked under
+  [`fixtures/chemie_8a_2026_27/`](fixtures/chemie_8a_2026_27/), not in the
+  seed wiki.
 
 ## Global Constraints
 

@@ -1,0 +1,365 @@
+{
+  "class_id": "chemie_8a_2026_27",
+  "edges": [
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "id": "dalton-model-builds-on-reaction-observation",
+      "material_refs": [],
+      "origin": "curriculum",
+      "relation": "builds_on",
+      "source_id": "dalton-atom-model",
+      "target_id": "reaction-observation"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "id": "mass-conservation-builds-on-dalton-model",
+      "material_refs": [],
+      "origin": "curriculum",
+      "relation": "builds_on",
+      "source_id": "mass-conservation",
+      "target_id": "dalton-atom-model"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "id": "reaction-equations-build-on-dalton-model",
+      "material_refs": [],
+      "origin": "curriculum",
+      "relation": "builds_on",
+      "source_id": "reaction-equations",
+      "target_id": "dalton-atom-model"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "id": "reaction-energy-builds-on-reaction-observation",
+      "material_refs": [],
+      "origin": "curriculum",
+      "relation": "builds_on",
+      "source_id": "reaction-energy",
+      "target_id": "reaction-observation"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "id": "energy-profiles-build-on-reaction-energy",
+      "material_refs": [],
+      "origin": "curriculum",
+      "relation": "builds_on",
+      "source_id": "energy-profiles",
+      "target_id": "reaction-energy"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "id": "activation-energy-builds-on-energy-profiles",
+      "material_refs": [],
+      "origin": "curriculum",
+      "relation": "builds_on",
+      "source_id": "activation-energy",
+      "target_id": "energy-profiles"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "id": "catalysis-builds-on-activation-energy",
+      "material_refs": [],
+      "origin": "curriculum",
+      "relation": "builds_on",
+      "source_id": "catalysis",
+      "target_id": "activation-energy"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "id": "avogadro-hypothesis-builds-on-dalton-model",
+      "material_refs": [],
+      "origin": "curriculum",
+      "relation": "builds_on",
+      "source_id": "avogadro-hypothesis",
+      "target_id": "dalton-atom-model"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "id": "amount-of-substance-builds-on-avogadro-hypothesis",
+      "material_refs": [],
+      "origin": "curriculum",
+      "relation": "builds_on",
+      "source_id": "amount-of-substance",
+      "target_id": "avogadro-hypothesis"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "id": "molar-quantities-build-on-amount-of-substance",
+      "material_refs": [],
+      "origin": "curriculum",
+      "relation": "builds_on",
+      "source_id": "molar-mass-and-molar-volume",
+      "target_id": "amount-of-substance"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "id": "stoichiometry-builds-on-reaction-equations",
+      "material_refs": [],
+      "origin": "curriculum",
+      "relation": "builds_on",
+      "source_id": "stoichiometry",
+      "target_id": "reaction-equations"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "id": "stoichiometry-builds-on-molar-quantities",
+      "material_refs": [],
+      "origin": "curriculum",
+      "relation": "builds_on",
+      "source_id": "stoichiometry",
+      "target_id": "molar-mass-and-molar-volume"
+    }
+  ],
+  "material_mappings": [],
+  "nodes": [
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "description": "Chemische Reaktionen als Stoffänderung mit Energieumsatz von physikalischen Vorgängen abgrenzen.",
+      "id": "reaction-observation",
+      "learning_goal": "Beobachtbare Stoff- und Energieänderungen als Kennzeichen einer chemischen Reaktion beschreiben.",
+      "material_refs": [],
+      "origin": "curriculum",
+      "status": "adopted",
+      "title": "Stoff- und Energieumsatz bei chemischen Reaktionen"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "description": "Stoffänderungen auf der Teilchenebene durch die Umgruppierung von Atomen erklären.",
+      "id": "dalton-atom-model",
+      "learning_goal": "Das Daltonsche Atommodell nutzen, um Reaktionen auf der Teilchenebene zu deuten.",
+      "material_refs": [],
+      "origin": "curriculum",
+      "status": "adopted",
+      "title": "Daltonsches Atommodell und Umgruppierung von Atomen"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "description": "Die Erhaltung der Masse mit dem Dalton-Modell und der Umgruppierung von Atomen begründen.",
+      "id": "mass-conservation",
+      "learning_goal": "Massenerhaltung in offenen und geschlossenen Versuchssystemen erklären.",
+      "material_refs": [],
+      "origin": "curriculum",
+      "status": "adopted",
+      "title": "Massenerhaltung bei chemischen Reaktionen"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "description": "Einfache Molekülreaktionen mit Symbolen, Formeln und ausgeglichenen Reaktionsgleichungen darstellen.",
+      "id": "reaction-equations",
+      "learning_goal": "Aus einer Teilchen- oder Stoffbeschreibung eine passende einfache Reaktionsgleichung ableiten.",
+      "material_refs": [],
+      "origin": "curriculum",
+      "status": "adopted",
+      "title": "Reaktionsgleichungen und Formelsprache"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "description": "Energieänderungen bei chemischen Reaktionen als Wärme, Arbeit oder Strahlung klassifizieren.",
+      "id": "reaction-energy",
+      "learning_goal": "Exotherme und endotherme Reaktionen anhand von Beobachtungen und Energieumsätzen unterscheiden.",
+      "material_refs": [],
+      "origin": "curriculum",
+      "status": "adopted",
+      "title": "Reaktionsenergie: exotherm und endotherm"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "description": "Energieänderungen bei Reaktionen und katalysierten Reaktionen grafisch darstellen.",
+      "id": "energy-profiles",
+      "learning_goal": "Ein Energieprofil lesen und den Energieumsatz einer Reaktion beschreiben.",
+      "material_refs": [],
+      "origin": "curriculum",
+      "status": "adopted",
+      "title": "Energieprofile chemischer Reaktionen"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "description": "Die Aktivierung chemischer Reaktionen als Energiebarriere einordnen.",
+      "id": "activation-energy",
+      "learning_goal": "Erklären, weshalb eine energetisch mögliche Reaktion eine Aktivierung benötigen kann.",
+      "material_refs": [],
+      "origin": "curriculum",
+      "status": "adopted",
+      "title": "Aktivierungsenergie"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "description": "Katalysierte Reaktionen mit nicht katalysierten Reaktionen über ihre Aktivierung und Energieprofile vergleichen.",
+      "id": "catalysis",
+      "learning_goal": "Die Wirkung eines Katalysators auf den Reaktionsweg im Energieprofil erklären.",
+      "material_refs": [],
+      "origin": "curriculum",
+      "status": "adopted",
+      "title": "Katalyse"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "description": "Molekülformeln gasförmiger Elemente und Verbindungen aus Volumenverhältnissen bei Gasreaktionen erschließen.",
+      "id": "avogadro-hypothesis",
+      "learning_goal": "Die Avogadro-Hypothese zum Deuten einfacher Gasreaktionen verwenden.",
+      "material_refs": [],
+      "origin": "curriculum",
+      "status": "adopted",
+      "title": "Avogadro-Hypothese und Volumengesetze"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "description": "Stoffmenge, Teilchenzahl, Masse und Volumen als Quantitätsgrößen bei Molekülreaktionen verknüpfen.",
+      "id": "amount-of-substance",
+      "learning_goal": "Die Stoffmenge als Brücke zwischen Teilchenzahl und messbaren Stoffportionen nutzen.",
+      "material_refs": [],
+      "origin": "curriculum",
+      "status": "adopted",
+      "title": "Stoffmenge und Teilchenzahl"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "description": "Molare Masse und molares Volumen als Umrechnungsgrößen für Stoffumsätze verwenden.",
+      "id": "molar-mass-and-molar-volume",
+      "learning_goal": "Zwischen Stoffmenge, Masse und Volumen mit passenden Umrechnungsgrößen wechseln.",
+      "material_refs": [],
+      "origin": "curriculum",
+      "status": "adopted",
+      "title": "Molare Masse und molares Volumen"
+    },
+    {
+      "curriculum_refs": [
+        {
+          "section_id": "c8_reactions",
+          "source_id": "by-lehrplanplus-chemie-8-ntg"
+        }
+      ],
+      "description": "Stoffumsätze aus Reaktionsgleichungen für einfache Molekülreaktionen ableiten und berechnen.",
+      "id": "stoichiometry",
+      "learning_goal": "Eine einfache Reaktionsgleichung verwenden, um gegebene und gesuchte Stoffmengen, Massen oder Volumina zu berechnen.",
+      "material_refs": [],
+      "origin": "curriculum",
+      "status": "adopted",
+      "title": "Stöchiometrie einfacher Molekülreaktionen"
+    }
+  ],
+  "positions": {},
+  "revision": 1,
+  "route": {
+    "branch": "NTG",
+    "grade": 8,
+    "subject": "chemie"
+  },
+  "schema_version": 1,
+  "updated_at": "2026-08-23T04:15:40.898532Z"
+}

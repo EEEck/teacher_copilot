@@ -39,6 +39,10 @@ between raw lesson notes and future planning.
    limits, and why blunt 14k caps were removed.
 9. `backend/teacher_wiki/AGENTS.md` - wiki schema and wiki-specific workflow
    rules when touching memory behavior.
+10. In-progress course-network program: start at
+    [`implementation_plans/course_network/README.md`](implementation_plans/course_network/README.md)
+    (setup, adopted Chemie 8a fixture, leftover Epic A work). Do not treat it
+    as shipped.
 
 Optional learning/reference: `docs/agent_learning_guide.md`.
 It is an educational note, not a behavior contract.

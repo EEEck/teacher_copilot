@@ -19,6 +19,7 @@ complete handoff portable for future agents.
 - [02 — delivery program, Epic A–D](02_delivery_program.md)
 - [03 — detailed A1–A3 foundation implementation plan](03_foundation_implementation.md)
 - [04 — current handoff and verified progress](README.md)
+- Adopted HITL graph: [`fixtures/chemie_8a_2026_27/`](fixtures/chemie_8a_2026_27/)
 
 ## Product boundary
 
@@ -94,6 +95,90 @@ curriculum evidence, followed `Builds on Aktivierungsenergie`, confirmed the
 new inspector content and canvas emphasis, and confirmed old source evidence
 was cleared. Final Task 8 re-review: PASS, no findings.
 
+## Agent continuation — how to set this up
+
+Start here if you are a later agent on `cursor/5c01f259`. Do not invent a
+second stack on the main repo ports. This worktree is isolated.
+
+### 1. Read this handoff, then the next task
+
+1. This file (status, leftovers, fixture graph).
+2. [`03_foundation_implementation.md`](03_foundation_implementation.md) Task 9
+   only, unless the teacher asked for Epic B.
+3. [`AGENTS.md`](../../AGENTS.md) and [`frontend/DESIGN.md`](../../frontend/DESIGN.md)
+   before UI work.
+
+### 2. Local secrets (never commit)
+
+`backend/.env` is gitignored. If it is missing, copy it from the main checkout
+or another trusted local worktree, then keep this profile (keys stay local):
+
+```dotenv
+APP_ENV=development
+MODEL_PROFILE=economy
+BETA_ENABLED=false
+MISTRAL_OCR_MODEL=mistral-ocr-latest
+MISTRAL_API_KEY=<local Mistral API key>
+```
+
+This worktree has no `backend/.venv`. Use the frontend/backend containers from
+the stack helper, or the host venv at `C:\Users\matth\teacher_agent_v2\backend\.venv`
+for pytest only.
+
+### 3. Start the worktree stack
+
+Preserve an existing sandbox (this worktree already has adopted Chemie 8a):
+
+```powershell
+.\scripts\worktree-stack.cmd up --wiki sandbox --app-env development --model-profile economy
+```
+
+`--fresh-wiki` wipes the sandbox back to tracked `backend/teacher_wiki/` (Chemie
+9b only, **no adopted graph**). After a fresh wiki, install the fixture:
+
+```powershell
+Copy-Item -Recurse -Force `
+  implementation_plans\course_network\fixtures\chemie_8a_2026_27 `
+  backend\teacher_wiki_sandbox\wiki\classes\chemie_8a_2026_27
+```
+
+Then restart or wait for the backend to see the class. Do not add `--beta` or
+`--fresh-beta-data` unless you are running the Epic A HITL gate.
+
+The helper prints `FRONTEND_URL` and `API_HEALTH_URL`. This worktree’s last
+known ports:
+
+- Frontend: `http://localhost:3228`
+- Backend health: `http://localhost:8830/api/health`
+- Compose project: `kp_9bv6_54edd4`
+
+Confirm with `docker compose -p kp_9bv6_54edd4 ps` rather than assuming those
+ports if another stack is running.
+
+### 4. Open the adopted graph
+
+There is still **no Course button** on class home. Use the URL:
+
+- Adopted graph (continue here): `http://localhost:3228/classes/chemie_8a_2026_27/course`
+- Seed / no-network class: `http://localhost:3228/classes/chemie_9b_2026_27/course`
+
+The adopted Chemie 8 NTG graph is 12 Lernbausteine / 12 `builds_on` edges,
+revision 1, in
+[`fixtures/chemie_8a_2026_27/course_network/network.json`](fixtures/chemie_8a_2026_27/course_network/network.json).
+It is **not** copied into tracked `backend/teacher_wiki/` because API tests
+create `chemie_8a_2026_27` on a 9b-only seed wiki.
+
+### 5. What not to do
+
+- Do not commit `backend/.env` or `backend/teacher_wiki_sandbox/`.
+- Do not treat Epic A as shipped. Task 9 + `.\scripts\test.ps1` + fresh-sandbox
+  HITL are still open.
+- Do not start Epic B graph editing until that gate is green, unless the
+  teacher explicitly asks to skip it.
+- Seed review can still return `revise` with notes only and trap Adopt. Do not
+  “fix” that by editing SQLite unless the teacher asks for another operator
+  override.
+
 ## Immediate next steps
 
 1. Execute A3 Task 9 only: add one class-home `Course` action beside Browse
@@ -132,11 +217,15 @@ The current local stack for browser work is worktree-scoped:
 - Compose project: `kp_9bv6_54edd4`
 - Mutable test wiki: `backend/teacher_wiki_sandbox/`
 
-The user’s manually created/adopted Chemie 8a lives only in that sandbox and is
-not tracked. Do not alter `backend/teacher_wiki/` unless a task explicitly
-changes the baseline fixture. The supported command for a clean isolated stack
-is `./scripts/worktree-stack.cmd up --fresh-wiki`; add `--beta --fresh-beta-data`
-only for beta/HITL coverage.
+The live sandbox copy of Chemie 8a stays untracked under
+`backend/teacher_wiki_sandbox/`. The same adopted class (graph included) is
+tracked as
+[`fixtures/chemie_8a_2026_27/`](fixtures/chemie_8a_2026_27/). Do not copy that
+class into `backend/teacher_wiki/`; provisioning tests create
+`chemie_8a_2026_27` against the 9b-only seed. The supported command for a clean
+isolated stack is `./scripts/worktree-stack.cmd up --fresh-wiki`, then install
+the fixture (see Agent continuation). Add `--beta --fresh-beta-data` only for
+beta/HITL coverage.
 
 ### Default local test profile
 
@@ -177,8 +266,9 @@ live pytest cases; it is not a default development setting.
 - A3 adapter: `b11d9db`, corrected by `29ed293`.
 - A3 workspace and review fixes: `b37a051`, `8202124`.
 - A3 React Flow selection stabilization and coherence: `00b7c40`, `2d21263`.
-- A3 HITL layout follow-up (narrow-pane edges + page scroll): `cursor/5c01f259`
-  after `9e4df80`.
+- A3 HITL layout follow-up (narrow-pane edges + page scroll): `2a1deec`.
+- Adopted Chemie 8a graph fixture + agent continuation setup: this follow-up
+  commit on `cursor/5c01f259`.
 
 Before completing A3, make the final Epic A verification report explicit about
 the exact commits tested and whether the sandbox wiki changed. Do not treat
