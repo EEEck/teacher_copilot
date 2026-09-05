@@ -10,7 +10,7 @@ from agents.exceptions import ModelBehaviorError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.config import get_settings
-from app.course_materials.store import get_course_material, read_course_material_section
+from app.course_materials.store import get_course_material, read_course_material_section, is_course_material_archived
 from app.course_network.operations import NetworkChangeSet, apply_change_set
 from app.course_network.validation import (
     route_authorized_curriculum_sections,
@@ -51,6 +51,8 @@ async def generate_course_changes(
         raise ValueError("Course class mismatch")
     material = None
     if request.material_id:
+        if is_course_material_archived(wiki, class_id, request.material_id):
+            raise ValueError("Restore this archived material before connecting it to the map")
         manifest = get_course_material(wiki, class_id, request.material_id)
         material = {
             "manifest": manifest.model_dump(mode="json"),

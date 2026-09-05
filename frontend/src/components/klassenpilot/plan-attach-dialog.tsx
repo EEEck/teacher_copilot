@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SegmentedToggle } from "@/components/ui/segmented-toggle";
+import { MaterialProcessingNote } from "@/components/klassenpilot/material-processing-note";
 import { cn } from "@/lib/utils";
 import {
   setPlanMaterialArm,
@@ -201,6 +202,7 @@ function PlanAttachDialog({
             closes this dialog; reading continues on a composer tile.
           </DialogDescription>
         </DialogHeader>
+        <MaterialProcessingNote />
 
         <div className="flex flex-col gap-3">
           <SegmentedToggle

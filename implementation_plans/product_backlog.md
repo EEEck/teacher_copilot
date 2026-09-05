@@ -10,6 +10,11 @@ focused implementation plan before making broad changes.
 
 ## Roadmap Rule
 
+Course release implementation: [teacher-owned finishing plan](course_network/08_teacher_owned_release_plan.md).
+The feature branch adds own-class onboarding alongside the retained beta demo,
+reviewed course materials and map-to-lesson integration. Browser acceptance and
+release deployment are separate gates; do not infer shipment from this plan link.
+
 Prioritize work that increases weekly teacher time saved while preserving
 teacher trust. Keep durable writes explicit and teacher-approved.
 

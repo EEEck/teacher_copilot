@@ -44,6 +44,10 @@ def main(argv: list[str] | None = None) -> int:
     provision.add_argument("--invite-code", required=True)
     provision.add_argument("--display-label", default="")
     provision.add_argument("--seed-label", default="")
+    provision.add_argument(
+        "--workspace-mode", choices=("empty", "demo"), default="demo",
+        help="New workspace contents: demo (beta default) or empty. Existing workspaces are preserved.",
+    )
 
     report = subparsers.add_parser(
         "report", help="Render a Markdown report from beta telemetry."
@@ -203,6 +207,7 @@ def main(argv: list[str] | None = None) -> int:
         invite_code=args.invite_code,
         display_label=args.display_label,
         seed_label=args.seed_label,
+        workspace_mode=args.workspace_mode,
     )
     print(f"Provisioned {identity.tester_id} -> {identity.workspace_id}")
     print(f"Wiki root: {identity.wiki_root}")

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { ActionLink } from "@/components/klassenpilot/action-link";
+import { MaterialProcessingNote } from "@/components/klassenpilot/material-processing-note";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { LearningBlock, MaterialMapping, NetworkEdge } from "@/features/course-network/types";
 import { courseApi } from "@/features/course-network/material-api";
 import { summarizeGraphChanges } from "@/features/course-network/change-summary";
+import { CourseChangeEditor } from "./course-change-editor";
 import { client } from "@/lib/api";
 import { passingReview, type CourseDraft, type CourseMaterial, type GraphChanges, type ImportArtifact } from "@/features/course-network/material-types";
 
@@ -30,20 +32,51 @@ export function CourseMaterialLibrary({ classId }: { classId: string }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [sectionText, setSectionText] = useState("");
+  const [correction, setCorrection] = useState("");
+  const [generation, setGeneration] = useState<CourseDraft<unknown> | null>(null);
+  const [requestingGeneration, setRequestingGeneration] = useState(false);
+  const generationRunning = requestingGeneration || !!generation?.running;
+  const localProposal = useRef({ classId, change, changes });
+  localProposal.current = { classId, change, changes };
   const refresh = useCallback(async () => {
     const [library, active, proposals, network] = await Promise.all([courseApi.list(classId), courseApi.imports(classId), courseApi.changes(classId), client.getCourseNetwork(classId)]);
     setNodes(network.network?.nodes.filter(n => n.status !== "retired") || []);
     setExistingMappings(network.network?.material_mappings || []);
     setExistingEdges(network.network?.edges || []);
     setMaterials(library.materials); setImports(active.drafts);
-    if (proposals.drafts[0]) { setChange(proposals.drafts[0]); setChanges(proposals.drafts[0].artifact); }
+    setGeneration(proposals.generation || null);
+    const local = localProposal.current;
+    const unsaved = local.classId === classId && local.change && JSON.stringify(local.changes) !== JSON.stringify(local.change.artifact);
+    if (!unsaved) { setChange(proposals.drafts[0] || null); setChanges(proposals.drafts[0]?.artifact || null); }
   }, [classId]);
+  useEffect(() => {
+    if (!generationRunning) return;
+    const timer = setInterval(() => { void refresh().catch(e => setError(String(e))); }, 2500);
+    return () => clearInterval(timer);
+  }, [generationRunning, refresh]);
   useEffect(() => { void refresh().catch(e => setError(String(e))); }, [refresh]);
   const run = async (operation: () => Promise<void>) => {
     if (busy) return;
     setBusy(true); setError(""); setNotice("");
     try { await operation(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
+  };
+  const generateProposal = async (operation: () => Promise<CourseDraft<GraphChanges>>) => {
+    setRequestingGeneration(true);
+    try {
+      const row = await operation();
+      const local = localProposal.current;
+      const unsaved = local.classId === classId && local.change && JSON.stringify(local.changes) !== JSON.stringify(local.change.artifact);
+      if (!unsaved) { setChange(row); setChanges(row.artifact); }
+      setGeneration(null);
+    } catch (e) {
+      // The request can fail after the server reserved or completed the job.
+      // Recover its durable state without replacing any local proposal edits.
+      await refresh().catch(() => undefined);
+      throw e;
+    } finally {
+      setRequestingGeneration(false);
+    }
   };
   const selectDraft = (row: CourseDraft<ImportArtifact>) => { setDraft(row); setArtifact(row.artifact); };
   useEffect(() => {
@@ -65,9 +98,12 @@ export function CourseMaterialLibrary({ classId }: { classId: string }) {
     <PageHeader title="Course materials" description="Review a chapter, connect it to the class map, and reuse it in lesson planning." backHref={`/classes/${encodeURIComponent(classId)}/course`} backLabel="Course network" />
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
     {notice && <Alert><AlertDescription>{notice}</AlertDescription></Alert>}
+    {(generationRunning || generation) && <Alert><AlertDescription>{generationRunning ? <p role="status">Generating a map proposal. You can leave and return; the saved request will stay here.</p> : generation && <><p>{generation.runtime.error || "Generation was interrupted. Retry the saved request."}</p><Button variant="outline" disabled={busy || !!change} onClick={() => void run(() => generateProposal(() => courseApi.retryGeneration(classId)))}>Retry saved map request</Button><Button variant="ghost" disabled={busy} onClick={() => void run(async () => { await courseApi.discardGeneration(classId, generation); await refresh(); })}>Discard saved request</Button></>}</AlertDescription></Alert>}
+    {!!nodes.length && <Card><CardHeader><CardTitle>Suggest a map correction</CardTitle></CardHeader><CardContent className="space-y-3"><Label htmlFor="course-correction">What should change?</Label><Textarea id="course-correction" value={correction} maxLength={6000} onChange={e => setCorrection(e.target.value)} placeholder="For example: clarify that catalysis changes the reaction path, not the reaction energy." /><Button variant="outline" disabled={busy || generationRunning || !!change || !correction.trim()} onClick={() => void run(() => generateProposal(() => courseApi.correct(classId, correction)))}>Suggest correction</Button><p className="text-sm text-muted-foreground">Suggestions change nothing until you review and approve them.</p></CardContent></Card>}
     <Card><CardHeader><CardTitle>Upload a chapter</CardTitle></CardHeader><CardContent>
       <form className="space-y-3" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(async () => { selectDraft(await courseApi.upload(classId, form)); await refresh(); }); }}>
         <Label htmlFor="course-file">PDF, up to 40 MB and 30 selected pages</Label><Input id="course-file" name="file" type="file" accept="application/pdf" required disabled={busy} />
+        <MaterialProcessingNote />
         <Label htmlFor="course-title">Title</Label><Input id="course-title" name="title" placeholder="Chapter or worksheet title" />
         <Label htmlFor="course-pages">PDF pages (optional)</Label><Input id="course-pages" name="pages" placeholder="For example: 4-12" />
         <Button type="submit" disabled={busy}>Extract chapter</Button>
@@ -75,12 +111,15 @@ export function CourseMaterialLibrary({ classId }: { classId: string }) {
     </CardContent></Card>
     {!!imports.length && <div className="flex flex-wrap gap-2" aria-label="Resume imports">{imports.map(row => <Button key={row.draft_id} variant="outline" onClick={() => void run(async () => selectDraft(await courseApi.import(classId, row.draft_id)))} disabled={busy}>{row.artifact.title} · {row.runtime.stage?.replaceAll("_", " ")}</Button>)}</div>}
     {draft && artifact && <Card><CardHeader><CardTitle>{artifact.title} · document review</CardTitle></CardHeader><CardContent className="space-y-4">
+      {draft.status === "draft" && <Button variant="ghost" disabled={busy || draft.running} onClick={() => void run(async () => { await client.discardWorkflowDraft(classId, draft.draft_id); setDraft(null); setArtifact(null); await refresh(); })}>Discard import</Button>}
       {draft.running && <p role="status">Extracting the chapter. You can leave and resume this import later.</p>}
       {draft.runtime.stage === "failed" && <><p>{draft.runtime.error}</p><Button disabled={busy} onClick={() => void run(async () => selectDraft(await courseApi.importAction(classId, draft, "retry")))}>Retry extraction</Button></>}
       {draft.runtime.stage === "document_review" && <>
         <p className="text-sm text-muted-foreground">Correct the text and section boundaries before approving. Excluded sections will not enter the library.</p>
         {artifact.sections.map((section, index) => <fieldset className="space-y-2 rounded-lg border border-border p-3" key={section.id}>
           <legend className="px-1 text-sm">Pages {section.page_start}–{section.page_end}</legend>
+          <a className="text-sm text-primary underline" href={courseApi.importSourceUrl(classId, draft.draft_id, section.page_start)} target="_blank" rel="noreferrer">Inspect source PDF pages</a>
+          <div className="flex gap-2"><div><Label htmlFor={`page-start-${section.id}`}>First PDF page</Label><Input id={`page-start-${section.id}`} aria-label="First PDF page" type="number" min={1} value={section.page_start} onChange={e => patchSection(index, { page_start: Number(e.target.value) })} /></div><div><Label htmlFor={`page-end-${section.id}`}>Last PDF page</Label><Input id={`page-end-${section.id}`} aria-label="Last PDF page" type="number" min={section.page_start} value={section.page_end} onChange={e => patchSection(index, { page_end: Number(e.target.value) })} /></div></div>
           <Label htmlFor={`title-${section.id}`}>Section title</Label><Input id={`title-${section.id}`} value={section.title} onChange={e => patchSection(index, { title: e.target.value })} />
           <Label htmlFor={`body-${section.id}`}>Extracted text</Label><Textarea id={`body-${section.id}`} rows={7} value={section.content} onChange={e => patchSection(index, { content: e.target.value })} />
           <div className="flex flex-wrap gap-2">
@@ -98,13 +137,16 @@ export function CourseMaterialLibrary({ classId }: { classId: string }) {
       </>}
       {draft.runtime.stage === "mapping_review" && <p>This chapter is approved and available in the library below.</p>}
     </CardContent></Card>}
-    <Card><CardHeader><CardTitle>Approved library</CardTitle></CardHeader><CardContent className="space-y-4">
-      {!materials.length && <p>No approved chapters yet.</p>}
+    <Card><CardHeader><CardTitle>Class materials library</CardTitle></CardHeader><CardContent className="space-y-4">
+      {!materials.length && <p>No saved materials yet. Upload a chapter here or save a lesson with its PDF.</p>}
       {materials.map(material => <div key={material.material_id} className="space-y-2 border-b border-border pb-3">
         <h3 className="font-medium">{material.title}</h3>
+        <p className="text-sm text-muted-foreground">{material.library_status === "saved" ? "Saved with a lesson — review sections before connecting to the course map." : "Approved for course planning."}{material.archived ? " Archived: kept for past lesson sources, excluded from new automatic retrieval." : ""}</p>
+        <Button variant="ghost" disabled={busy} onClick={() => void run(async () => { await courseApi.archive(classId, material.material_id, !material.archived); await refresh(); })}>{material.archived ? "Restore material" : "Archive material"}</Button>
+        {material.library_status === "saved" && !material.archived && <Button variant="outline" disabled={busy} onClick={() => void run(async () => { selectDraft(await courseApi.reviewSaved(classId, material.material_id)); await refresh(); })}>Review for course map</Button>}
         <a className="text-sm text-primary underline" href={courseApi.sourceUrl(classId, material.material_id)} target="_blank" rel="noreferrer">Open source PDF</a>
         <div className="flex flex-wrap gap-2">{material.sections.map(section => <Button variant="ghost" key={section.id} onClick={() => void run(async () => { const result = await courseApi.section(classId, material.material_id, section.id); setSectionText(`${material.title} · pages ${result.page_start}–${result.page_end}\n\n${result.content}`); })}>{section.title} · p. {section.page_start}–{section.page_end}</Button>)}</div>
-        <Button variant="outline" disabled={busy} onClick={() => void run(async () => { const row = await courseApi.generate(classId, material.material_id); const current = await client.getCourseNetwork(classId); setNodes(current.network?.nodes.filter(n => n.status !== "retired") || []); setExistingMappings(current.network?.material_mappings || []); setExistingEdges(current.network?.edges || []); setChange(row); setChanges(row.artifact); if (current.network?.revision !== row.artifact.base_revision) throw new Error("The course map changed. Discard this stale proposal and generate it again."); })}>Connect to course map</Button>
+        {material.library_status !== "saved" && !material.archived && <Button variant="outline" disabled={busy || generationRunning || !!change} onClick={() => void run(() => generateProposal(async () => { const row = await courseApi.generate(classId, material.material_id); const current = await client.getCourseNetwork(classId); setNodes(current.network?.nodes.filter(n => n.status !== "retired") || []); setExistingMappings(current.network?.material_mappings || []); setExistingEdges(current.network?.edges || []); if (current.network?.revision !== row.artifact.base_revision) throw new Error("The course map changed. Discard this stale proposal and generate it again."); return row; }))}>Connect to course map</Button>}
       </div>)}
       {sectionText && <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-muted p-3 text-sm">{sectionText}</pre>}
     </CardContent></Card>
@@ -112,12 +154,7 @@ export function CourseMaterialLibrary({ classId }: { classId: string }) {
       <p aria-label="Proposed changes">{summarizeGraphChanges(changes, existingMappings, existingEdges)}</p>
       <p className="text-sm text-muted-foreground">Review each proposed concept and connection. Saving a correction requires a fresh review.</p>
       {!!removedMappings.length && <Alert variant="destructive"><AlertDescription><p>These existing connections will be removed:</p><ul>{removedMappings.map(mapping => <li key={mapping.id}>{materials.find(m => m.material_id === mapping.material_id)?.sections.find(s => s.id === mapping.section_id)?.title || mapping.section_id} → {nodes.find(n => n.id === mapping.node_id)?.title || mapping.node_id} ({mapping.relation})</li>)}</ul></AlertDescription></Alert>}
-      {changes.operations.map((operation, index) => <div key={index} className="rounded-lg border border-border p-3"><p>{operation.op.replaceAll("_", " ")}: {"node" in operation ? operation.node.title : "node_id" in operation ? operation.node_id : "edge" in operation ? `${operation.edge.source_id} ${operation.edge.relation} ${operation.edge.target_id}` : operation.edge_id}</p>
-        {operation.op === "update_node" && <p className="text-sm">{Object.entries(operation.changes).map(([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`).join(" · ")}</p>}
-        {operation.op === "add_node" && <p className="text-sm">{operation.node.learning_goal}</p>}
-        {operation.op === "add_node" && <p className="text-sm">{operation.node.description} · Sources: {[...operation.node.curriculum_refs.map(r => `${r.source_id}/${r.section_id}`), ...operation.node.material_refs.map(r => `${r.material_id}/${r.section_id}`)].join(", ")}</p>}
-        {operation.op === "add_node" && <><Label htmlFor={`node-title-${index}`}>Concept title</Label><Input id={`node-title-${index}`} value={operation.node.title} onChange={e => setChanges({ ...changes, operations: changes.operations.map((op, i) => i === index ? { ...operation, node: { ...operation.node, title: e.target.value } } : op) })} /></>}
-        <Button variant="ghost" onClick={() => setChanges({ ...changes, operations: changes.operations.filter((_, i) => i !== index) })}>Reject this change</Button></div>)}
+      <CourseChangeEditor changes={changes} nodes={nodes} onChange={setChanges} />
       {changes.replacement_mappings?.map((mapping, index) => <div key={mapping.id} className="space-y-2 rounded-lg border border-border p-3"><p>{materials.find(m => m.material_id === mapping.material_id)?.sections.find(s => s.id === mapping.section_id)?.title || mapping.section_id}</p>
         <Label>Connect to concept</Label><Select value={mapping.node_id} onValueChange={node_id => setChanges({ ...changes, replacement_mappings: changes.replacement_mappings!.map((m, i) => i === index ? { ...m, node_id, origin: "teacher" } : m) })}><SelectTrigger aria-label="Connect to concept"><SelectValue /></SelectTrigger><SelectContent>{mappingNodes.map(node => <SelectItem key={node.id} value={node.id}>{node.title}</SelectItem>)}</SelectContent></Select>
         <Label>How this section helps</Label><Select value={mapping.relation} onValueChange={relation => setChanges({ ...changes, replacement_mappings: changes.replacement_mappings!.map((m, i) => i === index ? { ...m, relation: relation as MaterialMapping["relation"], origin: "teacher" } : m) })}><SelectTrigger aria-label="How this section helps"><SelectValue /></SelectTrigger><SelectContent>{["explains", "practices", "assesses", "extends"].map(relation => <SelectItem key={relation} value={relation}>{relation}</SelectItem>)}</SelectContent></Select>

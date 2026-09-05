@@ -587,8 +587,31 @@ Standalone reviewed chapters live under `materials/textbooks|personal/{material_
 storage until explicit chapter approval. The existing planner material registry
 includes this approved library alongside current uploads and lesson-linked packages.
 
+Lesson-linked packages can be reviewed for the course without another upload or
+OCR call. Normalizing one adds `document.course.md` and an approved `material.json`
+while retaining its original `document.agent.md` and legacy heading citations.
+New course section IDs address the normalized body; old citations retain their
+original meaning. Re-saving the lesson must not replace these approved artifacts.
+
+`course-lifecycle.json` stores archive state separately from the immutable approval
+manifest. Archived packages are omitted from new automatic course retrieval, but
+authorized historical section and PDF reads remain available. Source page spans
+always use original PDF numbering; serving a subset PDF translates those page
+numbers into physical pages in the stored file.
+
+Generation requests and their input hashes live in the existing workspace
+`workflow/workflow_drafts.sqlite`, separate from editable proposals. Interrupted
+requests require explicit retry. No chat transcript, request, review or map
+adoption is a taught-lesson record; lesson progress derives from actual lesson
+commit/revise records and approved results.
+
 `lessons/{date}/course_refs.json` records explicit valid plan citations, the graph
 revision and the actual saved plan hash. It is ignored if the plan hash differs.
+Its `material_node_refs` separately snapshots concept/section mappings for
+explicitly cited approved material. These yield "Uses linked material" navigation,
+never direct concept citations or automatic result/coverage evidence. Automatic
+summaries and search use approved chapter bodies after normalization; historical
+explicit heading aliases may still read the original package.
 Actual outcomes still live only in teacher-approved `lesson_results.md`. Result
 context is derived at read time; no new mastery, graph-progress or duplicate
 lesson-results store is introduced.

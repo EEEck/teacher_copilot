@@ -115,13 +115,13 @@ def _parse_log_by_date(store) -> dict[str, dict]:
         block = log_text[start:end]
         header_line = block.split("\n", 1)[0]
         meta = parsing.parse_log_entry(header_line, block)
-        if meta and meta["lesson_date"]:
+        if meta and meta["lesson_date"] and meta.get("kind") in {"ingest", "revise"}:
             by_date[meta["lesson_date"]] = meta
     return by_date
 
 
 def _latest_log_commit(store, class_id: str | None = None) -> dict[str, str]:
-    """Newest valid log entry, optionally limited to one class."""
+    """Newest approved lesson log, optionally limited to one class."""
     log_text = store.read_text(store.log_path)
     headers = list(re.finditer(r"^##\s*\[", log_text, re.MULTILINE))
     for i in range(len(headers) - 1, -1, -1):
@@ -133,6 +133,7 @@ def _latest_log_commit(store, class_id: str | None = None) -> dict[str, str]:
         if (
             meta
             and meta.get("lesson_date")
+            and meta.get("kind") in {"ingest", "revise"}
             and (class_id is None or meta.get("class_id") == class_id)
         ):
             return {

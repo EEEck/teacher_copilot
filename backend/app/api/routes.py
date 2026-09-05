@@ -1347,6 +1347,10 @@ def discard_workflow_draft(
         row = store.get(draft_id)
         if row.class_id != class_id:
             raise HTTPException(status_code=404, detail="Workflow draft not found")
+        if row.mode == "course_network" and row.intent == "generate":
+            raise HTTPException(status_code=409, detail="Use the saved generation request controls to discard it")
+        if row.mode == "course_material" and row.turn_in_progress:
+            raise HTTPException(status_code=409, detail="Wait for extraction to finish before discarding this import")
         row = store.discard(draft_id)
         return {"draft_id": row.draft_id, "status": row.status}
     except KeyError as e:

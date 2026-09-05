@@ -44,6 +44,14 @@ def test_parse_log_entry_iso_header():
     assert "lesson_results.md" in meta["wiki_paths"][0]
 
 
+def test_parse_log_entry_preserves_nonhex_legacy_lesson_id_and_kind():
+    header = "## [2026-05-29T15:30:00] ingest | 2026-05-29 - Anions review (id:ani29a7)"
+    meta = parsing.parse_log_entry(header, header)
+    assert meta is not None
+    assert meta["entry_id"] == "ani29a7"
+    assert meta["kind"] == "ingest"
+
+
 def test_parse_log_entry_reads_explicit_class_metadata():
     header = "## [2026-05-01T12:00:00] ingest | 2026-10-01 - Demo (id:abc12345)"
     block = (

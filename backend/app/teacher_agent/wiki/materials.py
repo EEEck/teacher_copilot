@@ -59,9 +59,7 @@ def _sections_from_markdown(text: str) -> tuple[MaterialSection, ...]:
         start = match.end()
         end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
         title = match.group("title").strip()
-        sections.append(
-            MaterialSection(_slug(title), title, text[start:end].strip())
-        )
+        sections.append(MaterialSection(_slug(title), title, text[start:end].strip()))
     return tuple(sections)
 
 
@@ -127,11 +125,25 @@ def _record_from_dir(
     if manifest_path.is_file():
         from app.course_materials.models import CourseMaterialManifest
         from app.course_materials.sections import read_section_body
-        manifest = CourseMaterialManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+        from app.course_materials.store import approved_document_path
+
+        manifest = CourseMaterialManifest.model_validate_json(
+            manifest_path.read_text(encoding="utf-8")
+        )
         if not manifest.approved_at:
             return None
         title = manifest.title
-        sections = tuple(MaterialSection(s.id, s.title, read_section_body(body, s.id)) for s in manifest.sections)
+        body = approved_document_path(root).read_text(encoding="utf-8")
+        sections = tuple(
+            MaterialSection(s.id, s.title, read_section_body(body, s.id))
+            for s in manifest.sections
+        )
+        # Normalization leaves original OCR packages intact for old citations.
+        # Automatic orientation must instead reflect the approved section text,
+        # even if the saved OCR summary or session hint still contains an error.
+        summary = (
+            _summary_blurb("\n".join(f"{s.title}: {s.body}" for s in sections)) or title
+        )
     return ClassMaterialRecord(
         material_id=material_id,
         arm=arm,
@@ -145,7 +157,9 @@ def _record_from_dir(
     )
 
 
-def _find_promoted_dir(wiki_root: Path, class_id: str, material_id: str) -> tuple[Path, str] | None:
+def _find_promoted_dir(
+    wiki_root: Path, class_id: str, material_id: str
+) -> tuple[Path, str] | None:
     for arm in ("textbook", "personal"):
         path = wiki_material_dir(wiki_root, class_id, arm, material_id)  # type: ignore[arg-type]
         if path.is_dir():
@@ -212,6 +226,7 @@ def list_materials_for_plan(
 
     from app.course_materials.store import list_course_materials, material_root
     from app.teacher_agent.wiki.store import WikiStore
+
     wiki = WikiStore(root=wiki_root)
     try:
         library = list_course_materials(wiki, class_id)
@@ -220,8 +235,14 @@ def list_materials_for_plan(
         library = []
     for material in library:
         root = material_root(wiki, material)
-        record = _record_from_dir(material_id=material.material_id, arm=material.arm, root=root,
-            source="wiki", wiki_path=wiki.rel_wiki(root), title_hint=material.title)
+        record = _record_from_dir(
+            material_id=material.material_id,
+            arm=material.arm,
+            root=root,
+            source="wiki",
+            wiki_path=wiki.rel_wiki(root),
+            title_hint=material.title,
+        )
         if record is not None:
             records[material.material_id] = record
     return list(records.values())
@@ -252,7 +273,10 @@ def search_class_materials(
     for material in materials:
         summary_path = material.root / "summary.md"
         summary_text = (
-            summary_path.read_text(encoding="utf-8") if summary_path.is_file() else material.summary
+            summary_path.read_text(encoding="utf-8")
+            if summary_path.is_file()
+            and not (material.root / "material.json").is_file()
+            else material.summary
         )
         for section in material.sections:
             haystack = " ".join(
@@ -306,10 +330,20 @@ def read_class_material(
 ) -> dict[str, Any]:
     material = next((m for m in materials if m.material_id == material_id), None)
     if material is None:
-        raise ValueError(f"material '{material_id}' is not available in this plan session")
+        raise ValueError(
+            f"material '{material_id}' is not available in this plan session"
+        )
     section = None
     if section_id and section_id not in {"", "summary"}:
         section = next((s for s in material.sections if s.id == section_id), None)
+        if section is None and (material.root / "document.course.md").is_file():
+            # Old lesson citations retain their heading aliases. These are
+            # explicit historical reads, never additional automatic evidence.
+            original = (material.root / "document.agent.md").read_text(encoding="utf-8")
+            section = next(
+                (s for s in _sections_from_markdown(original) if s.id == section_id),
+                None,
+            )
         if section is None:
             raise ValueError(
                 f"unknown section '{section_id}' for material '{material_id}'"
@@ -325,11 +359,15 @@ def read_class_material(
             body = material.summary or (
                 material.sections[0].body if material.sections else ""
             )
-            section_title = "Summary" if material.summary else (
-                material.sections[0].title if material.sections else "Document"
+            section_title = (
+                "Summary"
+                if material.summary
+                else (material.sections[0].title if material.sections else "Document")
             )
-            sid = "summary" if material.summary else (
-                material.sections[0].id if material.sections else "document"
+            sid = (
+                "summary"
+                if material.summary
+                else (material.sections[0].id if material.sections else "document")
             )
     else:
         assert section is not None
@@ -354,8 +392,7 @@ def read_class_material(
         "section_title": section_title,
         "content": body,
         "source": material.source,
-        "path": material.wiki_path
-        or str(material.root / "document.agent.md"),
+        "path": material.wiki_path or str(material.root / "document.agent.md"),
         "image_paths": image_paths[:40],
         "citation": f"Material: {material.material_id} ({material.title})",
     }
@@ -419,7 +456,7 @@ def build_materials_context_trace(
             _trace_section(
                 name="Class materials index",
                 function="build_materials_context_trace",
-                source="PlanRuntime.materials + materials/*/summary.md",
+                source="PlanRuntime.materials + approved material sections or OCR summary.md",
                 text=text,
                 authority="class_materials",
                 included=True,

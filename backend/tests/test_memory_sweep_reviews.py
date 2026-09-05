@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -25,13 +26,16 @@ def _seed_review_candidate(
     ledger: MemoryCandidateLedger,
     *,
     candidate_id: str = "cand_review_persistence_1",
-    created_at: str = "2026-07-09T08:00:00Z",
+    created_at: str | None = None,
 ) -> None:
+    # These API tests exercise live housekeeping; ordinary candidates must be
+    # fresh whenever the suite runs. Expiry tests supply their own old date.
+    created_at = created_at or datetime.now(timezone.utc).isoformat()
     ledger.add(
         MemoryCandidateRow(
             id=candidate_id,
             created_at=created_at,
-            updated_at="2026-07-09T08:00:00Z",
+            updated_at=created_at,
             class_id=CLASS_ID,
             subject="chemie",
             workflow="ingest",
@@ -334,6 +338,7 @@ def test_memory_sweep_review_api_explains_new_candidates_that_make_a_draft_stale
     _seed_review_candidate(memory_candidate_ledger)
     opened = client.post(f"/api/classes/{CLASS_ID}/memory/sweep/review")
     assert opened.status_code == 200, opened.text
+    _wait_for_ready_review(client)
 
     _seed_review_candidate(
         memory_candidate_ledger,

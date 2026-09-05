@@ -48,7 +48,7 @@ export default function HomePage() {
   return (
     <div className="relative left-1/2 w-screen max-w-[100vw] -translate-x-1/2 -mx-6 -my-6 min-h-[calc(100vh-3.5rem)] bg-muted/60 px-6 py-10 sm:px-8 sm:py-14">
       <div className="mx-auto w-full max-w-[58rem]">
-        <HomeLanding />
+        <HomeLanding onCreateClass={() => setCreating(true)} />
 
         <section aria-labelledby="your-classes-heading" className="mt-10 sm:mt-12">
           <div className="mb-3 flex items-center justify-between gap-3">
@@ -64,16 +64,23 @@ export default function HomePage() {
               onClick={() => setCreating((open) => !open)}
               aria-expanded={creating}
             >
-              {creating ? "Cancel" : "New class"}
+              {creating ? "Close" : "New class"}
             </Button>
           </div>
           <p className="mb-4 max-w-lg text-sm leading-relaxed text-muted-foreground">
-            All classes in this workspace.
+            Create your own class with New class. Beta demo classes, when included in your workspace, are available below to explore; your new class starts with no taught lessons.
           </p>
 
           {creating && (
             <div className="mb-4">
-              <CreateClassCard onCreated={() => setCreating(false)} />
+              <CreateClassCard onCreated={() => {
+                client.getClasses().then((data) => {
+                  setClasses(data.classes);
+                  setError(null);
+                }).catch(() => {
+                  setError("Could not refresh the class list. Reload to see your new class.");
+                });
+              }} />
             </div>
           )}
 
@@ -130,7 +137,7 @@ export default function HomePage() {
             {!loading && !error && classes.length === 0 && (
               <Card className="border-border/50 bg-muted/30 shadow-none">
                 <CardContent className="p-5 text-sm text-muted-foreground">
-                  No classes yet.
+                  No classes yet. Choose New class to start with your own Chemie 8 or 9 NTG class.
                 </CardContent>
               </Card>
             )}

@@ -31,10 +31,10 @@ DIARY_SECTION_HEADINGS = [label for _, label, _ in LESSON_RESULTS_SECTIONS]
 STUDENT_ID_RE = re.compile(r"\b(S-\d{3})\b", re.I)
 
 LOG_HEADER_RE = re.compile(
-    r"##\s*\[([^\]]+)\]\s+(\w+)\s*\|\s*(?:([\d]{4}-[\d]{2}-[\d]{2})\s*[-—]\s*)?(.+?)\s*\(id:([a-f0-9]+)\)"
+    r"##\s*\[([^\]]+)\]\s+(\w+)\s*\|\s*(?:([\d]{4}-[\d]{2}-[\d]{2})\s*[-—]\s*)?(.+?)\s*\(id:([A-Za-z0-9]+)\)"
 )
 LOG_HEADER_LEGACY_RE = re.compile(
-    r"##\s*\[(\d{4}-\d{2}-\d{2})\]\s+(\w+)\s*\|\s*(.+?)\s*\(id:([a-f0-9]+)\)"
+    r"##\s*\[(\d{4}-\d{2}-\d{2})\]\s+(\w+)\s*\|\s*(.+?)\s*\(id:([A-Za-z0-9]+)\)"
 )
 INDEX_WIKI_PATH_RE = re.compile(r"(wiki/classes/[^\s|)]+?\.md)", re.I)
 

@@ -49,7 +49,9 @@ class SessionMaterialEntry:
             arm=arm,  # type: ignore[arg-type]
             title=str(data.get("title") or "").strip(),
             summary=str(data.get("summary") or "").strip(),
-            page_numbers=[int(p) for p in pages if str(p).strip().isdigit() or isinstance(p, int)],
+            page_numbers=[
+                int(p) for p in pages if str(p).strip().isdigit() or isinstance(p, int)
+            ],
             scratch_path=str(data.get("scratch_path") or ""),
             page_count=int(data.get("page_count") or 0),
             asset_counts={str(k): int(v) for k, v in counts.items()},
@@ -209,7 +211,9 @@ def resolve_material_asset_file(
     if entry and entry.promoted and entry.wiki_path and wiki_root and class_id:
         candidates.append(Path(wiki_root) / entry.wiki_path / "assets" / name)
         candidates.append(
-            wiki_material_dir(wiki_root, class_id, entry.arm, material_id) / "assets" / name
+            wiki_material_dir(wiki_root, class_id, entry.arm, material_id)
+            / "assets"
+            / name
         )
 
     for path in candidates:
@@ -281,7 +285,9 @@ def _promote_ignore(_directory: str, names: list[str]) -> list[str]:
     return [name for name in names if name in _PROMOTE_SKIP_NAMES]
 
 
-def wiki_material_dir(wiki_root: Path, class_id: str, arm: MaterialArmName, material_id: str) -> Path:
+def wiki_material_dir(
+    wiki_root: Path, class_id: str, arm: MaterialArmName, material_id: str
+) -> Path:
     return (
         Path(wiki_root)
         / "wiki"
@@ -299,20 +305,42 @@ def promote_scratch_material(
     class_id: str,
     entry: SessionMaterialEntry,
 ) -> SessionMaterialEntry:
-    """Copy scratch package into durable class materials tree."""
+    """Publish once; subsequent plan saves preserve reviewed class packages."""
+    from app.services.course_network_service import _wiki_adoption_lock
+
     src = Path(entry.scratch_path)
-    if not src.is_dir():
-        raise FileNotFoundError(f"scratch package missing: {src}")
     dest = wiki_material_dir(wiki_root, class_id, entry.arm, entry.material_id)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists():
-        shutil.rmtree(dest)
-    shutil.copytree(src, dest, ignore=_promote_ignore)
-    # Prefer canonical source.pdf name after promote.
-    upload = dest / "upload.pdf"
-    source = dest / "source.pdf"
-    if upload.is_file() and not source.is_file():
-        upload.rename(source)
+    with _wiki_adoption_lock(wiki_root):
+        if dest.exists():
+            if not (dest / "document.agent.md").is_file():
+                raise ValueError("Material already exists with an incomplete package")
+            if src.is_dir():
+                for name in ("document.agent.md", "source.pdf", "provenance.json"):
+                    original = src / name
+                    if name == "source.pdf" and not original.is_file():
+                        original = src / "upload.pdf"
+                    saved = dest / name
+                    if original.is_file() and (
+                        not saved.is_file()
+                        or original.read_bytes() != saved.read_bytes()
+                    ):
+                        raise ValueError(
+                            "Material already exists with different source content"
+                        )
+        else:
+            if not src.is_dir():
+                raise FileNotFoundError(f"scratch package missing: {src}")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            staging = dest.parent / f".promoting-{uuid.uuid4().hex}"
+            try:
+                shutil.copytree(src, staging, ignore=_promote_ignore)
+                upload = staging / "upload.pdf"
+                if upload.is_file() and not (staging / "source.pdf").is_file():
+                    upload.rename(staging / "source.pdf")
+                staging.replace(dest)
+            finally:
+                if staging.exists():
+                    shutil.rmtree(staging)
     rel = f"wiki/classes/{class_id}/materials/{arm_dir_name(entry.arm)}/{entry.material_id}"
     entry.promoted = True
     entry.wiki_path = rel
@@ -326,7 +354,9 @@ def write_lesson_materials_json(
     lesson_date: str,
     material_ids: list[str],
 ) -> Path:
-    lesson_dir = Path(wiki_root) / "wiki" / "classes" / class_id / "lessons" / lesson_date
+    lesson_dir = (
+        Path(wiki_root) / "wiki" / "classes" / class_id / "lessons" / lesson_date
+    )
     lesson_dir.mkdir(parents=True, exist_ok=True)
     path = lesson_dir / "materials.json"
     existing: list[str] = []

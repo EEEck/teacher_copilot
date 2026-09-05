@@ -26,13 +26,13 @@ def test_compile_from_diary_proposals_have_unique_wiki_paths():
     assert len(paths) == len(set(paths))
 
 
-def test_seeded_snapshot_retains_known_last_commit_metadata():
+def test_seeded_snapshot_retains_last_lesson_commit_not_later_compaction():
     root = Path(__file__).resolve().parent.parent / "teacher_wiki"
     wiki = WikiStore(root=root)
     snap = wiki.get_snapshot("chemie_9b_2026_27")
-    assert snap.last_committed_date == "2026-06-01"
-    assert snap.last_committed_at == "2026-06-01T04:39:00"
-    assert snap.last_committed_title == "Compact class memory"
+    assert snap.last_committed_date == "2026-05-29"
+    assert snap.last_committed_at == "2026-05-29T15:30:00"
+    assert snap.last_committed_title == "Anions and Oxidation State Review"
 
 
 def test_timeline_has_seed_lessons():

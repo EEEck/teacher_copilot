@@ -59,7 +59,8 @@ Shipped teacher workflows:
   review the plan-file diff, and save it to a lesson date. Plan chat can attach a
   **PDF class material** (Textbook or Personal): Mistral OCR 4 writes a session
   scratch package; the planner cites/embeds cutouts; durable wiki promotion
-  happens only on plan save. Not a year-start materials library yet.
+  happens only on plan save. The course feature branch adds a standalone reviewed
+  chapter library and reuses plan-saved PDFs; larger whole-book intake remains separate.
 - **Timeline/detail shortcuts**: one status chip per lesson — **Upcoming**
   (future plan), **Add results** (plan due / past), **Done** (results logged).
   Matching row CTAs open Update Memory (“Add results” / “Correct with agent”).
@@ -160,10 +161,10 @@ Core implementation shape:
 | Test/exam generation is not first-class | Clear high-frequency teacher time saver | New assessment artifact workflow |
 | Memory/profile flows are partially productized | Personalization is part of the executive-assistant promise | Visible "copilot learned this" review and memory health |
 | Wiki/input conflicts are not yet proactive | Teacher trust depends on the wiki being the baseline, especially for roster typos or class-state contradictions | Deterministic conflict detection first, then model clarification and teacher-confirmed resolution |
-| Product now has local beta isolation but no hosted deployment | First external testers need persistence, HTTPS, backups, and operator recovery | AWS beta track: Amplify frontend, ECS/Fargate backend, EFS workspaces, Postgres telemetry, S3 exports |
+| Repository supports the private Railway beta deployment | Course release still needs deployment-specific persistence, restart and recovery acceptance | Continue the existing Railway setup; AWS is a later scale option, not a prerequisite for this release |
 | Auth is beta-grade invite-code auth | Good for first testers, not proper production identity, account recovery, or school roles | Keep `RequestIdentity`; later swap invite-code provider for Cognito/Auth.js/Clerk/Auth0/OAuth |
 | Evidence is not visible enough | Trust depends on inspecting sources | Source panel for class memory, uploads, and trusted web |
-| New classes need manual memory building | Product is strongest after memory exists | Class wiki factory (remaining). In-plan PDF materials already ship as a citation layer; year-start library / chapterize is Phase 3 |
+| Own-class onboarding and course materials need integrated release acceptance | Teachers must be able to bring their own class and PDFs | Class factory and map/material integration exist on the course feature branch; retain beta demos and verify fresh own-class workflows before rollout |
 | Input capture still requires web workflow | Teachers often have seconds after class | Voice memo / Telegram capture after core value is validated |
 
 ## Product Roadmap Themes
@@ -182,7 +183,7 @@ Enable teachers to trust and reuse the output with less review effort.
 
 Primary bets:
 
-- beta-hosted deployment on AWS with persistent workspace storage and telemetry
+- harden the existing Railway beta deployment, persistence and operator recovery
 - operator beta reports and daily review workflow
 - evidence/source panel
 - better class-home briefing
@@ -203,7 +204,7 @@ library (Chemie, Physik, Biologie, Mathe) with a generic fallback. OCR runtime
 is Mistral only — OpenAI vision/VLM and Docling are **not** working backups
 (VLM is a code skeleton; Docling is a later optional path).
 
-Remaining bets:
+Implemented on the course feature branch, awaiting integration/hosted acceptance:
 
 - approved class course-network program for Chemie 8/9 NTG: class-owned
   `Lernbausteine`, reviewed curriculum adoption, standalone reviewed materials,
@@ -211,13 +212,20 @@ Remaining bets:
   contract and PR map live in the
   [course-network design](superpowers/specs/2026-08-17-class-course-network-design.md)
   and [delivery program](superpowers/plans/2026-08-18-class-course-network-program.md);
-  this remains planned until the individual slices merge
-- class wiki factory
-- guided class setup and personalization
+  implementation and fresh-teacher local acceptance are recorded in
+  [the course handoff](../implementation_plans/course_network/README.md)
+- class wiki factory and guided class setup, with demo exploration retained and
+  optional empty provisioning; custom class label, year and optional prior learning
+- standalone chapter library, saved-plan PDF normalization, archive/restore,
+  reviewed map corrections and explicit generation recovery
+
+Remaining bets:
+
 - teacher preference setup
-- year-start source library / chapterize (Phase 3 of the materials epic)
+- larger whole-book / year-start packaging beyond the bounded chapter workflow
 - OCR backups: OpenAI vision/VLM (skeleton only), Docling later
-- native Word/PPT/photo ingest, page-range UI, background OCR jobs, scratch GC
+- native Word/PPT/photo ingest and scratch GC; chapter page-range UI and background
+  import recovery are present on the course feature branch
 - inherited subject/grade setup: shared Chemistry framework plus a bounded
   teacher-adjustment page composed at runtime
 - teacher-approved import from notes, worksheets, plans, and curriculum docs

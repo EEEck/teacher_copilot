@@ -1,6 +1,6 @@
 # Course Network Delivery Handoff
 
-**Updated:** 2026-09-04
+**Updated:** 2026-09-05
 
 **Branch:** `codex/class-course-network-design`
 
@@ -13,8 +13,12 @@ test evidence remains ignored under `.superpowers/sdd/`.
 ## Source documents
 
 Documents 01–03 are promoted copies of the original planning documents.
-Documents 04–05 define the refined scope and execution plan for the next
-end-to-end release. Where the delivery scope or order differs, follow 04–05.
+Documents 04–05 define the implemented core workflow. Document 08 is the active
+plan for the teacher-owned release work; its implementation is now present on
+the feature branch. Document 09 records the fresh-workspace browser checks,
+restoration rehearsal and remaining deployment gates.
+Documents 06–07 record implementation and synthetic acceptance evidence, not
+acceptance of fresh-teacher onboarding or a hosted release.
 
 - [01 — approved product design](01_product_design.md)
 - [02 — delivery program, Epic A–D](02_delivery_program.md)
@@ -23,6 +27,9 @@ end-to-end release. Where the delivery scope or order differs, follow 04–05.
 - [05 — optimized implementation plan](05_shipping_implementation.md)
 - [06 — implementation and validation record](06_shipping_validation.md)
 - [07 — realistic browser acceptance](07_browser_acceptance.md)
+- [08 — teacher-owned release gaps and finishing plan](08_teacher_owned_release_plan.md)
+- [09 — teacher-owned release acceptance](09_teacher_owned_release_acceptance.md)
+- [Closed-beta operator runbook](../../docs/course_release_runbook.md)
 - [Teacher guide — use and review the map](../../docs/course_graph_guide.md)
 - [Current handoff and historical verified progress](README.md)
 
@@ -51,6 +58,7 @@ Question extraction, cross-class reuse, and graph databases remain excluded.
 | A3 Task 9 | Browser verified | Class home has the Course action. Materials opens the standalone chapter workspace. |
 | Reviewed materials and changes | Implemented; live API and browser verified | PDF extraction, stable editable sections, exact document approval, generated mappings/concepts, exact map review/publication and recovery. |
 | Planning integration | Implemented; live API and browser verified | Existing planning automatically receives bounded map/material context; plan save records explicit concept/material citations, including exact formatted concept IDs. |
+| Teacher-owned release | Implemented; local validation in 09 | Demo retained plus optional empty workspace; own-class onboarding, saved-PDF normalization, archive/restore, teacher corrections, durable generation, honest lesson links and two-account isolation. 838 backend / 252 frontend tests pass; production build passes. Hosted deployment remains a separate gate. |
 
 ## Historical A3 browser evidence (before this change)
 
@@ -80,7 +88,26 @@ curriculum evidence, followed `Builds on Aktivierungsenergie`, confirmed the
 new inspector content and canvas emphasis, and confirmed old source evidence
 was cleared. Final Task 8 re-review: PASS, no findings.
 
-## Active shipping plan — 2026-09-04
+## Active release plan — 2026-09-05
+
+Read [08 — teacher-owned release plan](08_teacher_owned_release_plan.md).
+The core upload → map → plan → results loop is implemented and has synthetic
+browser evidence. The next gate is an invited teacher starting with an empty
+workspace, creating their own class and completing that loop with their own
+materials without developer assistance.
+
+The remaining work is clean workspace provisioning, coherent material discovery
+across both upload paths, complete teacher correction controls, relevant planning
+context and lesson navigation, and fresh-account recovery/isolation acceptance.
+Keep Chemistry 8/9 NTG as the recommended initial boundary; broader subject
+support remains a scope decision. No graph redesign or new hosting platform is
+required by this plan.
+
+Code checkpoint: `d3e5638` is pushed; follow-up `fa184d3` is committed locally
+but its additional push is pending explicit approval after automatic review.
+Neither checkpoint alone establishes a merged or deployed release.
+
+## Implemented core shipping scope — 2026-09-04
 
 The next release is the connected course-knowledge workflow: curriculum map,
 standalone course-material upload, reviewed section-to-concept mappings,
@@ -88,8 +115,9 @@ automatic use in ordinary lesson planning, and saved plan/result references.
 The map serves both teacher inspection and source-grounded agent retrieval.
 A standalone graph-generation chat or viewer is not the release goal.
 
-Read [04 — shipping scope](04_shipping_scope.md), then execute
-[05 — implementation plan](05_shipping_implementation.md). These supersede
+Read [04 — shipping scope](04_shipping_scope.md) and
+[05 — implementation plan](05_shipping_implementation.md) for core design and
+implementation detail. These superseded
 the old sequential B → C → D execution order for the first end-to-end release.
 The original documents remain design references and historical evidence.
 
@@ -104,9 +132,8 @@ The original documents remain design references and historical evidence.
 7. Persist lesson references and evidence-grounded result associations.
 8. Run the full upload → map → plan → results → next-plan acceptance scenario.
 
-The new scope/plan are documentation only. No implementation task or release
-acceptance has been completed under this revised plan. Historical checks here
-must not be presented as fresh verification of the end-to-end feature.
+The core work above is implemented; see 06–07 for evidence and limitations.
+Document 08 identifies gaps found in the subsequent teacher-owned release review.
 
 ## Original program reference
 
@@ -123,16 +150,17 @@ and saved lesson references remain required for the first release.
 
 ## Local development handoff
 
-The previously recorded local stack for browser work is worktree-scoped.
-These addresses were not reverified during the 2026-09-04 planning review:
+Latest browser acceptance used the worktree-scoped stack below. It was not
+restarted or re-tested during the 2026-09-05 documentation review:
 
-- Frontend: `http://localhost:3303`
-- Backend health: `http://localhost:8578/api/health`
-- Compose project: `kp_teacher_agent_v2_64977d`
-- Mutable test wiki: `backend/teacher_wiki_sandbox/`
+- Worktree: `C:/Users/matth/.codex/worktrees/849f/teacher_agent_v2`
+- Frontend: `http://localhost:3313`
+- Backend health: `http://localhost:8588/api/health`
+- Compose project: `kp_course_e2e_849f`
+- Mutable test wiki: `.worktree-stack/course-e2e/wiki/`
 
-The user’s manually created/adopted Chemie 8a lives only in that sandbox and is
-not tracked. Do not alter `backend/teacher_wiki/` unless a task explicitly
+The latest acceptance uses synthetic Chemie 9b data in that ignored sandbox.
+Do not alter `backend/teacher_wiki/` unless a task explicitly
 changes the baseline fixture. The supported command for a clean isolated stack
 is `./scripts/worktree-stack.cmd up --fresh-wiki`; add `--beta --fresh-beta-data`
 only for beta/HITL coverage.

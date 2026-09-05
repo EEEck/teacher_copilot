@@ -123,6 +123,74 @@ def test_provisioned_workspace_is_group_writable_for_api_process(tmp_path: Path)
     assert (workflow / "probe.txt").read_text(encoding="utf-8") == "ok"
 
 
+def test_empty_workspace_copies_only_reviewed_assets_and_preserves_reprovision(tmp_path):
+    from app.services.class_provisioning import ClassSpec, available_routes, create_class
+    from app.teacher_agent.wiki_store import WikiStore
+
+    seed = tmp_path / "contaminated_seed"
+    shutil.copytree(SEED_WIKI, seed)
+    for relative in (
+        "wiki/teacher_profile.md", "wiki/subjects/private_notes.md",
+        "wiki/subjects/chemie/teaching_frameworks/08/uploaded.pdf",
+        "workflow/private.sqlite", "uploads/private.pdf",
+    ):
+        path = seed / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("PRIVATE_TEACHER_SENTINEL", encoding="utf-8")
+    service = _service(tmp_path, seed_wiki_root=seed)
+    identity = service.provision_tester(
+        tester_id="empty", workspace_id="empty", invite_code="empty-code",
+        workspace_mode="empty",
+    )
+    wiki = WikiStore(root=identity.wiki_root)
+    assert wiki.list_classes() == []
+    assert [(route.grade, route.branch) for route in available_routes(wiki)] == [(8, "NTG"), (9, "NTG")]
+    for path in identity.wiki_root.rglob("*"):
+        if path.is_file():
+            assert b"PRIVATE_TEACHER_SENTINEL" not in path.read_bytes()
+    assert not (identity.wiki_root / "raw/classes").exists()
+    assert not (identity.wiki_root / "uploads").exists()
+    created = create_class(wiki, ClassSpec(label="My own chemistry", subject="chemie", grade=8))
+    sentinel = wiki.class_dir(created.id) / "lessons/2027-01-01/lesson_results.md"
+    sentinel.parent.mkdir(parents=True)
+    sentinel.write_text("Teacher-owned lesson", encoding="utf-8")
+    service.provision_tester(
+        tester_id="empty", workspace_id="empty", invite_code="empty-code",
+        workspace_mode="demo",
+    )
+    assert sentinel.read_text(encoding="utf-8") == "Teacher-owned lesson"
+    assert [row.id for row in wiki.list_classes()] == [created.id]
+
+
+def test_empty_beta_login_can_create_a_teacher_named_class_without_demo_history(tmp_path, monkeypatch):
+    service = _service(tmp_path)
+    identity = service.provision_tester(
+        tester_id="own", workspace_id="own", invite_code="own-code", workspace_mode="empty",
+    )
+    _enable_beta(monkeypatch, tmp_path, service)
+    try:
+        with TestClient(app) as api:
+            assert api.post("/api/beta/login", json={"invite_code": "own-code"}).status_code == 200
+            assert api.get("/api/classes").json()["classes"] == []
+            response = api.post("/api/classes", json={
+                "label": "Teacher chosen class", "subject": "chemie", "grade": 9,
+                "section": "b", "school_year": "2026_27", "student_names": [],
+            })
+            assert response.status_code == 201
+            assert api.get("/api/classes").json()["classes"] == [{
+                "id": CLASS_ID, "label": "Teacher chosen class", "subject": "chemie",
+            }]
+            assert api.get(f"/api/classes/{CLASS_ID}/timeline").json()["entries"] == []
+            snapshot = api.get(f"/api/classes/{CLASS_ID}/snapshot").json()
+            assert snapshot["current_unit"] == "Not set"
+            assert snapshot["last_lesson_date"] is None
+            assert snapshot["recent_lessons"] == []
+            assert api.get(f"/api/classes/{CLASS_ID}/course/network").status_code == 200
+            assert "chemie_9b_2026_27" not in (identity.wiki_root / "log.md").read_text(encoding="utf-8")
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_invalid_invite_code_is_rejected(tmp_path: Path):
     service = _service(tmp_path)
     service.provision_tester(

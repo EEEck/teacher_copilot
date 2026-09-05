@@ -7,6 +7,14 @@ It is a partial working map, not a prescribed timetable or a record of mastery.
 
 ## Try it with conductivity
 
+This example uses the synthetic Grade 9 material from the test walkthrough; it
+is not automatically present in every teacher workspace. Closed-beta workspaces
+normally include the demo class. On the homepage, choose **Create your own
+class** to add a separate Chemie 8 or 9 NTG class, choose its school year and label,
+and optionally enter prior learning. A roster is optional. Prior learning and map
+adoption do not count as taught lessons. Operators can also provision an empty
+workspace; its first class follows the same flow.
+
 1. Select **Elektrische Leitfähigkeit von Salzen und Salzlösungen**. Read the
    learning goal first. Could you assess it with one short pupil explanation?
 2. Read its connections using the meanings below. For conductivity, ask whether
@@ -52,9 +60,38 @@ question above? A section may explain only part of a broad concept; record that
 limit in its teacher note. Model acceptance is an aid to your review, not a
 substitute for checking the chemistry and suitability for your class.
 
-The adopted canvas and inspector are read-only. You cannot currently draw an arrow
-or edit any existing concept directly there. Proposal forms expose selected edits;
-general corrections to the adopted graph require the supported backend proposal
-workflow. Record a correction as “A → B: change Builds on to Related to, because…”
-so it can be applied and reviewed precisely. Do not try to correct the graph by
-asking the ordinary lesson-planning chat to write it.
+The adopted canvas and inspector are read-only. Under **Materials → Suggest a
+map correction**, describe the correction and its reason. The proposal form lets
+you edit concept goals and descriptions, choose connection endpoints and types,
+reverse a prerequisite, and reject additions. Rejecting a new concept also removes
+proposed connections that depend on it. Save edits, rerun review, and approve the
+exact proposal. Ordinary lesson-planning chat does not write the graph.
+
+## Reuse and maintain your library
+
+A PDF attached to an ordinary lesson becomes durable when you save that plan.
+It then appears here as **Saved with a lesson**. Choose **Review for course map**
+to review its existing extraction without uploading or running OCR again. Old
+lesson citations continue to work after course approval. Page labels refer to the
+original document; source links account for PDFs that contain only selected pages.
+
+**Archive material** removes a chapter from new automatic course retrieval while
+keeping its sources available to historical lessons. **Restore material** makes
+it available again. Neither action deletes the source or proves a concept was taught.
+
+Map generation saves its request before it starts. You may leave the page and
+return. If interrupted, use **Retry saved map request**; if the map or material
+changed meanwhile, discard the stale request and start again. A proposal changes
+the adopted map only after review and your approval.
+
+The concept inspector shows direct plan references, **Uses linked material**,
+and approved-results links separately. Material-use links preserve the mappings
+at plan save; they do not mean every concept in the chapter was used.
+Open those lessons to judge what happened. A plan citation records intended use;
+only approved lesson results describe teaching evidence. The map does not assign
+mastery scores.
+
+The document reviewer currently receives OCR and your proposed extraction, not
+independent original-PDF text. It permits organizational titles and plausible
+OCR corrections, but cannot certify the original page. Use **Inspect source PDF
+pages** for your own check before approval, especially formulas, tables and diagrams.

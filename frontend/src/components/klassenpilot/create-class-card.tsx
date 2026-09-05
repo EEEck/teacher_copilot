@@ -1,8 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ActionLink } from "@/components/klassenpilot/action-link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,9 +10,15 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import { client, type CurriculumRoute } from "@/lib/api";
+import { client, type ClassSummary, type CurriculumRoute } from "@/lib/api";
 
 const CHEMISTRY_LABEL = "Chemie";
+
+function currentSchoolYear(): string {
+  const today = new Date();
+  const start = today.getFullYear() - (today.getMonth() < 8 ? 1 : 0);
+  return `${start}_${String(start + 1).slice(-2)}`;
+}
 
 function routeKey(route: CurriculumRoute): string {
   return `${route.subject}|${route.grade}|${route.branch}`;
@@ -23,11 +29,12 @@ function routeLabel(route: CurriculumRoute): string {
 }
 
 export function CreateClassCard({ onCreated }: { onCreated?: () => void }) {
-  const router = useRouter();
   const [routes, setRoutes] = useState<CurriculumRoute[]>([]);
   const [selectedRoute, setSelectedRoute] = useState("");
   const [section, setSection] = useState("a");
-  const [schoolYear, setSchoolYear] = useState("2026_27");
+  const [schoolYear, setSchoolYear] = useState(currentSchoolYear);
+  const [customLabel, setCustomLabel] = useState<string | null>(null);
+  const [createdClass, setCreatedClass] = useState<ClassSummary | null>(null);
   const [priorLearning, setPriorLearning] = useState("");
   const [roster, setRoster] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +57,7 @@ export function CreateClassCard({ onCreated }: { onCreated?: () => void }) {
         setSelectedRoute(chemistryRoutes[0] ? routeKey(chemistryRoutes[0]) : "");
         setError(
           chemistryRoutes.length === 0
-            ? "No reviewed Chemie routes are available right now."
+            ? "No reviewed Chemie 8 or 9 NTG routes are available. Reload to try again or contact your beta host."
             : null,
         );
       })
@@ -66,15 +73,16 @@ export function CreateClassCard({ onCreated }: { onCreated?: () => void }) {
   }, []);
 
   const route = routes.find((item) => routeKey(item) === selectedRoute);
-  const label = route
+  const suggestedLabel = route
     ? `${CHEMISTRY_LABEL} ${route.grade}${section}${
         schoolYear ? ` — ${schoolYear.replace("_", "/")}` : ""
       }`
     : "";
+  const label = customLabel ?? suggestedLabel;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!route) return;
+    if (!route || !label.trim() || submitting) return;
 
     setSubmitting(true);
     setError(null);
@@ -92,12 +100,36 @@ export function CreateClassCard({ onCreated }: { onCreated?: () => void }) {
           .map((name) => name.trim())
           .filter(Boolean),
       });
+      setCreatedClass(created);
       onCreated?.();
-      router.push(`/classes/${created.id}`);
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : "Failed to create class");
+      const message = cause instanceof Error ? cause.message : "Failed to create class";
+      setError(message.includes("already exists")
+        ? "This class already exists. Change the section or school year, or open the existing class from Your classes."
+        : message.includes("No shared teaching framework") || message.includes("not supported")
+          ? "This curriculum route is unavailable. Choose an available Chemie 8 or 9 NTG route, or reload to refresh the choices."
+          : message);
       setSubmitting(false);
     }
+  }
+
+  if (createdClass) {
+    const base = `/classes/${encodeURIComponent(createdClass.id)}`;
+    return (
+      <Card>
+        <CardContent className="grid gap-4 p-5">
+          <div role="status">
+            <h3 className="font-medium">{createdClass.label} is ready</h3>
+            <p className="mt-1 text-sm text-muted-foreground">No taught lessons yet. Review the curriculum map in Course, then add a chapter in Materials.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <ActionLink href={`${base}/course`} variant="default">Course</ActionLink>
+            <ActionLink href={`${base}/course/materials`}>Materials</ActionLink>
+            <ActionLink href={base}>Open class</ActionLink>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -119,7 +151,7 @@ export function CreateClassCard({ onCreated }: { onCreated?: () => void }) {
               ))}
             </NativeSelect>
             <FieldDescription>
-              Only reviewed Chemie teaching frameworks can be used for a new class.
+              Chemie 8 or 9 NTG, Gymnasium in Bavaria. New classes start with no taught lessons.
             </FieldDescription>
           </Field>
 
@@ -138,10 +170,19 @@ export function CreateClassCard({ onCreated }: { onCreated?: () => void }) {
               <Input
                 id="new-class-year"
                 value={schoolYear}
+                maxLength={20}
                 onChange={(event) => setSchoolYear(event.target.value)}
               />
+              <FieldDescription>Confirm the suggested year, for example 2029/30.</FieldDescription>
             </Field>
           </div>
+
+          <Field>
+            <FieldLabel htmlFor="new-class-label">Class label</FieldLabel>
+            <Input id="new-class-label" value={label} required maxLength={120}
+              onChange={(event) => setCustomLabel(event.target.value)} />
+            <FieldDescription>The name shown in Your classes. You can edit the suggestion.</FieldDescription>
+          </Field>
 
           <Field>
             <FieldLabel htmlFor="new-class-prior">What have you covered so far?</FieldLabel>
@@ -155,7 +196,7 @@ export function CreateClassCard({ onCreated }: { onCreated?: () => void }) {
           </Field>
 
           <Field>
-            <FieldLabel htmlFor="new-class-roster">Roster</FieldLabel>
+            <FieldLabel htmlFor="new-class-roster">Roster (optional)</FieldLabel>
             <Textarea
               id="new-class-roster"
               rows={3}
@@ -179,7 +220,7 @@ export function CreateClassCard({ onCreated }: { onCreated?: () => void }) {
                 </>
               )}
             </p>
-            <Button type="submit" disabled={submitting || !route}>
+            <Button type="submit" disabled={submitting || !route || !label.trim()}>
               {submitting ? "Creating…" : "Create class"}
             </Button>
           </div>

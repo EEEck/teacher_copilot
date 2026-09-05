@@ -1156,12 +1156,19 @@ Teachers can inspect class wiki markdown without editing it.
   keeps a tombstone and removes active incident edges/mappings.
 - Standalone imports accept a PDF up to 40 MB and 30 selected pages. OCR runs in
   workflow storage and is not planner-visible. The teacher can correct text and
-  section titles, split/merge sections and exclude sections before review.
+  section titles and page bounds, split/merge sections and exclude sections before review.
 - Document review is pinned to artifact revision/hash. Explicit chapter approval
   publishes a manifest, one reviewed Markdown body with stable section anchors,
   original PDF and assets into the class materials library. A failed or discarded
   import cannot publish a previous review. Approved material is immutable in this
-  first release; another extraction is a new material identity.
+  first release; another extraction is a new material identity. A saved lesson PDF
+  without a course manifest is visible as requiring section review. Explicit review
+  reuses its existing OCR and material ID; approval adds the reviewed course body,
+  preserving the legacy body, section aliases and historical source citations.
+- Archive state is separate from the approved material manifest. Archiving excludes
+  material from new automatic course retrieval/enrichment but keeps historical
+  section/PDF reads. Restoring reverses this state. Duplicate source-plus-page
+  selections point to the existing material or active import instead of another OCR.
 - Mapping/concept proposals are a separate review and teacher approval. They pin
   the base network revision plus approved material evidence hashes. Edits invalidate
   review. Publication uses a receipt for retry without incrementing twice or
@@ -1179,8 +1186,11 @@ Teachers can inspect class wiki markdown without editing it.
   packet includes a deterministic prerequisite index derived from all `builds_on`
   edges, so multiple prerequisites are visible together. It adds no durable state.
 - Unusable generation responses (invalid model JSON/schema or timeout) return a
-  retryable 502 message without raw provider details. No proposal is saved and no
-  canonical memory is changed by the failed attempt, including seed revision.
+  retryable 502 message without raw provider details. No generated edit proposal or
+  canonical memory is published by a failed attempt, including seed revision.
+  Adopted-map generation keeps a separate durable request/failure reservation so
+  the teacher can retry saved input. Document/map review failures also return safe
+  retry messages and never approve a failed review.
 - The map review screen computes its summary from the editable operations and
   chapter-mapping differences, including mappings removed by retiring a concept.
   It does not present model-written summaries/coverage claims as the actual change
@@ -1189,19 +1199,47 @@ Teachers can inspect class wiki markdown without editing it.
   up to six concepts and four linked excerpts. It also sees the approved library
   through existing material tools. Library material is not the same set as current
   session uploads: a request to summarize an upload does not select the whole library.
+- Course selection prioritizes the current teacher request. Explicit continuation
+  requests may fall back to the runtime topic/current unit, ignoring generic planning
+  vocabulary. A no-match result is labelled as an overview, with no arbitrarily
+  selected concept evidence. Context budgets admit complete evidence sections and
+  record only actually injected concept/material references.
 - Plan save records valid explicit `Course: node_id` and `Material: material_id`
   citations (including Markdown code formatting). Exact canonical concept IDs
   named as standalone bold or inline-code tokens also count; titles, partial IDs,
   unknown IDs and retired concepts do not. `course_refs.json` pins the saved
   plan hash and network revision; a stale sidecar is ignored. Its kind is `planned`.
   Repeating a failed save rewrites references idempotently. No graph revision changes.
+- Explicitly cited approved materials also save `material_node_refs` with the
+  node, material and section IDs from that plan's network snapshot. This does not
+  add to direct `node_ids` citations. The inspector labels these planned links
+  "Uses linked material", independently of later map edits. Material-use links
+  establish neither direct concept use, coverage nor mastery, and do not create
+  concept result evidence. Legacy sidecars without this field remain readable.
 - Next-lesson context can quote actual approved `lesson_results.md` passages that
   name a concept, or quote results for a lesson whose saved plan cited that concept.
   These two relationships are labelled separately. A planned association never
   establishes coverage. No model-derived mastery/status sidecar is written.
 - OCR work can be resumed after navigation; interrupted extraction has an explicit
-  retry. Completed model proposals/reviews are durable. In-flight generation and
-  review use bounded HTTP calls, not a new general job orchestration system.
+  retry. Completed model proposals/reviews are durable. Adopted-map generation
+  reserves saved input before the bounded model call, shares identical in-flight
+  requests, and survives HTTP client cancellation in the single backend process.
+  Orphaned jobs after process restart require explicit retry. Network/material
+  snapshots are rechecked before exposing the proposal; publication remains a
+  separate reviewed teacher action. No general queue or multi-worker support is added.
+- The concept inspector links saved plans and approved results separately. Planned
+  associations do not imply coverage or mastery; older matching results remain
+  discoverable even after unrelated newer lessons.
+
+### Closed-beta own-class onboarding
+
+- Beta provisioning defaults to the existing demo wiki, excluding runtime workflow
+  data. `--workspace-mode empty` initializes reviewed shared chemistry assets and
+  fresh teacher memory without demo class history. Existing workspaces are preserved.
+- Teachers can create their own Chemie 8/9 NTG class from either mode, with an
+  editable display label, confirmed school year and optional roster/prior learning.
+  Prior learning is not a taught lesson. Configuration and map-adoption audit entries
+  must not establish a last-taught date.
 
 ## Deferred Contracts
 

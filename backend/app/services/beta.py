@@ -7,14 +7,14 @@ import hashlib
 import json
 import os
 import secrets
-import shutil
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from app.services.sqlite_util import connect as sqlite_connect
+from app.services.workspace_template import initialize_teacher_workspace
 
 # Railway beta volume: provision often runs as root via `railway ssh`, while the
 # API container runs as uid/gid 1000 (`app`). Friendly private beta — prefer
@@ -518,17 +518,12 @@ class BetaAuthService(BetaStorage):
         invite_code: str,
         display_label: str = "",
         seed_label: str = "",
+        workspace_mode: Literal["empty", "demo"] = "demo",
     ) -> RequestIdentity:
         self.initialize()
         now = _utc_now()
         wiki_root = self.data_root / "workspaces" / workspace_id / "teacher_wiki"
-        if not wiki_root.exists():
-            wiki_root.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(
-                self.seed_wiki_root,
-                wiki_root,
-                ignore=shutil.ignore_patterns("workflow"),
-            )
+        initialize_teacher_workspace(self.seed_wiki_root, wiki_root, mode=workspace_mode)
         # Always relax perms (incl. re-provision / existing tree) so Discuss and
         # other writers can create workflow/ under the wiki even after root SSH.
         ensure_beta_tree_writable(self.data_root / "workspaces" / workspace_id)

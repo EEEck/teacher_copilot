@@ -23,7 +23,6 @@ def list_classes(store) -> list[ClassSummary]:
             class_id = class_dir.name
             label, subject = store._read_class_meta(class_id)
             discovered.append(ClassSummary(id=class_id, label=label, subject=subject))
-    if discovered:
         return discovered
     return CLASS_REGISTRY
 
@@ -38,6 +37,10 @@ def _read_class_meta(store, class_id: str) -> tuple[str, str]:
     m = re.search(r"^subject:\s*(\S+)", config, re.M | re.I)
     if m:
         subject = m.group(1).strip().lower()
+    explicit_label = re.search(r"^label:\s*(.+)$", config, re.M)
+    if explicit_label:
+        return explicit_label.group(1).strip(), subject
+    # Preserve the legacy demo display name, whose config title is generic.
     for c in CLASS_REGISTRY:
         if c.id == class_id:
             return c.label, c.subject

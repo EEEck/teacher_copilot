@@ -903,6 +903,14 @@ paths:
         schema:
           type: string
           title: Asset
+      - name: original_page
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Original Page
       responses:
         '200':
           description: Successful Response
@@ -1153,6 +1161,279 @@ paths:
       - course-materials
       summary: Commit Changes
       operationId: commit_changes_api_classes__class_id__course_changes__draft_id__commit_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Snapshot'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/network/nodes/{node_id}/lessons:
+    get:
+      tags:
+      - course-network
+      summary: Get Course Node Lessons
+      operationId: get_course_node_lessons_api_classes__class_id__course_network_nodes__node_id__lessons_get
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: node_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Node Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseNodeLessonsResponse'
+        '404':
+          description: Class, course-network draft, or authorized evidence was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Request or structured draft validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/materials/{material_id}/review-import:
+    post:
+      tags:
+      - course-materials
+      summary: Review Saved Material
+      operationId: review_saved_material_api_classes__class_id__course_materials__material_id__review_import_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Material Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/materials/{material_id}/archive:
+    patch:
+      tags:
+      - course-materials
+      summary: Archive Material
+      operationId: archive_material_api_classes__class_id__course_materials__material_id__archive_patch
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: material_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Material Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterialArchive'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/material-imports/{draft_id}/source:
+    get:
+      tags:
+      - course-materials
+      summary: Import Source
+      operationId: import_source_api_classes__class_id__course_material_imports__draft_id__source_get
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Draft Id
+      - name: original_page
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Original Page
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/changes/retry-generation:
+    post:
+      tags:
+      - course-materials
+      summary: Retry Changes Generation
+      operationId: retry_changes_generation_api_classes__class_id__course_changes_retry_generation_post
+      parameters:
+      - name: class_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Class Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Class, draft, or approved material not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Stale review, inactive draft, or publication conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid source, page selection, extraction, or graph change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '502':
+          description: Unusable or timed-out model response; retry without changing memory.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/classes/{class_id}/course/changes/{draft_id}/discard-generation:
+    post:
+      tags:
+      - course-materials
+      summary: Discard Changes Generation
+      operationId: discard_changes_generation_api_classes__class_id__course_changes__draft_id__discard_generation_post
       parameters:
       - name: class_id
         in: path
@@ -2320,3 +2601,64 @@ components:
       - expected_revision
       - expected_hash
       title: ReviseSeedRequest
+    MaterialArchive:
+      properties:
+        archived:
+          type: boolean
+          title: Archived
+      type: object
+      required:
+      - archived
+      title: MaterialArchive
+    CourseNodeLessonsResponse:
+      properties:
+        class_id:
+          type: string
+          title: Class Id
+        node_id:
+          type: string
+          title: Node Id
+        associations:
+          items:
+            $ref: '#/components/schemas/CourseLessonAssociation'
+          type: array
+          title: Associations
+      type: object
+      required:
+      - class_id
+      - node_id
+      - associations
+      title: CourseNodeLessonsResponse
+    CourseLessonAssociation:
+      properties:
+        kind:
+          type: string
+          enum:
+          - planned
+          - approved_results
+          title: Kind
+        lesson_date:
+          type: string
+          title: Lesson Date
+        source_path:
+          type: string
+          title: Source Path
+        relation:
+          type: string
+          enum:
+          - explicit_plan_reference
+          - uses_linked_material
+          - explicit_result_mention
+          - results_of_lesson_planned_around_concept
+          title: Relation
+        quote:
+          type: string
+          title: Quote
+      type: object
+      required:
+      - kind
+      - lesson_date
+      - source_path
+      - relation
+      - quote
+      title: CourseLessonAssociation

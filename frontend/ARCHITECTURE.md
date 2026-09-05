@@ -254,9 +254,19 @@ evidence controls to read an authorized section and open its original PDF.
 
 Extraction is registered as `course_material` in the existing Running display
 and resumes from the materials workspace. It does not hydrate an ingest chat.
-Generation/review actions show local busy state and persist completed drafts.
+Generation requests persist before the model call; the library shows pending
+work on return and offers explicit retry/discard after interruption. Editable
+proposals remain separate. Archive/restore refreshes preserve unsaved proposal
+edits. `course-change-editor.tsx` owns concept/connection corrections and dependent
+rejection. The library also normalizes saved-plan PDFs without reuploading.
+The inspector loads distinct planned and approved-results lesson associations.
 Rendered tests exercise exact-review approval gating and enabled navigation;
 browser validation of the new workspace is tracked separately in the course plan.
+
+The homepage retains demo exploration and exposes own-class creation through
+`create-class-card.tsx`: current school-year default, editable label, optional
+roster/prior learning, then Course/Materials/Class actions. An empty class registry
+stays empty; the UI does not invent a demo class when none was provisioned.
 
 ## Design system
 

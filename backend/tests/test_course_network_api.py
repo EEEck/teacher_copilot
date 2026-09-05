@@ -188,6 +188,43 @@ def _service_override(wiki, workflow_drafts):
     return service
 
 
+def test_concept_lessons_are_class_scoped_read_only_and_unknown_nodes_are_not_found(client, wiki, workflow_drafts):
+    from app.course_network.lesson_refs import write_plan_course_refs
+    from tests.test_course_planning_context import topic_network
+
+    _service_override(wiki, workflow_drafts)
+    topic_network(wiki)
+    lesson = wiki.lesson_dir(CLASS_ID, "2026-10-05")
+    lesson.mkdir(parents=True, exist_ok=True)
+    (lesson / "lesson_plan.md").write_text("pH plan", encoding="utf-8")
+    write_plan_course_refs(wiki, CLASS_ID, "2026-10-05", "pH plan", {"class_id": CLASS_ID, "node_ids": ["z-ph"]})
+    before = {str(p): p.read_bytes() for p in wiki.class_dir(CLASS_ID).rglob("*") if p.is_file()}
+    response = client.get(f"/api/classes/{CLASS_ID}/course/network/nodes/z-ph/lessons")
+    assert response.status_code == 200, response.text
+    assert response.json()["associations"][0]["kind"] == "planned"
+    assert response.json()["associations"][0]["lesson_date"] == "2026-10-05"
+    assert client.get(f"/api/classes/{CLASS_ID}/course/network/nodes/a-salts/lessons").json()["associations"] == []
+    assert client.get(f"/api/classes/{CLASS_ID}/course/network/nodes/unknown/lessons").status_code == 404
+    assert client.get("/api/classes/unknown/course/network/nodes/z-ph/lessons").status_code == 404
+    assert before == {str(p): p.read_bytes() for p in wiki.class_dir(CLASS_ID).rglob("*") if p.is_file()}
+
+
+def test_concept_lessons_api_preserves_distinct_saved_material_relation(client, wiki, workflow_drafts):
+    from app.course_network.lesson_refs import build_plan_course_refs, write_plan_course_refs
+    from tests.test_course_lesson_refs import _material_linked_network
+
+    _service_override(wiki, workflow_drafts)
+    network, material = _material_linked_network(wiki, workflow_drafts)
+    plan = f"Material: {material.material_id}"
+    lesson = wiki.lesson_dir(CLASS_ID, "2026-10-05")
+    lesson.mkdir(parents=True, exist_ok=True)
+    (lesson / "lesson_plan.md").write_text(plan, encoding="utf-8")
+    write_plan_course_refs(wiki, CLASS_ID, lesson.name, plan, build_plan_course_refs(wiki, CLASS_ID, plan))
+    response = client.get(f"/api/classes/{CLASS_ID}/course/network/nodes/{network.nodes[0].id}/lessons")
+    assert response.status_code == 200, response.text
+    assert [(item["kind"], item["relation"]) for item in response.json()["associations"]] == [("planned", "uses_linked_material")]
+
+
 def test_course_network_open_review_and_teacher_adoption_are_explicit(
     client, wiki, workflow_drafts
 ):

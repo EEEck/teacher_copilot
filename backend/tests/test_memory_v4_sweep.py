@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -24,8 +24,8 @@ from tests.conftest import CLASS_ID
 NOW = datetime(2026, 7, 17, 12, 0, tzinfo=timezone.utc)
 
 
-def _row(candidate_id: str = "singleton") -> MemoryCandidateRow:
-    timestamp = "2026-07-17T10:00:00Z"
+def _row(candidate_id: str = "singleton", *, captured_at: datetime = NOW) -> MemoryCandidateRow:
+    timestamp = captured_at.isoformat()
     return MemoryCandidateRow(
         id=candidate_id,
         created_at=timestamp,
@@ -160,10 +160,13 @@ def test_sweep_rejects_model_operation_that_crosses_claim_target():
 
 
 @pytest.mark.anyio
-async def test_proposal_sends_singletons_to_the_second_judge(tmp_path, wiki):
+@pytest.mark.parametrize("age_days", [0, 60])
+async def test_proposal_sends_singletons_to_the_second_judge(tmp_path, wiki, age_days):
     ledger = MemoryCandidateLedger(tmp_path / "memory_candidates.sqlite")
     ledger.initialize()
-    ledger.add(_row())
+    # The live proposal service expires old unreinforced evidence before the
+    # second judge. Keep this test's age independent of the calendar date.
+    ledger.add(_row(captured_at=datetime.now(timezone.utc) - timedelta(days=age_days)))
 
     class CapturingSweepAgent:
         def __init__(self):
@@ -195,6 +198,12 @@ async def test_proposal_sends_singletons_to_the_second_judge(tmp_path, wiki):
         agents=agents,
         class_id=CLASS_ID,
     )
+
+    if age_days == 60:
+        assert agents.claims == []
+        assert result.cards_by_queue == {}
+        assert {row.id for row in ledger.list_candidates(statuses=("expired",))} == {"singleton"}
+        return
 
     assert agents.claims
     assert agents.claims[0]["sweep_gate"] == "held"

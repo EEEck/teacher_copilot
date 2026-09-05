@@ -80,3 +80,17 @@ export type ReactFlowModel = {
   nodes: CourseNetworkNode[];
   edges: CourseNetworkEdge[];
 };
+
+export type CourseLessonAssociation = {
+  kind: "planned" | "approved_results";
+  lesson_date: string;
+  source_path: string;
+  relation: "explicit_plan_reference" | "uses_linked_material" | "explicit_result_mention" | "results_of_lesson_planned_around_concept";
+  quote: string;
+};
+
+export type CourseNodeLessonsResponse = {
+  class_id: string;
+  node_id: string;
+  associations: CourseLessonAssociation[];
+};

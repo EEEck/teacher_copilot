@@ -34,6 +34,17 @@ export type ClassHomeHeading = {
   track: "STEM track" | "Language track" | null;
 };
 
+/** Teaching history requires approved results; planning is not a taught lesson. */
+export function classHomeLessonProgress(
+  entries: readonly { date: string; status?: string }[],
+): { lastTaught: string; lessonsLogged: number } {
+  const taught = entries.filter((entry) => entry.status === "taught");
+  return {
+    lastTaught: taught.map((entry) => entry.date).sort().at(-1) ?? "Not set",
+    lessonsLogged: taught.length,
+  };
+}
+
 function capitalizeWord(word: string): string {
   if (!word) return word;
   return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();

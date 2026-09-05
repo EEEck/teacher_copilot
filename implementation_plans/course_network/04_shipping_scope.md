@@ -1,7 +1,7 @@
 # Course knowledge map: first end-to-end release
 
 **Date:** 2026-09-04
-**Status:** Shipping scope refined from the product design and the teacher's confirmed direction in the planning conversation. Implementation has not started under this revision.
+**Status:** Core scope implemented; validation and synthetic browser evidence are recorded in 06–07. Remaining teacher-owned release gaps and execution order are in [08](08_teacher_owned_release_plan.md). This is not a hosted-release acceptance claim.
 **Execution baseline:** `codex/class-course-network-design`, inspected at `9e4df80`.
 
 ## Outcome

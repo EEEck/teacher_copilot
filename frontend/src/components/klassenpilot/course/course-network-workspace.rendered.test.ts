@@ -157,6 +157,7 @@ async function click(button: HTMLButtonElement): Promise<void> {
 
 describe("course network source evidence", () => {
   beforeEach(() => {
+    vi.spyOn(client, "getCourseNodeLessons").mockResolvedValue({ class_id: CLASS_ID, node_id: "redox", associations: [] });
     vi.stubGlobal("React", React);
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     mountedRoots = [];
@@ -169,6 +170,43 @@ describe("course network source evidence", () => {
     document.body.replaceChildren();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("links planned and approved result associations separately to normal lesson details", async () => {
+    vi.spyOn(client, "getCourseNodeLessons").mockResolvedValue({
+      class_id: CLASS_ID,
+      node_id: "redox",
+      associations: [
+        { kind: "planned", lesson_date: "2026-10-05", source_path: "lesson_plan.md", relation: "explicit_plan_reference", quote: "" },
+        { kind: "approved_results", lesson_date: "2026-10-05", source_path: "lesson_results.md", relation: "results_of_lesson_planned_around_concept", quote: "Experiment unfinished. Repeat next lesson." },
+      ],
+    });
+    const container = await mount(createElement(LearningBlockInspector, {
+      classId: CLASS_ID, nodes: ADOPTED_NETWORK.nodes, edges: [], selectedId: "redox", onSelect: vi.fn(),
+    }));
+    await settle();
+    expect(container.textContent).toContain("Referenced in plan");
+    expect(container.textContent).toContain("Approved lesson results");
+    expect(container.textContent).toContain("Experiment unfinished. Repeat next lesson.");
+    expect(container.querySelectorAll(`a[href="/classes/${CLASS_ID}/lessons/2026-10-05"]`)).toHaveLength(2);
+    expect(container.textContent).toContain("A plan reference does not establish teaching coverage or mastery.");
+  });
+
+  it("labels saved material associations separately from direct concept citations", async () => {
+    vi.spyOn(client, "getCourseNodeLessons").mockResolvedValue({
+      class_id: CLASS_ID, node_id: "redox", associations: [
+        { kind: "planned", lesson_date: "2026-10-05", source_path: "lesson_plan.md", relation: "uses_linked_material", quote: "" },
+      ],
+    });
+    const container = await mount(createElement(LearningBlockInspector, {
+      classId: CLASS_ID, nodes: ADOPTED_NETWORK.nodes, edges: [], selectedId: "redox", onSelect: vi.fn(),
+    }));
+    await settle();
+    expect(container.textContent).toContain("Uses linked material");
+    expect(container.textContent).toContain("saved with this plan");
+    expect(container.textContent).not.toContain("Referenced in plan");
+    expect(container.textContent).not.toContain("Approved lesson results");
+    expect(container.querySelector(`a[href="/classes/${CLASS_ID}/lessons/2026-10-05"]`)).not.toBeNull();
   });
 
   it("loads and renders the exact section body and provenance", async () => {
@@ -272,6 +310,7 @@ describe("course network source evidence", () => {
 
 describe("course network workspace live states", () => {
   beforeEach(() => {
+    vi.spyOn(client, "getCourseNodeLessons").mockResolvedValue({ class_id: CLASS_ID, node_id: "redox", associations: [] });
     vi.stubGlobal("React", React);
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     mountedRoots = [];

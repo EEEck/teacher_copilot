@@ -39,6 +39,7 @@ import {
 } from "@/lib/api";
 import {
   CLASS_HOME_HOVER,
+  classHomeLessonProgress,
   formatClassHomeHeading,
   shortenUnitLabel,
 } from "@/lib/class-home-display";
@@ -257,10 +258,7 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
   // No wiki-backed source for key dates yet (assessment calendar is a later
   // backlog item); render an honest empty state until one exists.
   const upcoming: { label: string; date: string }[] = [];
-  const lastTaught =
-    snapshot.last_committed_date ||
-    snapshot.last_lesson_date ||
-    "Not set";
+  const { lastTaught, lessonsLogged } = classHomeLessonProgress(timelineEntries);
   const heading = useMemo(
     () => formatClassHomeHeading(classId, snapshot.label),
     [classId, snapshot.label],
@@ -381,7 +379,7 @@ export function ClassHomeClient({ classId, highlightDate }: ClassHomeClientProps
                 <div>
                   <dt className="text-sm text-muted-foreground">Lessons logged</dt>
                   <dd className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-                    {timelineEntries.length}
+                    {lessonsLogged}
                   </dd>
                 </div>
               </dl>

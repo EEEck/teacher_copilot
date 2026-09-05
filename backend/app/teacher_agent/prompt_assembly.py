@@ -497,7 +497,7 @@ def build_plan_chat_prompt_assembly(
     materials_trace = wiki.build_materials_context_trace(materials_list)
     from app.course_network.planning import build_course_planning_context
     course_trace = build_course_planning_context(wiki, class_id,
-        " ".join([rt.lesson_planning_state.lesson_topic or "", *[m.content for m in messages[-3:] if m.role == "user"]]), rt)
+        next((m.content for m in reversed(messages) if m.role == "user"), ""), rt)
     session_state = render_session_state(rt.session_state)
     lesson_state = render_lesson_planning_state(rt.lesson_planning_state)
     current_plan_text = (

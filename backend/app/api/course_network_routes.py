@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -87,8 +87,9 @@ def _draft_response(row) -> CourseNetworkDraftResponse:
 
 def _raise_service_error(exc: Exception) -> None:
     from app.course_network.generation import CourseGenerationError
+    from app.course_network.review import CourseReviewError
 
-    if isinstance(exc, CourseGenerationError):
+    if isinstance(exc, (CourseGenerationError, CourseReviewError)):
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     if isinstance(exc, (CourseNetworkConflict, WorkflowDraftConflict)):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -107,6 +108,39 @@ class ReviseSeedRequest(BaseModel):
     )
     expected_revision: int
     expected_hash: str
+
+
+class CourseLessonAssociation(BaseModel):
+    kind: Literal["planned", "approved_results"]
+    lesson_date: str
+    source_path: str
+    relation: Literal["explicit_plan_reference", "uses_linked_material", "explicit_result_mention", "results_of_lesson_planned_around_concept"]
+    quote: str
+
+
+class CourseNodeLessonsResponse(BaseModel):
+    class_id: str
+    node_id: str
+    associations: list[CourseLessonAssociation]
+
+
+@router.get(
+    "/classes/{class_id}/course/network/nodes/{node_id}/lessons",
+    response_model=CourseNodeLessonsResponse,
+    responses={404: _NOT_FOUND_RESPONSE, 422: _VALIDATION_RESPONSE},
+)
+def get_course_node_lessons(class_id: str, node_id: str, service: CourseNetworkServiceDep):
+    from app.course_network.lesson_refs import lesson_associations_for_node
+
+    try:
+        network = service.get_network(class_id)
+        node = next((n for n in network.nodes if n.id == node_id), None) if network else None
+        if node is None:
+            raise KeyError("course_network_node_not_found")
+        return CourseNodeLessonsResponse(class_id=class_id, node_id=node_id,
+            associations=lesson_associations_for_node(service.wiki, class_id, node))
+    except (KeyError, ValueError) as exc:
+        _raise_service_error(exc)
 
 
 @router.post(

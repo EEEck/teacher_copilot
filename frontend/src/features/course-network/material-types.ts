@@ -1,11 +1,11 @@
 import type { LearningBlock, MaterialMapping, NetworkEdge } from "./types";
 
 export type CourseSection = { id: string; title: string; page_start: number; page_end: number; summary: string };
-export type CourseMaterial = { class_id: string; material_id: string; title: string; arm: "textbook" | "personal"; source_filename: string; source_hash: string; sections: CourseSection[]; approved_at?: string };
+export type CourseMaterial = { class_id: string; material_id: string; title: string; arm: "textbook" | "personal"; source_filename: string; source_hash: string; sections: CourseSection[]; approved_at?: string; library_status?: "saved" | "approved"; archived?: boolean };
 export type ImportArtifact = Omit<CourseMaterial, "sections"> & { sections: (CourseSection & { content: string; included: boolean })[] };
 export type GraphOperation =
   | { op: "add_node"; node: LearningBlock }
-  | { op: "update_node"; node_id: string; changes: Partial<LearningBlock> }
+  | { op: "update_node"; node_id: string; changes: { [K in "title" | "description" | "learning_goal" | "curriculum_refs" | "material_refs"]?: LearningBlock[K] | null } }
   | { op: "retire_node"; node_id: string }
   | { op: "add_edge"; edge: NetworkEdge }
   | { op: "remove_edge"; edge_id: string };

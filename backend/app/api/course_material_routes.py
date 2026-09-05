@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+from io import BytesIO
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
+from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 
 from app.api.course_network_routes import (
     _GENERATION_UNAVAILABLE_RESPONSE,
@@ -19,9 +23,12 @@ from app.api.deps import get_request_identity, get_wiki, get_workflow_draft_stor
 from app.course_materials.import_service import CourseMaterialImportService
 from app.course_materials.models import MaterialImportArtifact
 from app.course_materials.store import (
-    list_course_materials,
+    list_material_library,
+    saved_material_root,
+    set_course_material_archived,
     read_course_material_section,
     resolve_course_asset,
+    source_page_map,
 )
 from app.course_network.edit_service import (
     CourseNetworkEditService,
@@ -32,6 +39,9 @@ from app.course_network.generation import (
     generate_course_changes,
 )
 from app.course_network.operations import NetworkChangeSet
+from app.course_network.generation_jobs import start_or_resume_generation, status as generation_status, retry_generation, discard_generation
+from app.services.materials_ocr_packaging import parse_page_range
+from app.services.workflow_drafts import WorkflowDraftConflict
 
 router = APIRouter(
     tags=["course-materials"],
@@ -101,11 +111,47 @@ class GraphEdit(Snapshot):
     changes: NetworkChangeSet
 
 
+class MaterialArchive(BaseModel):
+    archived: bool
+
+
 @router.get("/classes/{class_id}/course/materials")
 def materials(class_id: str, service=Depends(import_service)):
     try:
-        return {"materials": list_course_materials(service.wiki, class_id)}
+        return {"materials": list_material_library(service.wiki, class_id)}
     except (KeyError, ValueError) as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/classes/{class_id}/course/materials/{material_id}/review-import")
+def review_saved_material(class_id: str, material_id: str, service=Depends(import_service)):
+    try:
+        return envelope(service.from_saved_material(class_id, material_id))
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.patch("/classes/{class_id}/course/materials/{material_id}/archive")
+def archive_material(class_id: str, material_id: str, body: MaterialArchive, service=Depends(import_service)):
+    try:
+        return set_course_material_archived(service.wiki, class_id, material_id, body.archived)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/classes/{class_id}/course/material-imports/{draft_id}/source")
+def import_source(class_id: str, draft_id: str, request: Request, original_page: int | None = None, service=Depends(import_service)):
+    try:
+        row = service.get(class_id, draft_id)
+        path = service.package_dir(row).parent / "upload.pdf"
+        if not path.is_file():
+            path = service.package_dir(row) / "source.pdf"
+        if not path.is_file():
+            raise KeyError("Import source PDF not found")
+        if original_page is not None:
+            return _source_redirect(request, path, original_page)
+        return FileResponse(path, media_type="application/pdf")
+    except Exception as exc:
         _raise_service_error(exc)
 
 
@@ -181,9 +227,34 @@ async def upload(
         contents = await file.read(40 * 1024 * 1024 + 1)
         if not contents.startswith(b"%PDF-") or len(contents) > 40 * 1024 * 1024:
             raise ValueError("Upload a PDF up to 40 MB")
+        try:
+            reader = PdfReader(BytesIO(contents))
+            if reader.is_encrypted:
+                raise ValueError("Encrypted PDFs are not supported")
+            selected = sorted(p + 1 for p in parse_page_range(pages, len(reader.pages))) if pages else list(range(1, len(reader.pages) + 1))
+        except PdfReadError as exc:
+            raise ValueError("This PDF cannot be read. Upload a valid PDF file.") from exc
+        if not selected or len(set(selected)) != len(selected) or len(selected) > 30:
+            raise ValueError("Select between 1 and 30 distinct PDF pages")
+        source_hash = hashlib.sha256(contents).hexdigest()
+        for material in list_material_library(service.wiki, class_id):
+            root, _ = saved_material_root(service.wiki, class_id, material["material_id"])
+            source = root / "source.pdf"
+            provenance = root / "provenance.json"
+            if source.is_file() and provenance.is_file():
+                original_pages = json.loads(provenance.read_text(encoding="utf-8")).get("original_page_numbers", [])
+                if sorted(original_pages) == selected and hashlib.sha256(source.read_bytes()).hexdigest() == source_hash:
+                    raise WorkflowDraftConflict(f"These PDF pages are already saved as {material['title']}. Open the material in the library; restore it first if archived.")
+        for active in service.drafts.list_active_for_class(class_id, mode="course_material"):
+            if active.workspace_id == service.workspace_id and active.runtime_json.get("upload_hash") == source_hash and active.runtime_json.get("selected_pages") == selected:
+                raise WorkflowDraftConflict("These PDF pages already have an import. Resume or discard it below.")
         row = service.create(class_id, title=title, arm=arm, filename=file.filename)
+        row = save_structured_row(service.drafts, row, json.loads(row.artifact_markdown), runtime=row.runtime_json | {"upload_hash": source_hash, "selected_pages": selected})
+        source = service.package_dir(row).parent / "upload.pdf"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(contents)
         return start_extraction(service, row, contents, pages or None)
-    except (KeyError, ValueError) as exc:
+    except Exception as exc:
         _raise_service_error(exc)
 
 
@@ -278,13 +349,23 @@ def section(
 
 
 @router.get("/classes/{class_id}/course/materials/{material_id}/files/{asset:path}")
-def asset(class_id: str, material_id: str, asset: str, service=Depends(import_service)):
+def asset(class_id: str, material_id: str, asset: str, request: Request, original_page: int | None = None, service=Depends(import_service)):
     try:
-        return FileResponse(
-            resolve_course_asset(service.wiki, class_id, material_id, asset)
-        )
+        path = resolve_course_asset(service.wiki, class_id, material_id, asset)
+        if original_page is not None:
+            if asset != "source.pdf":
+                raise ValueError("Page selection is only available for the source PDF")
+            return _source_redirect(request, path, original_page)
+        return FileResponse(path)
     except (KeyError, ValueError) as exc:
         _raise_service_error(exc)
+
+
+def _source_redirect(request, source, original_page):
+    physical_page = source_page_map(source).get(original_page)
+    if physical_page is None:
+        raise ValueError("This original page is not available in the source PDF")
+    return RedirectResponse(f"{request.url.path}#page={physical_page}")
 
 
 @router.post(
@@ -295,27 +376,7 @@ async def generate_changes(
     class_id: str, body: CourseGenerationRequest, service=Depends(edit_service)
 ):
     try:
-        if any(
-            row.intent == "edit"
-            for row in service.drafts.list_active_for_class(
-                class_id, mode="course_network"
-            )
-        ):
-            raise HTTPException(
-                409,
-                "Finish or discard the existing map proposal before starting another",
-            )
-        current = service._current(class_id)
-        if body.purpose == "curriculum_draft":
-            raise ValueError("Use the curriculum seed review for initial adoption")
-        result = await generate_course_changes(service.wiki, class_id, body, current)
-        row = service.open(class_id, result.changes)
-        row = save_structured_row(
-            service.drafts,
-            row,
-            result.changes.model_dump(mode="json"),
-            runtime={"generation": result.model_dump(mode="json")},
-        )
+        row = await start_or_resume_generation(service, class_id, body, generate_course_changes)
         return envelope(row)
     except Exception as exc:
         _raise_service_error(exc)
@@ -325,7 +386,9 @@ async def generate_changes(
 def list_changes(class_id: str, service=Depends(edit_service)):
     try:
         service.wiki.get_class(class_id)
+        job = generation_status(service, class_id)
         return {
+            "generation": envelope(job) if job else None,
             "drafts": [
                 envelope(row)
                 for row in service.drafts.list_active_for_class(
@@ -334,6 +397,22 @@ def list_changes(class_id: str, service=Depends(edit_service)):
                 if row.intent == "edit" and row.workspace_id == service.workspace_id
             ]
         }
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/classes/{class_id}/course/changes/retry-generation", responses={502: _GENERATION_UNAVAILABLE_RESPONSE})
+async def retry_changes_generation(class_id: str, service=Depends(edit_service)):
+    try:
+        return envelope(await retry_generation(service, class_id, generate_course_changes))
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/classes/{class_id}/course/changes/{draft_id}/discard-generation")
+def discard_changes_generation(class_id: str, draft_id: str, body: Snapshot, service=Depends(edit_service)):
+    try:
+        return envelope(discard_generation(service, class_id, draft_id, body.expected_revision, body.expected_hash))
     except Exception as exc:
         _raise_service_error(exc)
 

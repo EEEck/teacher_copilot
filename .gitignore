@@ -16,6 +16,7 @@ backend/.deepeval/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest-*/
 
 # Node
 frontend/node_modules/

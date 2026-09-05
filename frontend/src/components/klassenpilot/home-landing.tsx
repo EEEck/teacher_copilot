@@ -48,7 +48,7 @@ const chipClassName =
  * Production home marketing card (MagicPath Home v6 → locked AgentMark).
  * Compose with a quiet class list below on `/`.
  */
-export function HomeLanding() {
+export function HomeLanding({ onCreateClass }: { onCreateClass?: () => void }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card p-8 shadow-sm sm:p-10 lg:p-12">
       <header className="relative">
@@ -88,8 +88,8 @@ export function HomeLanding() {
           <div className="mt-8 flex flex-col gap-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
               <Button asChild>
-                <Link href={MOCK_CLASS_HREF}>
-                  Explore the mock class
+                <Link href="#your-classes-heading">
+                  Explore your classes
                   <ArrowRight className="size-3.5" aria-hidden />
                 </Link>
               </Button>
@@ -97,9 +97,7 @@ export function HomeLanding() {
                 <Link href="/dev/how-to">How it works (1 min)</Link>
               </Button>
             </div>
-            <span className="text-sm text-foreground/70 underline decoration-border underline-offset-4">
-              Bring your own class · coming soon
-            </span>
+            <Button asChild variant="outline"><Link href="#your-classes-heading" onClick={onCreateClass}>Create your own class</Link></Button>
           </div>
         </div>
 
@@ -121,11 +119,11 @@ export function HomeLanding() {
               id="beta-heading"
               className="mt-2 text-2xl font-semibold tracking-tight text-foreground sm:text-[1.65rem]"
             >
-              Play with Chemie 9b.
+              Try the demo or bring your own class.
             </h2>
             <p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground sm:text-[0.95rem]">
-              A seeded playground to try Plan, Organize, Discuss, and Coach, and give us first
-              feedback on what actually helps.
+              Beta workspaces can include a seeded chemistry playground. You can also create
+              your own Chemie 8/9 NTG class and add your materials now.
             </p>
             <Link
               href="/docs/first-session"
@@ -138,35 +136,35 @@ export function HomeLanding() {
 
           <div className="flex flex-col gap-3">
             <Link
-              href={MOCK_CLASS_HREF}
+              href="#your-classes-heading"
               className="w-full rounded-xl border border-border bg-card/90 text-left shadow-sm transition-colors hover:border-foreground/25 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <div className="p-5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-base font-semibold text-foreground">Chemie 9b</h3>
+                  <h3 className="text-base font-semibold text-foreground">Explore a class</h3>
                   <Badge variant="default" className="h-5 rounded-full px-2 text-[10px]">
-                    Mock class
+                    Beta
                   </Badge>
                 </div>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  Seeded mock class with a lesson timeline, memory, and examples to explore.
+                  Open an available class below. Seeded demo classes include a lesson timeline, memory, and examples to explore.
                 </p>
               </div>
             </Link>
 
             <div
-              className="rounded-xl border border-dashed border-border bg-card/50 p-5 opacity-70"
-              aria-disabled="true"
+              className="rounded-xl border border-border bg-card p-5"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base font-semibold text-foreground">Your class</h3>
                 <Badge variant="outline" className="h-5 rounded-full px-2 text-[10px]">
-                  Coming soon
+                  Available now
                 </Badge>
               </div>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Bring your own class into KlassenPilot after the beta.
+                Start with an empty teaching history, review the curriculum map, and add your own PDFs.
               </p>
+              <Button asChild variant="outline" className="mt-3"><Link href="#your-classes-heading" onClick={onCreateClass}>Start a new class</Link></Button>
             </div>
           </div>
         </div>

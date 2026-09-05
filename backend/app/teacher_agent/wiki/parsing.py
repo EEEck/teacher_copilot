@@ -290,6 +290,7 @@ def parse_log_entry(header: str, block: str) -> Optional[dict]:
     committed_at = ts_m.group(1) if ts_m else lesson_date
     return {
         "lesson_date": lesson_date,
+        "kind": _kind.lower(),
         "title": title.strip(),
         "entry_id": entry_id,
         "class_id": class_id,

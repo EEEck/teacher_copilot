@@ -139,6 +139,6 @@ def test_review_query_pack_is_available():
 def test_snapshot_last_committed_date_is_iso_not_bracketed():
     wiki = WikiStore(root=SEED_WIKI)
     snap = wiki.get_snapshot(CLASS_ID)
-    assert snap.last_committed_date == "2026-06-01"
-    assert snap.last_committed_at == "2026-06-01T04:39:00"
-    assert snap.last_committed_title == "Compact class memory"
+    assert snap.last_committed_date == "2026-05-29"
+    assert snap.last_committed_at == "2026-05-29T15:30:00"
+    assert snap.last_committed_title == "Anions and Oxidation State Review"

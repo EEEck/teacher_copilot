@@ -295,6 +295,7 @@ def _skeleton(
     return {
         "class_config.md": (
             f"# {label}\n\n"
+            f"label: {label}\n"
             f"subject: {subject}\n\n"
             "## Lesson results sections (fixed v1)\n"
             f"{results_sections}\n\n"

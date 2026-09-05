@@ -6,7 +6,8 @@ import asyncio
 from typing import Literal, Protocol
 
 from agents import Agent, Runner
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from agents.exceptions import ModelBehaviorError
+from pydantic import BaseModel, ConfigDict, Field, model_validator, ValidationError
 
 from app.config import Settings, get_settings
 from app.course_network.models import CourseNetworkDocument
@@ -18,6 +19,18 @@ CourseNetworkReviewDecision = Literal["accept", "revise", "block"]
 CourseNetworkReviewSeverity = Literal["note", "block"]
 COURSE_NETWORK_SOURCE_EVIDENCE_MAX_CHARS = 12000
 COURSE_NETWORK_SOURCE_SECTION_MAX_CHARS = 2400
+
+
+class CourseReviewError(RuntimeError):
+    """A review failed without approving or publishing its input."""
+
+
+async def run_course_review(agent, packet, timeout):
+    try:
+        result = await asyncio.wait_for(Runner.run(agent, packet, max_turns=1), timeout=timeout)
+        return CourseNetworkReviewJudgement.model_validate(result.final_output)
+    except (ModelBehaviorError, ValidationError, TimeoutError) as exc:
+        raise CourseReviewError("Could not finish the review. Try again. Your proposal is preserved and nothing has been approved.") from exc
 
 
 class CourseNetworkReviewFinding(BaseModel):
@@ -130,10 +143,4 @@ class OpenAICourseNetworkReviewer:
             output_type=CourseNetworkReviewJudgement,
             **({"model_settings": model_settings} if model_settings else {}),
         )
-        result = await asyncio.wait_for(
-            Runner.run(agent, "Review the supplied course-network seed.", max_turns=1),
-            timeout=self.settings.agent_timeout_seconds,
-        )
-        if not isinstance(result.final_output, CourseNetworkReviewJudgement):
-            raise TypeError("Course-network reviewer returned an invalid result")
-        return result.final_output
+        return await run_course_review(agent, "Review the supplied course-network seed.", self.settings.agent_timeout_seconds)

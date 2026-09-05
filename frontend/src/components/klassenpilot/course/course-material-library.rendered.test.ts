@@ -26,6 +26,40 @@ beforeEach(async () => {
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); });
 const button = (text: string) => [...container.querySelectorAll("button")].find(b => b.textContent === text)!;
 
+it("exposes saved lesson material review while keeping archived source access", async () => {
+  vi.mocked(courseApi.list).mockResolvedValue({ materials: [{ ...row.artifact, library_status: "saved", archived: true }] });
+  await act(async () => root.render(createElement(CourseMaterialLibrary, { classId: "saved-class" })));
+  expect(container.textContent).toContain("Saved with a lesson");
+  expect(container.querySelector('a[href*="source.pdf"]')).not.toBeNull();
+  expect(button("Restore material")).toBeDefined();
+  expect(button("Connect to course map")).toBeUndefined();
+});
+
+it("preserves unsaved map corrections when archiving refreshes the library", async () => {
+  vi.mocked(courseApi.list).mockResolvedValue({ materials: [row.artifact] });
+  vi.mocked(courseApi.changes).mockResolvedValue({ drafts: [{ ...row, draft_id: "changes-dirty", artifact: {
+    class_id: "chemie", base_revision: 1, summary: "", material_id: null, replacement_mappings: null,
+    operations: [{ op: "update_node", node_id: "one", changes: { title: "First" } }, { op: "update_node", node_id: "two", changes: { title: "Second" } }],
+  } }] });
+  vi.spyOn(courseApi, "archive").mockResolvedValue({});
+  await act(async () => root.render(createElement(CourseMaterialLibrary, { classId: "chemie-dirty" })));
+  await act(async () => button("Reject this change").click());
+  expect(container.querySelector('[aria-label="Proposed changes"]')?.textContent).toContain("1 edited");
+  await act(async () => button("Archive material").click());
+  expect(container.querySelector('[aria-label="Proposed changes"]')?.textContent).toContain("1 edited");
+  expect(button("Save map corrections").disabled).toBe(false);
+});
+
+it("lets a teacher discard an import and inspect source page bounds before approval", async () => {
+  await act(async () => button("Catalysis · document review").click());
+  expect(container.querySelector('input[aria-label="First PDF page"]')).not.toBeNull();
+  expect(container.querySelector('a[href*="material-imports/import-1/source"]')).not.toBeNull();
+  vi.spyOn(client, "discardWorkflowDraft").mockResolvedValue({} as never);
+  vi.mocked(courseApi.imports).mockResolvedValue({ drafts: [] });
+  await act(async () => button("Discard import").click());
+  expect(button("Review extraction")).toBeUndefined();
+});
+
 it("resumes extraction review and requires the exact accepted snapshot before approval", async () => {
   await act(async () => button("Catalysis · document review").click());
   expect(button("Approve chapter").disabled).toBe(true);

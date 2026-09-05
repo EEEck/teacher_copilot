@@ -1,4 +1,4 @@
-import type { CourseNetwork } from "@/features/course-network/types";
+import type { CourseNetwork, CourseNodeLessonsResponse } from "@/features/course-network/types";
 
 export type {
   CourseNetwork,
@@ -770,6 +770,10 @@ export const client = {
   getCourseNetwork: (classId: string) =>
     api<CourseNetworkResponse>(
       `/api/classes/${encodeURIComponent(classId)}/course/network`,
+    ),
+  getCourseNodeLessons: (classId: string, nodeId: string) =>
+    api<CourseNodeLessonsResponse>(
+      `/api/classes/${encodeURIComponent(classId)}/course/network/nodes/${encodeURIComponent(nodeId)}/lessons`,
     ),
   getCourseNetworkSourceSection: (
     classId: string,

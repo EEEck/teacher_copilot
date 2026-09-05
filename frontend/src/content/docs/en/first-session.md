@@ -1,8 +1,8 @@
 # Your First Session
 
-**So what:** One guided pass through the mock class proves the core loop — plan from memory, teach, log results, review what saves.
+Try the demo class or create your own class, then follow the core loop: plan from memory, teach, log results, and review what saves.
 
-The beta uses a seeded mock class: **Chemie 9b** (Chemie 9 NTG). Every tester starts from the same realistic notebook so you can focus on the workflow, not on building memory from scratch. Plans are grounded in that class memory plus adapted open K–12 planning skills and LehrplanPLUS/KMK trusted sources — see [How the Copilot Works](/docs/how-it-works#curriculum-grounding-chemie-9-ntg).
+Beta workspaces include the seeded demo **Chemie 9b** (Chemie 9 NTG) by default so you can explore a realistic notebook. Some accounts may be set up with an empty workspace instead. You can create your own class alongside the demo. Plans use the selected class's memory and available subject guidance — see [How the Copilot Works](/docs/how-it-works#curriculum-grounding-chemie-9-ntg).
 
 ## Why a mock class
 
@@ -12,6 +12,12 @@ The mock class includes a current unit, recent lessons, known misconceptions, op
 > Feedback that helps most: Did the plan use the right memory? Was the memory update trustworthy? How much did you edit before saving?
 
 ## 20-minute walkthrough
+
+For your own class, choose **New class** on the home page. Check the label and school year; the student roster is optional. Open **Course** to review and adopt the available curriculum map, then **Materials** to upload a chapter, check its extracted text, and approve it. Connecting a chapter to the map creates a proposal you review before applying. A new class starts without taught lesson history.
+
+You can also attach a PDF while planning. Saving that lesson makes the PDF available in the class materials library. Choose **Review for course map** there to review its sections before connecting it to the map.
+
+The walkthrough below uses the demo class; you can follow the same steps with your own class and lesson topic.
 
 > [!blueprint]
 > **Session blueprint**

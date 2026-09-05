@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight, BookOpen, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -25,6 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import type {
   CurriculumReference,
+  CourseLessonAssociation,
   LearningBlock,
   NetworkEdge,
 } from "@/features/course-network/types";
@@ -253,6 +255,48 @@ function relationshipLabel(edge: NetworkEdge, selectedId: string): string {
   return edge.source_id === selectedId ? "Builds on" : "Used by";
 }
 
+function ConceptLessonLinks({ classId, nodeId }: { classId: string; nodeId: string }) {
+  const [associations, setAssociations] = useState<CourseLessonAssociation[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setAssociations(null);
+    setError(null);
+    void client.getCourseNodeLessons(classId, nodeId).then((response) => {
+      if (active) setAssociations(response.associations);
+    }).catch((failure: unknown) => {
+      if (active) setError(failure instanceof Error ? failure.message : "Lesson references could not be loaded.");
+    });
+    return () => { active = false; };
+  }, [classId, nodeId, attempt]);
+  return <section aria-label="Lesson associations" className="space-y-3">
+    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Lesson evidence</h3>
+    <p className="text-sm text-muted-foreground">A plan reference does not establish teaching coverage or mastery.</p>
+    {error ? <Alert variant="destructive">
+      <AlertTitle>Lesson references unavailable</AlertTitle>
+      <AlertDescription>{error}
+        <Button variant="outline" size="sm" onClick={() => setAttempt(value => value + 1)}>Try again</Button>
+      </AlertDescription>
+    </Alert> : associations === null ? <p role="status" className="text-sm text-muted-foreground">Loading lesson references</p> : associations.length === 0 ?
+      <p className="text-sm text-muted-foreground">No saved plan or approved result references yet.</p> :
+      (["explicit_plan_reference", "uses_linked_material", "approved_results"] as const).map(group => {
+        const items = associations.filter(item => group === "approved_results" ? item.kind === "approved_results" : item.kind === "planned" && item.relation === group);
+        return items.length ? <div key={group} className="space-y-2">
+          <h4 className="text-sm font-medium">{group === "explicit_plan_reference" ? "Referenced in plan" : group === "uses_linked_material" ? "Uses linked material" : "Approved lesson results"}</h4>
+          {group === "uses_linked_material" && <p className="text-xs text-muted-foreground">Based on material links saved with this plan; this is not a direct concept citation.</p>}
+          <ul className="space-y-3">{items.map(item => <li key={`${item.kind}:${item.lesson_date}`} className="space-y-1 text-sm">
+            <Button asChild variant="link" size="sm" className="h-auto p-0"><Link href={`/classes/${encodeURIComponent(classId)}/lessons/${encodeURIComponent(item.lesson_date)}`}>{item.lesson_date} · View lesson</Link></Button>
+            {item.kind === "approved_results" ? <>
+              <p className="text-xs text-muted-foreground">{item.relation === "explicit_result_mention" ? "Concept named in approved results" : "Results of a lesson planned around this concept; the excerpt may concern other activities."}</p>
+              <blockquote className="whitespace-pre-wrap border-l-2 border-border pl-3">{item.quote}</blockquote>
+            </> : null}
+          </li>)}</ul>
+        </div> : null;
+      })}
+  </section>;
+}
+
 export function LearningBlockInspector({
   classId,
   nodes,
@@ -407,6 +451,10 @@ export function LearningBlockInspector({
                   </p>
                 )}
               </section>
+              {selected.status !== "proposed" ? <>
+                <Separator />
+                <ConceptLessonLinks key={`${classId}:${selected.id}`} classId={classId} nodeId={selected.id} />
+              </> : null}
             </CardContent>
           </ScrollArea>
         </>
